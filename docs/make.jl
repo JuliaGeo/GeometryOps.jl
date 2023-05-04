@@ -18,7 +18,7 @@ for (root_path, dirs, files) in walkdir(source_path)
         # convert the source file to Markdown
         Literate.markdown(joinpath(root_path, file), output_dir; documenter = false)
         # TODO: make this respect nesting somehow!
-        push!(literate_pages, joinpath(output_dir, splitext(file)[1] * ".md"))
+        push!(literate_pages, joinpath(relpath(root_path, source_path), splitext(file)[1] * ".md"))
     end
 end
 
