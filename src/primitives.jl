@@ -45,7 +45,7 @@ function apply(f, target::Type, trait, geom; crs=GI.crs(geom))::(GI.geointerface
     geoms = map(g -> apply(f, target, g), GI.getgeom(geom))
     if GI.is3d(geom)
         return GI.geointerface_geomtype(trait){true,false}(geoms; crs)
-    els
+    else
         return GI.geointerface_geomtype(trait){false,false}(geoms; crs)
     end
 end
