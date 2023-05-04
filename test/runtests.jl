@@ -1,6 +1,12 @@
 using GeometryOps
 using Test
 
+using GeometryOps.GeoInterface
+using ArchGDAL
+
+const GI = GeoInterface
+const AG = ArchGDAL
+
 @testset "GeometryOps.jl" begin
-    # Write your tests here.
+    @testset "Signed Area" include("methods/signed_area.jl")
 end
