@@ -1,5 +1,6 @@
+# # Signed distance
 export signed_distance
-
+# TODO: clean this up.  It already supports GeoInterface.
 
 Base.@propagate_inbounds euclid_distance(p1, p2) = sqrt((GeoInterface.x(p2)-GeoInterface.x(p1))^2 + (GeoInterface.y(p2)-GeoInterface.y(p1))^2)
 euclid_distance(x1, y1, x2, y2) = sqrt((x2-x1)^2 + (y2-y1)^2)

@@ -1,7 +1,26 @@
 using GeometryOps
 using Documenter
+using Literate
+using Makie, CairoMakie
+CairoMakie.activate!(px_per_unit = 2, type = "png") # TODO: make this svg
 
 DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps); recursive=true)
+
+source_path = joinpath(dirname(@__DIR__), "src")
+output_path = joinpath(@__DIR__, "src", "source")
+mkpath(output_path)
+
+literate_pages = String[]
+
+for (root_path, dirs, files) in walkdir(source_path)
+    output_dir = joinpath(output_path, relpath(root_path, source_path))
+    for file in files
+        # convert the source file to Markdown
+        Literate.markdown(joinpath(root_path, file), output_dir; documenter = false)
+        # TODO: make this respect nesting somehow!
+        push!(literate_pages, joinpath(output_dir, file))
+    end
+end
 
 makedocs(;
     modules=[GeometryOps],
@@ -16,10 +35,12 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-    ],
+        "Source code" => literate_pages
+    ]
 )
 
 deploydocs(;
     repo="github.com/asinghvi17/GeometryOps.jl",
     devbranch="main",
+    push_preview = true,
 )
