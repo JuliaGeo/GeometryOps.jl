@@ -1,6 +1,30 @@
 # # Signed area
 export signed_area
 
+# ## What is signed area?
+
+# Signed area is simply the integral over the exterior path of a polygon, 
+# minus the sum of integrals over its interior holes.
+
+# It is signed such that a clockwise path has a positive area, and a
+# counterclockwise path has a negative area.
+
+# To provide an example, consider this rectangle:
+# ```@example rect
+# using GeometryBasics
+# rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
+# f, a, p = poly(rect; axis = (; aspect = DataAspect()))
+# ```
+# This is clearly a rectangle, etc.  But now let's look at how the points look:
+# ```@example rect
+# lines!(a, rect; color = 1:length(coordinates(rect))+1)
+# f
+# ```
+# The points are ordered in a clockwise fashion, which means that the signed area
+# is positive.  If we reverse the order of the points, we get a negative area.
+
+# ## Implementation
+
 # This is the GeoInterface-compatible implementation.
 
 # First, we implement a wrapper method that dispatches to the correct
