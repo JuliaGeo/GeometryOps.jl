@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Overlap checks · GeometryOps.jl</title><script data-outdated-warner src="../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/overlaps/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li><a class="tocitem" href="../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../centroid/">Centroid</a></li><li><a class="tocitem" href="../contains/">Containment</a></li><li><a class="tocitem" href="../crosses/">Crossing checks</a></li><li><a class="tocitem" href="../disjoint/">Disjointness checks</a></li><li><a class="tocitem" href="../intersects/">Intersection checks</a></li><li class="is-active"><a class="tocitem" href>Overlap checks</a></li><li><a class="tocitem" href="../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../signed_area/">Signed area</a></li><li><a class="tocitem" href="../signed_distance/">Signed distance</a></li><li><a class="tocitem" href="../within/">Containment/withinness</a></li><li><a class="tocitem" href="../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Overlap checks</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Overlap checks</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/overlaps.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Overlap-checks"><a class="docs-heading-anchor" href="#Overlap-checks">Overlap checks</a><a id="Overlap-checks-1"></a><a class="docs-heading-anchor-permalink" href="#Overlap-checks" title="Permalink"></a></h1><pre><code class="language-julia hljs">export overlaps</code></pre><p>This code checks whether geometries overlap with each other.</p><p>It does not compute the overlap or intersection geometry.</p><pre><code class="language-julia hljs">&quot;&quot;&quot;
+    overlaps(geom1, geom2)::Bool
+
+Compare two Geometries of the same dimension and return true if their intersection set results in a geometry
+different from both but of the same dimension. It applies to Polygon/Polygon, LineString/LineString,
+Multipoint/Multipoint, MultiLineString/MultiLineString and MultiPolygon/MultiPolygon.
+
+# Examples
+```jldoctest
+julia&gt; poly1 = Polygon([[[0,0],[0,5],[5,5],[5,0],[0,0]]])
+Polygon(Array{Array{Float64,1},1}[[[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]]])
+
+julia&gt; poly2 = Polygon([[[1,1],[1,6],[6,6],[6,1],[1,1]]])
+Polygon(Array{Array{Float64,1},1}[[[1.0, 1.0], [1.0, 6.0], [6.0, 6.0], [6.0, 1.0], [1.0, 1.0]]])
+
+julia&gt; overlap(poly1, poly2)
+true
+```
+&quot;&quot;&quot;
+overlaps(g1, g2)::Bool = overlaps(trait(g1), g1, trait(g2), g2)::Bool
+overlaps(t1::FeatureTrait, g1, t2, g2)::Bool = overlaps(GI.geometry(g1), g2)
+overlaps(t1, g1, t2::FeatureTrait, g2)::Bool = overlaps(g1, geometry(g2))
+function overlaps(::MultiPointTrait, g1, ::MultiPointTrait, g2)::Bool
+    for p1 in GI.getpoint(g1)
+        for p2 in GI.getpoint(g2)
+            equals(p1, p2) &amp;&amp; return true
+        end
+    end
+end
+function overlaps(::PolygonTrait, g1, ::PolygonTrait, g2)::Bool
+    line1 = polygon_to_line(geom1)
+    line2 = polygon_to_line(geom2)
+
+    intersection(line1, line2)
+end
+overlaps(::PolygonTrait, mp, ::MultiPointTrait, p)::Bool = overlaps(p, mp)
+function overlaps(t1::MultiPolygonTrait, mp, t2::Polygon, p1)::Bool
+    for p2 in GI.getgeom(mp)
+        overlaps(p1, p2)
+    end
+end
+function overlaps(::MultiPolygonTrait, g1, ::MultiPolygonTrait, g2)::Bool
+    for p1 in GI.getgeom(g1)
+        overlaps(PolygonTrait(), mp, PolygonTrait(), p1)
+    end
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../intersects/">« Intersection checks</a><a class="docs-footer-nextpage" href="../polygonize/">Polygonizing raster data »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Tuesday 1 August 2023 16:42">Tuesday 1 August 2023</span>. Using Julia version 1.9.2.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

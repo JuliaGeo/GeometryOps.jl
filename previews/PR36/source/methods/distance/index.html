@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Distance and signed distance · GeometryOps.jl</title><script data-outdated-warner src="../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/distance/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li><a class="tocitem" href="../area/">Area and signed area</a></li><li><a class="tocitem" href="../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../centroid/">Centroid</a></li><li><a class="tocitem" href="../contains/">Containment</a></li><li><a class="tocitem" href="../crosses/">Crossing checks</a></li><li><a class="tocitem" href="../disjoint/">Disjointness checks</a></li><li class="is-active"><a class="tocitem" href>Distance and signed distance</a><ul class="internal"><li><a class="tocitem" href="#What-is-distance?-What-is-signed-distance?"><span>What is distance? What is signed distance?</span></a></li><li><a class="tocitem" href="#Implementation"><span>Implementation</span></a></li></ul></li><li><a class="tocitem" href="../equals/">Equals</a></li><li><a class="tocitem" href="../intersects/">Intersection checks</a></li><li><a class="tocitem" href="../overlaps/">Overlaps</a></li><li><a class="tocitem" href="../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../within/">Containment/withinness</a></li><li><a class="tocitem" href="../../transformations/extent/">-</a></li><li><a class="tocitem" href="../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Distance and signed distance</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Distance and signed distance</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/distance.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Distance-and-signed-distance"><a class="docs-heading-anchor" href="#Distance-and-signed-distance">Distance and signed distance</a><a id="Distance-and-signed-distance-1"></a><a class="docs-heading-anchor-permalink" href="#Distance-and-signed-distance" title="Permalink"></a></h1><pre><code class="language-julia hljs">export distance, signed_distance</code></pre><h2 id="What-is-distance?-What-is-signed-distance?"><a class="docs-heading-anchor" href="#What-is-distance?-What-is-signed-distance?">What is distance? What is signed distance?</a><a id="What-is-distance?-What-is-signed-distance?-1"></a><a class="docs-heading-anchor-permalink" href="#What-is-distance?-What-is-signed-distance?" title="Permalink"></a></h2><p>Distance is the distance of a point to another geometry. This is always a positive number. If a point is inside of geometry, so on a curve or inside of a polygon, the distance will be zero. Signed distance is mainly used for polygons and multipolygons. If a point is outside of a geometry, signed distance has the same value as distance. However, points within the geometry have a negative distance representing the distance of a point to the closest boundary. Therefore, for all &quot;non-filled&quot; geometries, like curves, the distance will either be postitive or 0.</p><p>To provide an example, consider this rectangle:</p><pre><code class="language- hljs">using GeometryOps
+using GeometryOps.GeometryBasics
+using Makie
+
+rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
+point_in = Point(0.5, 0.5)
+point_out = Point(0.5, 1.5)
+f, a, p = poly(rect; axis = (; aspect = DataAspect()))
+scatter!(f, point_in)
+scatter!(f, point_out)
+f</code></pre><p>This is clearly a rectangle with one point inside and one point outside. The points are both an equal distance to the polygon. The distance to point<em>in is negative while the distance to point</em>out is positive.</p><pre><code class="language- hljs">distance(point_in, poly)  # == 0
+signed_distance(point_in, poly)  # &lt; 0
+signed_distance(point_out, poly)  # &gt; 0</code></pre><h2 id="Implementation"><a class="docs-heading-anchor" href="#Implementation">Implementation</a><a id="Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation" title="Permalink"></a></h2><p>This is the GeoInterface-compatible implementation. First, we implement a wrapper method that dispatches to the correct implementation based on the geometry trait. This is also used in the implementation, since it&#39;s a lot less work!</p><p>Distance and signed distance are only implemented for points to other geometries right now. This could be extended to include distance from other geometries in the future.</p><p>The distance calculated is the Euclidean distance using the Pythagorean theorem. Also note that singed_distance only makes sense for &quot;filled-in&quot; shapes, like polygons, so it isn&#39;t implemented for curves.</p><pre><code class="language-julia hljs">&quot;&quot;&quot;
+    distance(point, geom, ::Type{T} = Float64)::T
+
+Calculates the  ditance from the geometry `g1` to the `point`. The distance
+will always be positive or zero.
+
+The method will differ based on the type of the geometry provided:
+    - The distance from a point to a point is just the Euclidean distance
+    between the points.
+    - The distance from a point to a line is the minimum distance from the point
+    to the closest point on the given line.
+    - The distance from a point to a linestring is the minimum distance from the
+    point to the closest segment of the linestring.
+    - The distance from a point to a linear ring is the minimum distance from
+    the point to the closest segment of the linear ring.
+    - The distance from a point to a polygon is zero if the point is within the
+    polygon and otherwise is the minimum distance from the point to an edge of
+    the polygon. This includes edges created by holes.
+    - The distance from a point to a multigeometry or a geometry collection is
+    the minimum distance between the point and any of the sub-geometries.
+
+Result will be of type T, where T is an optional argument with a default value
+of Float64.
+&quot;&quot;&quot;
+distance(point, geom, ::Type{T} = Float64) where T &lt;: AbstractFloat =
+    _distance(T, GI.trait(point), point, GI.trait(geom), geom)
+
+&quot;&quot;&quot;
+    signed_distance(point, geom, ::Type{T} = Float64)::T
+
+Calculates the signed distance from the geometry `geom` to the given point.
+Points within `geom` have a negative signed distance, and points outside of
+`geom` have a positive signed distance.
+    - The signed distance from a point to a point, line, linestring, or linear
+    ring is equal to the distance between the two.
+    - The signed distance from a point to a polygon is negative if the point is
+    within the polygon and is positive otherwise. The value of the distance is
+    the minimum distance from the point to an edge of the polygon. This includes
+    edges created by holes.
+    - The signed distance from a point to a multigeometry or a geometry
+    collection is the minimum signed distance between the point and any of the
+    sub-geometries.
+
+Result will be of type T, where T is an optional argument with a default value
+of Float64.
+&quot;&quot;&quot;
+signed_distance(point, geom, ::Type{T} = Float64) where T&lt;:AbstractFloat =
+    _signed_distance(T, GI.trait(point), point, GI.trait(geom), geom)</code></pre><p>Swap argument order to point as first argument</p><pre><code class="language-julia hljs">_distance(
+    ::Type{T},
+    gtrait::GI.AbstractTrait, geom,
+    ptrait::GI.PointTrait, point,
+) where T = _distance(T, ptrait, point, gtrait, geom)
+
+_signed_distance(
+    ::Type{T},
+    gtrait::GI.AbstractTrait, geom,
+    ptrait::GI.PointTrait, point,
+) where T = _signed_distance(T, ptrait, point, gtrait, geom)</code></pre><p>Point-Point, Point-Line, Point-LineString, Point-LinearRing</p><pre><code class="language-julia hljs">_distance(::Type{T}, ::GI.PointTrait, point, ::GI.PointTrait, geom) where T =
+    _euclid_distance(T, point, geom)
+
+_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LineTrait, geom) where T =
+    _distance_line(T, point, GI.getpoint(geom, 1), GI.getpoint(geom, 2))
+
+_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LineStringTrait, geom) where T =
+    _distance_curve(T, point, geom, close_curve = false)
+
+_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LinearRingTrait, geom) where T =
+    _distance_curve(T, point, geom, close_curve = true)
+
+_signed_distance(::Type{T}, ptrait::GI.PointTrait, point, gtrait::GI.AbstractTrait, geom) where T =
+    _distance(T, ptrait, point, gtrait, geom)</code></pre><p>Point-Polygon</p><pre><code class="language-julia hljs">function _distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
+    GI.within(point, geom) &amp;&amp; return zero(T)
+    return _distance_polygon(T, point, geom)
+end
+
+function _signed_distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
+    min_dist = _distance_polygon(T, point, geom)</code></pre><p>negative if point is inside polygon</p><pre><code class="language-julia hljs">    return GI.within(point, geom) ? -min_dist : min_dist
+end</code></pre><p>Point-MultiGeometries / Point-GeometryCollections</p><pre><code class="language-julia hljs">function _distance(
+    ::Type{T},
+    ::GI.PointTrait,
+    point,
+    ::Union{
+        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    },
+    geoms,
+) where T
+    min_dist = typemax(T)
+    for g in GI.getgeom(geoms)
+        dist = distance(point, g, T)
+        min_dist = dist &lt; min_dist ? dist : min_dist
+    end
+    return min_dist
+end
+
+function _signed_distance(
+    ::Type{T},
+    ::GI.PointTrait,
+    point,
+    ::Union{
+        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    },
+    geoms,
+) where T
+    min_dist = typemax(T)
+    for g in GI.getgeom(geoms)
+        dist = signed_distance(point, g, T)
+        min_dist = dist &lt; min_dist ? dist : min_dist
+    end
+    return min_dist
+end</code></pre><p>Returns the Euclidean distance between two points.</p><pre><code class="language-julia hljs">Base.@propagate_inbounds _euclid_distance(::Type{T}, p1, p2) where T =
+    _euclid_distance(
+        T,
+        GeoInterface.x(p1), GeoInterface.y(p1),
+        GeoInterface.x(p2), GeoInterface.y(p2),
+    )</code></pre><p>Returns the Euclidean distance between two points given their x and y values.</p><pre><code class="language-julia hljs">Base.@propagate_inbounds _euclid_distance(::Type{T}, x1, y1, x2, y2) where T =
+    T(sqrt((x2 - x1)^2 + (y2 - y1)^2))</code></pre><p>Returns the minimum distance from point p0 to the line defined by endpoints p1 and p2.</p><pre><code class="language-julia hljs">function _distance_line(::Type{T}, p0, p1, p2) where T
+    x0, y0 = GeoInterface.x(p0), GeoInterface.y(p0)
+    x1, y1 = GeoInterface.x(p1), GeoInterface.y(p1)
+    x2, y2 = GeoInterface.x(p2), GeoInterface.y(p2)
+
+    xfirst, yfirst, xlast, ylast = x1 &lt; x2 ?
+        (x1, y1, x2, y2) : (x2, y2, x1, y1)
+
+    #=
+    Vectors from first point to last point (v) and from first point to point of
+    interest (w) to find the projection of w onto v to find closest point
+    =#
+    v = (xlast - xfirst, ylast - yfirst)
+    w = (x0 - xfirst, y0 - yfirst)
+
+    c1 = sum(w .* v)
+    if c1 &lt;= 0  # p0 is closest to first endpoint
+        return _euclid_distance(T, x0, y0, xfirst, yfirst)
+    end
+
+    c2 = sum(v .* v)
+    if c2 &lt;= c1 # p0 is closest to last endpoint
+        return _euclid_distance(T, x0, y0, xlast, ylast)
+    end
+
+    b2 = c1 / c2  # projection fraction
+    return _euclid_distance(T, x0, y0, xfirst + (b2 * v[1]), yfirst + (b2 * v[2]))
+end</code></pre><p>Returns the minimum distance from the given point to the given curve. If close_curve is true, make sure to include the edge from the first to last point of the curve, even if it isn&#39;t explicitly repeated.</p><pre><code class="language-julia hljs">function _distance_curve(::Type{T}, point, curve; close_curve = false) where T</code></pre><p>see if linear ring has explicitly repeated last point in coordinates</p><pre><code class="language-julia hljs">    np = GI.npoint(curve)
+    first_last_equal = equals(GI.getpoint(curve, 1), GI.getpoint(curve, np))
+    close_curve &amp;= first_last_equal
+    np -= first_last_equal ? 1 : 0</code></pre><p>find minimum distance</p><pre><code class="language-julia hljs">    min_dist = typemax(T)
+    p1 = GI.getpoint(curve, close_curve ? np : 1)
+    for i in (close_curve ? 1 : 2):np
+        p2 = GI.getpoint(curve, i)
+        dist = _distance_line(T, point, p1, p2)
+        min_dist = dist &lt; min_dist ? dist : min_dist
+        p1 = p2
+    end
+    return min_dist
+end</code></pre><p>Returns the minimum distance from the given point to an edge of the given polygon, including from edges created by holes. Assumes polygon isn&#39;t filled and treats the exterior and each hole as a linear ring.</p><pre><code class="language-julia hljs">function _distance_polygon(::Type{T}, point, poly) where T
+    min_dist = _distance_curve(T, point, GI.getexterior(poly); close_curve = true)
+    @inbounds for hole in GI.gethole(poly)
+        dist = _distance_curve(T, point, hole; close_curve = true)
+        min_dist = dist &lt; min_dist ? dist : min_dist
+    end
+    return min_dist
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../disjoint/">« Disjointness checks</a><a class="docs-footer-nextpage" href="../equals/">Equals »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Monday 1 January 2024 23:17">Monday 1 January 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

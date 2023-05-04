@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Geometry simplification · GeometryOps.jl</title><script data-outdated-warner src="../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/transformations/simplify/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li><a class="tocitem" href="../../methods/barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../../methods/bools/">Boolean conditions</a></li><li><a class="tocitem" href="../../methods/centroid/">Centroid</a></li><li><a class="tocitem" href="../../methods/contains/">Containment</a></li><li><a class="tocitem" href="../../methods/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../../methods/disjoint/">Disjointness checks</a></li><li><a class="tocitem" href="../../methods/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../../methods/overlaps/">Overlap checks</a></li><li><a class="tocitem" href="../../methods/polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../../methods/signed_area/">Signed area</a></li><li><a class="tocitem" href="../../methods/signed_distance/">Signed distance</a></li><li><a class="tocitem" href="../../methods/within/">Containment/withinness</a></li><li><a class="tocitem" href="../extent/">-</a></li><li><a class="tocitem" href="../flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../reproject/">Geometry reprojection</a></li><li class="is-active"><a class="tocitem" href>Geometry simplification</a></li><li><a class="tocitem" href="../tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Geometry simplification</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Geometry simplification</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/transformations/simplify.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Geometry-simplification"><a class="docs-heading-anchor" href="#Geometry-simplification">Geometry simplification</a><a id="Geometry-simplification-1"></a><a class="docs-heading-anchor-permalink" href="#Geometry-simplification" title="Permalink"></a></h1><p>This file holds implementations for the Douglas-Peucker and Visvalingam-Whyatt algorithms for simplifying geometries (specifically polygons and lines).</p><pre><code class="language-julia hljs">export simplify, VisvalingamWhyatt, DouglasPeucker
+
+
+&quot;&quot;&quot;
+    abstract type SimplifyAlg
+
+Abstract type for simplification algorithms.
+
+# API
+
+For now, the algorithm must hold the `number`, `ratio` and `tol` properties.
+
+Simplification algorithm types can hook into the interface by implementing
+the `_simplify(trait, alg, geom)` methods for whichever traits are necessary.
+&quot;&quot;&quot;
+abstract type SimplifyAlg end
+
+const SIMPLIFY_ALG_KEYWORDS = &quot;&quot;&quot;
+# Keywords
+- `ratio`: the fraction of points that should remain after `simplify`.
+    Useful as it will generalise for large collections of objects.
+- `number`: the number of points that should remain after `simplify`.
+    Less useful for large collections of mixed size objects.
+&quot;&quot;&quot;
+
+const MIN_POINTS = 3
+
+function checkargs(number, ratio, tol)
+    count(isnothing, (number, ratio, tol)) == 2 ||
+        error(&quot;Must provide one of `number`, `ratio` or `tol` keywords&quot;)
+    if !isnothing(ratio)
+        if ratio &lt;= 0 || ratio &gt; 1
+            error(&quot;`ratio` must be 0 &lt; ratio &lt;= 1. Got $ratio&quot;)
+        end
+    end
+    if !isnothing(number)
+        if number &lt; MIN_POINTS
+            error(&quot;`number` must be $MIN_POINTS or larger. Got $number&quot;)
+        end
+    end
+    return nothing
+end
+
+&quot;&quot;&quot;
+    simplify(obj; kw...)
+    simplify(::SimplifyAlg, obj)
+
+Simplify a geometry, feature, feature collection,
+or nested vectors or a table of these.
+
+`RadialDistance`, `DouglasPeucker`, or
+`VisvalingamWhyatt` algorithms are available,
+listed in order of increasing quality but decreaseing performance.
+
+`PoinTrait` and `MultiPointTrait` are returned unchanged.
+
+The default behaviour is `simplify(DouglasPeucker(; kw...), obj)`.
+Pass in other `SimplifyAlg` to use other algorithms.</code></pre><p>Example</p><pre><code class="language-julia hljs">Simplify a polygon to have six points:
+
+```jldoctest
+import GeoInterface as GI
+import GeometryOps as GO
+
+poly = GI.Polygon([[
+    [-70.603637, -33.399918],
+    [-70.614624, -33.395332],
+    [-70.639343, -33.392466],
+    [-70.659942, -33.394759],
+    [-70.683975, -33.404504],
+    [-70.697021, -33.419406],
+    [-70.701141, -33.434306],
+    [-70.700454, -33.446339],
+    [-70.694274, -33.458369],
+    [-70.682601, -33.465816],
+    [-70.668869, -33.472117],
+    [-70.646209, -33.473835],
+    [-70.624923, -33.472117],
+    [-70.609817, -33.468107],
+    [-70.595397, -33.458369],
+    [-70.587158, -33.442901],
+    [-70.587158, -33.426283],
+    [-70.590591, -33.414248],
+    [-70.594711, -33.406224],
+    [-70.603637, -33.399918]]])
+
+simple = GO.simplify(poly; number=6)
+GI.npoint(simple)</code></pre><p>output</p><pre><code class="language-julia hljs">6
+```
+&quot;&quot;&quot;
+simplify(data; calc_extent=false, kw...) = _simplify(DouglasPeucker(; kw...), data; calc_extent)
+simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
+
+function _simplify(alg::SimplifyAlg, data; kw...)
+    # Apply simplication to all curves, multipoints, and points,
+    # reconstructing everything else around them.
+    simplifier(geom) = _simplify(trait(geom), alg, geom)
+    apply(simplifier, Union{PolygonTrait,AbstractCurveTrait,MultiPoint,PointTrait}, data; kw...)
+end
+# For Point and MultiPoint traits we do nothing
+_simplify(::PointTrait, alg, geom) = geom
+_simplify(::MultiPointTrait, alg, geom) = geom
+function _simplify(::PolygonTrait, alg, geom)
+    # Force treating children as LinearRing
+    rebuilder(g) = rebuild(g, _simplify(LinearRingTrait(), alg, g))
+    lrs = map(rebuilder, GI.getgeom(geom))
+    return rebuild(geom, lrs)
+end
+# For curves and rings we simplify
+_simplify(::AbstractCurveTrait, alg, geom) = rebuild(geom, simplify(alg, tuple_points(geom)))
+function _simplify(::LinearRingTrait, alg, geom)
+    # Make a vector of points
+    points = tuple_points(geom)
+
+    # Simplify it once
+    simple = _simplify(alg, points)
+
+    return rebuild(geom, simple)
+end
+
+&quot;&quot;&quot;
+    RadialDistance &lt;: SimplifyAlg
+
+Simplifies geometries by removing points less than
+`tol` distance from the line between its neighboring points.
+
+$SIMPLIFY_ALG_KEYWORDS
+- `tol`: the minimum distance between points.
+&quot;&quot;&quot;
+struct RadialDistance &lt;: SimplifyAlg
+    number::Union{Int64,Nothing}
+    ratio::Union{Float64,Nothing}
+    tol::Union{Float64,Nothing}
+end
+function RadialDistance(; number=nothing, ratio=nothing, tol=nothing)
+    checkargs(number, ratio, tol)
+    return RadialDistance(number, ratio, tol)
+end
+
+settol(alg::RadialDistance, tol) = RadialDistance(alg.number, alg.ratio, tol)
+
+function _simplify(alg::RadialDistance, points::Vector)
+    previous = first(points)
+    distances = Array{Float64}(undef, length(points))
+    for i in eachindex(points)
+        point = points[i]
+        distances[i] = _squared_dist(point, previous)
+        previous = point
+    end
+    # Never remove the end points
+    distances[begin] = distances[end] = Inf
+    # This avoids taking the square root of each distance above
+    if !isnothing(alg.tol)
+        alg = settol(alg, (alg.tol::Float64)^2)
+    end
+    return _get_points(alg, points, distances)
+end
+
+function _squared_dist(p1, p2)
+    dx = GI.x(p1) - GI.x(p2)
+    dy = GI.y(p1) - GI.y(p2)
+    return dx^2 + dy^2
+end
+
+&quot;&quot;&quot;
+    DouglasPeucker &lt;: SimplifyAlg
+
+    DouglasPeucker(; number, ratio, tol)
+
+Simplifies geometries by removing points below `tol`
+distance from the line between its neighboring points.
+
+$SIMPLIFY_ALG_KEYWORDS
+- `tol`: the minimum distance a point will be from the line
+    joining its neighboring points.
+&quot;&quot;&quot;
+struct DouglasPeucker &lt;: SimplifyAlg
+    number::Union{Int64,Nothing}
+    ratio::Union{Float64,Nothing}
+    tol::Union{Float64,Nothing}
+    prefilter::Bool
+end
+function DouglasPeucker(; number=nothing, ratio=nothing, tol=nothing, prefilter=false)
+    checkargs(number, ratio, tol)
+    return DouglasPeucker(number, ratio, tol, prefilter)
+end
+
+settol(alg::DouglasPeucker, tol) = DouglasPeucker(alg.number, alg.ratio, tol, alg.prefilter)
+
+function _simplify(alg::DouglasPeucker, points::Vector)
+    length(points) &lt;= MIN_POINTS &amp;&amp; return points
+    # TODO do we need this?
+    # points = alg.prefilter ? simplify(RadialDistance(alg.tol), points) : points
+
+    distances = _build_tolerances(_squared_segdist, points)
+    return _get_points(alg, points, distances)
+end
+
+function _squared_segdist(l1, p, l2)
+    x, y = GI.x(l1), GI.y(l1)
+    dx = GI.x(l2) - x
+    dy = GI.y(l2) - y
+
+    if !iszero(dx) || !iszero(dy)
+        t = ((GI.x(p) - x) * dx + (GI.y(p) - y) * dy) / (dx * dx + dy * dy)
+        if t &gt; 1
+            x = GI.x(l2)
+            y = GI.y(l2)
+        elseif t &gt; 0
+            x += dx * t
+            y += dy * t
+        end
+    end
+
+    dx = GI.x(p) - x
+    dy = GI.y(p) - y
+
+    return dx^2 + dy^2
+end
+
+
+&quot;&quot;&quot;
+    VisvalingamWhyatt &lt;: SimplifyAlg
+
+    VisvalingamWhyatt(; kw...)
+
+Simplifies geometries by removing points below `tol`
+distance from the line between its neighboring points.
+
+$SIMPLIFY_ALG_KEYWORDS
+- `tol`: the minimum area of a triangle made with a point and
+    its neighboring points.
+&quot;&quot;&quot;
+struct VisvalingamWhyatt &lt;: SimplifyAlg
+    number::Union{Int,Nothing}
+    ratio::Union{Float64,Nothing}
+    tol::Union{Float64,Nothing}
+    prefilter::Bool
+end
+function VisvalingamWhyatt(; number=nothing, ratio=nothing, tol=nothing, prefilter=false)
+    checkargs(number, ratio, tol)
+    return VisvalingamWhyatt(number, ratio, tol, prefilter)
+end
+
+settol(alg::VisvalingamWhyatt, tol) = VisvalingamWhyatt(alg.number, alg.ratio, tol, alg.prefilter)
+
+function _simplify(alg::VisvalingamWhyatt, points::Vector)
+    length(points) &lt;= MIN_POINTS &amp;&amp; return points
+    areas = _build_tolerances(_triangle_double_area, points)
+
+    # This avoids diving everything by two
+    if !isnothing(alg.tol)
+        alg = settol(alg, (alg.tol::Float64)*2)
+    end
+    return _get_points(alg, points, areas)
+end
+
+# calculates the area of a triangle given its vertices
+_triangle_double_area(p1, p2, p3) =
+    abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2]))</code></pre><h3 id="Shared-utils"><a class="docs-heading-anchor" href="#Shared-utils">Shared utils</a><a id="Shared-utils-1"></a><a class="docs-heading-anchor-permalink" href="#Shared-utils" title="Permalink"></a></h3><pre><code class="language-julia hljs">function _build_tolerances(f, points)
+    nmax = length(points)
+    real_tolerances = _flat_tolerances(f, points)
+
+    tolerances = copy(real_tolerances)
+    i = collect(1:nmax)
+
+    min_vert = argmin(tolerances)
+    this_tolerance = tolerances[min_vert]
+    _remove!(tolerances, min_vert)
+    deleteat!(i, min_vert)
+
+    while this_tolerance &lt; Inf
+        skip = false
+
+        if min_vert &lt; length(i)
+            right_tolerance = f(
+                points[i[min_vert - 1]],
+                points[i[min_vert]],
+                points[i[min_vert + 1]],
+            )
+            if right_tolerance &lt;= this_tolerance
+                right_tolerance = this_tolerance
+                skip = min_vert == 1
+            end
+
+            real_tolerances[i[min_vert]] = right_tolerance
+            tolerances[min_vert] = right_tolerance
+        end
+
+        if min_vert &gt; 2
+            left_tolerance = f(
+                points[i[min_vert - 2]],
+                points[i[min_vert - 1]],
+                points[i[min_vert]],
+            )
+            if left_tolerance &lt;= this_tolerance
+                left_tolerance = this_tolerance
+                skip = min_vert == 2
+            end
+            real_tolerances[i[min_vert - 1]] = left_tolerance
+            tolerances[min_vert - 1] = left_tolerance
+        end
+
+        if !skip
+            min_vert = argmin(tolerances)
+        end
+        deleteat!(i, min_vert)
+        this_tolerance = tolerances[min_vert]
+        _remove!(tolerances, min_vert)
+    end
+
+    return real_tolerances
+end
+
+function tuple_points(geom)
+    points = Array{Tuple{Float64,Float64}}(undef, GI.ngeom(geom))
+    for (i, p) in enumerate(GI.getpoint(geom))
+        points[i] = (GI.x(p), GI.y(p))
+    end
+    return points
+end
+
+function _get_points(alg, points, tolerances)
+    # This assumes that `alg` has the properties
+    # `tol`, `number`, and `ratio` available...
+    tol = alg.tol
+    number = alg.number
+    ratio = alg.ratio
+    bit_indices = if !isnothing(tol)
+        _tol_indices(alg.tol::Float64, points, tolerances)
+    elseif !isnothing(number)
+        _number_indices(alg.number::Int64, points, tolerances)
+    else
+        _ratio_indices(alg.ratio::Float64, points, tolerances)
+    end
+    return points[bit_indices]
+end
+
+function _tol_indices(tol, points, tolerances)
+    tolerances .&gt;= tol
+end
+
+function _number_indices(n, points, tolerances)
+    tol = partialsort(tolerances, length(points) - n + 1)
+    bit_indices = _tol_indices(tol, points, tolerances)
+    nselected = sum(bit_indices)
+    # If there are multiple values exactly at `tol` we will get
+    # the wrong output length. So we need to remove some.
+    while nselected &gt; n
+        min_tol = Inf
+        min_i = 0
+        for i in eachindex(bit_indices)
+            bit_indices[i] || continue
+            if tolerances[i] &lt; min_tol
+                min_tol = tolerances[i]
+                min_i = i
+            end
+        end
+        nselected -= 1
+        bit_indices[min_i] = false
+    end
+    return bit_indices
+end
+
+function _ratio_indices(r, points, tolerances)
+    n = max(3, round(Int, r * length(points)))
+    return _number_indices(n, points, tolerances)
+end
+
+function _flat_tolerances(f, points)
+    result = Array{Float64}(undef, length(points))
+    result[1] = result[end] = Inf
+
+    for i in 2:length(result) - 1
+        result[i] = f(points[i-1], points[i], points[i+1])
+    end
+    return result
+end
+
+_remove!(s, i) = s[i:end-1] .= s[i+1:end]</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../reproject/">« Geometry reprojection</a><a class="docs-footer-nextpage" href="../tuples/">Tuple conversion »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Sunday 10 September 2023 12:16">Sunday 10 September 2023</span>. Using Julia version 1.9.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

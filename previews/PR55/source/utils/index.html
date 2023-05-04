@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Utility functions · GeometryOps.jl</title><meta name="title" content="Utility functions · GeometryOps.jl"/><meta property="og:title" content="Utility functions · GeometryOps.jl"/><meta property="twitter:title" content="Utility functions · GeometryOps.jl"/><meta name="description" content="Documentation for GeometryOps.jl."/><meta property="og:description" content="Documentation for GeometryOps.jl."/><meta property="twitter:description" content="Documentation for GeometryOps.jl."/><meta property="og:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/utils/"/><meta property="twitter:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/utils/"/><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/utils/"/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">GeometryOps.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../api/">API Reference</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../primitives/">Primitive functions</a></li><li class="is-active"><a class="tocitem" href>Utility functions</a></li><li><a class="tocitem" href="../methods/angles/">Angles</a></li><li><a class="tocitem" href="../methods/area/">Area and signed area</a></li><li><a class="tocitem" href="../methods/barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../methods/bools/">Boolean conditions</a></li><li><a class="tocitem" href="../methods/centroid/">Centroid</a></li><li><a class="tocitem" href="../methods/distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../methods/equals/">Equals</a></li><li><a class="tocitem" href="../methods/polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../methods/clipping/clipping_processor/">Polygon clipping helpers</a></li><li><a class="tocitem" href="../methods/clipping/difference/">Difference Polygon Clipping</a></li><li><a class="tocitem" href="../methods/clipping/intersection/">Intersection</a></li><li><a class="tocitem" href="../methods/clipping/union/">Union Polygon Clipping</a></li><li><a class="tocitem" href="../methods/geom_relations/contains/">Contains</a></li><li><a class="tocitem" href="../methods/geom_relations/coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../methods/geom_relations/covers/">Covers</a></li><li><a class="tocitem" href="../methods/geom_relations/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../methods/geom_relations/disjoint/">Disjoint</a></li><li><a class="tocitem" href="../methods/geom_relations/geom_geom_processors/">Line-curve interaction</a></li><li><a class="tocitem" href="../methods/geom_relations/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../methods/geom_relations/overlaps/">Overlaps</a></li><li><a class="tocitem" href="../methods/geom_relations/touches/">Touches</a></li><li><a class="tocitem" href="../methods/geom_relations/within/">Within</a></li><li><a class="tocitem" href="../transformations/extent/">Extent embedding</a></li><li><a class="tocitem" href="../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../transformations/transform/">Pointwise transformation</a></li><li><a class="tocitem" href="../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Utility functions</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Utility functions</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/utils.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Utility-functions"><a class="docs-heading-anchor" href="#Utility-functions">Utility functions</a><a id="Utility-functions-1"></a><a class="docs-heading-anchor-permalink" href="#Utility-functions" title="Permalink"></a></h1><pre><code class="language-julia hljs">_is3d(geom) = _is3d(GI.trait(geom), geom)
+_is3d(::GI.AbstractGeometryTrait, geom) = GI.is3d(geom)
+_is3d(::GI.FeatureTrait, feature) = _is3d(GI.geometry(feature))
+_is3d(::GI.FeatureCollectionTrait, fc) = _is3d(GI.getfeature(fc, 1))
+_is3d(::Nothing, geom) = _is3d(first(geom)) # Otherwise step into an itererable
+
+_npoint(x) = _npoint(trait(x), x)
+_npoint(::Nothing, xs::AbstractArray) = sum(_npoint, xs)
+_npoint(::GI.FeatureCollectionTrait, fc) = sum(_npoint, GI.getfeature(fc))
+_npoint(::GI.FeatureTrait, f) = _npoint(GI.geometry(f))
+_npoint(::GI.AbstractGeometryTrait, x) = GI.npoint(trait(x), x)
+
+_nedge(x) = _nedge(trait(x), x)
+_nedge(::Nothing, xs::AbstractArray) = sum(_nedge, xs)
+_nedge(::GI.FeatureCollectionTrait, fc) = sum(_nedge, GI.getfeature(fc))
+_nedge(::GI.FeatureTrait, f) = _nedge(GI.geometry(f))
+function _nedge(::GI.AbstractGeometryTrait, x)
+    n = 0
+    for g in GI.getgeom(x)
+        n += _nedge(g)
+    end
+    return n
+end
+_nedge(::GI.AbstractCurveTrait, x) = GI.npoint(x) - 1
+_nedge(::GI.PointTrait, x) = error(&quot;Cant get edges from points&quot;)
+
+
+&quot;&quot;&quot;
+    polygon_to_line(poly::Polygon)
+
+Converts a Polygon to LineString or MultiLineString</code></pre><p>Examples</p><pre><code class="language-julia hljs">```jldoctest
+import GeometryOps as GO, GeoInterface as GI
+
+poly = GI.Polygon([[(-2.275543, 53.464547), (-2.275543, 53.489271), (-2.215118, 53.489271), (-2.215118, 53.464547), (-2.275543, 53.464547)]])
+GO.polygon_to_line(poly)</code></pre><p>output</p><pre><code class="language-julia hljs">GeoInterface.Wrappers.LineString{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}([(-2.275543, 53.464547), (-2.275543, 53.489271), (-2.215118, 53.489271), (-2.215118, 53.464547), (-2.275543, 53.464547)], nothing, nothing)
+```
+&quot;&quot;&quot;
+function polygon_to_line(poly)
+    @assert GI.trait(poly) isa PolygonTrait
+    GI.ngeom(poly) &gt; 1 &amp;&amp; return GI.MultiLineString(collect(GI.getgeom(poly)))
+    return GI.LineString(collect(GI.getgeom(GI.getgeom(poly, 1))))
+end
+
+
+&quot;&quot;&quot;
+    to_edges()
+
+Convert any geometry or collection of geometries into a flat
+vector of `Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}` edges.
+&quot;&quot;&quot;
+function to_edges(x)
+    edges = Vector{Edge}(undef, _nedge(x))
+    _to_edges!(edges, x, 1)
+    return edges
+end
+
+_to_edges!(edges::Vector, x, n) = _to_edges!(edges, trait(x), x, n)
+function _to_edges!(edges::Vector, ::GI.FeatureCollectionTrait, fc, n)
+    for f in GI.getfeature(fc)
+        n = _to_edges!(edges, f, n)
+    end
+end
+_to_edges!(edges::Vector, ::GI.FeatureTrait, f, n) = _to_edges!(edges, GI.geometry(f), n)
+function _to_edges!(edges::Vector, ::GI.AbstractGeometryTrait, fc, n)
+    for f in GI.getgeom(fc)
+        n = _to_edges!(edges, f, n)
+    end
+end
+function _to_edges!(edges::Vector, ::GI.AbstractCurveTrait, geom, n)
+    p1 = GI.getpoint(geom, 1)
+    p1x, p1y = GI.x(p1), GI.y(p1)
+    for i in 2:GI.npoint(geom)
+        p2 = GI.getpoint(geom, i)
+        p2x, p2y = GI.x(p2), GI.y(p2)
+        edges[n] = (p1x, p1y), (p2x, p2y)
+        p1x, p1y = p2x, p2y
+        n += 1
+    end
+    return n
+end
+
+_tuple_point(p) = GI.x(p), GI.y(p)
+
+function to_extent(edges::Vector{Edge})
+    x, y = extrema(first, edges)
+    Extents.Extent(X=x, Y=y)
+end
+
+function to_points(x)
+    points = Vector{TuplePoint}(undef, _npoint(x))
+    _to_points!(points, x, 1)
+    return points
+end
+
+_to_points!(points::Vector, x, n) = _to_points!(points, trait(x), x, n)
+function _to_points!(points::Vector, ::FeatureCollectionTrait, fc, n)
+    for f in GI.getfeature(fc)
+        n = _to_points!(points, f, n)
+    end
+end
+_to_points!(points::Vector, ::FeatureTrait, f, n) = _to_points!(points, GI.geometry(f), n)
+function _to_points!(points::Vector, ::AbstractGeometryTrait, fc, n)
+    for f in GI.getgeom(fc)
+        n = _to_points!(points, f, n)
+    end
+end
+function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}, geom, n)
+    p1 = GI.getpoint(geom, 1)
+    p1x, p1y = GI.x(p1), GI.y(p1)
+    for i in 2:GI.npoint(geom)
+        p2 = GI.getpoint(geom, i)
+        p2x, p2y = GI.x(p2), GI.y(p2)
+        points[n] = (p1x, p1y), (p2x, p2y)
+        p1 = p2
+        n += 1
+    end
+    return n
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../primitives/">« Primitive functions</a><a class="docs-footer-nextpage" href="../methods/angles/">Angles »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="auto">Automatic (OS)</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.2.1 on <span class="colophon-date" title="Monday 5 February 2024 16:34">Monday 5 February 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

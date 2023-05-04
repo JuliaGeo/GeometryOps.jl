@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>- · GeometryOps.jl</title><script data-outdated-warner src="../../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/geom_relations/geom_geom_processors/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../../assets/documenter.js"></script><script src="../../../../siteinfo.js"></script><script src="../../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../../"><img src="../../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../../utils/">Utility functions</a></li><li><a class="tocitem" href="../../area/">Area and signed area</a></li><li><a class="tocitem" href="../../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../../centroid/">Centroid</a></li><li><a class="tocitem" href="../../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../../equals/">Equals</a></li><li><a class="tocitem" href="../../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../contains/">Contains</a></li><li><a class="tocitem" href="../coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../covers/">Covers</a></li><li><a class="tocitem" href="../crosses/">Crossing checks</a></li><li><a class="tocitem" href="../disjoint/">Disjoint</a></li><li class="is-active"><a class="tocitem" href>-</a></li><li><a class="tocitem" href="../intersects/">Intersection checks</a></li><li><a class="tocitem" href="../overlaps/">Overlaps</a></li><li><a class="tocitem" href="../touches/">Touches</a></li><li><a class="tocitem" href="../within/">Within</a></li><li><a class="tocitem" href="../../../transformations/extent/">-</a></li><li><a class="tocitem" href="../../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../../transformations/transform/">-</a></li><li><a class="tocitem" href="../../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>-</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>-</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/geom_relations/geom_geom_processors.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><pre><code class="language-julia hljs">#= Code is based off of DE-9IM Standards (https://en.wikipedia.org/wiki/DE-9IM)
+and attempts a standardized solution for most of the functions.
+=#
+
+@enum PointOrientation point_in=1 point_on=2 point_out=3
+
+@enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4</code></pre><p>Determines if a point meets the given checks with respect to a curve.</p><p>If in<em>allow is true, the point can be on the curve interior. If on</em>allow is true, the point can be on the curve boundary. If out_allow is true, the point can be disjoint from the curve.</p><p>If the point is in an &quot;allowed&quot; location, return true. Else, return false.</p><p>If closed_curve is true, curve is treated as a closed curve where the first and last point are connected by a segment.</p><pre><code class="language-julia hljs">function _point_curve_process(
+    point, curve;
+    in_allow, on_allow, out_allow,
+    closed_curve = false,
+)</code></pre><p>Determine if curve is closed</p><pre><code class="language-julia hljs">    n = GI.npoint(curve)
+    first_last_equal = equals(GI.getpoint(curve, 1), GI.getpoint(curve, n))
+    closed_curve |= first_last_equal
+    n -= first_last_equal ? 1 : 0</code></pre><p>Loop through all curve segments</p><pre><code class="language-julia hljs">    p_start = GI.getpoint(curve, closed_curve ? n : 1)
+    @inbounds for i in (closed_curve ? 1 : 2):n
+        p_end = GI.getpoint(curve, i)
+        seg_val = _point_segment_orientation(point, p_start, p_end)
+        seg_val == point_in &amp;&amp; return in_allow
+        if seg_val == point_on
+            if !closed_curve  # if point is on curve endpoints, it is &quot;on&quot;
+                i == 2 &amp;&amp; equals(point, p_start) &amp;&amp; return on_allow
+                i == n &amp;&amp; equals(point, p_end) &amp;&amp; return on_allow
+            end
+            return in_allow
+        end
+        p_start = p_end
+    end
+    return out_allow
+end</code></pre><p>Determines if a point meets the given checks with respect to a polygon.</p><p>If in<em>allow is true, the point can be within the polygon interior If on</em>allow is true, the point can be on the polygon boundary. If out_allow is true, the point can be disjoint from the polygon.</p><p>If the point is in an &quot;allowed&quot; location, return true. Else, return false.</p><pre><code class="language-julia hljs">function _point_polygon_process(
+    point, polygon;
+    in_allow, on_allow, out_allow,
+)</code></pre><p>Check interaction of geom with polygon&#39;s exterior boundary</p><pre><code class="language-julia hljs">    ext_val = _point_filled_curve_orientation(point, GI.getexterior(polygon))</code></pre><p>If a point is outside, it isn&#39;t interacting with any holes</p><pre><code class="language-julia hljs">    ext_val == point_out &amp;&amp; return out_allow</code></pre><p>if a point is on an external boundary, it isn&#39;t interacting with any holes</p><pre><code class="language-julia hljs">    ext_val == point_on &amp;&amp; return on_allow</code></pre><p>If geom is within the polygon, need to check interactions with holes</p><pre><code class="language-julia hljs">    for hole in GI.gethole(polygon)
+        hole_val = _point_filled_curve_orientation(point, hole)</code></pre><p>If a point in in a hole, it is outside of the polygon</p><pre><code class="language-julia hljs">        hole_val == point_in &amp;&amp; return out_allow</code></pre><p>If a point in on a hole edge, it is on the edge of the polygon</p><pre><code class="language-julia hljs">        hole_val == point_on &amp;&amp; return on_allow
+    end</code></pre><p>Point is within external boundary and on in/on any holes</p><pre><code class="language-julia hljs">    return in_allow
+end</code></pre><p>Determines if a line meets the given checks with respect to a curve.</p><p>If over<em>allow is true, segments of the line and curve can be co-linear. If cross</em>allow is true, segments of the line and curve can cross. If on<em>allow is true, endpoints of either the line or curve can intersect a     segment of the other geometry. If cross</em>allow is true, segments of the line and curve can be disjoint.</p><p>If in<em>require is true, the interiors of the line and curve must meet in at least     one point. If on</em>require is true, the bounday of one of the two geometries can meet the     interior or boundary of the other geometry in at least one point. If out_require is true, there must be at least one point of the given line that     is exterior of the curve.</p><p>If the point is in an &quot;allowed&quot; location and meets all requirments, return true. Else, return false.</p><p>If closed<em>line is true, line is treated as a closed line where the first and last point are connected by a segment. Same with closed</em>curve.</p><pre><code class="language-julia hljs">function _line_curve_process(
+    line, curve;
+    over_allow, cross_allow, on_allow, out_allow,
+    in_require, on_require, out_require,
+    closed_line = false,
+    closed_curve = false,
+)</code></pre><p>Set up requirments</p><pre><code class="language-julia hljs">    in_req_met = !in_require
+    on_req_met = !on_require
+    out_req_met = !out_require</code></pre><p>Determine curve endpoints</p><pre><code class="language-julia hljs">    nl = GI.npoint(line)
+    nc = GI.npoint(curve)
+    first_last_equal_line = equals(GI.getpoint(line, 1), GI.getpoint(line, nl))
+    first_last_equal_curve = equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc))
+    nl -= first_last_equal_line ? 1 : 0
+    nc -= first_last_equal_curve ? 1 : 0
+    closed_line |= first_last_equal_line
+    closed_curve |= first_last_equal_curve</code></pre><p>Loop over each line segment</p><pre><code class="language-julia hljs">    l_start = GI.getpoint(line, closed_line ? nl : 1)
+    i = closed_line ? 1 : 2
+    while i ≤ nl
+        l_end = GI.getpoint(line, i)
+        c_start = GI.getpoint(curve, closed_curve ? nc : 1)</code></pre><p>Loop over each curve segment</p><pre><code class="language-julia hljs">        for j in (closed_curve ? 1 : 2):nc
+            c_end = GI.getpoint(curve, j)</code></pre><p>Check if line and curve segments meet</p><pre><code class="language-julia hljs">            seg_val = _segment_segment_orientation((l_start, l_end), (c_start, c_end))</code></pre><p>If segments are co-linear</p><pre><code class="language-julia hljs">            if seg_val == line_over
+                !over_allow &amp;&amp; return false</code></pre><p>at least one point in, meets requirments</p><pre><code class="language-julia hljs">                in_req_met = true
+                point_val = _point_segment_orientation(l_start, c_start, c_end)</code></pre><p>If entire segment isn&#39;t covered, consider remaining section</p><pre><code class="language-julia hljs">                if point_val != point_out
+                    i, l_start, break_off = _find_new_seg(i, l_start, l_end, c_start, c_end)
+                    break_off &amp;&amp; break
+                end
+            else
+                if seg_val == line_cross
+                    !cross_allow &amp;&amp; return false
+                    in_req_met = true
+                elseif seg_val == line_hinge  # could cross or overlap</code></pre><p>Determine location of intersection point on each segment</p><pre><code class="language-julia hljs">                    (α, β) = _find_intersect_fracs(l_start, l_end, c_start, c_end)
+                    if ( # Don&#39;t consider edges of curves as they can&#39;t cross
+                        (!closed_line &amp;&amp; ((α == 0 &amp;&amp; i == 2) || (α == 1 &amp;&amp; i == nl))) ||
+                        (!closed_curve &amp;&amp; ((β == 0 &amp;&amp; j == 2) || (β == 1 &amp;&amp; j == nc)))
+                    )
+                        !on_allow &amp;&amp; return false
+                        on_req_met = true
+                    else
+                        in_req_met = true</code></pre><p>If needed, determine if hinge actually crosses</p><pre><code class="language-julia hljs">                        if (!cross_allow || !over_allow) &amp;&amp; α != 0 &amp;&amp; β != 0</code></pre><p>Find next pieces of hinge to see if line and curve cross</p><pre><code class="language-julia hljs">                            l, c = _find_hinge_next_segments(
+                                α, β, l_start, l_end, c_start, c_end,
+                                i, line, j, curve,
+                            )
+                            if _segment_segment_orientation(l, c) == line_hinge
+                                !cross_allow &amp;&amp; return false
+                            else
+                                !over_allow &amp;&amp; return false
+                            end
+                        end
+                    end
+                end</code></pre><p>no overlap for a give segment, some of segment must be out of curve</p><pre><code class="language-julia hljs">                if j == nc
+                    !out_allow &amp;&amp; return false
+                    out_req_met = true
+                end
+            end
+            c_start = c_end  # consider next segment of curve
+            if j == nc  # move on to next line segment
+                i += 1
+                l_start = l_end
+            end
+        end
+    end
+    return in_req_met &amp;&amp; on_req_met &amp;&amp; out_req_met
+end
+
+#= If entire segment (le to ls) isn&#39;t covered by segment (cs to ce), find remaining section
+part of section outside of cs to ce. If completly covered, increase segment index i. =#
+function _find_new_seg(i, ls, le, cs, ce)
+    break_off = true
+    if _point_segment_orientation(le, cs, ce) != point_out
+        ls = le
+        i += 1
+    elseif !equals(ls, cs) &amp;&amp; _point_segment_orientation(cs, ls, le) != point_out
+        ls = cs
+    elseif !equals(ls, ce) &amp;&amp; _point_segment_orientation(ce, ls, le) != point_out
+        ls = ce
+    else
+        break_off = false
+    end
+    return i, ls, break_off
+end
+
+#= Find where line and curve segments intersect by fraction of length. α is the fraction of
+the line (ls to le) and β is the traction of the curve (cs to ce). =#
+function _find_intersect_fracs(ls, le, cs, ce)
+    _, fracs = _intersection_point(
+        (_tuple_point(ls), _tuple_point(le)),
+        (_tuple_point(cs), _tuple_point(ce))
+    )
+    (α, β) = if !isnothing(fracs)
+        fracs
+    else  # line and curve segments are parallel
+        if equals(ls, cs)
+            (0, 0)
+        elseif equals(ls, ce)
+            (0, 1)
+        elseif equals(le, cs)
+            (1, 0)
+        else  # equals(l_end, c_end)
+            (1, 1)
+        end
+    end
+    return α, β
+end
+
+#= Find next set of segments needed to determine if given hinge segments cross or not.=#
+_find_hinge_next_segments(α, β, ls, le, cs, ce, i, line, j, curve) =
+    if β == 1
+        if α == 1  # hinge at endpoints, so next segment of both is needed
+            ((le, GI.getpoint(line, i + 1)), (ce, GI.getpoint(curve, j + 1)))
+        else  # hinge at curve endpoint and line interior point, curve next segment needed
+            ((ls, le), (ce, GI.getpoint(curve, j + 1)))
+        end
+    else  # hinge at curve interior point and line endpoint, line next segment needed
+        ((le, GI.getpoint(line, i + 1)), (cs, ce))
+    end</code></pre><p>Determines if a line meets the given checks with respect to a polygon.</p><p>If in<em>allow is true, segments of the line can be in the polygon interior. If on</em>allow is true, segments of the line can be on the polygon&#39;s boundary. If out_allow is true, segments of the line can be outside of the polygon.</p><p>If in<em>require is true, the interiors of the line and polygon must meet in at     least one point. If on</em>require is true, the line must have at least one point on the polygon&#39;same     boundary. If out_require is true, the line must have at least one point outside of the     polygon.</p><p>If the point is in an &quot;allowed&quot; location and meets all requirments, return true. Else, return false.</p><p>If closed_line is true, line is treated as a closed line where the first and last point are connected by a segment.</p><pre><code class="language-julia hljs">function _line_polygon_process(
+    line, polygon;
+    in_allow, on_allow, out_allow,
+    in_require, on_require, out_require,
+    closed_line = false,
+)
+    in_req_met = !in_require
+    on_req_met = !on_require
+    out_req_met = !out_require</code></pre><p>Check interaction of line with polygon&#39;s exterior boundary</p><pre><code class="language-julia hljs">    in_curve, on_curve, out_curve = _line_filled_curve_interactions(
+        line, GI.getexterior(polygon);
+        closed_line = closed_line,
+    )
+    if on_curve
+        !on_allow &amp;&amp; return false
+        on_req_met = true
+    end
+    if out_curve
+        !out_allow &amp;&amp; return false
+        out_req_met = true
+    end</code></pre><p>If no points within the polygon, the line is disjoint and we are done</p><pre><code class="language-julia hljs">    !in_curve &amp;&amp; return in_req_met &amp;&amp; on_req_met &amp;&amp; out_req_met</code></pre><p>Loop over polygon holes</p><pre><code class="language-julia hljs">    for hole in GI.gethole(polygon)
+        in_hole, on_hole, out_hole =_line_filled_curve_interactions(
+            line, hole;
+            closed_line = closed_line,
+        )
+        if in_hole  # line in hole is equivalent to being out of polygon
+            !out_allow &amp;&amp; return false
+            out_req_met = true
+        end
+        if on_hole  # hole bounday is polygon boundary
+            !on_allow &amp;&amp; return false
+            on_req_met = true
+        end
+        if !out_hole  # entire line is in/on hole, can&#39;t be in/on other holes
+            in_curve = false
+            break
+        end
+    end
+    if in_curve  # entirely of curve isn&#39;t within a hole
+        !in_allow &amp;&amp; return false
+        in_req_met = true
+    end
+    return in_req_met &amp;&amp; on_req_met &amp;&amp; out_req_met
+end</code></pre><p>Determines if a polygon meets the given checks with respect to a polygon.</p><p>If in<em>allow is true, the polygon&#39;s interiors must intersect. If on</em>allow is true, the one of the polygon&#39;s boundaries must either interact     with the other polygon&#39;s boundary or interior. If out_allow is true, the first polygon must have interior regions outside of     the second polygon.</p><p>If in<em>require is true, the polygon interiors must meet in at least one point. If on</em>require is true, one of the polygon&#39;s must have at least one boundary     point in or on the other polygon. If out_require is true, the first polygon must have at least one interior point     outside of the second polygon.</p><p>If the point is in an &quot;allowed&quot; location and meets all requirments, return true. Else, return false.</p><pre><code class="language-julia hljs">function _polygon_polygon_process(
+    poly1, poly2;
+    in_allow, on_allow, out_allow,
+    in_require, on_require, out_require,
+)
+    in_req_met = !in_require
+    on_req_met = !on_require
+    out_req_met = !out_require</code></pre><p>Check if exterior of poly1 is within poly2</p><pre><code class="language-julia hljs">    ext1 = GI.getexterior(poly1)
+    ext2 = GI.getexterior(poly2)</code></pre><p>Check if exterior of poly1 is in polygon 2</p><pre><code class="language-julia hljs">    e1_in_p2, e1_on_p2, e1_out_p2 = _line_polygon_interactions(
+        ext1, poly2;
+        closed_line = true,
+    )
+    if e1_on_p2
+        !on_allow &amp;&amp; return false
+        on_req_met = true
+    end
+    if e1_out_p2
+        !out_allow &amp;&amp; return false
+        out_req_met = true
+    end
+
+    if !e1_in_p2</code></pre><p>if exterior ring isn&#39;t in poly2, check if it surrounds poly2</p><pre><code class="language-julia hljs">        _, _, e2_out_e1 = _line_filled_curve_interactions(
+            ext2, ext1;
+            closed_line = true,
+        )  # if they really are disjoint, we are done
+        e2_out_e1 &amp;&amp; return in_req_met &amp;&amp; on_req_met &amp;&amp; out_req_met
+    end</code></pre><p>If interiors interact, check if poly2 interacts with any of poly1&#39;s holes</p><pre><code class="language-julia hljs">    for h1 in GI.gethole(poly1)
+        h1_in_p2, h1_on_p2, h1_out_p2 = _line_polygon_interactions(
+            h1, poly2;
+            closed_line = true,
+        )
+        if h1_on_p2
+            !on_allow &amp;&amp; return false
+            on_req_met = true
+        end
+        if h1_out_p2
+            !out_allow &amp;&amp; return false
+            out_req_met = true
+        end
+        if !h1_in_p2</code></pre><p>If hole isn&#39;t in poly2, see if poly2 is in hole</p><pre><code class="language-julia hljs">            _, _, e2_out_h1 = _line_filled_curve_interactions(
+                ext2, h1;
+                closed_line = true,
+            )</code></pre><p>hole encompasses all of poly2</p><pre><code class="language-julia hljs">            !e2_out_h1 &amp;&amp; return in_req_met &amp;&amp; on_req_met &amp;&amp; out_req_met
+            break
+        end
+    end
+    #=
+    poly2 isn&#39;t outside of poly1 and isn&#39;t in a hole, poly1 interior must
+    interact with poly2 interior
+    =#
+    !in_allow &amp;&amp; return false
+    in_req_met = true</code></pre><p>If any of poly2 holes are within poly1, part of poly1 is exterior to poly2</p><pre><code class="language-julia hljs">    for h2 in GI.gethole(poly2)
+        h2_in_p1, h2_on_p1, _ = _line_polygon_interactions(
+            h2, poly1;
+            closed_line = true,
+        )
+        if h2_on_p1
+            !on_allow &amp;&amp; return false
+            on_req_met = true
+        end
+        if h2_in_p1
+            !out_allow &amp;&amp; return false
+            out_req_met = true
+        end
+    end
+    return in_req_met &amp;&amp; on_req_met &amp;&amp; out_req_met
+end</code></pre><p>Determines if a point is in, on, or out of a segment. If the point is <code>on</code> the segment it is on one of the segments endpoints. If it is <code>in</code>, it is on any other point of the segment. If the point is not on any part of the segment, it is <code>out</code> of the segment.</p><p>Point should be an object of point trait and curve should be an object with a linestring or linearring trait.</p><p>Can provide values of in, on, and out keywords, which determines return values for each scenario.</p><pre><code class="language-julia hljs">function _point_segment_orientation(
+    point, start, stop;
+    in::T = point_in, on::T = point_on, out::T = point_out,
+) where {T}</code></pre><p>Parse out points</p><pre><code class="language-julia hljs">    x, y = GI.x(point), GI.y(point)
+    x1, y1 = GI.x(start), GI.y(start)
+    x2, y2 = GI.x(stop), GI.y(stop)
+    Δx_seg = x2 - x1
+    Δy_seg = y2 - y1
+    Δx_pt = x - x1
+    Δy_pt = y - y1
+    if (Δx_pt == 0 &amp;&amp; Δy_pt == 0) || (Δx_pt == Δx_seg &amp;&amp; Δy_pt == Δy_seg)</code></pre><p>If point is equal to the segment start or end points</p><pre><code class="language-julia hljs">        return on
+    else
+        #=
+        Determine if the point is on the segment -&gt; see if vector from segment
+        start to point is parallel to segment and if point is between the
+        segment endpoints
+        =#
+        on_line = _isparallel(Δx_seg, Δy_seg, Δx_pt, Δy_pt)
+        !on_line &amp;&amp; return out
+        between_endpoints =
+            (x2 &gt; x1 ? x1 &lt;= x &lt;= x2 : x2 &lt;= x &lt;= x1) &amp;&amp;
+            (y2 &gt; y1 ? y1 &lt;= y &lt;= y2 : y2 &lt;= y &lt;= y1)
+        !between_endpoints &amp;&amp; return out
+    end
+    return in
+end</code></pre><p>Determine if point is in, on, or out of a closed curve, which includes the space enclosed by the closed curve.</p><p><code>In</code> means the point is within the closed curve (excluding edges and vertices). <code>On</code> means the point is on an edge or a vertex of the closed curve. <code>Out</code> means the point is outside of the closed curve.</p><p>Point should be an object of point trait and curve should be an object with a linestring or linearring trait, that is assumed to be closed, regardless of repeated last point.</p><p>Can provide values of in, on, and out keywords, which determines return values for each scenario.</p><p>Note that this uses the Algorithm by Hao and Sun (2018): https://doi.org/10.3390/sym10100477 Paper seperates orientation of point and edge into 26 cases. For each case, it is either a case where the point is on the edge (returns on), where a ray from the point (x, y) to infinity along the line y = y cut through the edge (k += 1), or the ray does not pass through the edge (do nothing and continue). If the ray passes through an odd number of edges, it is within the curve, else outside of of the curve if it didn&#39;t return &#39;on&#39;. See paper for more information on cases denoted in comments.</p><pre><code class="language-julia hljs">function _point_filled_curve_orientation(
+    point, curve;
+    in::T = point_in, on::T = point_on, out::T = point_out,
+) where {T}
+    x, y = GI.x(point), GI.y(point)
+    n = GI.npoint(curve)
+    n -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, n)) ? 1 : 0
+    k = 0  # counter for ray crossings
+    p_start = GI.getpoint(curve, n)
+    @inbounds for i in 1:n
+        p_end = GI.getpoint(curve, i)
+        v1 = GI.y(p_start) - y
+        v2 = GI.y(p_end) - y
+        if !((v1 &lt; 0 &amp;&amp; v2 &lt; 0) || (v1 &gt; 0 &amp;&amp; v2 &gt; 0)) # if not cases 11 or 26
+            u1 = GI.x(p_start) - x
+            u2 = GI.x(p_end) - x
+            c1 = u1 * v2  # first element of cross product summation
+            c2 = u2 * v1  # second element of cross product summation
+            f = c1 - c2
+            if v2 &gt; 0 &amp;&amp; v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
+                (c1 ≈ c2) &amp;&amp; return on         # Case 16 or 21
+                f &gt; 0 &amp;&amp; (k += 1)              # Case 3 or 9
+            elseif v1 &gt; 0 &amp;&amp; v2 ≤ 0            # Case 4, 10, 19, 20, 12, or 25
+                (c1 ≈ c2) &amp;&amp; return on         # Case 19 or 20
+                f &lt; 0 &amp;&amp; (k += 1)              # Case 4 or 10
+            elseif v2 == 0 &amp;&amp; v1 &lt; 0           # Case 7, 14, or 17
+                (c1 ≈ c2) &amp;&amp; return on         # Case 17
+            elseif v1 == 0 &amp;&amp; v2 &lt; 0           # Case 8, 15, or 18
+                (c1 ≈ c2) &amp;&amp; return on         # Case 18
+            elseif v1 == 0 &amp;&amp; v2 == 0          # Case 1, 2, 5, 6, 22, or 23
+                u2 ≤ 0 &amp;&amp; u1 ≥ 0 &amp;&amp; return on  # Case 1
+                u1 ≤ 0 &amp;&amp; u2 ≥ 0 &amp;&amp; return on  # Case 2
+            end
+        end
+        p_start = p_end
+    end
+    return iseven(k) ? out : in
+end</code></pre><p>Determines the type of interaction between two line segments. If the segments <code>cross</code>, this means that they have a single intersection point that isn&#39;t on either of their enpoints. If they form a <code>hinge</code>, they meet at one of the segments endpoints. If they are <code>over</code>, then they are co-linear for at least some of the length of the segments. Finally, if they are <code>out</code>, then the segments are disjoint.</p><p>Point should be an object of point trait and curve should be an object with a linestring or linearring trait.</p><p>Can provide values of in, on, and out keywords, which determines return values for each scenario.</p><pre><code class="language-julia hljs">function _segment_segment_orientation(
+    (a_point, b_point), (c_point, d_point);
+    cross::T = line_cross, hinge::T = line_hinge,
+    over::T = line_over, out::T = line_out,
+) where T
+    (ax, ay) = Float64.(_tuple_point(a_point))
+    (bx, by) = Float64.(_tuple_point(b_point))
+    (cx, cy) = Float64.(_tuple_point(c_point))
+    (dx, dy) = Float64.(_tuple_point(d_point))
+    meet_type = ExactPredicates.meet((ax, ay), (bx, by), (cx, cy), (dx, dy))</code></pre><p>Lines meet at one point within open segments</p><pre><code class="language-julia hljs">    meet_type == 1 &amp;&amp; return cross</code></pre><p>Lines don&#39;t meet at any points</p><pre><code class="language-julia hljs">    meet_type == -1 &amp;&amp; return out</code></pre><p>Lines meet at one or more points within closed segments</p><pre><code class="language-julia hljs">    if _isparallel(((ax, ay), (bx, by)), ((cx, cy), (dx, dy)))
+        min_x, max_x = cx &lt; dx ? (cx, dx) : (dx, cx)
+        min_y, max_y = cy &lt; dy ? (cy, dy) : (dy, cy)
+        if (
+            ((ax ≤ min_x &amp;&amp; bx ≤ min_x) || (ax ≥ max_x &amp;&amp; bx ≥ max_x)) &amp;&amp;
+            ((ay ≤ min_y &amp;&amp; by ≤ min_y) || (ay ≥ max_y &amp;&amp; by ≥ max_y))
+        )</code></pre><p>a<em>point and b</em>point are on the same side of segment, don&#39;t overlap</p><pre><code class="language-julia hljs">            return hinge
+        else
+            return over
+        end
+    end</code></pre><p>if lines aren&#39;t parallel then they must hinge</p><pre><code class="language-julia hljs">    return hinge
+end</code></pre><p>Determines the types of interactions of a line with a filled-in curve. By filled-in curve, I am referring to the exterior ring of a poylgon, for example.</p><p>Returns a tuple of booleans: (in<em>curve, on</em>curve, out_curve).</p><p>If in<em>curve is true, some of the lines interior points interact with the curve&#39;s     interior points. If on</em>curve is true, endpoints of either the line intersect with the curve or     the line interacts with the polygon boundary. If out_curve is true, at least one segments of the line is outside the curve.</p><p>If closed_line is true, line is treated as a closed line where the first and last point are connected by a segment.</p><pre><code class="language-julia hljs">function _line_filled_curve_interactions(
+    line, curve;
+    closed_line = false,
+)
+    in_curve = false
+    on_curve = false
+    out_curve = false</code></pre><p>Determine number of points in curve and line</p><pre><code class="language-julia hljs">    nl = GI.npoint(line)
+    nc = GI.npoint(curve)
+    first_last_equal_line = equals(GI.getpoint(line, 1), GI.getpoint(line, nl))
+    first_last_equal_curve = equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc))
+    nl -= first_last_equal_line ? 1 : 0
+    nc -= first_last_equal_curve ? 1 : 0
+    closed_line |= first_last_equal_line</code></pre><p>See if first point is in an acceptable orientation</p><pre><code class="language-julia hljs">    l_start = GI.getpoint(line, closed_line ? nl : 1)
+    point_val = _point_filled_curve_orientation(l_start, curve)
+    if point_val == point_in
+        in_curve = true
+    elseif point_val == point_on
+        on_curve = true
+    else  # point_val == point_out
+        out_curve = true
+    end</code></pre><p>Check for any intersections between line and curve</p><pre><code class="language-julia hljs">    for i in (closed_line ? 1 : 2):nl
+        l_end = GI.getpoint(line, i)
+        c_start = GI.getpoint(curve, nc)</code></pre><p>If already interacted with all regions of curve, can stop</p><pre><code class="language-julia hljs">        in_curve &amp;&amp; on_curve &amp;&amp; out_curve &amp;&amp; break</code></pre><p>Check next segment of line against curve</p><pre><code class="language-julia hljs">        for j in 1:nc
+            c_end = GI.getpoint(curve, j)</code></pre><p>Check if two line and curve segments meet</p><pre><code class="language-julia hljs">            seg_val = _segment_segment_orientation(
+                (l_start, l_end),
+                (c_start, c_end),
+            )
+            if seg_val != line_out</code></pre><p>If line and curve meet, then at least one point is on boundary</p><pre><code class="language-julia hljs">                on_curve = true
+                if seg_val == line_cross</code></pre><p>When crossing boundary, line is both in and out of curve</p><pre><code class="language-julia hljs">                    in_curve = true
+                    out_curve = true
+                else
+                    if seg_val == line_over
+                        sp = _point_segment_orientation(l_start, c_start, c_end)
+                        lp = _point_segment_orientation(l_end, c_start, c_end)
+                        if sp != point_in || lp != point_in
+                            #=
+                            Line crosses over segment endpoint, creating a hinge
+                            with another segment.
+                            =#
+                            seg_val = line_hinge
+                        end
+                    end
+                    if seg_val == line_hinge
+                        #=
+                        Can&#39;t determine all types of interactions (in, out) with
+                        hinge as it could pass through multiple other segments
+                        so calculate if segment endpoints and intersections are
+                        in/out of filled curve
+                        =#
+                        ipoints = intersection_points(
+                            GI.Line([l_start, l_end]),
+                            curve
+                        )
+                        npoints = length(ipoints)  # since hinge, at least one
+                        sort!(ipoints, by = p -&gt; _euclid_distance(Float64, p, l_start))
+                        p_start = _tuple_point(l_start)
+                        for i in 1:(npoints + 1)
+                            p_end = i ≤ npoints ?
+                                ipoints[i] :
+                                _tuple_point(l_end)
+                            mid_val = _point_filled_curve_orientation(
+                                (p_start .+ p_end) ./ 2,
+                                curve,
+                            )
+                            if mid_val == point_in
+                                in_curve = true
+                            elseif mid_val == point_out
+                                out_curve = true
+                            end
+                        end</code></pre><p>already checked segment against whole filled curve</p><pre><code class="language-julia hljs">                        l_start = l_end
+                        break
+                    end
+                end
+            end
+            c_start = c_end
+        end
+        l_start = l_end
+    end
+    return in_curve, on_curve, out_curve
+end</code></pre><p>Determines the types of interactions of a line with a polygon.</p><p>Returns a tuple of booleans: (in<em>poly, on</em>poly, out_poly).</p><p>If in<em>poly is true, some of the lines interior points interact with the polygon     interior points. If in</em>poly is true, endpoints of either the line intersect with the polygon or     the line interacts with the polygon boundary, including hole bounaries. If out_curve is true, at least one segments of the line is outside the polygon,     including inside of holes.</p><p>If closed_line is true, line is treated as a closed line where the first and last point are connected by a segment.</p><pre><code class="language-julia hljs">function _line_polygon_interactions(
+    line, polygon;
+    closed_line = false,
+)
+    in_poly, on_poly, out_poly = _line_filled_curve_interactions(
+        line, GI.getexterior(polygon);
+        closed_line = closed_line,
+    )
+    !in_poly &amp;&amp; return (in_poly, on_poly, out_poly)</code></pre><p>Loop over polygon holes</p><pre><code class="language-julia hljs">    for hole in GI.gethole(polygon)
+        in_hole, on_hole, out_hole =_line_filled_curve_interactions(
+            line, hole;
+            closed_line = closed_line,
+        )
+        if in_hole
+            out_poly = true
+        end
+        if on_hole
+            on_poly = true
+        end
+        if !out_hole  # entire line is in/on hole, can&#39;t be in/on other holes
+            in_poly = false
+            return (in_poly, on_poly, out_poly)
+        end
+    end
+    return in_poly, on_poly, out_poly
+end
+
+function _point_in_extent(p, extent::Extents.Extent)
+    (x1, x2), (y1, y2) = extent.X, extent.Y
+    return x1 ≤ GI.x(p) ≤ x2 &amp;&amp; y1 ≤ GI.y(p) ≤ y2
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../disjoint/">« Disjoint</a><a class="docs-footer-nextpage" href="../intersects/">Intersection checks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Friday 12 January 2024 21:29">Friday 12 January 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

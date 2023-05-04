@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Intersection checks · GeometryOps.jl</title><script data-outdated-warner src="../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/intersects/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li><a class="tocitem" href="../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../centroid/">Centroid</a></li><li><a class="tocitem" href="../contains/">Containment</a></li><li><a class="tocitem" href="../crosses/">Crossing checks</a></li><li><a class="tocitem" href="../disjoint/">Disjointness checks</a></li><li class="is-active"><a class="tocitem" href>Intersection checks</a></li><li><a class="tocitem" href="../overlaps/">Overlap checks</a></li><li><a class="tocitem" href="../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../signed_area/">Signed area</a></li><li><a class="tocitem" href="../signed_distance/">Signed distance</a></li><li><a class="tocitem" href="../within/">Containment/withinness</a></li><li><a class="tocitem" href="../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Intersection checks</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Intersection checks</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/intersects.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Intersection-checks"><a class="docs-heading-anchor" href="#Intersection-checks">Intersection checks</a><a id="Intersection-checks-1"></a><a class="docs-heading-anchor-permalink" href="#Intersection-checks" title="Permalink"></a></h1><pre><code class="language-julia hljs">export intersects, intersection</code></pre><p>This code checks whether geometries intersect with each other.</p><div class="admonition is-info"><header class="admonition-header">Note</header><div class="admonition-body"><p>This does not compute intersections, only checks if they exist.</p></div></div><pre><code class="language-julia hljs">const MEETS_OPEN = 1
+const MEETS_CLOSED = 0
+
+&quot;&quot;&quot;
+    line_intersects(line_a, line_b)
+
+Check if `line_a` intersects with `line_b`.
+
+These can be `LineTrait`, `LineStringTrait` or `LinearRingTrait`
+
+# Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+GO.line_intersects(line1, line2)</code></pre><p>output</p><pre><code class="language-julia hljs">true
+```
+&quot;&quot;&quot;
+line_intersects(a, b; kw...) = line_intersects(trait(a), a, trait(b), b; kw...)</code></pre><p>Skip to_edges for LineTrait</p><pre><code class="language-julia hljs">function line_intersects(::GI.LineTrait, a, ::GI.LineTrait, b; meets=MEETS_OPEN)
+    a1 = _tuple_point(GI.getpoint(a, 1))
+    b1 = _tuple_point(GI.getpoint(b, 1))
+    a2 = _tuple_point(GI.getpoint(a, 2))
+    b2 = _tuple_point(GI.getpoint(b, 2))
+    return ExactPredicates.meet(a1, a2, b1, b2) == meets
+end
+function line_intersects(::GI.AbstractTrait, a, ::GI.AbstractTrait, b; kw...)
+    edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
+    return line_intersects(edges_a, edges_b; kw...)
+end
+function line_intersects(edges_a::Vector{Edge}, edges_b::Vector{Edge}; meets=MEETS_OPEN)</code></pre><p>Extents.intersects(to<em>extent(edges</em>a), to<em>extent(edges</em>b)) || return false</p><pre><code class="language-julia hljs">    for edge_a in edges_a
+        for edge_b in edges_b
+            ExactPredicates.meet(edge_a..., edge_b...) == meets &amp;&amp; return true
+        end
+    end
+    return false
+end
+
+&quot;&quot;&quot;
+    line_intersection(line_a, line_b)
+
+Find a point that intersects LineStrings with two coordinates each.
+
+Returns `nothing` if no point is found.
+
+# Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+GO.line_intersection(line1, line2)</code></pre><p>output</p><pre><code class="language-julia hljs">(125.58375366067547, -14.83572303404496)
+```
+&quot;&quot;&quot;
+line_intersection(line_a, line_b) = line_intersection(trait(line_a), line_a, trait(line_b), line_b)
+function line_intersection(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)
+    Extents.intersects(GI.extent(a), GI.extent(b)) || return nothing
+    result = Tuple{Float64,Float64}[]
+    edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
+    for edge_a in edges_a
+        for edge_b in edges_b
+            x = _line_intersection(edge_a, edge_b)
+            isnothing(x) || push!(result, x)
+        end
+    end
+    return result
+end
+function line_intersection(::GI.LineTrait, line_a, ::GI.LineTrait, line_b)
+    a1 = GI.getpoint(line_a, 1)
+    b1 = GI.getpoint(line_b, 1)
+    a2 = GI.getpoint(line_a, 2)
+    b2 = GI.getpoint(line_b, 2)
+
+    return _line_intersection((a1, a2), (b1, b2))
+end
+function _line_intersection((p11, p12)::Tuple, (p21, p22)::Tuple)</code></pre><p>Get points from lines</p><pre><code class="language-julia hljs">    x1, y1 = GI.x(p11), GI.y(p11)
+    x2, y2 = GI.x(p12), GI.y(p12)
+    x3, y3 = GI.x(p21), GI.y(p21)
+    x4, y4 = GI.x(p22), GI.y(p22)
+
+    d = ((y4 - y3) * (x2 - x1)) - ((x4 - x3) * (y2 - y1))
+    a = ((x4 - x3) * (y1 - y3)) - ((y4 - y3) * (x1 - x3))
+    b = ((x2 - x1) * (y1 - y3)) - ((y2 - y1) * (x1 - x3))
+
+    if d == 0
+        if a == 0 &amp;&amp; b == 0
+            return nothing
+        end
+        return nothing
+    end
+
+    ã  = a / d
+    b̃  = b / d
+
+    if ã  &gt;= 0 &amp;&amp; ã  &lt;= 1 &amp;&amp; b̃  &gt;= 0 &amp;&amp; b̃  &lt;= 1
+        x = x1 + (ã  * (x2 - x1))
+        y = y1 + (ã  * (y2 - y1))
+        return (x, y)
+    end
+
+    return nothing
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../disjoint/">« Disjointness checks</a><a class="docs-footer-nextpage" href="../overlaps/">Overlap checks »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Friday 1 September 2023 09:46">Friday 1 September 2023</span>. Using Julia version 1.9.3.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

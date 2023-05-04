@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Intersection checks · GeometryOps.jl</title><script data-outdated-warner src="../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/intersects/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li><a class="tocitem" href="../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../centroid/">Centroid</a></li><li><a class="tocitem" href="../contains/">Containment</a></li><li><a class="tocitem" href="../crosses/">Crossing checks</a></li><li><a class="tocitem" href="../disjoint/">Disjointness checks</a></li><li><a class="tocitem" href="../equals/">Equals</a></li><li class="is-active"><a class="tocitem" href>Intersection checks</a><ul class="internal"><li><a class="tocitem" href="#What-is-intersects-vs-intersection-vs-intersection_points?"><span>What is <code>intersects</code> vs <code>intersection</code> vs <code>intersection_points</code>?</span></a></li><li><a class="tocitem" href="#Implementation"><span>Implementation</span></a></li></ul></li><li><a class="tocitem" href="../overlaps/">Overlaps</a></li><li><a class="tocitem" href="../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../signed_area/">Signed area</a></li><li><a class="tocitem" href="../signed_distance/">Signed distance</a></li><li><a class="tocitem" href="../within/">Containment/withinness</a></li><li><a class="tocitem" href="../../transformations/extent/">-</a></li><li><a class="tocitem" href="../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Intersection checks</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Intersection checks</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/intersects.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Intersection-checks"><a class="docs-heading-anchor" href="#Intersection-checks">Intersection checks</a><a id="Intersection-checks-1"></a><a class="docs-heading-anchor-permalink" href="#Intersection-checks" title="Permalink"></a></h1><pre><code class="language-julia hljs">export intersects, intersection, intersection_points</code></pre><h2 id="What-is-intersects-vs-intersection-vs-intersection_points?"><a class="docs-heading-anchor" href="#What-is-intersects-vs-intersection-vs-intersection_points?">What is <code>intersects</code> vs <code>intersection</code> vs <code>intersection_points</code>?</a><a id="What-is-intersects-vs-intersection-vs-intersection_points?-1"></a><a class="docs-heading-anchor-permalink" href="#What-is-intersects-vs-intersection-vs-intersection_points?" title="Permalink"></a></h2><p>The <code>intersects</code> methods check whether two geometries intersect with each other. The <code>intersection</code> methods return the geometry intersection between the two input geometries. The <code>intersection_points</code> method returns a list of intersection points between two geometries.</p><p>The <code>intersects</code> methods will always return a Boolean. However, note that the <code>intersection</code> methods will not all return the same type. For example, the intersection of two lines will be a point in most cases, unless the lines are parallel. On the other hand, the intersection of two polygons will be another polygon in most cases. Finally, the <code>intersection_points</code> method returns a list of tuple points.</p><p>To provide an example, consider these two lines:</p><pre><code class="language-julia hljs">using GeometryOps
+using GeometryOps.GeometryBasics
+using Makie
+using CairoMakie
+point1, point2 = Point(124.584961,-12.768946), Point(126.738281,-17.224758)
+point3, point4 = Point(123.354492,-15.961329), Point(127.22168,-14.008696)
+line1 = Line(point1, point2)
+line2 = Line(point3, point4)
+f, a, p = lines([point1, point2])
+lines!([point3, point4])</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Lines{Tuple{Vector{Point{2, Float32}}}}</code></pre><p>We can see that they intersect, so we expect intersects to return true, and we can visualize the intersection point in red.</p><pre><code class="language- hljs">int_bool = GO.intersects(line1, line2)
+println(int_bool)
+int_point = GO.intersection(line1, line2)
+scatter!(int_point, color = :red)
+f</code></pre><h2 id="Implementation"><a class="docs-heading-anchor" href="#Implementation">Implementation</a><a id="Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation" title="Permalink"></a></h2><p>This is the GeoInterface-compatible implementation.</p><p>First, we implement a wrapper method for intersects, intersection, and intersection<em>points that dispatches to the correct implementation based on the geometry trait. The two underlying helper functions that are widely used in all geometry dispatches are _line</em>intersects, which determines if two line segments intersect and <em>intersection</em>point which determines the intersection point between two line segments.</p><pre><code class="language-julia hljs">&quot;&quot;&quot;
+    intersects(geom1, geom2)::Bool
+
+Check if two geometries intersect, returning true if so and false otherwise.
+
+# Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+GO.intersects(line1, line2)</code></pre><p>output</p><pre><code class="language-julia hljs">true
+```
+&quot;&quot;&quot;
+intersects(geom1, geom2) = intersects(
+    GI.trait(geom1),
+    geom1,
+    GI.trait(geom2),
+    geom2
+)
+
+&quot;&quot;&quot;
+    intersects(::GI.LineTrait, a, ::GI.LineTrait, b)::Bool
+
+Returns true if two line segments intersect and false otherwise.
+&quot;&quot;&quot;
+function intersects(::GI.LineTrait, a, ::GI.LineTrait, b)
+    a1 = _tuple_point(GI.getpoint(a, 1))
+    a2 = _tuple_point(GI.getpoint(a, 2))
+    b1 = _tuple_point(GI.getpoint(b, 1))
+    b2 = _tuple_point(GI.getpoint(b, 2))
+    meet_type = ExactPredicates.meet(a1, a2, b1, b2)
+    return meet_type == 0 || meet_type == 1
+end
+
+&quot;&quot;&quot;
+    intersects(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)::Bool
+
+Returns true if two geometries intersect with one another and false
+otherwise. For all geometries but lines, convert the geometry to a list of edges
+and cross compare the edges for intersections.
+&quot;&quot;&quot;
+function intersects(
+    trait_a::GI.AbstractTrait, a_geom,
+    trait_b::GI.AbstractTrait, b_geom,
+)   edges_a, edges_b = map(sort! ∘ to_edges, (a_geom, b_geom))
+    return _line_intersects(edges_a, edges_b) ||
+        within(trait_a, a_geom, trait_b, b_geom) ||
+        within(trait_b, b_geom, trait_a, a_geom)
+end
+
+&quot;&quot;&quot;
+    _line_intersects(
+        edges_a::Vector{Edge},
+        edges_b::Vector{Edge}
+    )::Bool
+
+Returns true if there is at least one intersection between edges within the
+two lists of edges.
+&quot;&quot;&quot;
+function _line_intersects(
+    edges_a::Vector{Edge},
+    edges_b::Vector{Edge}
+)</code></pre><p>Extents.intersects(to<em>extent(edges</em>a), to<em>extent(edges</em>b)) || return false</p><pre><code class="language-julia hljs">    for edge_a in edges_a
+        for edge_b in edges_b
+            _line_intersects(edge_a, edge_b) &amp;&amp; return true
+        end
+    end
+    return false
+end
+
+&quot;&quot;&quot;
+    _line_intersects(
+        edge_a::Edge,
+        edge_b::Edge,
+    )::Bool
+
+Returns true if there is at least one intersection between two edges.
+&quot;&quot;&quot;
+function _line_intersects(edge_a::Edge, edge_b::Edge)
+    meet_type = ExactPredicates.meet(edge_a..., edge_b...)
+    return meet_type == 0 || meet_type == 1
+end
+
+&quot;&quot;&quot;
+    intersection(geom_a, geom_b)::Union{Tuple{::Real, ::Real}, ::Nothing}
+
+Return an intersection point between two geometries. Return nothing if none are
+found. Else, the return type depends on the input. It will be a union between:
+a point, a line, a linear ring, a polygon, or a multipolygon
+
+# Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+GO.intersection(line1, line2)</code></pre><p>output</p><pre><code class="language-julia hljs">(125.58375366067547, -14.83572303404496)
+```
+&quot;&quot;&quot;
+intersection(geom_a, geom_b) =
+    intersection(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+
+&quot;&quot;&quot;
+    intersection(
+        ::GI.LineTrait, line_a,
+        ::GI.LineTrait, line_b,
+    )::Union{
+        ::Tuple{::Real, ::Real},
+        ::Nothing
+    }
+
+Calculates the intersection between two line segments. Return nothing if
+there isn&#39;t one.
+&quot;&quot;&quot;
+function intersection(::GI.LineTrait, line_a, ::GI.LineTrait, line_b)</code></pre><p>Get start and end points for both lines</p><pre><code class="language-julia hljs">    a1 = GI.getpoint(line_a, 1)
+    a2 = GI.getpoint(line_a, 2)
+    b1 = GI.getpoint(line_b, 1)
+    b2 = GI.getpoint(line_b, 2)</code></pre><p>Determine the intersection point</p><pre><code class="language-julia hljs">    point, fracs = _intersection_point((a1, a2), (b1, b2))</code></pre><p>Determine if intersection point is on line segments</p><pre><code class="language-julia hljs">    if !isnothing(point) &amp;&amp; 0 &lt;= fracs[1] &lt;= 1 &amp;&amp; 0 &lt;= fracs[2] &lt;= 1
+        return point
+    end
+    return nothing
+end
+
+intersection(
+    trait_a::Union{GI.LineStringTrait, GI.LinearRingTrait},
+    geom_a,
+    trait_b::Union{GI.LineStringTrait, GI.LinearRingTrait},
+    geom_b,
+) = intersection_points(trait_a, geom_a, trait_b, geom_b)
+
+&quot;&quot;&quot;
+    intersection(
+        ::GI.PolygonTrait, poly_a,
+        ::GI.PolygonTrait, poly_b,
+    )::Union{
+        ::Vector{Vector{Tuple{::Real, ::Real}}}, # is this a good return type?
+        ::Nothing
+    }
+
+Calculates the intersection between two line segments. Return nothing if
+there isn&#39;t one.
+&quot;&quot;&quot;
+function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+    @assert false &quot;Polygon intersection isn&#39;t implemented yet.&quot;
+    return nothing
+end
+
+&quot;&quot;&quot;
+    intersection(
+        ::GI.AbstractTrait, geom_a,
+        ::GI.AbstractTrait, geom_b,
+    )::Union{
+        ::Vector{Vector{Tuple{::Real, ::Real}}}, # is this a good return type?
+        ::Nothing
+    }
+
+Calculates the intersection between two line segments. Return nothing if
+there isn&#39;t one.
+&quot;&quot;&quot;
+function intersection(
+    trait_a::GI.AbstractTrait, geom_a,
+    trait_b::GI.AbstractTrait, geom_b,
+)
+    @assert(
+        false,
+        &quot;Intersection between $trait_a and $trait_b isn&#39;t implemented yet.&quot;,
+    )
+    return nothing
+end
+
+&quot;&quot;&quot;
+    intersection_points(
+        geom_a,
+        geom_b,
+    )::Union{
+        ::Vector{::Tuple{::Real, ::Real}},
+        ::Nothing,
+    }
+
+Return a list of intersection points between two geometries. If no intersection
+point was possible given geometry extents, return nothing. If none are found,
+return an empty list.
+&quot;&quot;&quot;
+intersection_points(geom_a, geom_b) =
+    intersection_points(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+
+&quot;&quot;&quot;
+    intersection_points(
+        ::GI.AbstractTrait, geom_a,
+        ::GI.AbstractTrait, geom_b,
+    )::Union{
+        ::Vector{::Tuple{::Real, ::Real}},
+        ::Nothing,
+    }
+
+Calculates the list of intersection points between two geometries, inlcuding
+line segments, line strings, linear rings, polygons, and multipolygons. If no
+intersection points were possible given geometry extents, return nothing. If
+none are found, return an empty list.
+&quot;&quot;&quot;
+function intersection_points(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)</code></pre><p>Check if the geometries extents even overlap</p><pre><code class="language-julia hljs">    Extents.intersects(GI.extent(a), GI.extent(b)) || return nothing</code></pre><p>Create a list of edges from the two input geometries</p><pre><code class="language-julia hljs">    edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
+    npoints_a, npoints_b  = length(edges_a), length(edges_b)
+    a_closed = npoints_a &gt; 1 &amp;&amp; edges_a[1][1] == edges_a[end][1]
+    b_closed = npoints_b &gt; 1 &amp;&amp; edges_b[1][1] == edges_b[end][1]
+    if npoints_a &gt; 0 &amp;&amp; npoints_b &gt; 0</code></pre><p>Initialize an empty list of points</p><pre><code class="language-julia hljs">        T = typeof(edges_a[1][1][1]) # x-coordinate of first point in first edge
+        result = Tuple{T,T}[]</code></pre><p>Loop over pairs of edges and add any intersection points to results</p><pre><code class="language-julia hljs">        for i in eachindex(edges_a)
+            for j in eachindex(edges_b)
+                point, fracs = _intersection_point(edges_a[i], edges_b[j])
+                if !isnothing(point)
+                    #=
+                    Determine if point is on edge (all edge endpoints excluded
+                    except for the last edge for an open geometry)
+                    =#
+                    α, β = fracs
+                    on_a_edge = (!a_closed &amp;&amp; i == npoints_a &amp;&amp; 0 &lt;= α &lt;= 1) ||
+                        (0 &lt;= α &lt; 1)
+                    on_b_edge = (!b_closed &amp;&amp; j == npoints_b &amp;&amp; 0 &lt;= β &lt;= 1) ||
+                        (0 &lt;= β &lt; 1)
+                    if on_a_edge &amp;&amp; on_b_edge
+                        push!(result, point)
+                    end
+                end
+            end
+        end
+        return result
+    end
+    return nothing
+end
+
+&quot;&quot;&quot;
+    _intersection_point(
+        (a1, a2)::Tuple,
+        (b1, b2)::Tuple,
+    )
+
+Calculates the intersection point between two lines if it exists, and as if the
+line extended to infinity, and the fractional component of each line from the
+initial end point to the intersection point.
+Inputs:
+    (a1, a2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} first line
+    (b1, b2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} second line
+Outputs:
+    (x, y)::Tuple{::Real, ::Real} intersection point
+    (t, u)::Tuple{::Real, ::Real} fractional length of lines to intersection
+    Both are ::Nothing if point doesn&#39;t exist!
+
+Calculation derivation can be found here:
+    https://stackoverflow.com/questions/563198/
+&quot;&quot;&quot;
+function _intersection_point((a1, a2)::Tuple, (b1, b2)::Tuple)</code></pre><p>First line runs from p to p + r</p><pre><code class="language-julia hljs">    px, py = GI.x(a1), GI.y(a1)
+    rx, ry = GI.x(a2) - px, GI.y(a2) - py</code></pre><p>Second line runs from q to q + s</p><pre><code class="language-julia hljs">    qx, qy = GI.x(b1), GI.y(b1)
+    sx, sy = GI.x(b2) - qx, GI.y(b2) - qy</code></pre><p>Intersection will be where p + tr = q + us where 0 &lt; t, u &lt; 1 and</p><pre><code class="language-julia hljs">    r_cross_s = rx * sy - ry * sx
+    if r_cross_s != 0
+        Δqp_x = qx - px
+        Δqp_y = qy - py
+        t = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
+        u = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
+        x = px + t * rx
+        y = py + t * ry
+        return (x, y), (t, u)
+    end
+    return nothing, nothing
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../equals/">« Equals</a><a class="docs-footer-nextpage" href="../overlaps/">Overlaps »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Friday 22 December 2023 14:51">Friday 22 December 2023</span>. Using Julia version 1.9.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

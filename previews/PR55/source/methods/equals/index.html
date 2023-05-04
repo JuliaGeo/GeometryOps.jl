@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Equals · GeometryOps.jl</title><meta name="title" content="Equals · GeometryOps.jl"/><meta property="og:title" content="Equals · GeometryOps.jl"/><meta property="twitter:title" content="Equals · GeometryOps.jl"/><meta name="description" content="Documentation for GeometryOps.jl."/><meta property="og:description" content="Documentation for GeometryOps.jl."/><meta property="twitter:description" content="Documentation for GeometryOps.jl."/><meta property="og:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/equals/"/><meta property="twitter:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/equals/"/><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/equals/"/><script data-outdated-warner src="../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../search_index.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><a class="tocitem" href="../../../api/">API Reference</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li><a class="tocitem" href="../angles/">Angles</a></li><li><a class="tocitem" href="../area/">Area and signed area</a></li><li><a class="tocitem" href="../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../centroid/">Centroid</a></li><li><a class="tocitem" href="../distance/">Distance and signed distance</a></li><li class="is-active"><a class="tocitem" href>Equals</a><ul class="internal"><li><a class="tocitem" href="#What-is-equals?"><span>What is equals?</span></a></li><li><a class="tocitem" href="#Implementation"><span>Implementation</span></a></li></ul></li><li><a class="tocitem" href="../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../clipping/clipping_processor/">Polygon clipping helpers</a></li><li><a class="tocitem" href="../clipping/difference/">Difference Polygon Clipping</a></li><li><a class="tocitem" href="../clipping/intersection/">Intersection</a></li><li><a class="tocitem" href="../clipping/union/">Union Polygon Clipping</a></li><li><a class="tocitem" href="../geom_relations/contains/">Contains</a></li><li><a class="tocitem" href="../geom_relations/coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../geom_relations/covers/">Covers</a></li><li><a class="tocitem" href="../geom_relations/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../geom_relations/disjoint/">Disjoint</a></li><li><a class="tocitem" href="../geom_relations/geom_geom_processors/">Line-curve interaction</a></li><li><a class="tocitem" href="../geom_relations/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../geom_relations/overlaps/">Overlaps</a></li><li><a class="tocitem" href="../geom_relations/touches/">Touches</a></li><li><a class="tocitem" href="../geom_relations/within/">Within</a></li><li><a class="tocitem" href="../../transformations/extent/">Extent embedding</a></li><li><a class="tocitem" href="../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../transformations/transform/">Pointwise transformation</a></li><li><a class="tocitem" href="../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Equals</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Equals</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/equals.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Equals"><a class="docs-heading-anchor" href="#Equals">Equals</a><a id="Equals-1"></a><a class="docs-heading-anchor-permalink" href="#Equals" title="Permalink"></a></h1><pre><code class="language-julia hljs">export equals</code></pre><h2 id="What-is-equals?"><a class="docs-heading-anchor" href="#What-is-equals?">What is equals?</a><a id="What-is-equals?-1"></a><a class="docs-heading-anchor-permalink" href="#What-is-equals?" title="Permalink"></a></h2><p>The equals function checks if two geometries are equal. They are equal if they share the same set of points and edges to define the same shape.</p><p>To provide an example, consider these two lines:</p><pre><code class="language-julia hljs">import GeometryOps as GO
+import GeoInterface as GI
+using Makie
+using CairoMakie
+
+l1 = GI.LineString([(0.0, 0.0), (0.0, 10.0)])
+l2 = GI.LineString([(0.0, -10.0), (0.0, 3.0)])
+f, a, p = lines(GI.getpoint(l1), color = :blue)
+scatter!(GI.getpoint(l1), color = :blue)
+lines!(GI.getpoint(l2), color = :orange)
+scatter!(GI.getpoint(l2), color = :orange)
+f</code></pre><img src="ce5fc47e.svg" alt="Example block output"/><p>We can see that the two lines do not share a commen set of points and edges in the plot, so they are not equal:</p><pre><code class="language-julia hljs">GO.equals(l1, l2)  # returns false</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">false</code></pre><h2 id="Implementation"><a class="docs-heading-anchor" href="#Implementation">Implementation</a><a id="Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation" title="Permalink"></a></h2><p>This is the GeoInterface-compatible implementation.</p><p>First, we implement a wrapper method that dispatches to the correct implementation based on the geometry trait. This is also used in the implementation, since it&#39;s a lot less work!</p><p>Note that while we need the same set of points and edges, they don&#39;t need to be provided in the same order for polygons. For for example, we need the same set points for two multipoints to be equal, but they don&#39;t have to be saved in the same order. The winding order also doesn&#39;t have to be the same to represent the same geometry. This requires checking every point against every other point in the two geometries we are comparing. Also, some geometries must be &quot;closed&quot; like polygons and linear rings. These will be assumed to be closed, even if they don&#39;t have a repeated last point explicity written in the coordinates. Additionally, geometries and multi-geometries can be equal if the multi-geometry only includes that single geometry.</p><pre><code class="language-julia hljs">&quot;&quot;&quot;
+    equals(geom1, geom2)::Bool
+
+Compare two Geometries return true if they are the same geometry.
+
+# Examples
+```jldoctest
+import GeometryOps as GO, GeoInterface as GI
+poly1 = GI.Polygon([[(0,0), (0,5), (5,5), (5,0), (0,0)]])
+poly2 = GI.Polygon([[(0,0), (0,5), (5,5), (5,0), (0,0)]])
+
+GO.equals(poly1, poly2)</code></pre><p>output</p><pre><code class="language-julia hljs">true
+```
+&quot;&quot;&quot;
+equals(geom_a, geom_b) = equals(
+    GI.trait(geom_a), geom_a,
+    GI.trait(geom_b), geom_b,
+)
+
+&quot;&quot;&quot;
+    equals(::T, geom_a, ::T, geom_b)::Bool
+
+Two geometries of the same type, which don&#39;t have a equals function to dispatch
+off of should throw an error.
+&quot;&quot;&quot;
+equals(::T, geom_a, ::T, geom_b) where T = error(&quot;Cant compare $T yet&quot;)
+
+&quot;&quot;&quot;
+    equals(trait_a, geom_a, trait_b, geom_b)
+
+Two geometries which are not of the same type cannot be equal so they always
+return false.
+&quot;&quot;&quot;
+equals(trait_a, geom_a, trait_b, geom_b) = false
+
+&quot;&quot;&quot;
+    equals(::GI.PointTrait, p1, ::GI.PointTrait, p2)::Bool
+
+Two points are the same if they have the same x and y (and z if 3D) coordinates.
+&quot;&quot;&quot;
+function equals(::GI.PointTrait, p1, ::GI.PointTrait, p2)
+    GI.ncoord(p1) == GI.ncoord(p2) || return false
+    GI.x(p1) == GI.x(p2) || return false
+    GI.y(p1) == GI.y(p2) || return false
+    if GI.is3d(p1)
+        GI.z(p1) == GI.z(p2) || return false
+    end
+    return true
+end
+
+&quot;&quot;&quot;
+    equals(::GI.PointTrait, p1, ::GI.MultiPointTrait, mp2)::Bool
+
+A point and a multipoint are equal if the multipoint is composed of a single
+point that is equivalent to the given point.
+&quot;&quot;&quot;
+function equals(::GI.PointTrait, p1, ::GI.MultiPointTrait, mp2)
+    GI.npoint(mp2) == 1 || return false
+    return equals(p1, GI.getpoint(mp2, 1))
+end
+
+&quot;&quot;&quot;
+    equals(::GI.MultiPointTrait, mp1, ::GI.PointTrait, p2)::Bool
+
+A point and a multipoint are equal if the multipoint is composed of a single
+point that is equivalent to the given point.
+&quot;&quot;&quot;
+equals(trait1::GI.MultiPointTrait, mp1, trait2::GI.PointTrait, p2) =
+    equals(trait2, p2, trait1, mp1)
+
+&quot;&quot;&quot;
+    equals(::GI.MultiPointTrait, mp1, ::GI.MultiPointTrait, mp2)::Bool
+
+Two multipoints are equal if they share the same set of points.
+&quot;&quot;&quot;
+function equals(::GI.MultiPointTrait, mp1, ::GI.MultiPointTrait, mp2)
+    GI.npoint(mp1) == GI.npoint(mp2) || return false
+    for p1 in GI.getpoint(mp1)
+        has_match = false  # if point has a matching point in other multipoint
+        for p2 in GI.getpoint(mp2)
+            if equals(p1, p2)
+                has_match = true
+                break
+            end
+        end
+        has_match || return false  # if no matching point, can&#39;t be equal
+    end
+    return true  # all points had a match
+end
+
+&quot;&quot;&quot;
+    _equals_curves(c1, c2, closed_type1, closed_type2)::Bool
+
+Two curves are equal if they share the same set of point, representing the same
+geometry. Both curves must must be composed of the same set of points, however,
+they do not have to wind in the same direction, or start on the same point to be
+equivalent.
+Inputs:
+    c1 first geometry
+    c2 second geometry
+    closed_type1::Bool true if c1 is closed by definition (polygon, linear ring)
+    closed_type2::Bool true if c2 is closed by definition (polygon, linear ring)
+&quot;&quot;&quot;
+function _equals_curves(c1, c2, closed_type1, closed_type2)</code></pre><p>Check if both curves are closed or not</p><pre><code class="language-julia hljs">    n1 = GI.npoint(c1)
+    n2 = GI.npoint(c2)
+    c1_repeat_point = GI.getpoint(c1, 1) == GI.getpoint(c1, n1)
+    n2 = GI.npoint(c2)
+    c2_repeat_point = GI.getpoint(c2, 1) == GI.getpoint(c2, n2)
+    closed1 = closed_type1 || c1_repeat_point
+    closed2 = closed_type2 || c2_repeat_point
+    closed1 == closed2 || return false</code></pre><p>How many points in each curve</p><pre><code class="language-julia hljs">    n1 -= c1_repeat_point ? 1 : 0
+    n2 -= c2_repeat_point ? 1 : 0
+    n1 == n2 || return false
+    n1 == 0 &amp;&amp; return true</code></pre><p>Find offset between curves</p><pre><code class="language-julia hljs">    jstart = nothing
+    p1 = GI.getpoint(c1, 1)
+    for i in 1:n2
+        if equals(p1, GI.getpoint(c2, i))
+            jstart = i
+            break
+        end
+    end</code></pre><p>no point matches the first point</p><pre><code class="language-julia hljs">    isnothing(jstart) &amp;&amp; return false</code></pre><p>found match for only point</p><pre><code class="language-julia hljs">    n1 == 1 &amp;&amp; return true</code></pre><p>if isn&#39;t closed and first or last point don&#39;t match, not same curve</p><pre><code class="language-julia hljs">    !closed_type1 &amp;&amp; (jstart != 1 &amp;&amp; jstart != n1) &amp;&amp; return false</code></pre><p>Check if curves are going in same direction</p><pre><code class="language-julia hljs">    i = 2
+    j = jstart + 1
+    j -= j &gt; n2 ? n2 : 0
+    same_direction = equals(GI.getpoint(c1, i), GI.getpoint(c2, j))</code></pre><p>if only 2 points, we have already compared both</p><pre><code class="language-julia hljs">    n1 == 2 &amp;&amp; return same_direction</code></pre><p>Check all remaining points are the same wrapping around line</p><pre><code class="language-julia hljs">    jstep = same_direction ? 1 : -1
+    for i in 2:n1
+        ip = GI.getpoint(c1, i)
+        j = jstart + (i - 1) * jstep
+        j += (0 &lt; j &lt;= n2) ? 0 : (n2 * -jstep)
+        jp = GI.getpoint(c2, j)
+        equals(ip, jp) || return false
+    end
+    return true
+end
+
+&quot;&quot;&quot;
+    equals(
+        ::Union{GI.LineTrait, GI.LineStringTrait}, l1,
+        ::Union{GI.LineTrait, GI.LineStringTrait}, l2,
+    )::Bool
+
+Two lines/linestrings are equal if they share the same set of points going
+along the curve. Note that lines/linestrings aren&#39;t closed by defintion.
+&quot;&quot;&quot;
+equals(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, l1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, l2,
+) = _equals_curves(l1, l2, false, false)
+
+&quot;&quot;&quot;
+    equals(
+        ::Union{GI.LineTrait, GI.LineStringTrait}, l1,
+        ::GI.LinearRingTrait, l2,
+    )::Bool
+
+A line/linestring and a linear ring are equal if they share the same set of
+points going along the curve. Note that lines aren&#39;t closed by defintion, but
+rings are, so the line must have a repeated last point to be equal
+&quot;&quot;&quot;
+equals(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, l1,
+    ::GI.LinearRingTrait, l2,
+) = _equals_curves(l1, l2, false, true)
+
+&quot;&quot;&quot;
+    equals(
+        ::GI.LinearRingTrait, l1,
+        ::Union{GI.LineTrait, GI.LineStringTrait}, l2,
+    )::Bool
+
+A linear ring and a line/linestring are equal if they share the same set of
+points going along the curve. Note that lines aren&#39;t closed by defintion, but
+rings are, so the line must have a repeated last point to be equal
+&quot;&quot;&quot;
+equals(
+    ::GI.LinearRingTrait, l1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, l2,
+) = _equals_curves(l1, l2, true, false)
+
+&quot;&quot;&quot;
+    equals(
+        ::GI.LinearRingTrait, l1,
+        ::GI.LinearRingTrait, l2,
+    )::Bool
+
+Two linear rings are equal if they share the same set of points going along the
+curve. Note that rings are closed by definition, so they can have, but don&#39;t
+need, a repeated last point to be equal.
+&quot;&quot;&quot;
+equals(
+    ::GI.LinearRingTrait, l1,
+    ::GI.LinearRingTrait, l2,
+) = _equals_curves(l1, l2, true, true)
+
+&quot;&quot;&quot;
+    equals(::GI.PolygonTrait, geom_a, ::GI.PolygonTrait, geom_b)::Bool
+
+Two polygons are equal if they share the same exterior edge and holes.
+&quot;&quot;&quot;
+function equals(::GI.PolygonTrait, geom_a, ::GI.PolygonTrait, geom_b)</code></pre><p>Check if exterior is equal</p><pre><code class="language-julia hljs">    _equals_curves(
+        GI.getexterior(geom_a), GI.getexterior(geom_b),
+        true, true,  # linear rings are closed by definition
+    ) || return false</code></pre><p>Check if number of holes are equal</p><pre><code class="language-julia hljs">    GI.nhole(geom_a) == GI.nhole(geom_b) || return false</code></pre><p>Check if holes are equal</p><pre><code class="language-julia hljs">    for ihole in GI.gethole(geom_a)
+        has_match = false
+        for jhole in GI.gethole(geom_b)
+            if _equals_curves(
+                ihole, jhole,
+                true, true,  # linear rings are closed by definition
+            )
+                has_match = true
+                break
+            end
+        end
+        has_match || return false
+    end
+    return true
+end
+
+&quot;&quot;&quot;
+    equals(::GI.PolygonTrait, geom_a, ::GI.MultiPolygonTrait, geom_b)::Bool
+
+A polygon and a multipolygon are equal if the multipolygon is composed of a
+single polygon that is equivalent to the given polygon.
+&quot;&quot;&quot;
+function equals(::GI.PolygonTrait, geom_a, ::MultiPolygonTrait, geom_b)
+    GI.npolygon(geom_b) == 1 || return false
+    return equals(geom_a, GI.getpolygon(geom_b, 1))
+end
+
+&quot;&quot;&quot;
+    equals(::GI.MultiPolygonTrait, geom_a, ::GI.PolygonTrait, geom_b)::Bool
+
+A polygon and a multipolygon are equal if the multipolygon is composed of a
+single polygon that is equivalent to the given polygon.
+&quot;&quot;&quot;
+equals(trait_a::GI.MultiPolygonTrait, geom_a, trait_b::PolygonTrait, geom_b) =
+    equals(trait_b, geom_b, trait_a, geom_a)
+
+&quot;&quot;&quot;
+    equals(::GI.PolygonTrait, geom_a, ::GI.PolygonTrait, geom_b)::Bool
+
+Two multipolygons are equal if they share the same set of polygons.
+&quot;&quot;&quot;
+function equals(::GI.MultiPolygonTrait, geom_a, ::GI.MultiPolygonTrait, geom_b)</code></pre><p>Check if same number of polygons</p><pre><code class="language-julia hljs">    GI.npolygon(geom_a) == GI.npolygon(geom_b) || return false</code></pre><p>Check if each polygon has a matching polygon</p><pre><code class="language-julia hljs">    for poly_a in GI.getpolygon(geom_a)
+        has_match = false
+        for poly_b in GI.getpolygon(geom_b)
+            if equals(poly_a, poly_b)
+                has_match = true
+                break
+            end
+        end
+        has_match || return false
+    end
+    return true
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../distance/">« Distance and signed distance</a><a class="docs-footer-nextpage" href="../polygonize/">Polygonizing raster data »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="auto">Automatic (OS)</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.2.1 on <span class="colophon-date" title="Monday 5 February 2024 16:34">Monday 5 February 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

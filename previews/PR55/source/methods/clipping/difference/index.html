@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Difference Polygon Clipping · GeometryOps.jl</title><meta name="title" content="Difference Polygon Clipping · GeometryOps.jl"/><meta property="og:title" content="Difference Polygon Clipping · GeometryOps.jl"/><meta property="twitter:title" content="Difference Polygon Clipping · GeometryOps.jl"/><meta name="description" content="Documentation for GeometryOps.jl."/><meta property="og:description" content="Documentation for GeometryOps.jl."/><meta property="twitter:description" content="Documentation for GeometryOps.jl."/><meta property="og:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/clipping/difference/"/><meta property="twitter:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/clipping/difference/"/><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/clipping/difference/"/><script data-outdated-warner src="../../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../../assets/documenter.js"></script><script src="../../../../search_index.js"></script><script src="../../../../siteinfo.js"></script><script src="../../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../../"><img src="../../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../../">GeometryOps.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../../">Home</a></li><li><a class="tocitem" href="../../../../api/">API Reference</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../../utils/">Utility functions</a></li><li><a class="tocitem" href="../../angles/">Angles</a></li><li><a class="tocitem" href="../../area/">Area and signed area</a></li><li><a class="tocitem" href="../../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../../centroid/">Centroid</a></li><li><a class="tocitem" href="../../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../../equals/">Equals</a></li><li><a class="tocitem" href="../../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../clipping_processor/">Polygon clipping helpers</a></li><li class="is-active"><a class="tocitem" href>Difference Polygon Clipping</a></li><li><a class="tocitem" href="../intersection/">Intersection</a></li><li><a class="tocitem" href="../union/">Union Polygon Clipping</a></li><li><a class="tocitem" href="../../geom_relations/contains/">Contains</a></li><li><a class="tocitem" href="../../geom_relations/coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../../geom_relations/covers/">Covers</a></li><li><a class="tocitem" href="../../geom_relations/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../../geom_relations/disjoint/">Disjoint</a></li><li><a class="tocitem" href="../../geom_relations/geom_geom_processors/">Line-curve interaction</a></li><li><a class="tocitem" href="../../geom_relations/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../../geom_relations/overlaps/">Overlaps</a></li><li><a class="tocitem" href="../../geom_relations/touches/">Touches</a></li><li><a class="tocitem" href="../../geom_relations/within/">Within</a></li><li><a class="tocitem" href="../../../transformations/extent/">Extent embedding</a></li><li><a class="tocitem" href="../../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../../transformations/transform/">Pointwise transformation</a></li><li><a class="tocitem" href="../../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Difference Polygon Clipping</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Difference Polygon Clipping</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/clipping/difference.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Difference-Polygon-Clipping"><a class="docs-heading-anchor" href="#Difference-Polygon-Clipping">Difference Polygon Clipping</a><a id="Difference-Polygon-Clipping-1"></a><a class="docs-heading-anchor-permalink" href="#Difference-Polygon-Clipping" title="Permalink"></a></h1><pre><code class="language-julia hljs">export difference
+
+
+&quot;&quot;&quot;
+    difference(geom_a, geom_b, [T::Type]; target::Type)
+
+Return the difference between two geometries as a list of geometries. Return an empty list
+if none are found. The type of the list will be constrained as much as possible given the
+input geometries. Furthermore, the user can provide a `taget` type as a keyword argument and
+a list of target geometries found in the difference will be returned. The user can also
+provide a float type that they would like the points of returned geometries to be.
+
+# Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+poly1 = GI.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
+poly2 = GI.Polygon([[[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]])
+diff_poly = GO.difference(poly1, poly2; target = GI.PolygonTrait)
+GI.coordinates.(diff_poly)</code></pre><p>output</p><pre><code class="language-julia hljs">1-element Vector{Vector{Vector{Vector{Float64}}}}:
+ [[[6.5, 3.5], [5.0, 5.0], [0.0, 0.0], [5.0, -5.0], [6.5, -3.5], [3.0, 0.0], [6.5, 3.5]]]
+```
+&quot;&quot;&quot;
+function difference(
+    geom_a, geom_b, ::Type{T} = Float64; target::Type{Target} = Nothing,
+) where {T &lt;: AbstractFloat, Target &lt;: GI.AbstractTrait}
+    return _difference(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+end
+
+#= The &#39;difference&#39; function returns the difference of two polygons as a list of polygons.
+The algorithm to determine the difference was adapted from &quot;Efficient clipping of efficient
+polygons,&quot; by Greiner and Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
+function _difference(
+    ::Type{GI.PolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.PolygonTrait, poly_b,
+) where T</code></pre><p>Get the exterior of the polygons</p><pre><code class="language-julia hljs">    ext_poly_a = GI.getexterior(poly_a)
+    ext_poly_b = GI.getexterior(poly_b)</code></pre><p>Find the difference of the exterior of the polygons</p><pre><code class="language-julia hljs">    a_list, b_list, a_idx_list = _build_ab_list(T, ext_poly_a, ext_poly_b)
+    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -&gt; (x ⊻ y) ? 1 : (-1))
+    if isempty(polys)
+        if _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in
+            poly_a_b_hole = GI.Polygon([ext_poly_a, ext_poly_b])
+            push!(polys, poly_a_b_hole)
+        elseif _point_filled_curve_orientation(a_list[1].point, ext_poly_b) != point_in</code></pre><p>Two polygons don&#39;t intersect and are not contained in one another</p><pre><code class="language-julia hljs">            push!(polys, GI.Polygon([ext_poly_a]))
+        end
+    end</code></pre><p>If the original polygons had holes, take that into account.</p><pre><code class="language-julia hljs">    if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
+        _add_holes_to_polys!(T, polys, GI.gethole(poly_a))
+        for hole in GI.gethole(poly_b)
+            new_polys = intersection(GI.Polygon([hole]), poly_a, T; target = GI.PolygonTrait)
+            if length(new_polys) &gt; 0
+                append!(polys, new_polys)
+            end
+        end
+    end
+    return polys
+end</code></pre><p>Many type and target combos aren&#39;t implemented</p><pre><code class="language-julia hljs">function _difference(
+    ::Type{Target}, ::Type{T},
+    trait_a::GI.AbstractTrait, geom_a,
+    trait_b::GI.AbstractTrait, geom_b,
+) where {Target, T}
+    @assert(
+        false,
+        &quot;Intersection between $trait_a and $trait_b with target $Target isn&#39;t implemented yet.&quot;,
+    )
+    return nothing
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../clipping_processor/">« Polygon clipping helpers</a><a class="docs-footer-nextpage" href="../intersection/">Intersection »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="auto">Automatic (OS)</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.2.1 on <span class="colophon-date" title="Monday 5 February 2024 16:15">Monday 5 February 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

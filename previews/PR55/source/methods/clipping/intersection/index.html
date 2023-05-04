@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Intersection · GeometryOps.jl</title><meta name="title" content="Intersection · GeometryOps.jl"/><meta property="og:title" content="Intersection · GeometryOps.jl"/><meta property="twitter:title" content="Intersection · GeometryOps.jl"/><meta name="description" content="Documentation for GeometryOps.jl."/><meta property="og:description" content="Documentation for GeometryOps.jl."/><meta property="twitter:description" content="Documentation for GeometryOps.jl."/><meta property="og:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/clipping/intersection/"/><meta property="twitter:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/clipping/intersection/"/><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/clipping/intersection/"/><script data-outdated-warner src="../../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../../assets/documenter.js"></script><script src="../../../../search_index.js"></script><script src="../../../../siteinfo.js"></script><script src="../../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../../"><img src="../../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../../">GeometryOps.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../../">Home</a></li><li><a class="tocitem" href="../../../../api/">API Reference</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../../utils/">Utility functions</a></li><li><a class="tocitem" href="../../angles/">Angles</a></li><li><a class="tocitem" href="../../area/">Area and signed area</a></li><li><a class="tocitem" href="../../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../../centroid/">Centroid</a></li><li><a class="tocitem" href="../../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../../equals/">Equals</a></li><li><a class="tocitem" href="../../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../clipping_processor/">Polygon clipping helpers</a></li><li><a class="tocitem" href="../difference/">Difference Polygon Clipping</a></li><li class="is-active"><a class="tocitem" href>Intersection</a></li><li><a class="tocitem" href="../union/">Union Polygon Clipping</a></li><li><a class="tocitem" href="../../geom_relations/contains/">Contains</a></li><li><a class="tocitem" href="../../geom_relations/coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../../geom_relations/covers/">Covers</a></li><li><a class="tocitem" href="../../geom_relations/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../../geom_relations/disjoint/">Disjoint</a></li><li><a class="tocitem" href="../../geom_relations/geom_geom_processors/">Line-curve interaction</a></li><li><a class="tocitem" href="../../geom_relations/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../../geom_relations/overlaps/">Overlaps</a></li><li><a class="tocitem" href="../../geom_relations/touches/">Touches</a></li><li><a class="tocitem" href="../../geom_relations/within/">Within</a></li><li><a class="tocitem" href="../../../transformations/extent/">Extent embedding</a></li><li><a class="tocitem" href="../../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../../transformations/transform/">Pointwise transformation</a></li><li><a class="tocitem" href="../../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Intersection</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Intersection</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/clipping/intersection.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Intersection"><a class="docs-heading-anchor" href="#Intersection">Intersection</a><a id="Intersection-1"></a><a class="docs-heading-anchor-permalink" href="#Intersection" title="Permalink"></a></h1><pre><code class="language-julia hljs">export intersection, intersection_points
+
+
+&quot;&quot;&quot;
+    intersection(geom_a, geom_b, [T::Type]; target::Type)
+
+Return the intersection between two geometries as a list of geometries. Return an empty list
+if none are found. The type of the list will be constrained as much as possible given the
+input geometries. Furthermore, the user can provide a `taget` type as a keyword argument and
+a list of target geometries found in the intersection will be returned. The user can also
+provide a float type that they would like the points of returned geometries to be.
+
+# Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+inter_points = GO.intersection(line1, line2; target = GI.PointTrait)
+GI.coordinates.(inter_points)</code></pre><p>output</p><pre><code class="language-julia hljs">1-element Vector{Vector{Float64}}:
+ [125.58375366067547, -14.83572303404496]
+```
+&quot;&quot;&quot;
+function intersection(
+    geom_a, geom_b, ::Type{T} = Float64; target::Type{Target} = Nothing,
+) where {T &lt;: AbstractFloat, Target &lt;: GI.AbstractTrait}
+    return _intersection(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+end</code></pre><p>Curve-Curve Intersections with target Point</p><pre><code class="language-julia hljs">_intersection(
+    ::Type{GI.PointTrait}, ::Type{T},
+    trait_a::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_a,
+    trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b,
+) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
+
+
+#= Polygon-Polygon Intersections with target Polygon
+The algorithm to determine the intersection was adapted from &quot;Efficient clipping
+of efficient polygons,&quot; by Greiner and Hormann (1998).
+DOI: https://doi.org/10.1145/274363.274364 =#
+function _intersection(
+    ::Type{GI.PolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.PolygonTrait, poly_b,
+) where {T}</code></pre><p>First we get the exteriors of &#39;poly<em>a&#39; and &#39;poly</em>b&#39;</p><pre><code class="language-julia hljs">    ext_poly_a = GI.getexterior(poly_a)
+    ext_poly_b = GI.getexterior(poly_b)</code></pre><p>Then we find the intersection of the exteriors</p><pre><code class="language-julia hljs">    a_list, b_list, a_idx_list = _build_ab_list(T, ext_poly_a, ext_poly_b)
+    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -&gt; x ? 1 : (-1))
+
+    if isempty(polys)
+        if _point_filled_curve_orientation(a_list[1].point, ext_poly_b) == point_in
+            push!(polys, GI.Polygon([ext_poly_a]))
+        elseif _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in
+            push!(polys, GI.Polygon([ext_poly_b]))
+        end
+    end</code></pre><p>If the original polygons had holes, take that into account.</p><pre><code class="language-julia hljs">    if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
+        hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
+        _add_holes_to_polys!(T, polys, hole_iterator)
+    end
+    return polys
+end</code></pre><p>Many type and target combos aren&#39;t implemented</p><pre><code class="language-julia hljs">function _intersection(
+    ::Type{Target}, ::Type{T},
+    trait_a::GI.AbstractTrait, geom_a,
+    trait_b::GI.AbstractTrait, geom_b,
+) where {Target, T}
+    @assert(
+        false,
+        &quot;Intersection between $trait_a and $trait_b with target $Target isn&#39;t implemented yet.&quot;,
+    )
+    return nothing
+end
+
+&quot;&quot;&quot;
+    intersection_points(
+        geom_a,
+        geom_b,
+    )::Union{
+        ::Vector{::Tuple{::Real, ::Real}},
+        ::Nothing,
+    }
+
+Return a list of intersection points between two geometries of type GI.Point.
+If no intersection point was possible given geometry extents, returns an empty
+list.
+&quot;&quot;&quot;
+intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T &lt;: AbstractFloat =
+    _intersection_points(T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+
+
+#= Calculates the list of intersection points between two geometries, inlcuding line
+segments, line strings, linear rings, polygons, and multipolygons. If no intersection points
+were possible given geometry extents or if none are found, return an empty list of
+GI.Points. =#
+function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b) where T</code></pre><p>Initialize an empty list of points</p><pre><code class="language-julia hljs">    result = GI.Point[]</code></pre><p>Check if the geometries extents even overlap</p><pre><code class="language-julia hljs">    Extents.intersects(GI.extent(a), GI.extent(b)) || return result</code></pre><p>Create a list of edges from the two input geometries</p><pre><code class="language-julia hljs">    edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
+    npoints_a, npoints_b  = length(edges_a), length(edges_b)
+    a_closed = npoints_a &gt; 1 &amp;&amp; edges_a[1][1] == edges_a[end][1]
+    b_closed = npoints_b &gt; 1 &amp;&amp; edges_b[1][1] == edges_b[end][1]
+    if npoints_a &gt; 0 &amp;&amp; npoints_b &gt; 0</code></pre><p>Loop over pairs of edges and add any intersection points to results</p><pre><code class="language-julia hljs">        for i in eachindex(edges_a), j in eachindex(edges_b)
+            point, fracs = _intersection_point(T, edges_a[i], edges_b[j])
+            if !isnothing(point)
+                #=
+                Determine if point is on edge (all edge endpoints excluded
+                except for the last edge for an open geometry)
+                =#
+                α, β = fracs
+                on_a_edge = (!a_closed &amp;&amp; i == npoints_a &amp;&amp; 0 &lt;= α &lt;= 1) ||
+                    (0 &lt;= α &lt; 1)
+                on_b_edge = (!b_closed &amp;&amp; j == npoints_b &amp;&amp; 0 &lt;= β &lt;= 1) ||
+                    (0 &lt;= β &lt; 1)
+                if on_a_edge &amp;&amp; on_b_edge
+                    push!(result, GI.Point(point))
+                end
+            end
+        end
+    end
+    return result
+end
+
+#= Calculates the intersection point between two lines if it exists, and as if the line
+extended to infinity, and the fractional component of each line from the initial end point
+to the intersection point.
+Inputs:
+    (a1, a2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} first line
+    (b1, b2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} second line
+Outputs:
+    (x, y)::Tuple{::Real, ::Real} intersection point
+    (t, u)::Tuple{::Real, ::Real} fractional length of lines to intersection
+    Both are ::Nothing if point doesn&#39;t exist!
+
+Calculation derivation can be found here:
+    https://stackoverflow.com/questions/563198/
+=#
+function _intersection_point(::Type{T}, (a1, a2)::Tuple, (b1, b2)::Tuple) where T</code></pre><p>First line runs from p to p + r</p><pre><code class="language-julia hljs">    px, py = GI.x(a1), GI.y(a1)
+    rx, ry = GI.x(a2) - px, GI.y(a2) - py</code></pre><p>Second line runs from q to q + s</p><pre><code class="language-julia hljs">    qx, qy = GI.x(b1), GI.y(b1)
+    sx, sy = GI.x(b2) - qx, GI.y(b2) - qy</code></pre><p>Intersection will be where p + tr = q + us where 0 &lt; t, u &lt; 1 and</p><pre><code class="language-julia hljs">    r_cross_s = rx * sy - ry * sx
+    if r_cross_s != 0
+        Δqp_x = qx - px
+        Δqp_y = qy - py
+        t = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
+        u = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
+        x = px + t * rx
+        y = py + t * ry
+        return (T(x), T(y)), (T(t), T(u))
+    end
+    return nothing, nothing
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../difference/">« Difference Polygon Clipping</a><a class="docs-footer-nextpage" href="../union/">Union Polygon Clipping »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="auto">Automatic (OS)</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.2.1 on <span class="colophon-date" title="Monday 5 February 2024 16:15">Monday 5 February 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

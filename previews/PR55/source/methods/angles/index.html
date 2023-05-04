@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Angles · GeometryOps.jl</title><meta name="title" content="Angles · GeometryOps.jl"/><meta property="og:title" content="Angles · GeometryOps.jl"/><meta property="twitter:title" content="Angles · GeometryOps.jl"/><meta name="description" content="Documentation for GeometryOps.jl."/><meta property="og:description" content="Documentation for GeometryOps.jl."/><meta property="twitter:description" content="Documentation for GeometryOps.jl."/><meta property="og:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/angles/"/><meta property="twitter:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/angles/"/><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/angles/"/><script data-outdated-warner src="../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../search_index.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><a class="tocitem" href="../../../api/">API Reference</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li class="is-active"><a class="tocitem" href>Angles</a><ul class="internal"><li><a class="tocitem" href="#What-is-angles?"><span>What is angles?</span></a></li><li><a class="tocitem" href="#Implementation"><span>Implementation</span></a></li></ul></li><li><a class="tocitem" href="../area/">Area and signed area</a></li><li><a class="tocitem" href="../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../centroid/">Centroid</a></li><li><a class="tocitem" href="../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../equals/">Equals</a></li><li><a class="tocitem" href="../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../clipping/clipping_processor/">Polygon clipping helpers</a></li><li><a class="tocitem" href="../clipping/difference/">Difference Polygon Clipping</a></li><li><a class="tocitem" href="../clipping/intersection/">Intersection</a></li><li><a class="tocitem" href="../clipping/union/">Union Polygon Clipping</a></li><li><a class="tocitem" href="../geom_relations/contains/">Contains</a></li><li><a class="tocitem" href="../geom_relations/coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../geom_relations/covers/">Covers</a></li><li><a class="tocitem" href="../geom_relations/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../geom_relations/disjoint/">Disjoint</a></li><li><a class="tocitem" href="../geom_relations/geom_geom_processors/">Line-curve interaction</a></li><li><a class="tocitem" href="../geom_relations/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../geom_relations/overlaps/">Overlaps</a></li><li><a class="tocitem" href="../geom_relations/touches/">Touches</a></li><li><a class="tocitem" href="../geom_relations/within/">Within</a></li><li><a class="tocitem" href="../../transformations/extent/">Extent embedding</a></li><li><a class="tocitem" href="../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../transformations/transform/">Pointwise transformation</a></li><li><a class="tocitem" href="../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Angles</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Angles</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/angles.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Angles"><a class="docs-heading-anchor" href="#Angles">Angles</a><a id="Angles-1"></a><a class="docs-heading-anchor-permalink" href="#Angles" title="Permalink"></a></h1><pre><code class="language-julia hljs">export angles</code></pre><h2 id="What-is-angles?"><a class="docs-heading-anchor" href="#What-is-angles?">What is angles?</a><a id="What-is-angles?-1"></a><a class="docs-heading-anchor-permalink" href="#What-is-angles?" title="Permalink"></a></h2><p>Angles are the angles formed by a given geometries line segments, if it has line segments.</p><p>To provide an example, consider this rectangle:</p><pre><code class="language-julia hljs">import GeometryOps as GO
+import GeoInterface as GI
+using Makie, CairoMakie
+
+rect = GI.Polygon([[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)]])
+f, a, p = poly(collect(GI.getpoint(rect)); axis = (; aspect = DataAspect()))</code></pre><img src="8fbc8239.svg" alt="Example block output"/><p>This is clearly a rectangle, with angles of 90 degrees.</p><pre><code class="language-julia hljs">GO.angles(rect)  # [90, 90, 90, 90]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4-element Vector{Float64}:
+ 90.0
+ 90.0
+ 90.0
+ 90.0</code></pre><h2 id="Implementation"><a class="docs-heading-anchor" href="#Implementation">Implementation</a><a id="Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation" title="Permalink"></a></h2><p>This is the GeoInterface-compatible implementation. First, we implement a wrapper method that dispatches to the correct implementation based on the geometry trait. This is also used in the implementation, since it&#39;s a lot less work!</p><pre><code class="language-julia hljs">const _ANGLE_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
+
+&quot;&quot;&quot;
+    angles(geom, ::Type{T} = Float64)
+
+Returns the angles of a geometry or collection of geometries.
+This is computed differently for different geometries:
+
+    - The angles of a point is an empty vector.
+    - The angles of a single line segment is an empty vector.
+    - The angles of a linestring or linearring is a vector of angles formed by the curve.
+    - The angles of a polygin is a vector of vectors of angles formed by each ring.
+    - The angles of a multi-geometry collection is a vector of the angles of each of the
+        sub-geometries as defined above.
+
+Result will be a Vector, or nested set of vectors, of type T where an optional argument with
+a default value of Float64.
+&quot;&quot;&quot;
+function angles(geom, ::Type{T} = Float64; threaded =false) where T &lt;: AbstractFloat
+    applyreduce(vcat, _ANGLE_TARGETS, geom; threaded, init = Vector{T}()) do g
+        _angles(T, GI.trait(g), g)
+    end
+end</code></pre><p>Points and single line segments have no angles</p><pre><code class="language-julia hljs">_angles(::Type{T}, ::Union{GI.PointTrait, GI.MultiPointTrait, GI.LineTrait}, geom) where T = T[]
+
+#= The angles of a linestring are the angles formed by the line. If the first and last point
+are not explicitly repeated, the geom is not considered closed. The angles should all be on
+one side of the line, but a particular side is not guaranteed by this function. =#
+function _angles(::Type{T}, ::GI.LineStringTrait, geom) where T
+    npoints = GI.npoint(geom)
+    first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, npoints))
+    angle_list = Vector{T}(undef, npoints - (first_last_equal ? 1 : 2))
+    _find_angles!(
+        T, angle_list, geom;
+        offset = first_last_equal, close_geom = false,
+    )
+    return angle_list
+end
+
+#= The angles of a linearring are the angles within the closed line and include the angles
+formed by connecting the first and last points of the curve. =#
+function _angles(::Type{T}, ::GI.LinearRingTrait, geom; interior = true) where T
+    npoints = GI.npoint(geom)
+    first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, npoints))
+    angle_list = Vector{T}(undef, npoints - (first_last_equal ? 1 : 0))
+    _find_angles!(
+        T, angle_list, geom;
+        offset = true, close_geom = !first_last_equal, interior = interior,
+    )
+    return angle_list
+end
+
+#= The angles of a polygon is a vector of polygon angles. Note that if there are holes
+within the polyogn, the angles will be listed after the exterior ring angles in order of the
+holes. All angles, including the hole angles, are interior angles of the polygon.=#
+function _angles(::Type{T}, ::GI.PolygonTrait, geom) where T
+    angles = _angles(T, GI.LinearRingTrait(), GI.getexterior(geom); interior = true)
+    for h in GI.gethole(geom)
+        append!(angles, _angles(T, GI.LinearRingTrait(), h; interior = false))
+    end
+    return angles
+end</code></pre><p>Find angles of a curve and insert the values into the angle<em>list. If offset is true, then save space for the angle at the first vertex, as the curve is closed, at the front of angle</em>list. If close<em>geom is true, then despite the first and last point not being explicitly repeated, the curve is closed and the angle of the last point should be added to angle</em>list. If interior is true, then all angles will be on the same side of the line</p><pre><code class="language-julia hljs">function _find_angles!(
+    ::Type{T}, angle_list, geom;
+    offset, close_geom, interior = true,
+) where T
+    local p1, prev_p1_diff, p2_p1_diff
+    local start_point, start_diff
+    local extreem_idx, extreem_x, extreem_y
+    i_offset = offset ? 1 : 0</code></pre><p>Loop through the curve and find each of the angels</p><pre><code class="language-julia hljs">    for (i, p2) in enumerate(GI.getpoint(geom))
+        xp2, yp2 = GI.x(p2), GI.y(p2)
+        #= Find point with smallest x values (and smallest y in case of a tie) as this point
+        is know to be convex. =#
+        if i == 1 || (xp2 &lt; extreem_x || (xp2 == extreem_x &amp;&amp; yp2 &lt; extreem_y))
+            extreem_idx = i
+            extreem_x, extreem_y = xp2, yp2
+        end
+        if i &gt; 1
+            p2_p1_diff = (xp2 - GI.x(p1), yp2 - GI.y(p1))
+            if i == 2
+                start_point = p1
+                start_diff = p2_p1_diff
+            else
+                angle_list[i - 2 + i_offset] = _diffs_calc_angle(T, prev_p1_diff, p2_p1_diff)
+            end
+            prev_p1_diff = -1 .* p2_p1_diff
+        end
+        p1 = p2
+    end</code></pre><p>If the last point of geometry should be the same as the first, calculate closing angle</p><pre><code class="language-julia hljs">    if close_geom
+        p2_p1_diff = (GI.x(start_point) - GI.x(p1), GI.y(start_point) - GI.y(p1))
+        angle_list[end] = _diffs_calc_angle(T, prev_p1_diff, p2_p1_diff)
+        prev_p1_diff = -1 .* p2_p1_diff
+    end</code></pre><p>If needed, calculate first angle corresponding to the first point</p><pre><code class="language-julia hljs">    if offset
+        angle_list[1] = _diffs_calc_angle(T, prev_p1_diff, start_diff)
+    end
+    #= Make sure that all of the angles are on the same side of the line and inside of the
+    closed ring if the input geometry is closed. =#
+    inside_sgn = sign(angle_list[extreem_idx]) * (interior ? 1 : -1)
+    for i in eachindex(angle_list)
+        idx_sgn = sign(angle_list[i])
+        if idx_sgn == -1
+            angle_list[i] = abs(angle_list[i])
+        end
+        if idx_sgn != inside_sgn
+            angle_list[i] = 360 - angle_list[i]
+        end
+    end
+    return
+end</code></pre><p>Calculate the angle between two vectors defined by the previous and current Δx and Δys. Angle will have a sign corresponding to the sign of the cross product between the two vectors. All angles of one sign in a given geometry are convex, while those of the other sign are concave. However, the sign corresponding to each of these can vary based on geometry and thus you must compare to an angle that is know to be convex or concave.</p><pre><code class="language-julia hljs">function _diffs_calc_angle(::Type{T}, (Δx_prev, Δy_prev), (Δx_curr, Δy_curr)) where T
+    cross_prod = Δx_prev * Δy_curr - Δy_prev * Δx_curr
+    dot_prod = Δx_prev * Δx_curr + Δy_prev * Δy_curr
+    prev_mag = max(sqrt(Δx_prev^2 + Δy_prev^2), eps(T))
+    curr_mag = max(sqrt(Δx_curr^2 + Δy_curr^2), eps(T))
+    val = clamp(dot_prod / (prev_mag * curr_mag), -one(T), one(T))
+    angle = real(acos(val) * 180 / π)
+    return angle * (cross_prod &lt; 0 ? -1 : 1)
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../utils/">« Utility functions</a><a class="docs-footer-nextpage" href="../area/">Area and signed area »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="auto">Automatic (OS)</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.2.1 on <span class="colophon-date" title="Monday 5 February 2024 16:15">Monday 5 February 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

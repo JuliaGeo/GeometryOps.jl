@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Barycentric coordinates · GeometryOps.jl</title><meta name="title" content="Barycentric coordinates · GeometryOps.jl"/><meta property="og:title" content="Barycentric coordinates · GeometryOps.jl"/><meta property="twitter:title" content="Barycentric coordinates · GeometryOps.jl"/><meta name="description" content="Documentation for GeometryOps.jl."/><meta property="og:description" content="Documentation for GeometryOps.jl."/><meta property="twitter:description" content="Documentation for GeometryOps.jl."/><meta property="og:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/barycentric/"/><meta property="twitter:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/barycentric/"/><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/barycentric/"/><script data-outdated-warner src="../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../search_index.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><a class="tocitem" href="../../../api/">API Reference</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li><a class="tocitem" href="../angles/">Angles</a></li><li><a class="tocitem" href="../area/">Area and signed area</a></li><li class="is-active"><a class="tocitem" href>Barycentric coordinates</a><ul class="internal"><li><a class="tocitem" href="#Example"><span>Example</span></a></li><li><a class="tocitem" href="#Barycentric-coordinate-API"><span>Barycentric-coordinate API</span></a></li></ul></li><li><a class="tocitem" href="../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../centroid/">Centroid</a></li><li><a class="tocitem" href="../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../equals/">Equals</a></li><li><a class="tocitem" href="../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../clipping/clipping_processor/">Polygon clipping helpers</a></li><li><a class="tocitem" href="../clipping/difference/">Difference Polygon Clipping</a></li><li><a class="tocitem" href="../clipping/intersection/">Intersection</a></li><li><a class="tocitem" href="../clipping/union/">Union Polygon Clipping</a></li><li><a class="tocitem" href="../geom_relations/contains/">Contains</a></li><li><a class="tocitem" href="../geom_relations/coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../geom_relations/covers/">Covers</a></li><li><a class="tocitem" href="../geom_relations/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../geom_relations/disjoint/">Disjoint</a></li><li><a class="tocitem" href="../geom_relations/geom_geom_processors/">Line-curve interaction</a></li><li><a class="tocitem" href="../geom_relations/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../geom_relations/overlaps/">Overlaps</a></li><li><a class="tocitem" href="../geom_relations/touches/">Touches</a></li><li><a class="tocitem" href="../geom_relations/within/">Within</a></li><li><a class="tocitem" href="../../transformations/extent/">Extent embedding</a></li><li><a class="tocitem" href="../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../transformations/transform/">Pointwise transformation</a></li><li><a class="tocitem" href="../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Barycentric coordinates</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Barycentric coordinates</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/barycentric.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Barycentric-coordinates"><a class="docs-heading-anchor" href="#Barycentric-coordinates">Barycentric coordinates</a><a id="Barycentric-coordinates-1"></a><a class="docs-heading-anchor-permalink" href="#Barycentric-coordinates" title="Permalink"></a></h1><pre><code class="language-julia hljs">export barycentric_coordinates, barycentric_coordinates!, barycentric_interpolate
+export MeanValue</code></pre><p>Generalized barycentric coordinates are a generalization of barycentric coordinates, which are typically used in triangles, to arbitrary polygons.</p><p>They provide a way to express a point within a polygon as a weighted average of the polygon&#39;s vertices.</p><p>In the case of a triangle, barycentric coordinates are a set of three numbers <span>$(λ_1, λ_2, λ_3)$</span>, each associated with a vertex of the triangle. Any point within the triangle can be expressed as a weighted average of the vertices, where the weights are the barycentric coordinates. The weights sum to 1, and each is non-negative.</p><p>For a polygon with <span>$n$</span> vertices, generalized barycentric coordinates are a set of <span>$n$</span> numbers <span>$(λ_1, λ_2, ..., λ_n)$</span>, each associated with a vertex of the polygon. Any point within the polygon can be expressed as a weighted average of the vertices, where the weights are the generalized barycentric coordinates.</p><p>As with the triangle case, the weights sum to 1, and each is non-negative.</p><h2 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h2><p>This example was taken from <a href="https://doc.cgal.org/latest/Barycentric_coordinates_2/index.html">this page of CGAL&#39;s documentation</a>.</p><pre><code class="language-julia hljs">using GeometryOps
+using GeometryOps.GeometryBasics
+using Makie
+using CairoMakie
+# Define a polygon
+polygon_points = Point3f[
+(0.03, 0.05, 0.00), (0.07, 0.04, 0.02), (0.10, 0.04, 0.04),
+(0.14, 0.04, 0.06), (0.17, 0.07, 0.08), (0.20, 0.09, 0.10),
+(0.22, 0.11, 0.12), (0.25, 0.11, 0.14), (0.27, 0.10, 0.16),
+(0.30, 0.07, 0.18), (0.31, 0.04, 0.20), (0.34, 0.03, 0.22),
+(0.37, 0.02, 0.24), (0.40, 0.03, 0.26), (0.42, 0.04, 0.28),
+(0.44, 0.07, 0.30), (0.45, 0.10, 0.32), (0.46, 0.13, 0.34),
+(0.46, 0.19, 0.36), (0.47, 0.26, 0.38), (0.47, 0.31, 0.40),
+(0.47, 0.35, 0.42), (0.45, 0.37, 0.44), (0.41, 0.38, 0.46),
+(0.38, 0.37, 0.48), (0.35, 0.36, 0.50), (0.32, 0.35, 0.52),
+(0.30, 0.37, 0.54), (0.28, 0.39, 0.56), (0.25, 0.40, 0.58),
+(0.23, 0.39, 0.60), (0.21, 0.37, 0.62), (0.21, 0.34, 0.64),
+(0.23, 0.32, 0.66), (0.24, 0.29, 0.68), (0.27, 0.24, 0.70),
+(0.29, 0.21, 0.72), (0.29, 0.18, 0.74), (0.26, 0.16, 0.76),
+(0.24, 0.17, 0.78), (0.23, 0.19, 0.80), (0.24, 0.22, 0.82),
+(0.24, 0.25, 0.84), (0.21, 0.26, 0.86), (0.17, 0.26, 0.88),
+(0.12, 0.24, 0.90), (0.07, 0.20, 0.92), (0.03, 0.15, 0.94),
+(0.01, 0.10, 0.97), (0.02, 0.07, 1.00)]
+# Plot it!
+# First, we&#39;ll plot the polygon using Makie&#39;s rendering:
+f, a1, p1 = poly(
+    polygon_points;
+    color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true),
+    axis = (;
+       type = Axis, aspect = DataAspect(), title = &quot;Makie mesh based polygon rendering&quot;, subtitle = &quot;CairoMakie&quot;
+    ),
+    figure = (; size = (800, 400),)
+)
+
+Makie.update_state_before_display!(f) # We have to call this explicitly, to get the axis limits correct
+# Now that we&#39;ve plotted the first polygon,
+# we can render it using barycentric coordinates.
+a1_bbox = a1.finallimits[] # First we get the extent of the axis
+ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(a1_bbox), maximum(a1_bbox))))
+
+a2 = Axis(
+        f[1, 2],
+        aspect = DataAspect(),
+        title = &quot;Barycentric coordinate based polygon rendering&quot;, subtitle = &quot;GeometryOps&quot;,
+        limits = (ext.X, ext.Y)
+    )
+p2box = poly!( # Now, we plot a cropping rectangle around the axis so we only show the polygon
+    a2,
+    GeometryOps.GeometryBasics.Polygon( # This is a rectangle with an internal hole shaped like the polygon.
+        Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])],
+        [reverse(Point2f.(polygon_points))]
+    );
+    color = :white, xautolimits = false, yautolimits = false
+)
+hidedecorations!(a1)
+hidedecorations!(a2)
+cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
+# Finally, we perform barycentric interpolation on a grid,
+xrange = LinRange(ext.X..., size(a2.scene)[1] * 4) # 2 rendered pixels per &quot;physical&quot; pixel
+yrange = LinRange(ext.Y..., size(a2.scene)[2] * 4) # 2 rendered pixels per &quot;physical&quot; pixel
+@time mean_values = barycentric_interpolate.(
+    (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
+    (Point2f.(polygon_points),), # The polygon points as `Point2f`
+    (last.(polygon_points,),),   # The values per polygon point - can be anything which supports addition and division
+    Point2f.(xrange, yrange&#39;)    # The points at which to interpolate
+)
+# and render!
+hm = heatmap!(
+    a2, xrange, yrange, mean_values;
+    colormap = p1.colormap, # Use the same colormap as the original polygon plot
+    colorrange = p1.plots[1].colorrange[], # Access the rendered mesh plot&#39;s colorrange directly
+    xautolimits = false, yautolimits = false
+)
+translate!(hm, 0, 0, -1) # translate the heatmap behind the cropping polygon!
+f</code></pre><img src="a43e88b0.svg" alt="Example block output"/><h2 id="Barycentric-coordinate-API"><a class="docs-heading-anchor" href="#Barycentric-coordinate-API">Barycentric-coordinate API</a><a id="Barycentric-coordinate-API-1"></a><a class="docs-heading-anchor-permalink" href="#Barycentric-coordinate-API" title="Permalink"></a></h2><p>In some cases, we actually want barycentric interpolation, and have no interest in the coordinates themselves.</p><p>However, the coordinates can be useful for debugging, and when performing 3D rendering, multiple barycentric values (depth, uv) are needed for depth buffering.</p><pre><code class="language-julia hljs">const _VecTypes = Union{Tuple{Vararg{T, N}}, GeometryBasics.StaticArraysCore.StaticArray{Tuple{N}, T, 1}} where {N, T}
+
+&quot;&quot;&quot;
+    abstract type AbstractBarycentricCoordinateMethod
+
+Abstract supertype for barycentric coordinate methods.
+The subtypes may serve as dispatch types, or may cache
+some information about the target polygon.
+
+# API
+The following methods must be implemented for all subtypes:
+- `barycentric_coordinates!(λs::Vector{&lt;: Real}, method::AbstractBarycentricCoordinateMethod, exterior::Vector{&lt;: Point{2, T1}}, point::Point{2, T2})`
+- `barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, exterior::Vector{&lt;: Point{2, T1}}, values::Vector{V}, point::Point{2, T2})::V`
+- `barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, exterior::Vector{&lt;: Point{2, T1}}, interiors::Vector{&lt;: Vector{&lt;: Point{2, T1}}} values::Vector{V}, point::Point{2, T2})::V`
+The rest of the methods will be implemented in terms of these, and have efficient dispatches for broadcasting.
+&quot;&quot;&quot;
+abstract type AbstractBarycentricCoordinateMethod end
+
+
+Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{&lt;: Real}, method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{&lt;: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 &lt;: Real, T2 &lt;: Real}
+    @boundscheck @assert length(λs) == length(polypoints)
+    @boundscheck @assert length(polypoints) &gt;= 3
+
+    @error(&quot;Not implemented yet for method $(method).&quot;)
+end
+Base.@propagate_inbounds barycentric_coordinates!(λs::Vector{&lt;: Real}, polypoints::AbstractVector{&lt;: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 &lt;: Real, T2 &lt;: Real} = barycentric_coordinates!(λs, MeanValue(), polypoints, point)
+
+Base.@propagate_inbounds function barycentric_coordinates(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{&lt;: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 &lt;: Real, T2 &lt;: Real}
+    λs = zeros(promote_type(T1, T2), length(polypoints))
+    barycentric_coordinates!(λs, method, polypoints, point)
+    return λs
+end
+Base.@propagate_inbounds barycentric_coordinates(polypoints::AbstractVector{&lt;: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 &lt;: Real, T2 &lt;: Real} = barycentric_coordinates(MeanValue(), polypoints, point)
+
+Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{&lt;: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 &lt;: Real, T2 &lt;: Real, V}
+    @boundscheck @assert length(values) == length(polypoints)
+    @boundscheck @assert length(polypoints) &gt;= 3
+    λs = barycentric_coordinates(method, polypoints, point)
+    return sum(λs .* values)
+end
+Base.@propagate_inbounds barycentric_interpolate(polypoints::AbstractVector{&lt;: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 &lt;: Real, T2 &lt;: Real, V} = barycentric_interpolate(MeanValue(), polypoints, values, point)
+
+Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, exterior::AbstractVector{&lt;: Point{N, T1}}, interiors::AbstractVector{&lt;: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 &lt;: Real, T2 &lt;: Real, V}
+    @boundscheck @assert length(values) == length(exterior) + isempty(interiors) ? 0 : sum(length.(interiors))
+    @boundscheck @assert length(exterior) &gt;= 3
+    λs = barycentric_coordinates(method, exterior, interiors, point)
+    return sum(λs .* values)
+end
+Base.@propagate_inbounds barycentric_interpolate(exterior::AbstractVector{&lt;: Point{N, T1}}, interiors::AbstractVector{&lt;: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 &lt;: Real, T2 &lt;: Real, V} = barycentric_interpolate(MeanValue(), exterior, interiors, values, point)
+
+Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polygon::Polygon{2, T1}, values::AbstractVector{V}, point::Point{2, T2}) where {T1 &lt;: Real, T2 &lt;: Real, V}
+    exterior = decompose(Point{2, promote_type(T1, T2)}, polygon.exterior)
+    if isempty(polygon.interiors)
+        @boundscheck @assert length(values) == length(exterior)
+        return barycentric_interpolate(method, exterior, values, point)
+    else # the poly has interiors
+        interiors = reverse.(decompose.((Point{2, promote_type(T1, T2)},), polygon.interiors))
+        @boundscheck @assert length(values) == length(exterior) + sum(length.(interiors))
+        return barycentric_interpolate(method, exterior, interiors, values, point)
+    end
+end
+Base.@propagate_inbounds barycentric_interpolate(polygon::Polygon{2, T1}, values::AbstractVector{V}, point::Point{2, T2}) where {T1 &lt;: Real, T2 &lt;: Real, V} = barycentric_interpolate(MeanValue(), polygon, values, point)</code></pre><p>3D polygons are considered to have their vertices in the XY plane, and the Z coordinate must represent some value.  This is to say that the Z coordinate is interpreted as an M coordinate.</p><pre><code class="language-julia hljs">Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polygon::Polygon{3, T1}, point::Point{2, T2}) where {T1 &lt;: Real, T2 &lt;: Real}
+    exterior_point3s = decompose(Point{3, promote_type(T1, T2)}, polygon.exterior)
+    exterior_values = getindex.(exterior_point3s, 3)
+    exterior_points = Point2f.(exterior_point3s)
+    if isempty(polygon.interiors)
+        return barycentric_interpolate(method, exterior_points, exterior_values, point)
+    else # the poly has interiors
+        interior_point3s = decompose.((Point{3, promote_type(T1, T2)},), polygon.interiors)
+        interior_values = collect(Iterators.flatten((getindex.(point3s, 3) for point3s in interior_point3s)))
+        interior_points = map(point3s -&gt; Point2f.(point3s), interior_point3s)
+        return barycentric_interpolate(method, exterior_points, interior_points, vcat(exterior_values, interior_values), point)
+    end
+end
+Base.@propagate_inbounds barycentric_interpolate(polygon::Polygon{3, T1}, point::Point{2, T2}) where {T1 &lt;: Real, T2 &lt;: Real} = barycentric_interpolate(MeanValue(), polygon, point)</code></pre><p>This method is the one which supports GeoInterface.</p><pre><code class="language-julia hljs">Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polygon, values::AbstractVector{V}, point) where V
+    @assert GeoInterface.trait(polygon) isa GeoInterface.PolygonTrait
+    @assert GeoInterface.trait(point) isa GeoInterface.PointTrait
+    passable_polygon = GeoInterface.convert(GeometryBasics, polygon)
+    @assert passable_polygon isa GeometryBasics.Polygon &quot;The polygon was converted to a $(typeof(passable_polygon)), which is not a `GeometryBasics.Polygon`.&quot;
+    # first_poly_point = GeoInterface.getpoint(GeoInterface.getexterior(polygon))
+    passable_point = GeoInterface.convert(GeometryBasics, point)
+    return barycentric_interpolate(method, passable_polygon, Point2(passable_point))
+end
+Base.@propagate_inbounds barycentric_interpolate(polygon, values::AbstractVector{V}, point) where V = barycentric_interpolate(MeanValue(), polygon, values, point)
+
+&quot;&quot;&quot;
+    weighted_mean(weight::Real, x1, x2)
+
+Returns the weighted mean of `x1` and `x2`, where `weight` is the weight of `x1`.
+
+Specifically, calculates `x1 * weight + x2 * (1 - weight)`.
+
+!!! note
+    The idea for this method is that you can override this for custom types, like Color types, in extension modules.
+&quot;&quot;&quot;
+function weighted_mean(weight::WT, x1, x2) where {WT &lt;: Real}
+    return muladd(x1, weight, x2 * (oneunit(WT) - weight))
+end
+
+
+&quot;&quot;&quot;
+    MeanValue() &lt;: AbstractBarycentricCoordinateMethod
+
+This method calculates barycentric coordinates using the mean value method.
+
+# References
+
+&quot;&quot;&quot;
+struct MeanValue &lt;: AbstractBarycentricCoordinateMethod
+end</code></pre><p>Before we go to the actual implementation, there are some quick and simple utility functions that we need to implement.  These are mainly for convenience and code brevity.</p><pre><code class="language-julia hljs">&quot;&quot;&quot;
+    _det(s1::Point2{T1}, s2::Point2{T2}) where {T1 &lt;: Real, T2 &lt;: Real}
+
+Returns the determinant of the matrix formed by `hcat`&#39;ing two points `s1` and `s2`.
+
+Specifically, this is:
+```julia
+s1[1] * s2[2] - s1[2] * s2[1]
+```
+&quot;&quot;&quot;
+function _det(s1::_VecTypes{2, T1}, s2::_VecTypes{2, T2}) where {T1 &lt;: Real, T2 &lt;: Real}
+    return s1[1] * s2[2] - s1[2] * s2[1]
+end
+
+&quot;&quot;&quot;
+    t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)
+
+Returns the &quot;T-value&quot; as described in Hormann&#39;s presentation [^HormannPresentation] on how to calculate
+the mean-value coordinate.
+
+Here, `sᵢ` is the vector from vertex `vᵢ` to the point, and `rᵢ` is the norm (length) of `sᵢ`.
+`s` must be `Point` and `r` must be real numbers.
+
+```math
+tᵢ = \\frac{\\mathrm{det}\\left(sᵢ, sᵢ₊₁\\right)}{rᵢ * rᵢ₊₁ + sᵢ ⋅ sᵢ₊₁}
+```
+
+[^HormannPresentation]: K. Hormann and N. Sukumar. Generalized Barycentric Coordinates in Computer Graphics and Computational Mechanics. Taylor &amp; Fancis, CRC Press, 2017.
+```
+
+&quot;&quot;&quot;
+function t_value(sᵢ::_VecTypes{N, T1}, sᵢ₊₁::_VecTypes{N, T1}, rᵢ::T2, rᵢ₊₁::T2) where {N, T1 &lt;: Real, T2 &lt;: Real}
+    return _det(sᵢ, sᵢ₊₁) / muladd(rᵢ, rᵢ₊₁, dot(sᵢ, sᵢ₊₁))
+end
+
+
+function barycentric_coordinates!(λs::Vector{&lt;: Real}, ::MeanValue, polypoints::AbstractVector{&lt;: Point{2, T1}}, point::Point{2, T2}) where {T1 &lt;: Real, T2 &lt;: Real}
+    @boundscheck @assert length(λs) == length(polypoints)
+    @boundscheck @assert length(polypoints) &gt;= 3
+    n_points = length(polypoints)
+    # Initialize counters and register variables
+    # Points - these are actually vectors from point to vertices
+    #  polypoints[i-1], polypoints[i], polypoints[i+1]
+    sᵢ₋₁ = polypoints[end] - point
+    sᵢ   = polypoints[begin] - point
+    sᵢ₊₁ = polypoints[begin+1] - point
+    # radius / Euclidean distance between points.
+    rᵢ₋₁ = norm(sᵢ₋₁)
+    rᵢ   = norm(sᵢ  )
+    rᵢ₊₁ = norm(sᵢ₊₁)
+    # Perform the first computation explicitly, so we can cut down on
+    # a mod in the loop.
+    λs[1] = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
+    # Loop through the rest of the vertices, compute, store in λs
+    for i in 2:n_points
+        # Increment counters + set variables
+        sᵢ₋₁ = sᵢ
+        sᵢ   = sᵢ₊₁
+        sᵢ₊₁ = polypoints[mod1(i+1, n_points)] - point
+        rᵢ₋₁ = rᵢ
+        rᵢ   = rᵢ₊₁
+        rᵢ₊₁ = norm(sᵢ₊₁) # radius / Euclidean distance between points.
+        λs[i] = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
+    end
+    # Normalize λs to the 1-norm (sum=1)
+    λs ./= sum(λs)
+    return λs
+end</code></pre><pre><code class="language-julia hljs">function barycentric_coordinates(::MeanValue, polypoints::NTuple{N, Point{2, T2}}, point::Point{2, T1},) where {N, T1, T2}
+    ## Initialize counters and register variables
+    ## Points - these are actually vectors from point to vertices
+    ##  polypoints[i-1], polypoints[i], polypoints[i+1]
+    sᵢ₋₁ = polypoints[end] - point
+    sᵢ   = polypoints[begin] - point
+    sᵢ₊₁ = polypoints[begin+1] - point
+    ## radius / Euclidean distance between points.
+    rᵢ₋₁ = norm(sᵢ₋₁)
+    rᵢ   = norm(sᵢ  )
+    rᵢ₊₁ = norm(sᵢ₊₁)
+    λ₁ = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
+    λs = ntuple(N) do i
+        if i == 1
+            return λ₁
+        end
+        ## Increment counters + set variables
+        sᵢ₋₁ = sᵢ
+        sᵢ   = sᵢ₊₁
+        sᵢ₊₁ = polypoints[mod1(i+1, N)] - point
+        rᵢ₋₁ = rᵢ
+        rᵢ   = rᵢ₊₁
+        rᵢ₊₁ = norm(sᵢ₊₁) # radius / Euclidean distance between points.
+        return (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
+    end
+
+    ∑λ = sum(λs)
+
+    return ntuple(N) do i
+        λs[i] / ∑λ
+    end
+end</code></pre><p>This performs an inplace accumulation, using less memory and is faster. That&#39;s particularly good if you are using a polygon with a large number of points...</p><pre><code class="language-julia hljs">function barycentric_interpolate(::MeanValue, polypoints::AbstractVector{&lt;: Point{2, T1}}, values::AbstractVector{V}, point::Point{2, T2}) where {T1 &lt;: Real, T2 &lt;: Real, V}
+    @boundscheck @assert length(values) == length(polypoints)
+    @boundscheck @assert length(polypoints) &gt;= 3
+
+    n_points = length(polypoints)
+    # Initialize counters and register variables
+    # Points - these are actually vectors from point to vertices
+    #  polypoints[i-1], polypoints[i], polypoints[i+1]
+    sᵢ₋₁ = polypoints[end] - point
+    sᵢ   = polypoints[begin] - point
+    sᵢ₊₁ = polypoints[begin+1] - point
+    # radius / Euclidean distance between points.
+    rᵢ₋₁ = norm(sᵢ₋₁)
+    rᵢ   = norm(sᵢ  )
+    rᵢ₊₁ = norm(sᵢ₊₁)
+    # Now, we set the interpolated value to the first point&#39;s value, multiplied
+    # by the weight computed relative to the first point in the polygon.
+    wᵢ = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
+    wₜₒₜ = wᵢ
+    interpolated_value = values[begin] * wᵢ
+    for i in 2:n_points
+        # Increment counters + set variables
+        sᵢ₋₁ = sᵢ
+        sᵢ   = sᵢ₊₁
+        sᵢ₊₁ = polypoints[mod1(i+1, n_points)] - point
+        rᵢ₋₁ = rᵢ
+        rᵢ   = rᵢ₊₁
+        rᵢ₊₁ = norm(sᵢ₊₁)
+        # Now, we calculate the weight:
+        wᵢ = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
+        # perform a weighted sum with the interpolated value:
+        interpolated_value += values[i] * wᵢ
+        # and add the weight to the total weight accumulator.
+        wₜₒₜ += wᵢ
+    end
+    # Return the normalized interpolated value.
+    return interpolated_value / wₜₒₜ
+end</code></pre><p>When you have holes, then you have to be careful about the order you iterate around points.</p><p>Specifically, you have to iterate around each linear ring separately and ensure there are no degenerate/repeated points at the start and end!</p><pre><code class="language-julia hljs">function barycentric_interpolate(::MeanValue, exterior::AbstractVector{&lt;: Point{N, T1}}, interiors::AbstractVector{&lt;: AbstractVector{&lt;: Point{N, T1}}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 &lt;: Real, T2 &lt;: Real, V}
+    # @boundscheck @assert length(values) == (length(exterior) + isempty(interiors) ? 0 : sum(length.(interiors)))
+    # @boundscheck @assert length(exterior) &gt;= 3
+
+    current_index = 1
+    l_exterior = length(exterior)
+
+    sᵢ₋₁ = exterior[end] - point
+    sᵢ   = exterior[begin] - point
+    sᵢ₊₁ = exterior[begin+1] - point
+    rᵢ₋₁ = norm(sᵢ₋₁) # radius / Euclidean distance between points.
+    rᵢ   = norm(sᵢ  ) # radius / Euclidean distance between points.
+    rᵢ₊₁ = norm(sᵢ₊₁) # radius / Euclidean distance between points.</code></pre><p>Now, we set the interpolated value to the first point&#39;s value, multiplied by the weight computed relative to the first point in the polygon.</p><pre><code class="language-julia hljs">    wᵢ = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
+    wₜₒₜ = wᵢ
+    interpolated_value = values[begin] * wᵢ
+
+    for i in 2:l_exterior</code></pre><p>Increment counters + set variables</p><pre><code class="language-julia hljs">        sᵢ₋₁ = sᵢ
+        sᵢ   = sᵢ₊₁
+        sᵢ₊₁ = exterior[mod1(i+1, l_exterior)] - point
+        rᵢ₋₁ = rᵢ
+        rᵢ   = rᵢ₊₁
+        rᵢ₊₁ = norm(sᵢ₊₁) # radius / Euclidean distance between points.
+        wᵢ = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ</code></pre><p>Updates - first the interpolated value,</p><pre><code class="language-julia hljs">        interpolated_value += values[current_index] * wᵢ</code></pre><p>then the accumulators for total weight and current index.</p><pre><code class="language-julia hljs">        wₜₒₜ += wᵢ
+        current_index += 1
+
+    end
+    for hole in interiors
+        l_hole = length(hole)
+        sᵢ₋₁ = hole[end] - point
+        sᵢ   = hole[begin] - point
+        sᵢ₊₁ = hole[begin+1] - point
+        rᵢ₋₁ = norm(sᵢ₋₁) # radius / Euclidean distance between points.
+        rᵢ   = norm(sᵢ  ) # radius / Euclidean distance between points.
+        rᵢ₊₁ = norm(sᵢ₊₁) # radius / Euclidean distance between points.
+        # Now, we set the interpolated value to the first point&#39;s value, multiplied
+        # by the weight computed relative to the first point in the polygon.
+        wᵢ = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
+
+        interpolated_value += values[current_index] * wᵢ
+
+        wₜₒₜ += wᵢ
+        current_index += 1
+
+        for i in 2:l_hole
+            # Increment counters + set variables
+            sᵢ₋₁ = sᵢ
+            sᵢ   = sᵢ₊₁
+            sᵢ₊₁ = hole[mod1(i+1, l_hole)] - point
+            rᵢ₋₁ = rᵢ
+            rᵢ   = rᵢ₊₁
+            rᵢ₊₁ = norm(sᵢ₊₁) ## radius / Euclidean distance between points.
+            wᵢ = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
+            interpolated_value += values[current_index] * wᵢ
+            wₜₒₜ += wᵢ
+            current_index += 1
+        end
+    end
+    return interpolated_value / wₜₒₜ
+
+end
+
+struct Wachspress &lt;: AbstractBarycentricCoordinateMethod
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../area/">« Area and signed area</a><a class="docs-footer-nextpage" href="../bools/">Boolean conditions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="auto">Automatic (OS)</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.2.1 on <span class="colophon-date" title="Monday 5 February 2024 16:15">Monday 5 February 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

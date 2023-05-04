@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Polygon clipping helpers · GeometryOps.jl</title><meta name="title" content="Polygon clipping helpers · GeometryOps.jl"/><meta property="og:title" content="Polygon clipping helpers · GeometryOps.jl"/><meta property="twitter:title" content="Polygon clipping helpers · GeometryOps.jl"/><meta name="description" content="Documentation for GeometryOps.jl."/><meta property="og:description" content="Documentation for GeometryOps.jl."/><meta property="twitter:description" content="Documentation for GeometryOps.jl."/><meta property="og:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/clipping/clipping_processor/"/><meta property="twitter:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/clipping/clipping_processor/"/><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/clipping/clipping_processor/"/><script data-outdated-warner src="../../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../../assets/documenter.js"></script><script src="../../../../search_index.js"></script><script src="../../../../siteinfo.js"></script><script src="../../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../../"><img src="../../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../../">GeometryOps.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../../">Home</a></li><li><a class="tocitem" href="../../../../api/">API Reference</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../../utils/">Utility functions</a></li><li><a class="tocitem" href="../../angles/">Angles</a></li><li><a class="tocitem" href="../../area/">Area and signed area</a></li><li><a class="tocitem" href="../../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../../centroid/">Centroid</a></li><li><a class="tocitem" href="../../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../../equals/">Equals</a></li><li><a class="tocitem" href="../../polygonize/">Polygonizing raster data</a></li><li class="is-active"><a class="tocitem" href>Polygon clipping helpers</a></li><li><a class="tocitem" href="../difference/">Difference Polygon Clipping</a></li><li><a class="tocitem" href="../intersection/">Intersection</a></li><li><a class="tocitem" href="../union/">Union Polygon Clipping</a></li><li><a class="tocitem" href="../../geom_relations/contains/">Contains</a></li><li><a class="tocitem" href="../../geom_relations/coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../../geom_relations/covers/">Covers</a></li><li><a class="tocitem" href="../../geom_relations/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../../geom_relations/disjoint/">Disjoint</a></li><li><a class="tocitem" href="../../geom_relations/geom_geom_processors/">Line-curve interaction</a></li><li><a class="tocitem" href="../../geom_relations/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../../geom_relations/overlaps/">Overlaps</a></li><li><a class="tocitem" href="../../geom_relations/touches/">Touches</a></li><li><a class="tocitem" href="../../geom_relations/within/">Within</a></li><li><a class="tocitem" href="../../../transformations/extent/">Extent embedding</a></li><li><a class="tocitem" href="../../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../../transformations/transform/">Pointwise transformation</a></li><li><a class="tocitem" href="../../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Polygon clipping helpers</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Polygon clipping helpers</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/clipping/clipping_processor.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Polygon-clipping-helpers"><a class="docs-heading-anchor" href="#Polygon-clipping-helpers">Polygon clipping helpers</a><a id="Polygon-clipping-helpers-1"></a><a class="docs-heading-anchor-permalink" href="#Polygon-clipping-helpers" title="Permalink"></a></h1><p>This file contains the shared helper functions for the polygon clipping functionalities.</p><pre><code class="language-julia hljs">#= This is the struct that makes up a_list and b_list. Many values are only used if point is
+an intersection point (ipt). =#
+struct PolyNode{T &lt;: AbstractFloat}
+    idx::Int           # If ipt, index of point in a_idx_list, else 0
+    point::Tuple{T,T}  # (x, y) values of given point
+    inter::Bool        # If ipt, true, else 0
+    neighbor::Int      # If ipt, index of equivalent point in a_list or b_list, else 0
+    ent_exit::Bool     # If ipt, true if enter and false if exit, else false
+    fracs::Tuple{T,T}  # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
+end</code></pre><pre><code class="nohighlight hljs">_build_ab_list(::Type{T}, poly_a, poly_b) -&gt; (a_list, b_list, a_idx_list)</code></pre><p>This function takes in two polygon rings and calls &#39;<em>build</em>a<em>list&#39;, &#39;</em>build<em>b</em>list&#39;, and &#39;<em>flag</em>ent<em>exit&#39; in order to fully form a</em>list and b<em>list. The &#39;a</em>list&#39; and &#39;b<em>list&#39; that it returns are the fully updated vectors of PolyNodes that represent the rings &#39;poly</em>a&#39; and &#39;poly<em>b&#39;, respectively. This function also returns &#39;a</em>idx<em>list&#39;, which at its &quot;ith&quot; index stores the index in &#39;a</em>list&#39; at which the &quot;ith&quot; intersection point lies.</p><pre><code class="language-julia hljs">function _build_ab_list(::Type{T}, poly_a, poly_b) where T</code></pre><p>Make a list for nodes of each polygon</p><pre><code class="language-julia hljs">    a_list, a_idx_list = _build_a_list(T, poly_a, poly_b)
+    b_list = _build_b_list(T, a_idx_list, a_list, poly_b)</code></pre><p>Flag the entry and exits</p><pre><code class="language-julia hljs">    _flag_ent_exit!(poly_b, a_list)
+    _flag_ent_exit!(poly_a, b_list)
+
+    return a_list, b_list, a_idx_list
+end</code></pre><pre><code class="nohighlight hljs">_build_a_list(::Type{T}, poly_a, poly_b) -&gt; (a_list, a_idx_list)</code></pre><p>This function take in two polygon rings and creates a vector of PolyNodes to represent poly<em>a, including its intersection points with poly</em>b. The information stored in each PolyNode is needed for clipping using the Greiner-Hormann clipping algorithm.</p><p>Note: After calling this function, a<em>list is not fully formed because the neighboring indicies of the intersection points in b</em>list still need to be updated. Also we still have not update the entry and exit flags for a_list.</p><p>The a<em>idx</em>list is a list of the indicies of intersection points in a<em>list. The value at index i of a</em>idx<em>list is the location in a</em>list where the ith intersection point lies.</p><pre><code class="language-julia hljs">function _build_a_list(::Type{T}, poly_a, poly_b) where T
+    n_a_edges = _nedge(poly_a)
+    a_list = Vector{PolyNode{T}}(undef, n_a_edges)  # list of points in poly_a
+    a_idx_list = Vector{Int}()  # finds indices of intersection points in a_list
+    intr_count = 0  # number of intersection points found
+    a_count = 0  # number of points added to a_list</code></pre><p>Loop through points of poly_a</p><pre><code class="language-julia hljs">    local a_pt1
+    for (i, a_p2) in enumerate(GI.getpoint(poly_a))
+        a_pt2 = (T(GI.x(a_p2)), T(GI.y(a_p2)))
+        if i &lt;= 1
+            a_pt1 = a_pt2
+            continue
+        end</code></pre><p>Add the first point of the edge to the list of points in a_list</p><pre><code class="language-julia hljs">        new_point = PolyNode(0, a_pt1, false, 0, false, (zero(T), zero(T)))
+        a_count += 1
+        _add!(a_list, a_count, new_point, n_a_edges)</code></pre><p>Find intersections with edges of poly_b</p><pre><code class="language-julia hljs">        local b_pt1
+        prev_counter = intr_count
+        for (j, b_p2) in enumerate(GI.getpoint(poly_b))
+            b_pt2 = _tuple_point(b_p2)
+            if j &lt;=1
+                b_pt1 = b_pt2
+                continue
+            end
+            int_pt, fracs = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))</code></pre><p>if no intersection point, skip this edge</p><pre><code class="language-julia hljs">            if !isnothing(int_pt) &amp;&amp; all(0 .≤ fracs .≤ 1)</code></pre><p>Set neighbor field to b edge (j-1) to keep track of intersection</p><pre><code class="language-julia hljs">                new_intr = PolyNode(intr_count, int_pt, true, j - 1, false, fracs)
+                a_count += 1
+                intr_count += 1
+                _add!(a_list, a_count, new_intr, n_a_edges)
+                push!(a_idx_list, a_count)
+            end
+            b_pt1 = b_pt2
+        end</code></pre><p>Order intersection points by placement along edge using fracs value</p><pre><code class="language-julia hljs">        if prev_counter &lt; intr_count
+            Δintrs = intr_count - prev_counter
+            inter_points = @view a_list[(a_count - Δintrs + 1):a_count]
+            sort!(inter_points, by = x -&gt; x.fracs[1])
+            for (i, p) in enumerate(inter_points)
+                inter_points[i] = PolyNode(prev_counter + i, p.point, p.inter, p.neighbor, p.ent_exit, p.fracs)
+            end
+        end
+
+        a_pt1 = a_pt2
+    end
+    return a_list, a_idx_list
+end</code></pre><p>Add value x at index i to given array - if list isn&#39;t long enough, push value to array</p><pre><code class="language-julia hljs">function _add!(arr, i, x, l = length(arr))
+    if i &lt;= l
+        arr[i] = x
+    else
+        push!(arr, x)
+    end
+    return
+end</code></pre><pre><code class="nohighlight hljs">_build_b_list(::Type{T}, a_idx_list, a_list, poly_b) -&gt; b_list</code></pre><p>This function takes in the a<em>list and a</em>idx<em>list build in _build</em>a<em>list and poly</em>b and creates a vector of PolyNodes to represent poly_b. The information stored in each PolyNode is needed for clipping using the Greiner-Hormann clipping algorithm.</p><p>Note: after calling this function, b<em>list is not fully updated. The entry/exit flags still need to be updated. However, the neightbor value in a</em>list is now updated.</p><pre><code class="language-julia hljs">function _build_b_list(::Type{T}, a_idx_list, a_list, poly_b) where T</code></pre><p>Sort intersection points by insertion order in b_list</p><pre><code class="language-julia hljs">    sort!(a_idx_list, by = x-&gt; a_list[x].neighbor + a_list[x].fracs[2])</code></pre><p>Initialize needed values and lists</p><pre><code class="language-julia hljs">    n_b_edges = _nedge(poly_b)
+    n_intr_pts = length(a_idx_list)
+    b_list = Vector{PolyNode{T}}(undef, n_b_edges + n_intr_pts)
+    intr_curr = 1
+    b_count = 0</code></pre><p>Loop over points in poly_b and add each point and intersection point</p><pre><code class="language-julia hljs">    for (i, p) in enumerate(GI.getpoint(poly_b))
+        (i == n_b_edges + 1) &amp;&amp; break
+        b_count += 1
+        pt = (T(GI.x(p)), T(GI.y(p)))
+        b_list[b_count] = PolyNode(0, pt, false, 0, false, (zero(T), zero(T)))
+        if intr_curr ≤ n_intr_pts
+            curr_idx = a_idx_list[intr_curr]
+            curr_node = a_list[curr_idx]
+            while curr_node.neighbor == i  # Add all intersection points in current edge
+                b_count += 1
+                b_list[b_count] = PolyNode(curr_node.idx, curr_node.point, true, curr_idx, false, curr_node.fracs)
+                a_list[curr_idx] = PolyNode(curr_node.idx, curr_node.point, curr_node.inter, b_count, curr_node.ent_exit, curr_node.fracs)
+                curr_node = a_list[curr_idx]
+                intr_curr += 1
+                intr_curr &gt; n_intr_pts &amp;&amp; break
+                curr_idx = a_idx_list[intr_curr]
+                curr_node = a_list[curr_idx]
+            end
+        end
+    end
+    sort!(a_idx_list)  # return a_idx_list to order of points in a_list
+    return b_list
+end</code></pre><pre><code class="nohighlight hljs">_flag_ent_exit(poly_b, a_list)</code></pre><p>This function flags all the intersection points as either an &#39;entry&#39; or &#39;exit&#39; point in relation to the given polygon.</p><pre><code class="language-julia hljs">function _flag_ent_exit!(poly, pt_list)
+    local status
+    for ii in eachindex(pt_list)
+        if ii == 1
+            status = !_point_filled_curve_orientation(
+                pt_list[ii].point, poly;
+                in = true, on = false, out = false
+            )
+        elseif pt_list[ii].inter
+            pt_list[ii] = PolyNode(pt_list[ii].idx, pt_list[ii].point, pt_list[ii].inter, pt_list[ii].neighbor, status, pt_list[ii].fracs)
+            status = !status
+        end
+    end
+    return
+end</code></pre><pre><code class="nohighlight hljs">_trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step)::Vector{GI.Polygon}</code></pre><p>This function takes the outputs of <em>build</em>ab<em>list and traces the lists to determine which polygons are formed as described in Greiner and Hormann. The function f</em>step determines in which direction the lists are traced.  This function is different for intersection, difference, and union. f<em>step must take in two arguments: the most recent intersection node&#39;s entry/exit status and a boolean that is true if we are currently tracing a</em>list and false if we are tracing b_list. The functions used for each clipping operation are follows:     - Intersection: (x, y) -&gt; x ? 1 : (-1)     - Difference: (x, y) -&gt; (x ⊻ y) ? 1 : (-1)     - Union: (x, y) -&gt; (x ⊻ y) ? 1 : (-1)</p><p>A list of GeoInterface polygons is returned from this function.</p><pre><code class="language-julia hljs">function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
+    n_a_pts, n_b_pts = length(a_list), length(b_list)
+    n_intr_pts = length(a_idx_list)
+    return_polys = Vector{_get_poly_type(T)}(undef, 0)</code></pre><p>Keep track of number of processed intersection points</p><pre><code class="language-julia hljs">    processed_pts = 0
+    while processed_pts &lt; n_intr_pts
+        curr_list, curr_npoints = a_list, n_a_pts
+        on_a_list = true</code></pre><p>Find first unprocessed intersecting point in subject polygon</p><pre><code class="language-julia hljs">        processed_pts += 1
+        first_idx = findnext(x -&gt; x != 0, a_idx_list, processed_pts)
+        idx = a_idx_list[first_idx]
+        a_idx_list[first_idx] = 0
+        start_pt = a_list[idx]</code></pre><p>Set first point in polygon</p><pre><code class="language-julia hljs">        curr = curr_list[idx]
+        pt_list = [curr.point]
+
+        curr_not_start = true
+        while curr_not_start
+            step = f_step(curr.ent_exit, on_a_list)
+            curr_not_intr = true
+            while curr_not_intr</code></pre><p>Traverse polygon either forwards or backwards</p><pre><code class="language-julia hljs">                idx += step
+                idx = (idx &gt; curr_npoints) ? mod(idx, curr_npoints) : idx
+                idx = (idx == 0) ? curr_npoints : idx</code></pre><p>Get current node and add to pt_list</p><pre><code class="language-julia hljs">                curr = curr_list[idx]
+                push!(pt_list, curr.point)
+                if curr.inter</code></pre><p>Keep track of processed intersection points</p><pre><code class="language-julia hljs">                    curr_not_start = curr != start_pt &amp;&amp; curr != b_list[start_pt.neighbor]
+                    if curr_not_start
+                        processed_pts += 1
+                        a_idx_list[curr.idx] = 0
+                    end
+                    curr_not_intr = false
+                end
+            end</code></pre><p>Switch to next list and next point</p><pre><code class="language-julia hljs">            curr_list, curr_npoints = on_a_list ? (b_list, n_b_pts) : (a_list, n_a_pts)
+            on_a_list = !on_a_list
+            idx = curr.neighbor
+            curr = curr_list[idx]
+        end
+        push!(return_polys, GI.Polygon([pt_list]))
+    end
+    return return_polys
+end</code></pre><p>Get type of polygons that will be made TODO: Increase type options</p><pre><code class="language-julia hljs">_get_poly_type(::Type{T}) where T =
+    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}</code></pre><pre><code class="nohighlight hljs">_add_holes_to_polys!(::Type{T}, return_polys, hole_iterator)</code></pre><p>The holes specified by the hole iterator are added to the polygons in the return_polys list. If this creates more polygon, they are added to the end of the list. If this removes polygons, they are removed from the list</p><pre><code class="language-julia hljs">function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
+    n_polys = length(return_polys)</code></pre><p>Remove set of holes from all polygons</p><pre><code class="language-julia hljs">    for i in 1:n_polys
+        n_new_per_poly = 0
+        for hole in hole_iterator  # loop through all holes
+            hole_poly = GI.Polygon([hole])</code></pre><p>loop through all pieces of original polygon (new pieces added to end of list)</p><pre><code class="language-julia hljs">            for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
+                if !isnothing(return_polys[j])
+                    new_polys = difference(return_polys[j], hole_poly, T; target = GI.PolygonTrait)
+                    n_new_polys = length(new_polys)
+                    if n_new_polys == 0  # hole covered whole polygon
+                        return_polys[j] = nothing
+                    else
+                        return_polys[j] = new_polys[1]  # replace original
+                        if n_new_polys &gt; 1  # add any extra pieces
+                            append!(return_polys, @view new_polys[2:end])
+                            n_new_per_poly += n_new_polys - 1
+                        end
+                    end
+                end
+            end
+        end
+        n_polys += n_new_per_poly
+    end</code></pre><p>Remove all polygon that were marked for removal</p><pre><code class="language-julia hljs">    filter!(!isnothing, return_polys)
+    return
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../polygonize/">« Polygonizing raster data</a><a class="docs-footer-nextpage" href="../difference/">Difference Polygon Clipping »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="auto">Automatic (OS)</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.2.1 on <span class="colophon-date" title="Monday 5 February 2024 16:15">Monday 5 February 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

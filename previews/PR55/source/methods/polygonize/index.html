@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Polygonizing raster data · GeometryOps.jl</title><meta name="title" content="Polygonizing raster data · GeometryOps.jl"/><meta property="og:title" content="Polygonizing raster data · GeometryOps.jl"/><meta property="twitter:title" content="Polygonizing raster data · GeometryOps.jl"/><meta name="description" content="Documentation for GeometryOps.jl."/><meta property="og:description" content="Documentation for GeometryOps.jl."/><meta property="twitter:description" content="Documentation for GeometryOps.jl."/><meta property="og:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/polygonize/"/><meta property="twitter:url" content="https://asinghvi17.github.io/GeometryOps.jl/source/methods/polygonize/"/><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/polygonize/"/><script data-outdated-warner src="../../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../search_index.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><a class="tocitem" href="../../../api/">API Reference</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li><a class="tocitem" href="../angles/">Angles</a></li><li><a class="tocitem" href="../area/">Area and signed area</a></li><li><a class="tocitem" href="../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../centroid/">Centroid</a></li><li><a class="tocitem" href="../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../equals/">Equals</a></li><li class="is-active"><a class="tocitem" href>Polygonizing raster data</a><ul class="internal"><li><a class="tocitem" href="#Example"><span>Example</span></a></li><li><a class="tocitem" href="#Implementation"><span>Implementation</span></a></li></ul></li><li><a class="tocitem" href="../clipping/clipping_processor/">Polygon clipping helpers</a></li><li><a class="tocitem" href="../clipping/difference/">Difference Polygon Clipping</a></li><li><a class="tocitem" href="../clipping/intersection/">Intersection</a></li><li><a class="tocitem" href="../clipping/union/">Union Polygon Clipping</a></li><li><a class="tocitem" href="../geom_relations/contains/">Contains</a></li><li><a class="tocitem" href="../geom_relations/coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../geom_relations/covers/">Covers</a></li><li><a class="tocitem" href="../geom_relations/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../geom_relations/disjoint/">Disjoint</a></li><li><a class="tocitem" href="../geom_relations/geom_geom_processors/">Line-curve interaction</a></li><li><a class="tocitem" href="../geom_relations/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../geom_relations/overlaps/">Overlaps</a></li><li><a class="tocitem" href="../geom_relations/touches/">Touches</a></li><li><a class="tocitem" href="../geom_relations/within/">Within</a></li><li><a class="tocitem" href="../../transformations/extent/">Extent embedding</a></li><li><a class="tocitem" href="../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../transformations/transform/">Pointwise transformation</a></li><li><a class="tocitem" href="../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Polygonizing raster data</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Polygonizing raster data</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/polygonize.md#" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Polygonizing-raster-data"><a class="docs-heading-anchor" href="#Polygonizing-raster-data">Polygonizing raster data</a><a id="Polygonizing-raster-data-1"></a><a class="docs-heading-anchor-permalink" href="#Polygonizing-raster-data" title="Permalink"></a></h1><pre><code class="language-julia hljs">export polygonize</code></pre><p>The methods in this file are able to convert a raster image into a set of polygons, by contour detection using a clockwise Moore neighborhood method.</p><p>The main entry point is the <code>polygonize</code> function.</p><pre><code class="language- hljs">polygonize</code></pre><h2 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h2><p>Here&#39;s a basic example, using the <code>Makie.peaks()</code> function.  First, let&#39;s investigate the nature of the function:</p><pre><code class="language-julia hljs">using Makie, GeometryOps
+n = 49
+xs, ys = LinRange(-3, 3, n), LinRange(-3, 3, n)
+zs = Makie.peaks(n)
+z_max_value = maximum(abs.(extrema(zs)))
+f, a, p = heatmap(
+    xs, ys, zs;
+    axis = (; aspect = DataAspect(), title = &quot;Exact function&quot;)
+)
+cb = Colorbar(f[1, 2], p; label = &quot;Z-value&quot;)
+f</code></pre><img src="13e8007c.svg" alt="Example block output"/><p>Now, we can use the <code>polygonize</code> function to convert the raster data into polygons.</p><p>For this particular example, we chose a range of z-values between 0.8 and 3.2, which would provide two distinct polyogns with holes.</p><pre><code class="language-julia hljs">polygons = polygonize(xs, ys, 0.8 .&lt; zs .&lt; 3.2)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">5-element Vector{GeometryBasics.Polygon{2, Float32, Point{2, Float32}, GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}, Vector{GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}}}}:
+ GeometryBasics.Polygon{2, Float32, Point{2, Float32}, GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}, Vector{GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}}}(GeometryBasics.Line{2, Float32}[Line(Float32[11.0, 11.0] =&gt; Float32[12.0, 11.0]), Line(Float32[12.0, 11.0] =&gt; Float32[13.0, 11.0]), Line(Float32[13.0, 11.0] =&gt; Float32[14.0, 11.0]), Line(Float32[14.0, 11.0] =&gt; Float32[15.0, 12.0]), Line(Float32[15.0, 12.0] =&gt; Float32[16.0, 13.0]), Line(Float32[16.0, 13.0] =&gt; Float32[17.0, 14.0]), Line(Float32[17.0, 14.0] =&gt; Float32[18.0, 14.0]), Line(Float32[18.0, 14.0] =&gt; Float32[19.0, 15.0]), Line(Float32[19.0, 15.0] =&gt; Float32[20.0, 16.0]), Line(Float32[20.0, 16.0] =&gt; Float32[21.0, 16.0])  …  Line(Float32[16.0, 22.0] =&gt; Float32[15.0, 21.0]), Line(Float32[15.0, 21.0] =&gt; Float32[14.0, 20.0]), Line(Float32[14.0, 20.0] =&gt; Float32[13.0, 19.0]), Line(Float32[13.0, 19.0] =&gt; Float32[13.0, 18.0]), Line(Float32[13.0, 18.0] =&gt; Float32[12.0, 17.0]), Line(Float32[12.0, 17.0] =&gt; Float32[12.0, 16.0]), Line(Float32[12.0, 16.0] =&gt; Float32[11.0, 15.0]), Line(Float32[11.0, 15.0] =&gt; Float32[11.0, 14.0]), Line(Float32[11.0, 14.0] =&gt; Float32[11.0, 13.0]), Line(Float32[11.0, 13.0] =&gt; Float32[11.0, 12.0])], GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}[])
+ GeometryBasics.Polygon{2, Float32, Point{2, Float32}, GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}, Vector{GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}}}(GeometryBasics.Line{2, Float32}[Line(Float32[13.0, 33.0] =&gt; Float32[14.0, 32.0]), Line(Float32[14.0, 32.0] =&gt; Float32[14.0, 31.0]), Line(Float32[14.0, 31.0] =&gt; Float32[14.0, 30.0]), Line(Float32[14.0, 30.0] =&gt; Float32[15.0, 29.0]), Line(Float32[15.0, 29.0] =&gt; Float32[16.0, 28.0]), Line(Float32[16.0, 28.0] =&gt; Float32[17.0, 27.0]), Line(Float32[17.0, 27.0] =&gt; Float32[18.0, 26.0]), Line(Float32[18.0, 26.0] =&gt; Float32[19.0, 26.0]), Line(Float32[19.0, 26.0] =&gt; Float32[20.0, 26.0]), Line(Float32[20.0, 26.0] =&gt; Float32[21.0, 26.0])  …  Line(Float32[22.0, 38.0] =&gt; Float32[21.0, 38.0]), Line(Float32[21.0, 38.0] =&gt; Float32[20.0, 38.0]), Line(Float32[20.0, 38.0] =&gt; Float32[19.0, 38.0]), Line(Float32[19.0, 38.0] =&gt; Float32[18.0, 38.0]), Line(Float32[18.0, 38.0] =&gt; Float32[17.0, 38.0]), Line(Float32[17.0, 38.0] =&gt; Float32[16.0, 37.0]), Line(Float32[16.0, 37.0] =&gt; Float32[15.0, 37.0]), Line(Float32[15.0, 37.0] =&gt; Float32[14.0, 36.0]), Line(Float32[14.0, 36.0] =&gt; Float32[14.0, 35.0]), Line(Float32[14.0, 35.0] =&gt; Float32[13.0, 34.0])], GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}[])
+ GeometryBasics.Polygon{2, Float32, Point{2, Float32}, GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}, Vector{GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}}}(GeometryBasics.Line{2, Float32}[Line(Float32[15.0, 15.0] =&gt; Float32[14.0, 16.0]), Line(Float32[14.0, 16.0] =&gt; Float32[14.0, 17.0]), Line(Float32[14.0, 17.0] =&gt; Float32[14.0, 18.0]), Line(Float32[14.0, 18.0] =&gt; Float32[15.0, 19.0]), Line(Float32[15.0, 19.0] =&gt; Float32[16.0, 20.0]), Line(Float32[16.0, 20.0] =&gt; Float32[17.0, 20.0]), Line(Float32[17.0, 20.0] =&gt; Float32[18.0, 19.0]), Line(Float32[18.0, 19.0] =&gt; Float32[19.0, 18.0]), Line(Float32[19.0, 18.0] =&gt; Float32[18.0, 17.0]), Line(Float32[18.0, 17.0] =&gt; Float32[17.0, 16.0]), Line(Float32[17.0, 16.0] =&gt; Float32[16.0, 15.0])], GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}[])
+ GeometryBasics.Polygon{2, Float32, Point{2, Float32}, GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}, Vector{GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}}}(GeometryBasics.Line{2, Float32}[Line(Float32[19.0, 30.0] =&gt; Float32[18.0, 31.0]), Line(Float32[18.0, 31.0] =&gt; Float32[18.0, 32.0]), Line(Float32[18.0, 32.0] =&gt; Float32[19.0, 33.0]), Line(Float32[19.0, 33.0] =&gt; Float32[20.0, 34.0]), Line(Float32[20.0, 34.0] =&gt; Float32[21.0, 34.0]), Line(Float32[21.0, 34.0] =&gt; Float32[22.0, 34.0]), Line(Float32[22.0, 34.0] =&gt; Float32[23.0, 33.0]), Line(Float32[23.0, 33.0] =&gt; Float32[24.0, 32.0]), Line(Float32[24.0, 32.0] =&gt; Float32[24.0, 31.0]), Line(Float32[24.0, 31.0] =&gt; Float32[23.0, 30.0]), Line(Float32[23.0, 30.0] =&gt; Float32[22.0, 29.0]), Line(Float32[22.0, 29.0] =&gt; Float32[21.0, 29.0]), Line(Float32[21.0, 29.0] =&gt; Float32[20.0, 29.0])], GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}[])
+ GeometryBasics.Polygon{2, Float32, Point{2, Float32}, GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}, Vector{GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}}}(GeometryBasics.Line{2, Float32}[Line(Float32[29.0, 17.0] =&gt; Float32[28.0, 18.0]), Line(Float32[28.0, 18.0] =&gt; Float32[28.0, 19.0]), Line(Float32[28.0, 19.0] =&gt; Float32[28.0, 20.0]), Line(Float32[28.0, 20.0] =&gt; Float32[28.0, 21.0]), Line(Float32[28.0, 21.0] =&gt; Float32[28.0, 22.0]), Line(Float32[28.0, 22.0] =&gt; Float32[28.0, 23.0]), Line(Float32[28.0, 23.0] =&gt; Float32[29.0, 24.0]), Line(Float32[29.0, 24.0] =&gt; Float32[29.0, 25.0]), Line(Float32[29.0, 25.0] =&gt; Float32[29.0, 26.0]), Line(Float32[29.0, 26.0] =&gt; Float32[29.0, 27.0])  …  Line(Float32[38.0, 16.0] =&gt; Float32[38.0, 15.0]), Line(Float32[38.0, 15.0] =&gt; Float32[37.0, 14.0]), Line(Float32[37.0, 14.0] =&gt; Float32[36.0, 14.0]), Line(Float32[36.0, 14.0] =&gt; Float32[35.0, 13.0]), Line(Float32[35.0, 13.0] =&gt; Float32[34.0, 13.0]), Line(Float32[34.0, 13.0] =&gt; Float32[33.0, 13.0]), Line(Float32[33.0, 13.0] =&gt; Float32[32.0, 14.0]), Line(Float32[32.0, 14.0] =&gt; Float32[31.0, 14.0]), Line(Float32[31.0, 14.0] =&gt; Float32[30.0, 15.0]), Line(Float32[30.0, 15.0] =&gt; Float32[30.0, 16.0])], GeometryBasics.LineString{2, Float32, Point{2, Float32}, Base.ReinterpretArray{GeometryBasics.Line{2, Float32}, 1, Tuple{Point{2, Float32}, Point{2, Float32}}, GeometryBasics.TupleView{Tuple{Point{2, Float32}, Point{2, Float32}}, 2, 1, Vector{Point{2, Float32}}}, false}}[])</code></pre><p>This returns a list of <code>GeometryBasics.Polygon</code>, which can be plotted immediately, or wrapped directly in a <code>GeometryBasics.MultiPolygon</code>.  Let&#39;s see how these look:</p><pre><code class="language-julia hljs">f, a, p = poly(polygons; label = &quot;Polygonized polygons&quot;, axis = (; aspect = DataAspect()))</code></pre><img src="7cbf807a.svg" alt="Example block output"/><p>Finally, let&#39;s plot the Makie contour lines on top, to see how well the polygonization worked:</p><pre><code class="language-julia hljs">contour!(a, zs; labels = true, levels = [0.8, 3.2], label = &quot;Contour lines&quot;)
+f</code></pre><img src="df641ad2.svg" alt="Example block output"/><h2 id="Implementation"><a class="docs-heading-anchor" href="#Implementation">Implementation</a><a id="Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation" title="Permalink"></a></h2><p>The implementation follows:</p><pre><code class="language-julia hljs">&quot;&quot;&quot;
+    polygonize(A; minpoints=10)
+    polygonize(xs, ys, A; minpoints=10)
+
+Convert matrix `A` to polygons.
+
+If `xs` and `ys` are passed in they are used as the pixel center points.</code></pre><p>Keywords</p><pre><code class="language-julia hljs">- `minpoints`: ignore polygons with less than `minpoints` points.
+&quot;&quot;&quot;
+polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...)
+
+function polygonize(xs, ys, A::AbstractMatrix; minpoints=10)
+    # This function uses a lazy map to get contours.
+    contours = Iterators.map(get_contours(A)) do contour
+        poly = map(contour) do xy
+            x, y = Tuple(xy)
+            Point2f(x + first(xs) - 1, y + first(ys) - 1)
+        end
+    end
+    # If we filter off the minimum points, then it&#39;s a hair more efficient
+    # not to convert contours with length &lt; missingpoints to polygons.
+    if minpoints &gt; 1
+        contours = Iterators.filter(contours) do contour
+            length(contour) &gt; minpoints
+        end
+       return map(Polygon, contours)
+    else
+        return map(Polygon, contours)
+    end
+end
+
+# rotate direction clockwise
+rot_clockwise(dir) = (dir) % 8 + 1
+# rotate direction counterclockwise
+rot_counterclockwise(dir) = (dir + 6) % 8 + 1
+
+# move from current pixel to next in given direction
+function move(pixel, image, dir, dir_delta)
+    newp = pixel + dir_delta[dir]
+    height, width = size(image)
+    if (0 &lt; newp[1] &lt;= height) &amp;&amp; (0 &lt; newp[2] &lt;= width)
+        if image[newp] != 0
+            return newp
+        end
+    end
+    return CartesianIndex(0, 0)
+end
+
+# finds direction between two given pixels
+function from_to(from, to, dir_delta)
+    delta = to - from
+    return findall(x -&gt; x == delta, dir_delta)[1]
+end
+
+function detect_move(image, p0, p2, nbd, border, done, dir_delta)
+    dir = from_to(p0, p2, dir_delta)
+    moved = rot_clockwise(dir)
+    p1 = CartesianIndex(0, 0)
+    while moved != dir ## 3.1
+        newp = move(p0, image, moved, dir_delta)
+        if newp[1] != 0
+            p1 = newp
+            break
+        end
+        moved = rot_clockwise(moved)
+    end
+
+    if p1 == CartesianIndex(0, 0)
+        return
+    end
+
+    p2 = p1 ## 3.2
+    p3 = p0 ## 3.2
+    done .= false
+    while true
+        dir = from_to(p3, p2, dir_delta)
+        moved = rot_counterclockwise(dir)
+        p4 = CartesianIndex(0, 0)
+        done .= false
+        while true ## 3.3
+            p4 = move(p3, image, moved, dir_delta)
+            if p4[1] != 0
+                break
+            end
+            done[moved] = true
+            moved = rot_counterclockwise(moved)
+        end
+        push!(border, p3) ## 3.4
+        if p3[1] == size(image, 1) || done[3]
+            image[p3] = -nbd
+        elseif image[p3] == 1
+            image[p3] = nbd
+        end
+
+        if (p4 == p0 &amp;&amp; p3 == p1) ## 3.5
+            break
+        end
+        p2 = p3
+        p3 = p4
+    end
+end
+
+&quot;&quot;&quot;
+   get_contours(A::AbstractMatrix)
+
+Returns contours as vectors of `CartesianIndex`.
+&quot;&quot;&quot;
+function get_contours(image::AbstractMatrix)
+    nbd = 1
+    lnbd = 1
+    image = Float64.(image)
+    contour_list = Vector{typeof(CartesianIndex[])}()
+    done = [false, false, false, false, false, false, false, false]
+
+    # Clockwise Moore neighborhood.
+    dir_delta = (CartesianIndex(-1, 0), CartesianIndex(-1, 1), CartesianIndex(0, 1), CartesianIndex(1, 1),
+                 CartesianIndex(1, 0), CartesianIndex(1, -1), CartesianIndex(0, -1), CartesianIndex(-1, -1))
+
+    height, width = size(image)
+
+    for i = 1:height
+        lnbd = 1
+        for j = 1:width
+            fji = image[i, j]
+            is_outer = (image[i, j] == 1 &amp;&amp; (j == 1 || image[i, j-1] == 0)) ## 1 (a)
+            is_hole = (image[i, j] &gt;= 1 &amp;&amp; (j == width || image[i, j+1] == 0))
+
+            if is_outer || is_hole
+                # 2
+                border = CartesianIndex[]
+                from = CartesianIndex(i, j)
+
+                if is_outer
+                    nbd += 1
+                    from -= CartesianIndex(0, 1)
+
+                else
+                    nbd += 1
+                    if fji &gt; 1
+                        lnbd = fji
+                    end
+                    from += CartesianIndex(0, 1)
+                end
+
+                p0 = CartesianIndex(i, j)
+                detect_move(image, p0, from, nbd, border, done, dir_delta) ## 3
+                if isempty(border) ##TODO
+                    push!(border, p0)
+                    image[p0] = -nbd
+                end
+                push!(contour_list, border)
+            end
+            if fji != 0 &amp;&amp; fji != 1
+                lnbd = abs(fji)
+            end
+
+        end
+    end
+
+    return contour_list
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../equals/">« Equals</a><a class="docs-footer-nextpage" href="../clipping/clipping_processor/">Polygon clipping helpers »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="auto">Automatic (OS)</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.2.1 on <span class="colophon-date" title="Monday 5 February 2024 16:15">Monday 5 February 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

@@ -1,0 +1,1 @@
+import{_ as e,o as t,c as a}from"./chunks/framework.BKzlMhRT.js";const _=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"explanations/crs.md","filePath":"explanations/crs.md","lastUpdated":null}'),s={name:"explanations/crs.md"};function n(r,o,c,p,i,l){return t(),a("div")}const m=e(s,[["render",n]]);export{_ as __pageData,m as default};

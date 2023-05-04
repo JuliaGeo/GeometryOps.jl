@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>CoveredBy · GeometryOps.jl</title><script data-outdated-warner src="../../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/geom_relations/coveredby/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../../assets/documenter.js"></script><script src="../../../../siteinfo.js"></script><script src="../../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../../"><img src="../../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../../utils/">Utility functions</a></li><li><a class="tocitem" href="../../area/">Area and signed area</a></li><li><a class="tocitem" href="../../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../../centroid/">Centroid</a></li><li><a class="tocitem" href="../../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../../equals/">Equals</a></li><li><a class="tocitem" href="../../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../contains/">Contains</a></li><li class="is-active"><a class="tocitem" href>CoveredBy</a><ul class="internal"><li><a class="tocitem" href="#What-is-coveredby?"><span>What is coveredby?</span></a></li><li><a class="tocitem" href="#Implementation"><span>Implementation</span></a></li><li class="toplevel"><a class="tocitem" href="#Convert-features-to-geometries"><span>Convert features to geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Points-coveredby-geometries"><span>Points coveredby geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Lines-coveredby-geometries"><span>Lines coveredby geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Rings-covered-by-geometries"><span>Rings covered by geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Polygons-covered-by-geometries"><span>Polygons covered by geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Geometries-coveredby-multi-geometry/geometry-collections"><span>Geometries coveredby multi-geometry/geometry collections</span></a></li><li class="toplevel"><a class="tocitem" href="#Multi-geometry/geometry-collections-coveredby-geometries"><span>Multi-geometry/geometry collections coveredby geometries</span></a></li></ul></li><li><a class="tocitem" href="../covers/">Covers</a></li><li><a class="tocitem" href="../crosses/">Crossing checks</a></li><li><a class="tocitem" href="../disjoint/">Disjoint</a></li><li><a class="tocitem" href="../geom_geom_processors/">-</a></li><li><a class="tocitem" href="../intersects/">Intersection checks</a></li><li><a class="tocitem" href="../overlaps/">Overlaps</a></li><li><a class="tocitem" href="../touches/">Touches</a></li><li><a class="tocitem" href="../within/">Within</a></li><li><a class="tocitem" href="../../../transformations/extent/">-</a></li><li><a class="tocitem" href="../../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../../transformations/transform/">-</a></li><li><a class="tocitem" href="../../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>CoveredBy</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>CoveredBy</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/geom_relations/coveredby.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="CoveredBy"><a class="docs-heading-anchor" href="#CoveredBy">CoveredBy</a><a id="CoveredBy-1"></a><a class="docs-heading-anchor-permalink" href="#CoveredBy" title="Permalink"></a></h1><pre><code class="language-julia hljs">export coveredby</code></pre><h2 id="What-is-coveredby?"><a class="docs-heading-anchor" href="#What-is-coveredby?">What is coveredby?</a><a id="What-is-coveredby?-1"></a><a class="docs-heading-anchor-permalink" href="#What-is-coveredby?" title="Permalink"></a></h2><p>The coveredby function checks if one geometry is covered by another geometry. This is an extension of within that does not require the interiors of the two geometries to intersect, but still does require that the interior and boundary of the first geometry isn&#39;t outside of the second geometry.</p><p>To provide an example, consider this point and line:</p><pre><code class="language-julia hljs">using GeometryOps
+using GeometryOps.GeometryBasics
+using Makie
+using CairoMakie
+
+p1 = Point(0.0, 0.0)
+p2 = Point(1.0, 1.0)
+l1 = Line(p1, p2)
+
+f, a, p = lines([p1, p2])
+scatter!(p1, color = :red)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">Scatter{Tuple{Vector{Point{2, Float32}}}}</code></pre><p>As we can see, <code>p1</code> is on the endpoint of l1. This means it is not <code>within</code>, but it does meet the definition of <code>coveredby</code>.</p><pre><code class="language-julia hljs">coveredby(p1, l1)  # true</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">true</code></pre><h2 id="Implementation"><a class="docs-heading-anchor" href="#Implementation">Implementation</a><a id="Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation" title="Permalink"></a></h2><p>This is the GeoInterface-compatible implementation.</p><p>First, we implement a wrapper method that dispatches to the correct implementation based on the geometry trait.</p><p>Each of these calls a method in the geom<em>geom</em>processors file. The methods in this file determine if the given geometries meet a set of criteria. For the <code>coveredby</code> function and arguments g1 and g2, this criteria is as follows:     - points of g1 are allowed to be in the interior of g2 (either through     overlap or crossing for lines)     - points of g1 are allowed to be on the boundary of g2     - points of g1 are not allowed to be in the exterior of g2     - no points of g1 are required to be in the interior of g2     - no points of g1 are required to be on the boundary of g2     - no points of g1 are required to be in the exterior of g2</p><p>The code for the specific implementations is in the geom<em>geom</em>processors file.</p><pre><code class="language-julia hljs">const COVEREDBY_ALLOWS = (in_allow = true, on_allow = true, out_allow = false)
+const COVEREDBY_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = false)
+const COVEREDBY_CURVE_REQUIRES = (in_require = false, on_require = false, out_require = false)
+const COVEREDBY_POLYGON_REQUIRES = (in_require = true, on_require = false, out_require = false,)
+
+&quot;&quot;&quot;
+    coveredby(g1, g2)::Bool
+
+Return `true` if the first geometry is completely covered by the second
+geometry. The interior and boundary of the primary geometry (g1) must not
+intersect the exterior of the secondary geometry (g2).
+
+Furthermore, `coveredby` returns the exact opposite result of `covers`. They are
+equivalent with the order of the arguments swapped.
+
+# Examples
+```jldoctest setup=:(using GeometryOps, GeometryBasics)
+import GeometryOps as GO, GeoInterface as GI
+p1 = GI.Point(0.0, 0.0)
+p2 = GI.Point(1.0, 1.0)
+l1 = GI.Line([p1, p2])
+
+GO.coveredby(p1, l1)</code></pre><p>output</p><pre><code class="language-julia hljs">true
+```
+&quot;&quot;&quot;
+coveredby(g1, g2) = _coveredby(trait(g1), g1, trait(g2), g2)</code></pre><h1 id="Convert-features-to-geometries"><a class="docs-heading-anchor" href="#Convert-features-to-geometries">Convert features to geometries</a><a id="Convert-features-to-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Convert-features-to-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">_coveredby(::GI.FeatureTrait, g1, ::Any, g2) = coveredby(GI.geometry(g1), g2)
+_coveredby(::Any, g1, t2::GI.FeatureTrait, g2) = coveredby(g1, GI.geometry(g2))
+_coveredby(::FeatureTrait, g1, ::FeatureTrait, g2) = coveredby(GI.geometry(g1), GI.geometry(g2))</code></pre><h1 id="Points-coveredby-geometries"><a class="docs-heading-anchor" href="#Points-coveredby-geometries">Points coveredby geometries</a><a id="Points-coveredby-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Points-coveredby-geometries" title="Permalink"></a></h1><p>Point is coveredby another point if those points are equal</p><pre><code class="language-julia hljs">_coveredby(
+    ::GI.PointTrait, g1,
+    ::GI.PointTrait, g2,
+) = equals(g1, g2)</code></pre><p>Point is coveredby a line/linestring if it is on a line vertex or an edge</p><pre><code class="language-julia hljs">_coveredby(
+    ::GI.PointTrait, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _point_curve_process(
+    g1, g2;
+    COVEREDBY_ALLOWS...,
+    closed_curve = false,
+)</code></pre><p>Point is coveredby a linearring if it is on a vertex or an edge of ring</p><pre><code class="language-julia hljs">_coveredby(
+    ::GI.PointTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _point_curve_process(
+    g1, g2;
+    COVEREDBY_ALLOWS...,
+    closed_curve = true,
+)</code></pre><p>Point is coveredby a polygon if it is inside polygon, including edges/vertices</p><pre><code class="language-julia hljs">_coveredby(
+    ::GI.PointTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _point_polygon_process(
+    g1, g2;
+    COVEREDBY_ALLOWS...,
+)</code></pre><p>Points cannot cover any geometry other than points</p><pre><code class="language-julia hljs">_coveredby(
+    ::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::GI.PointTrait, g2,
+) = false</code></pre><h1 id="Lines-coveredby-geometries"><a class="docs-heading-anchor" href="#Lines-coveredby-geometries">Lines coveredby geometries</a><a id="Lines-coveredby-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Lines-coveredby-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Linestring is coveredby a line if all interior and boundary points of the
+first line are on the interior/boundary points of the second line. =#
+_coveredby(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _line_curve_process(
+    g1, g2;
+    COVEREDBY_CURVE_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
+    closed_line = false,
+    closed_curve = false,
+)
+
+#= Linestring is coveredby a ring if all interior and boundary points of the
+line are on the edges of the ring. =#
+_coveredby(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    COVEREDBY_CURVE_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
+    closed_line = false,
+    closed_curve = true,
+)
+
+#= Linestring is coveredby a polygon if all interior and boundary points of the
+line are in the polygon interior or on its edges, inlcuding hole edges. =#
+_coveredby(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::GI.PolygonTrait, g2,
+) = _line_polygon_process(
+    g1, g2;
+    COVEREDBY_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
+    closed_line = false,
+)</code></pre><h1 id="Rings-covered-by-geometries"><a class="docs-heading-anchor" href="#Rings-covered-by-geometries">Rings covered by geometries</a><a id="Rings-covered-by-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Rings-covered-by-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Linearring is covered by a line if all vertices and edges of the ring are on
+the edges and vertices of the line. =#
+_coveredby(
+    ::GI.LinearRingTrait, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _line_curve_process(
+    g1, g2;
+    COVEREDBY_CURVE_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
+    closed_line = true,
+    closed_curve = false,
+)
+
+#= Linearring is covered by another linear ring if all vertices and edges of the
+first ring are on the edges/vertices of the second ring. =#
+_coveredby(
+    ::GI.LinearRingTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    COVEREDBY_CURVE_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
+    closed_line = true,
+    closed_curve = true,
+)
+
+#= Linearring is coveredby a polygon if all vertices and edges of the ring are
+in the polygon interior or on the polygon edges, inlcuding hole edges. =#
+_coveredby(
+    ::GI.LinearRingTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _line_polygon_process(
+    g1, g2;
+    COVEREDBY_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
+    closed_line = true,
+)</code></pre><h1 id="Polygons-covered-by-geometries"><a class="docs-heading-anchor" href="#Polygons-covered-by-geometries">Polygons covered by geometries</a><a id="Polygons-covered-by-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Polygons-covered-by-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Polygon is covered by another polygon if if the interior and edges of the
+first polygon are in the second polygon interior or on polygon edges, including
+hole edges.=#
+_coveredby(
+    ::GI.PolygonTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _polygon_polygon_process(
+    g1, g2;
+    COVEREDBY_ALLOWS...,
+    COVEREDBY_POLYGON_REQUIRES...,
+)</code></pre><p>Polygons cannot covered by any curves</p><pre><code class="language-julia hljs">_coveredby(
+    ::GI.PolygonTrait, g1,
+    ::GI.AbstractCurveTrait, g2,
+) = false</code></pre><h1 id="Geometries-coveredby-multi-geometry/geometry-collections"><a class="docs-heading-anchor" href="#Geometries-coveredby-multi-geometry/geometry-collections">Geometries coveredby multi-geometry/geometry collections</a><a id="Geometries-coveredby-multi-geometry/geometry-collections-1"></a><a class="docs-heading-anchor-permalink" href="#Geometries-coveredby-multi-geometry/geometry-collections" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Geometry is covered by a multi-geometry or a collection if one of the elements
+of the collection cover the geometry. =#
+function _coveredby(
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g2,
+)
+    for sub_g2 in GI.getgeom(g2)
+        coveredby(g1, sub_g2) &amp;&amp; return true
+    end
+    return false
+end</code></pre><h1 id="Multi-geometry/geometry-collections-coveredby-geometries"><a class="docs-heading-anchor" href="#Multi-geometry/geometry-collections-coveredby-geometries">Multi-geometry/geometry collections coveredby geometries</a><a id="Multi-geometry/geometry-collections-coveredby-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-geometry/geometry-collections-coveredby-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Multi-geometry or a geometry collection is covered by a geometry if all
+elements of the collection are covered by the geometry. =#
+function _coveredby(
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g1,
+    ::GI.AbstractGeometryTrait, g2,
+)
+    for sub_g1 in GI.getgeom(g1)
+        !coveredby(sub_g1, g2) &amp;&amp; return false
+    end
+    return true
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../contains/">« Contains</a><a class="docs-footer-nextpage" href="../covers/">Covers »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Friday 12 January 2024 21:29">Friday 12 January 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

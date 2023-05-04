@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Primitive functions · GeometryOps.jl</title><script data-outdated-warner src="../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/primitives/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../"><img src="../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../GeometryOps/">GeometryOps.jl</a></li><li class="is-active"><a class="tocitem" href>Primitive functions</a></li><li><a class="tocitem" href="../utils/">Utility functions</a></li><li><a class="tocitem" href="../methods/barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../methods/centroid/">Centroid</a></li><li><a class="tocitem" href="../methods/contains/">Containment</a></li><li><a class="tocitem" href="../methods/polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../methods/signed_area/">Signed area</a></li><li><a class="tocitem" href="../methods/signed_distance/">Signed distance</a></li><li><a class="tocitem" href="../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../transformations/simplify/">Geometry simplification</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Primitive functions</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Primitive functions</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/primitives.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Primitive-functions"><a class="docs-heading-anchor" href="#Primitive-functions">Primitive functions</a><a id="Primitive-functions-1"></a><a class="docs-heading-anchor-permalink" href="#Primitive-functions" title="Permalink"></a></h1><p>This file mainly defines the <code>apply</code> function.</p><pre><code class="language-julia hljs">&quot;&quot;&quot;
+    apply(f, target::Type{&lt;:AbstractTrait}, obj; crs)
+
+Reconstruct a geometry or feature using the function `f` on the `target` trait.
+
+`f(target_geom) =&gt; x` where `x` also has the `target` trait, or an equivalent.
+
+The result is an functionally similar geometry with values depending on `f`</code></pre><p>Flipped point the order in any feature or geometry, or iterables of either:</p><pre><code class="language-julia hljs">```juia
+import GeoInterface as GI
+import GeometryOps as GO
+geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]),
+                   GI.LinearRing([(3, 4), (5, 6), (6, 7), (3, 4)])])
+
+flipped_geom = GO.apply(GI.PointTrait, geom) do p
+    (GI.y(p), GI.x(p))
+end
+&quot;&quot;&quot;
+apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw...)
+
+_apply(f, ::Type{Target}, geom; kw...)  where Target =
+    _apply(f, Target, GI.trait(geom), geom; kw...)</code></pre><p>Try to _apply over iterables</p><pre><code class="language-julia hljs">_apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
+    map(x -&gt; _apply(f, Target, x; kw...), iterable)</code></pre><p>Rewrap feature collections</p><pre><code class="language-julia hljs">function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc)) where Target
+    applicator(feature) = _apply(f, Target, feature; crs)::GI.Feature
+    features = map(applicator, GI.getfeature(fc))
+    return GI.FeatureCollection(features; crs)
+end</code></pre><p>Rewrap features</p><pre><code class="language-julia hljs">function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; crs=GI.crs(feature)) where Target
+    properties = GI.properties(feature)
+    geometry = _apply(f, Target, GI.geometry(feature); crs)
+    return GI.Feature(geometry; properties, crs)
+end</code></pre><p>Reconstruct nested geometries</p><pre><code class="language-julia hljs">function _apply(f, ::Type{Target}, trait, geom; crs=GI.crs(geom))::(GI.geointerface_geomtype(trait)) where Target</code></pre><p>TODO handle zero length...</p><pre><code class="language-julia hljs">    applicator(g) = _apply(f, Target, g; crs)
+    geoms = map(applicator, GI.getgeom(geom))
+    return rebuild(geom, geoms; crs)
+end</code></pre><p>Apply f to the target geometry</p><pre><code class="language-julia hljs">_apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom)) where {Target,Trait&lt;:Target} = f(geom)</code></pre><p>Fail if we hit PointTrait without running <code>f</code></p><pre><code class="language-julia hljs">_apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing) where Target =
+    throw(ArgumentError(&quot;target $Target not found, but reached a `PointTrait` leaf&quot;))</code></pre><p>Specific cases to avoid method ambiguity</p><pre><code class="language-julia hljs">_apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing) = f(geom)
+_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=GI.crs(feature)) = f(feature)
+_apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc)) = f(fc)
+
+&quot;&quot;&quot;
+    unwrap(target::Type{&lt;:AbstractTrait}, obj)
+    unwrap(f, target::Type{&lt;:AbstractTrait}, obj)
+
+Unwrap the geometry to vectors, down to the target trait.
+
+If `f` is passed in it will be applied to the target geometries
+as they are found.
+&quot;&quot;&quot;
+function unwrap end
+unwrap(target::Type, geom) = unwrap(identity, target, geom)</code></pre><p>Add dispatch argument for trait</p><pre><code class="language-julia hljs">unwrap(f, target::Type, geom) = unwrap(f, target, GI.trait(geom), geom)</code></pre><p>Try to unwrap over iterables</p><pre><code class="language-julia hljs">unwrap(f, target::Type, ::Nothing, iterable) =
+    map(x -&gt; unwrap(f, target, x), iterable)</code></pre><p>Rewrap feature collections</p><pre><code class="language-julia hljs">unwrap(f, target::Type, ::GI.FeatureCollectionTrait, fc) =
+    map(x -&gt; unwrap(f, target, x), GI.getfeature(fc))
+unwrap(f, target::Type, ::GI.FeatureTrait, feature) = unwrap(f, target, GI.geometry(feature))
+unwrap(f, target::Type, trait, geom) = map(g -&gt; unwrap(f, target, g), GI.getgeom(geom))</code></pre><p>Apply f to the target geometry</p><pre><code class="language-julia hljs">unwrap(f, ::Type{Target}, ::Trait, geom) where {Target,Trait&lt;:Target} = f(geom)</code></pre><p>Fail if we hit PointTrait</p><pre><code class="language-julia hljs">unwrap(f, target::Type, trait::GI.PointTrait, geom) =
+    throw(ArgumentError(&quot;target $target not found, but reached a `PointTrait` leaf&quot;))</code></pre><p>Specific cases to avoid method ambiguity</p><pre><code class="language-julia hljs">unwrap(f, target::Type{GI.PointTrait}, trait::GI.PointTrait, geom) = f(geom)
+unwrap(f, target::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature) = f(feature)
+unwrap(f, target::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc) = f(fc)
+
+&quot;&quot;&quot;
+    flatten(target::Type{&lt;:GI.AbstractTrait}, geom)
+
+Lazily flatten any geometry, feature or iterator of geometries or features
+so that objects with the specified trait are returned by the iterator.
+&quot;&quot;&quot;
+flatten(::Type{Target}, geom) where {Target&lt;:GI.AbstractTrait} = flatten(identity, Target, geom)
+flatten(f, ::Type{Target}, geom) where {Target&lt;:GI.AbstractTrait} = _flatten(f, Target, geom)
+
+_flatten(f, ::Type{Target}, geom) where Target = _flatten(f, Target, GI.trait(geom), geom)</code></pre><p>Try to flatten over iterables</p><pre><code class="language-julia hljs">_flatten(f, ::Type{Target}, ::Nothing, iterable) where Target =
+    Iterators.flatten(Iterators.map(x -&gt; _flatten(f, Target, x), iterable))</code></pre><p>Flatten feature collections</p><pre><code class="language-julia hljs">function _flatten(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc) where Target
+    Iterators.map(GI.getfeature(fc)) do feature
+        _flatten(f, Target, feature)
+    end |&gt; Iterators.flatten
+end
+_flatten(f, ::Type{Target}, ::GI.FeatureTrait, feature) where Target =
+    _flatten(f, Target, GI.geometry(feature))</code></pre><p>Apply f to the target geometry</p><pre><code class="language-julia hljs">_flatten(f, ::Type{Target}, ::Trait, geom) where {Target,Trait&lt;:Target} = (f(geom),)
+_flatten(f, ::Type{Target}, trait, geom) where Target =
+    Iterators.flatten(Iterators.map(g -&gt; _flatten(f, Target, g), GI.getgeom(geom)))</code></pre><p>Fail if we hit PointTrait without running <code>f</code></p><pre><code class="language-julia hljs">_flatten(f, ::Type{Target}, trait::GI.PointTrait, geom) where Target =
+    throw(ArgumentError(&quot;target $Target not found, but reached a `PointTrait` leaf&quot;))</code></pre><p>Specific cases to avoid method ambiguity</p><pre><code class="language-julia hljs">_flatten(f, ::Type{&lt;:GI.PointTrait}, ::GI.PointTrait, geom) = (f(geom),)
+_flatten(f, ::Type{&lt;:GI.FeatureTrait}, ::GI.FeatureTrait, feature) = (f(feature),)
+_flatten(f, ::Type{&lt;:GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc) = (f(fc),)
+
+
+&quot;&quot;&quot;
+    reconstruct(geom, components)
+
+Reconstruct `geom` from an iterable of component objects that match its structure.
+
+All objects in `components` must have the same `GeoInterface.trait`.
+
+Ususally used in combination with `flatten`.
+&quot;&quot;&quot;
+reconstruct(geom, components) = first(_reconstruct(geom, components))
+
+_reconstruct(geom, components) =
+    _reconstruct(typeof(GI.trait(first(components))), geom, components, 1)
+_reconstruct(::Type{Target}, geom, components, iter) where Target =
+    _reconstruct(Target, GI.trait(geom), geom, components, iter)</code></pre><p>Try to reconstruct over iterables</p><pre><code class="language-julia hljs">function _reconstruct(::Type{Target}, ::Nothing, iterable, components, iter) where Target
+    vect = map(iterable) do x
+        obj, iter = _reconstruct(Target, x, components, iter)
+        obj
+    end
+    return vect, iter
+end</code></pre><p>Reconstruct feature collections</p><pre><code class="language-julia hljs">function _reconstruct(::Type{Target}, ::GI.FeatureCollectionTrait, fc, components, iter) where Target
+    features = map(GI.getfeature(fc)) do feature
+        newfeature, iter = _reconstruct(Target, feature, components, iter)
+        newfeature
+    end
+    return GI.FeatureCollection(features; crs=GI.crs(fc)), iter
+end
+function _reconstruct(::Type{Target}, ::GI.FeatureTrait, feature, components, iter) where Target
+    geom, iter = _reconstruct(Target, GI.geometry(feature), components, iter)
+    return GI.Feature(geom; properties=GI.properties(feature), crs=GI.crs(feature)), iter
+end
+function _reconstruct(::Type{Target}, trait, geom, components, iter) where Target
+    geoms = map(GI.getgeom(geom)) do subgeom
+        subgeom1, iter = _reconstruct(Target, GI.trait(subgeom), subgeom, components, iter)
+        subgeom1
+    end
+    return rebuild(geom, geoms), iter
+end</code></pre><p>Apply f to the target geometry</p><pre><code class="language-julia hljs">_reconstruct(::Type{Target}, ::Trait, geom, components, iter) where {Target,Trait&lt;:Target} =
+    iterate(components, iter)</code></pre><p>Specific cases to avoid method ambiguity</p><pre><code class="language-julia hljs">_reconstruct(::Type{&lt;:GI.PointTrait}, ::GI.PointTrait, geom, components, iter) = iterate(components, iter)
+_reconstruct(::Type{&lt;:GI.FeatureTrait}, ::GI.FeatureTrait, feature, components, iter) = iterate(feature, iter)
+_reconstruct(::Type{&lt;:GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc, components, iter) = iterate(fc, iter)</code></pre><p>Fail if we hit PointTrait without running <code>f</code></p><pre><code class="language-julia hljs">_reconstruct(::Type{Target}, trait::GI.PointTrait, geom, components, iter) where Target =
+    throw(ArgumentError(&quot;target $Target not found, but reached a `PointTrait` leaf&quot;))
+
+
+const BasicsGeoms = Union{GB.AbstractGeometry,GB.AbstractFace,GB.AbstractPoint,GB.AbstractMesh,
+    GB.AbstractPolygon,GB.LineString,GB.MultiPoint,GB.MultiLineString,GB.MultiPolygon,GB.Mesh}
+
+&quot;&quot;&quot;
+    rebuild(geom, child_geoms)
+
+Rebuild a geometry from child geometries.
+
+By default geometries will be rebuilt as a GeoInterface.Wrappers
+geometry, but `rebuild` can have methods added to it to dispatch
+on geometries from other packages and specify how to rebuild them.
+
+(Maybe it should go into GeoInterface.jl)
+&quot;&quot;&quot;
+rebuild(geom, child_geoms; kw...) = rebuild(GI.trait(geom), geom, child_geoms; kw...)
+function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom))
+    T = GI.geointerface_geomtype(trait)
+    if GI.is3d(geom)</code></pre><p>The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.</p><pre><code class="language-julia hljs">        return T{true,false}(child_geoms; crs)
+    else
+        return T{false,false}(child_geoms; crs)
+    end
+end</code></pre><p>So that GeometryBasics geoms rebuild as themselves</p><pre><code class="language-julia hljs">function rebuild(trait::GI.AbstractTrait, geom::BasicsGeoms, child_geoms; crs=nothing)
+    GB.geointerface_geomtype(trait)(child_geoms)
+end
+function rebuild(trait::GI.AbstractTrait, geom::Union{GB.LineString,GB.MultiPoint}, child_geoms; crs=nothing)
+    GB.geointerface_geomtype(trait)(GI.convert.(GB.Point, child_geoms))
+end
+function rebuild(trait::GI.PolygonTrait, geom::GB.Polygon, child_geoms; crs=nothing)
+    Polygon(child_geoms[1], child_geoms[2:end])
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../GeometryOps/">« GeometryOps.jl</a><a class="docs-footer-nextpage" href="../utils/">Utility functions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Monday 5 June 2023 23:55">Monday 5 June 2023</span>. Using Julia version 1.9.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

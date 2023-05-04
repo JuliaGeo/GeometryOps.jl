@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Disjoint · GeometryOps.jl</title><script data-outdated-warner src="../../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/geom_relations/disjoint/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../../assets/documenter.js"></script><script src="../../../../siteinfo.js"></script><script src="../../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../../"><img src="../../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../../utils/">Utility functions</a></li><li><a class="tocitem" href="../../area/">Area and signed area</a></li><li><a class="tocitem" href="../../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../../centroid/">Centroid</a></li><li><a class="tocitem" href="../../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../../equals/">Equals</a></li><li><a class="tocitem" href="../../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../contains/">Contains</a></li><li><a class="tocitem" href="../coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../covers/">Covers</a></li><li><a class="tocitem" href="../crosses/">Crossing checks</a></li><li class="is-active"><a class="tocitem" href>Disjoint</a><ul class="internal"><li><a class="tocitem" href="#What-is-disjoint?"><span>What is disjoint?</span></a></li><li><a class="tocitem" href="#Implementation"><span>Implementation</span></a></li><li class="toplevel"><a class="tocitem" href="#Convert-features-to-geometries"><span>Convert features to geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Point-disjoint-geometries"><span>Point disjoint geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Lines-disjoint-geometries"><span>Lines disjoint geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Rings-disjoint-geometries"><span>Rings disjoint geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Polygon-disjoint-geometries"><span>Polygon disjoint geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Geometries-disjoint-multi-geometry/geometry-collections"><span>Geometries disjoint multi-geometry/geometry collections</span></a></li><li class="toplevel"><a class="tocitem" href="#Multi-geometry/geometry-collections-coveredby-geometries"><span>Multi-geometry/geometry collections coveredby geometries</span></a></li></ul></li><li><a class="tocitem" href="../geom_geom_processors/">-</a></li><li><a class="tocitem" href="../intersects/">Intersection checks</a></li><li><a class="tocitem" href="../overlaps/">Overlaps</a></li><li><a class="tocitem" href="../touches/">Touches</a></li><li><a class="tocitem" href="../within/">Within</a></li><li><a class="tocitem" href="../../../transformations/extent/">-</a></li><li><a class="tocitem" href="../../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../../transformations/transform/">-</a></li><li><a class="tocitem" href="../../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Disjoint</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Disjoint</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/geom_relations/disjoint.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Disjoint"><a class="docs-heading-anchor" href="#Disjoint">Disjoint</a><a id="Disjoint-1"></a><a class="docs-heading-anchor-permalink" href="#Disjoint" title="Permalink"></a></h1><pre><code class="language-julia hljs">export disjoint</code></pre><h2 id="What-is-disjoint?"><a class="docs-heading-anchor" href="#What-is-disjoint?">What is disjoint?</a><a id="What-is-disjoint?-1"></a><a class="docs-heading-anchor-permalink" href="#What-is-disjoint?" title="Permalink"></a></h2><p>The disjoint function checks if one geometry is outside of another geometry, without sharing any boundaries or interiors.</p><p>To provide an example, consider these two lines:</p><pre><code class="language- hljs">using GeometryOps
+using GeometryOps.GeometryBasics
+using Makie
+using CairoMakie
+
+l1 = GI.LineString([(0.0, 0.0), (1.0, 0.0), (0.0, 0.1)])
+l2 = GI.LineString([(2.0, 0.0), (2.75, 0.0)])
+f, a, p = lines(GI.getpoint(l1), color = :blue)
+scatter!(GI.getpoint(l1), color = :blue)
+lines!(GI.getpoint(l2), color = :orange)
+scatter!(GI.getpoint(l2), color = :orange)</code></pre><p>We can see that none of the edges or vertices of l1 interact with l2 so they are disjoint.</p><pre><code class="language- hljs">disjoint(l1, l2)  # returns true</code></pre><h2 id="Implementation"><a class="docs-heading-anchor" href="#Implementation">Implementation</a><a id="Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation" title="Permalink"></a></h2><p>This is the GeoInterface-compatible implementation.</p><p>First, we implement a wrapper method that dispatches to the correct implementation based on the geometry trait.</p><p>Each of these calls a method in the geom<em>geom</em>processors file. The methods in this file determine if the given geometries meet a set of criteria. For the <code>disjoint</code> function and arguments g1 and g2, this criteria is as follows:     - points of g1 are not allowed to be in the interior of g2     - points of g1 are not allowed to be on the boundary of g2     - points of g1 are allowed to be in the exterior of g2     - no points required to be in the interior of g2     - no points of g1 are required to be on the boundary of g2     - no points of g1 are required to be in the exterior of g2</p><p>The code for the specific implementations is in the geom<em>geom</em>processors file.</p><pre><code class="language-julia hljs">const DISJOINT_ALLOWS = (in_allow = false, on_allow = false, out_allow = true)
+const DISJOINT_CURVE_ALLOWS = (over_allow = false, cross_allow = false, on_allow = false, out_allow = true)
+const DISJOINT_REQUIRES = (in_require = false, on_require = false, out_require = false)
+&quot;&quot;&quot;
+    disjoint(geom1, geom2)::Bool
+
+Return `true` if the first geometry is disjoint from the second geometry.
+
+Return `true` if the first geometry is disjoint from the second geometry. The
+interiors and boundaries of both geometries must not intersect.
+
+# Examples
+```jldoctest setup=:(using GeometryOps, GeometryBasics)
+import GeometryOps as GO, GeoInterface as GI
+
+line = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
+point = (2, 2)
+GO.disjoint(point, line)</code></pre><p>output</p><pre><code class="language-julia hljs">true
+```
+&quot;&quot;&quot;
+disjoint(g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)</code></pre><h1 id="Convert-features-to-geometries"><a class="docs-heading-anchor" href="#Convert-features-to-geometries">Convert features to geometries</a><a id="Convert-features-to-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Convert-features-to-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">_disjoint(::FeatureTrait, g1, ::Any, g2) = disjoint(GI.geometry(g1), g2)
+_disjoint(::Any, g1, ::FeatureTrait, g2) = disjoint(g1, geometry(g2))
+_disjoint(::FeatureTrait, g1, ::FeatureTrait, g2) = disjoint(GI.geometry(g1), GI.geometry(g2))</code></pre><h1 id="Point-disjoint-geometries"><a class="docs-heading-anchor" href="#Point-disjoint-geometries">Point disjoint geometries</a><a id="Point-disjoint-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Point-disjoint-geometries" title="Permalink"></a></h1><p>Point is disjoint from another point if the points are not equal.</p><pre><code class="language-julia hljs">_disjoint(
+    ::GI.PointTrait, g1,
+    ::GI.PointTrait, g2,
+) = !equals(g1, g2)</code></pre><p>Point is disjoint from a linestring if it is not on the line&#39;s edges/vertices.</p><pre><code class="language-julia hljs">_disjoint(
+    ::GI.PointTrait, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _point_curve_process(
+    g1, g2;
+    DISJOINT_ALLOWS...,
+    closed_curve = false,
+)</code></pre><p>Point is disjoint from a linearring if it is not on the ring&#39;s edges/vertices.</p><pre><code class="language-julia hljs">_disjoint(
+    ::GI.PointTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _point_curve_process(
+    g1, g2;
+    DISJOINT_ALLOWS...,
+    closed_curve = true,
+)
+
+#= Point is disjoint from a polygon if it is not on any edges, vertices, or
+within the polygon&#39;s interior. =#
+_disjoint(
+    ::GI.PointTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _point_polygon_process(
+    g1, g2;
+    DISJOINT_ALLOWS...,
+)
+
+#= Geometry is disjoint from a point if the point is not in the interior or on
+the boundary of the geometry. =#
+_disjoint(
+    trait1::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    trait2::GI.PointTrait, g2,
+) = _disjoint(trait2, g2, trait1, g1)</code></pre><h1 id="Lines-disjoint-geometries"><a class="docs-heading-anchor" href="#Lines-disjoint-geometries">Lines disjoint geometries</a><a id="Lines-disjoint-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Lines-disjoint-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Linestring is disjoint from another line if they do not share any interior
+edge/vertex points or boundary points. =#
+_disjoint(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _line_curve_process(
+    g1, g2;
+    DISJOINT_CURVE_ALLOWS...,
+    DISJOINT_REQUIRES...,
+    closed_line = false,
+    closed_curve = false,
+)
+
+#= Linestring is disjoint from a linearring if they do not share any interior
+edge/vertex points or boundary points. =#
+_disjoint(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    DISJOINT_CURVE_ALLOWS...,
+    DISJOINT_REQUIRES...,
+    closed_line = false,
+    closed_curve = true,
+)
+
+#= Linestring is disjoint from a polygon if the interior and boundary points of
+the line are not in the polygon&#39;s interior or on the polygon&#39;s boundary. =#
+_disjoint(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::GI.PolygonTrait, g2,
+) = _line_polygon_process(
+    g1, g2;
+    DISJOINT_ALLOWS...,
+    DISJOINT_REQUIRES...,
+    closed_line = false,
+)
+
+#= Geometry is disjoint from a linestring if the line&#39;s interior and boundary
+points don&#39;t intersect with the geometrie&#39;s interior and boundary points. =#
+_disjoint(
+    trait1::Union{GI.LinearRingTrait, GI.PolygonTrait}, g1,
+    trait2::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _disjoint(trait2, g2, trait1, g1)</code></pre><h1 id="Rings-disjoint-geometries"><a class="docs-heading-anchor" href="#Rings-disjoint-geometries">Rings disjoint geometries</a><a id="Rings-disjoint-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Rings-disjoint-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Linearrings is disjoint from another linearring if they do not share any
+interior edge/vertex points or boundary points.=#
+_disjoint(
+    ::GI.LinearRingTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    DISJOINT_CURVE_ALLOWS...,
+    DISJOINT_REQUIRES...,
+    closed_line = true,
+    closed_curve = true,
+)
+
+#= Linearring is disjoint from a polygon if the interior and boundary points of
+the ring are not in the polygon&#39;s interior or on the polygon&#39;s boundary. =#
+_disjoint(
+    ::GI.LinearRingTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _line_polygon_process(
+    g1, g2;
+    DISJOINT_ALLOWS...,
+    DISJOINT_REQUIRES...,
+    closed_line = true,
+)</code></pre><h1 id="Polygon-disjoint-geometries"><a class="docs-heading-anchor" href="#Polygon-disjoint-geometries">Polygon disjoint geometries</a><a id="Polygon-disjoint-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Polygon-disjoint-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Polygon is disjoint from another polygon if they do not share any edges or
+vertices and if their interiors do not intersect, excluding any holes. =#
+_disjoint(
+    ::GI.PolygonTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _polygon_polygon_process(
+    g1, g2;
+    DISJOINT_ALLOWS...,
+    DISJOINT_REQUIRES...,
+)</code></pre><h1 id="Geometries-disjoint-multi-geometry/geometry-collections"><a class="docs-heading-anchor" href="#Geometries-disjoint-multi-geometry/geometry-collections">Geometries disjoint multi-geometry/geometry collections</a><a id="Geometries-disjoint-multi-geometry/geometry-collections-1"></a><a class="docs-heading-anchor-permalink" href="#Geometries-disjoint-multi-geometry/geometry-collections" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Geometry is disjoint from a multi-geometry or a collection if all of the
+elements of the collection are disjoint from the geometry. =#
+function _disjoint(
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g2,
+)
+    for sub_g2 in GI.getgeom(g2)
+        !disjoint(g1, sub_g2) &amp;&amp; return false
+    end
+    return true
+end</code></pre><h1 id="Multi-geometry/geometry-collections-coveredby-geometries"><a class="docs-heading-anchor" href="#Multi-geometry/geometry-collections-coveredby-geometries">Multi-geometry/geometry collections coveredby geometries</a><a id="Multi-geometry/geometry-collections-coveredby-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-geometry/geometry-collections-coveredby-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Multi-geometry or a geometry collection is covered by a geometry if all
+elements of the collection are covered by the geometry. =#
+function _disjoint(
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g1,
+    ::GI.AbstractGeometryTrait, g2,
+)
+    for sub_g1 in GI.getgeom(g1)
+        !disjoint(sub_g1, g2) &amp;&amp; return false
+    end
+    return true
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../crosses/">« Crossing checks</a><a class="docs-footer-nextpage" href="../geom_geom_processors/">- »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Friday 12 January 2024 21:29">Friday 12 January 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

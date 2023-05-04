@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Within · GeometryOps.jl</title><script data-outdated-warner src="../../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/methods/geom_relations/within/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../../assets/documenter.js"></script><script src="../../../../siteinfo.js"></script><script src="../../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../../"><img src="../../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../../utils/">Utility functions</a></li><li><a class="tocitem" href="../../area/">Area and signed area</a></li><li><a class="tocitem" href="../../barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../../bools/">Boolean conditions</a></li><li><a class="tocitem" href="../../centroid/">Centroid</a></li><li><a class="tocitem" href="../../distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../../equals/">Equals</a></li><li><a class="tocitem" href="../../polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../contains/">Contains</a></li><li><a class="tocitem" href="../coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../covers/">Covers</a></li><li><a class="tocitem" href="../crosses/">Crossing checks</a></li><li><a class="tocitem" href="../disjoint/">Disjoint</a></li><li><a class="tocitem" href="../geom_geom_processors/">-</a></li><li><a class="tocitem" href="../intersects/">Intersection checks</a></li><li><a class="tocitem" href="../overlaps/">Overlaps</a></li><li><a class="tocitem" href="../touches/">Touches</a></li><li class="is-active"><a class="tocitem" href>Within</a><ul class="internal"><li><a class="tocitem" href="#What-is-within?"><span>What is within?</span></a></li><li><a class="tocitem" href="#Implementation"><span>Implementation</span></a></li><li class="toplevel"><a class="tocitem" href="#Convert-features-to-geometries"><span>Convert features to geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Points-within-geometries"><span>Points within geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Lines-within-geometries"><span>Lines within geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Rings-covered-by-geometries"><span>Rings covered by geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Polygons-within-geometries"><span>Polygons within geometries</span></a></li><li class="toplevel"><a class="tocitem" href="#Geometries-within-multi-geometry/geometry-collections"><span>Geometries within multi-geometry/geometry collections</span></a></li><li class="toplevel"><a class="tocitem" href="#Multi-geometry/geometry-collections-within-geometries"><span>Multi-geometry/geometry collections within geometries</span></a></li></ul></li><li><a class="tocitem" href="../../../transformations/extent/">-</a></li><li><a class="tocitem" href="../../../transformations/flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../../../transformations/reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../../../transformations/simplify/">Geometry simplification</a></li><li><a class="tocitem" href="../../../transformations/transform/">-</a></li><li><a class="tocitem" href="../../../transformations/tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>Within</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Within</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/methods/geom_relations/within.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><h1 id="Within"><a class="docs-heading-anchor" href="#Within">Within</a><a id="Within-1"></a><a class="docs-heading-anchor-permalink" href="#Within" title="Permalink"></a></h1><pre><code class="language-julia hljs">export within</code></pre><h2 id="What-is-within?"><a class="docs-heading-anchor" href="#What-is-within?">What is within?</a><a id="What-is-within?-1"></a><a class="docs-heading-anchor-permalink" href="#What-is-within?" title="Permalink"></a></h2><p>The within function checks if one geometry is inside another geometry. This requires that the two interiors intersect and that the interior and boundary of the first geometry is not in the exterior of the second geometry.</p><p>To provide an example, consider these two lines:</p><pre><code class="language- hljs">using GeometryOps
+using GeometryOps.GeometryBasics
+using Makie
+using CairoMakie
+
+l1 = GI.LineString([(0.0, 0.0), (1.0, 0.0), (0.0, 0.1)])
+l2 = GI.LineString([(0.25, 0.0), (0.75, 0.0)])
+f, a, p = lines(GI.getpoint(l1), color = :blue)
+scatter!(GI.getpoint(l1), color = :blue)
+lines!(GI.getpoint(l2), color = :orange)
+scatter!(GI.getpoint(l2), color = :orange)</code></pre><p>We can see that all of the points and edges of l2 are within l1, so l2 is within l1, but l1 is not within l2</p><pre><code class="language- hljs">within(l1, l2)  # returns false
+within(l2, l1)  # returns true</code></pre><h2 id="Implementation"><a class="docs-heading-anchor" href="#Implementation">Implementation</a><a id="Implementation-1"></a><a class="docs-heading-anchor-permalink" href="#Implementation" title="Permalink"></a></h2><p>This is the GeoInterface-compatible implementation.</p><p>First, we implement a wrapper method that dispatches to the correct implementation based on the geometry trait.</p><p>Each of these calls a method in the geom<em>geom</em>processors file. The methods in this file determine if the given geometries meet a set of criteria. For the <code>within</code> function and arguments g1 and g2, this criteria is as follows:     - points of g1 are allowed to be in the interior of g2 (either through     overlap or crossing for lines)     - points of g1 are allowed to be on the boundary of g2     - points of g1 are not allowed to be in the exterior of g2     - at least one point of g1 is required to be in the interior of g2     - no points of g1 are required to be on the boundary of g2     - no points of g1 are required to be in the exterior of g2</p><p>The code for the specific implementations is in the geom<em>geom</em>processors file.</p><pre><code class="language-julia hljs">const WITHIN_POINT_ALLOWS = (in_allow = true, on_allow = false, out_allow = false)
+const WITHIN_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = false)
+const WITHIN_POLYGON_ALLOWS = (in_allow = true, on_allow = true, out_allow = false)
+const WITHIN_REQUIRES = (in_require = true, on_require = false, out_require = false)
+
+&quot;&quot;&quot;
+    within(geom1, geom2)::Bool
+
+Return `true` if the first geometry is completely within the second geometry.
+The interiors of both geometries must intersect and the interior and boundary of
+the primary geometry (geom1) must not intersect the exterior of the secondary
+geometry (geom2).
+
+Furthermore, `within` returns the exact opposite result of `contains`.
+
+# Examples
+```jldoctest setup=:(using GeometryOps, GeometryBasics)
+import GeometryOps as GO, GeoInterface as GI
+
+line = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
+point = (1, 2)
+GO.within(point, line)</code></pre><p>output</p><pre><code class="language-julia hljs">true
+```
+&quot;&quot;&quot;
+within(g1, g2) = _within(trait(g1), g1, trait(g2), g2)</code></pre><h1 id="Convert-features-to-geometries"><a class="docs-heading-anchor" href="#Convert-features-to-geometries">Convert features to geometries</a><a id="Convert-features-to-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Convert-features-to-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">_within(::GI.FeatureTrait, g1, ::Any, g2) = within(GI.geometry(g1), g2)
+_within(::Any, g1, t2::GI.FeatureTrait, g2) = within(g1, GI.geometry(g2))
+_within(::FeatureTrait, g1, ::FeatureTrait, g2) = within(GI.geometry(g1), GI.geometry(g2))</code></pre><h1 id="Points-within-geometries"><a class="docs-heading-anchor" href="#Points-within-geometries">Points within geometries</a><a id="Points-within-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Points-within-geometries" title="Permalink"></a></h1><p>Point is within another point if those points are equal.</p><pre><code class="language-julia hljs">_within(
+    ::GI.PointTrait, g1,
+    ::GI.PointTrait, g2,
+) = equals(g1, g2)
+
+#= Point is within a linestring if it is on a vertex or an edge of that line,
+excluding the start and end vertex if the line is not closed. =#
+_within(
+    ::GI.PointTrait, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _point_curve_process(
+    g1, g2;
+    WITHIN_POINT_ALLOWS...,
+    closed_curve = false,
+)</code></pre><p>Point is within a linearring if it is on a vertex or an edge of that ring.</p><pre><code class="language-julia hljs">_within(
+    ::GI.PointTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _point_curve_process(
+    g1, g2;
+    WITHIN_POINT_ALLOWS...,
+    closed_curve = true,
+)
+
+#= Point is within a polygon if it is inside of that polygon, excluding edges,
+vertices, and holes. =#
+_within(
+    ::GI.PointTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _point_polygon_process(
+    g1, g2;
+    WITHIN_POINT_ALLOWS...,
+)</code></pre><p>No geometries other than points can be within points</p><pre><code class="language-julia hljs">_within(
+    ::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::GI.PointTrait, g2,
+) = false</code></pre><h1 id="Lines-within-geometries"><a class="docs-heading-anchor" href="#Lines-within-geometries">Lines within geometries</a><a id="Lines-within-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Lines-within-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Linestring is within another linestring if their interiors intersect and no
+points of the first line are in the exterior of the second line. =#
+_within(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _line_curve_process(
+    g1, g2;
+    WITHIN_CURVE_ALLOWS...,
+    WITHIN_REQUIRES...,
+    closed_line = false,
+    closed_curve = false,
+)
+
+#= Linestring is within a linear ring if their interiors intersect and no points
+of the line are in the exterior of the ring. =#
+_within(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    WITHIN_CURVE_ALLOWS...,
+    WITHIN_REQUIRES...,
+    closed_line = false,
+    closed_curve = true,
+)
+
+#= Linestring is within a polygon if their interiors intersect and no points of
+the line are in the exterior of the polygon, although they can be on an edge. =#
+_within(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::GI.PolygonTrait, g2,
+) = _line_polygon_process(
+    g1, g2;
+    WITHIN_POLYGON_ALLOWS...,
+    WITHIN_REQUIRES...,
+    closed_line = false,
+)</code></pre><h1 id="Rings-covered-by-geometries"><a class="docs-heading-anchor" href="#Rings-covered-by-geometries">Rings covered by geometries</a><a id="Rings-covered-by-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Rings-covered-by-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Linearring is within a linestring if their interiors intersect and no points
+of the ring are in the exterior of the line. =#
+_within(
+    ::GI.LinearRingTrait, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _line_curve_process(
+    g1, g2;
+    WITHIN_CURVE_ALLOWS...,
+    WITHIN_REQUIRES...,
+    closed_line = true,
+    closed_curve = false,
+)
+
+#= Linearring is within another linearring if their interiors intersect and no
+points of the first ring are in the exterior of the second ring. =#
+_within(
+    ::GI.LinearRingTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    WITHIN_CURVE_ALLOWS...,
+    WITHIN_REQUIRES...,
+    closed_line = true,
+    closed_curve = true,
+)
+
+#= Linearring is within a polygon if their interiors intersect and no points of
+the ring are in the exterior of the polygon, although they can be on an edge. =#
+_within(
+    ::GI.LinearRingTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _line_polygon_process(
+    g1, g2;
+    WITHIN_POLYGON_ALLOWS...,
+    WITHIN_REQUIRES...,
+    closed_line = true,
+)</code></pre><h1 id="Polygons-within-geometries"><a class="docs-heading-anchor" href="#Polygons-within-geometries">Polygons within geometries</a><a id="Polygons-within-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Polygons-within-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Polygon is within another polygon if the interior of the first polygon
+intersects with the interior of the second and no points of the first polygon
+are outside of the second polygon. =#
+_within(
+    ::GI.PolygonTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _polygon_polygon_process(
+    g1, g2;
+    WITHIN_POLYGON_ALLOWS...,
+    WITHIN_REQUIRES...,
+)</code></pre><p>Polygons cannot be within any curves</p><pre><code class="language-julia hljs">_within(
+    ::GI.PolygonTrait, g1,
+    ::GI.AbstractCurveTrait, g2,
+) = false</code></pre><h1 id="Geometries-within-multi-geometry/geometry-collections"><a class="docs-heading-anchor" href="#Geometries-within-multi-geometry/geometry-collections">Geometries within multi-geometry/geometry collections</a><a id="Geometries-within-multi-geometry/geometry-collections-1"></a><a class="docs-heading-anchor-permalink" href="#Geometries-within-multi-geometry/geometry-collections" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Geometry is within a multi-geometry or a collection if the geometry is within
+at least one of the collection elements. =#
+function _within(
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g2,
+)
+    for sub_g2 in GI.getgeom(g2)
+        within(g1, sub_g2) &amp;&amp; return true
+    end
+    return false
+end</code></pre><h1 id="Multi-geometry/geometry-collections-within-geometries"><a class="docs-heading-anchor" href="#Multi-geometry/geometry-collections-within-geometries">Multi-geometry/geometry collections within geometries</a><a id="Multi-geometry/geometry-collections-within-geometries-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-geometry/geometry-collections-within-geometries" title="Permalink"></a></h1><pre><code class="language-julia hljs">#= Multi-geometry or a geometry collection is within a geometry if all
+elements of the collection are within the geometry. =#
+function _within(
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g1,
+    ::GI.AbstractGeometryTrait, g2,
+)
+    for sub_g1 in GI.getgeom(g1)
+        !within(sub_g1, g2) &amp;&amp; return false
+    end
+    return true
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../touches/">« Touches</a><a class="docs-footer-nextpage" href="../../../transformations/extent/">- »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Friday 12 January 2024 21:29">Friday 12 January 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

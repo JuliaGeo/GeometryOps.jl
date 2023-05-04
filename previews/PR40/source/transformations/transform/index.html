@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>- · GeometryOps.jl</title><script data-outdated-warner src="../../../assets/warner.js"></script><link rel="canonical" href="https://asinghvi17.github.io/GeometryOps.jl/source/transformations/transform/"/><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.045/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.13.24/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../../assets/documenter.js"></script><script src="../../../siteinfo.js"></script><script src="../../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><a class="docs-logo" href="../../../"><img src="../../../assets/logo.png" alt="GeometryOps.jl logo"/></a><div class="docs-package-name"><span class="docs-autofit"><a href="../../../">GeometryOps.jl</a></span></div><form class="docs-search" action="../../../search/"><input class="docs-search-query" id="documenter-search-query" name="q" type="text" placeholder="Search docs"/></form><ul class="docs-menu"><li><a class="tocitem" href="../../../">Home</a></li><li><span class="tocitem">Source code</span><ul><li><a class="tocitem" href="../../GeometryOps/">GeometryOps.jl</a></li><li><a class="tocitem" href="../../primitives/">Primitive functions</a></li><li><a class="tocitem" href="../../utils/">Utility functions</a></li><li><a class="tocitem" href="../../methods/area/">Area and signed area</a></li><li><a class="tocitem" href="../../methods/barycentric/">Barycentric coordinates</a></li><li><a class="tocitem" href="../../methods/bools/">Boolean conditions</a></li><li><a class="tocitem" href="../../methods/centroid/">Centroid</a></li><li><a class="tocitem" href="../../methods/distance/">Distance and signed distance</a></li><li><a class="tocitem" href="../../methods/equals/">Equals</a></li><li><a class="tocitem" href="../../methods/polygonize/">Polygonizing raster data</a></li><li><a class="tocitem" href="../../methods/geom_relations/contains/">Contains</a></li><li><a class="tocitem" href="../../methods/geom_relations/coveredby/">CoveredBy</a></li><li><a class="tocitem" href="../../methods/geom_relations/covers/">Covers</a></li><li><a class="tocitem" href="../../methods/geom_relations/crosses/">Crossing checks</a></li><li><a class="tocitem" href="../../methods/geom_relations/disjoint/">Disjoint</a></li><li><a class="tocitem" href="../../methods/geom_relations/geom_geom_processors/">-</a></li><li><a class="tocitem" href="../../methods/geom_relations/intersects/">Intersection checks</a></li><li><a class="tocitem" href="../../methods/geom_relations/overlaps/">Overlaps</a></li><li><a class="tocitem" href="../../methods/geom_relations/touches/">Touches</a></li><li><a class="tocitem" href="../../methods/geom_relations/within/">Within</a></li><li><a class="tocitem" href="../extent/">-</a></li><li><a class="tocitem" href="../flip/">Coordinate flipping</a></li><li><a class="tocitem" href="../reproject/">Geometry reprojection</a></li><li><a class="tocitem" href="../simplify/">Geometry simplification</a></li><li class="is-active"><a class="tocitem" href>-</a></li><li><a class="tocitem" href="../tuples/">Tuple conversion</a></li></ul></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Source code</a></li><li class="is-active"><a href>-</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>-</a></li></ul></nav><div class="docs-right"><a class="docs-edit-link" href="https://github.com/asinghvi17/GeometryOps.jl/blob/main/docs/src/source/transformations/transform.md#" title="Edit on GitHub"><span class="docs-icon fab"></span><span class="docs-label is-hidden-touch">Edit on GitHub</span></a><a class="docs-settings-button fas fa-cog" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-sidebar-button fa fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a></div></header><article class="content" id="documenter-page"><pre><code class="language-julia hljs">&quot;&quot;&quot;
+    transform(f, obj)
+
+Apply a function `f` to all the points in `obj`.
+
+Points will be passed to `f` as an `SVector` to allow
+using CoordinateTransformations.jl and Rotations.jl
+without hassle.
+
+`SVector` is also a valid GeoInterface.jl point, so will
+work in all GeoInterface.jl methods.
+
+# Example
+
+```julia
+julia&gt; import GeoInterface as GI
+
+julia&gt; import GeometryOps as GO
+
+julia&gt; geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]), GI.LinearRing([(3, 4), (5, 6), (6, 7), (3, 4)])]);
+
+julia&gt; f = CoordinateTransformations.Translation(3.5, 1.5)
+Translation(3.5, 1.5)
+
+julia&gt; GO.transform(f, geom)
+GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.Linea
+rRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}[GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}(StaticArraysCo
+re.SVector{2, Float64}[[4.5, 3.5], [6.5, 5.5], [8.5, 7.5], [4.5, 3.5]], nothing, nothing), GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}(StaticA
+rraysCore.SVector{2, Float64}[[6.5, 5.5], [8.5, 7.5], [9.5, 8.5], [6.5, 5.5]], nothing, nothing)], nothing, nothing)
+```
+
+With Rotations.jl you need to actuall multiply the Rotation
+by the `SVector` point, which is easy using an anonymous function.
+
+```julia
+julia&gt; using Rotations
+
+julia&gt; GO.transform(p -&gt; one(RotMatrix{2}) * p, geom)
+GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.LinearR
+ing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}[GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}(StaticArraysCore.SVe
+ctor{2, Int64}[[2, 1], [4, 3], [6, 5], [2, 1]], nothing, nothing), GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}(StaticArraysCore.SVector{2, Int64
+}[[4, 3], [6, 5], [7, 6], [4, 3]], nothing, nothing)], nothing, nothing)
+```
+&quot;&quot;&quot;
+function transform(f, geom; kw...)
+    if _is3d(geom)
+        return apply(PointTrait, geom; kw...) do p
+            f(StaticArrays.SVector{3}((GI.x(p), GI.y(p), GI.z(p))))
+        end
+    else
+        return apply(PointTrait, geom; kw...) do p
+            f(StaticArrays.SVector{2}((GI.x(p), GI.y(p))))
+        end
+    end
+end</code></pre><hr/><p><em>This page was generated using <a href="https://github.com/fredrikekre/Literate.jl">Literate.jl</a>.</em></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../simplify/">« Geometry simplification</a><a class="docs-footer-nextpage" href="../tuples/">Tuple conversion »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 0.27.24 on <span class="colophon-date" title="Friday 12 January 2024 21:29">Friday 12 January 2024</span>. Using Julia version 1.10.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
