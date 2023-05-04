@@ -14,29 +14,10 @@ import GeoInterface as GI
 import GeometryOps as GO
 geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]), 
                    GI.LinearRing([(3, 4), (5, 6), (6, 7), (3, 4)])])
+
 flipped_geom = GO.map(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
-```
-
-Its also possible to change traits:
-
-```juia
-multipoints = GeometryOps.map(GI.LinearRingTrait, geom) do poly
-    GI.MultiPoint(GI.getpoint(poly))
-end
-```
-
-Or just return something else entirely, and get nested vectors:
-
-```julia
-multipoints = GeometryOps.map(GI.LinearRingTrait, geom) do poly
-    GI.npoint(poly)
-end
-```
-
-In which case a `PolygonTrait` objects will become `Vector{MultiPoint}`,
-as MultiPoint is no longer a subtrait of `Polygon`.
 """
 function map end
 # Add dispatch argument for trait
@@ -59,15 +40,13 @@ function map(f, target::Type, ::GI.FeatureTrait, feature; crs=GI.crs(feature))
     return Feature(geometry; properties, crs)
 end
 # Reconstruct nested geometries
-function map(f, target::Type, trait, geom; crs=GI.crs(geom))
+function map(f, target::Type, trait, geom; crs=GI.crs(geom))::(GI.geointerface_geomtype(trait))
     # TODO handle zero length...
     geoms = Base.map(g -> map(f, target, g), GI.getgeom(geom))
-    # Rewrap if the returned value is the right trait
-    if GI.trait(first(geoms)) isa GI.subtrait(GI.trait(geom))
-        return GI.geointerface_geomtype(trait)(geoms; crs)
+    if GI.is3d(geom)
+        return GI.geointerface_geomtype(trait){true,false}(geoms; crs)
     else
-        # Or fall back to returning vectors
-        return geoms
+        return GI.geointerface_geomtype(trait){false,false}(geoms; crs)
     end
 end
 # Apply f to the target geometry
