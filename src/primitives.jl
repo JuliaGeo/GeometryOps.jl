@@ -44,6 +44,7 @@ function apply(f, target::Type, trait, geom; crs=GI.crs(geom))::(GI.geointerface
     # TODO handle zero length...
     geoms = map(g -> apply(f, target, g), GI.getgeom(geom))
     if GI.is3d(geom)
+        # The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.
         return GI.geointerface_geomtype(trait){true,false}(geoms; crs)
     else
         return GI.geointerface_geomtype(trait){false,false}(geoms; crs)
