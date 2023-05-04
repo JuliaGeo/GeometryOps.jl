@@ -1,5 +1,8 @@
 module GeometryOps
 
-# Write your package code here.
+using GeoInterface
+using GeometryBasics
+
+include("methods/signed_distance.jl")
 
 end
