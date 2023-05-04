@@ -25,7 +25,7 @@ apply(f, target::Type{<:GI.AbstractTrait}, geom; kw...) =
     apply(f, target, GI.trait(geom), geom; kw...)
 # Try to apply over iterables
 apply(f, target::Type, ::Nothing, iterable; kw...) =
-    map(x -> map(f, target, x), iterable; kw...)
+    map(x -> apply(f, target, x), iterable; kw...)
 # Rewrap feature collections
 function apply(f, target::Type, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc))
     features = map(GI.getfeature(fc)) do feature
@@ -58,4 +58,3 @@ apply(f, target::Type, trait::GI.PointTrait, geom; crs=nothing) =
 apply(f, target::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing) = f(geom)
 apply(f, target::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=nothing) = f(feature)
 apply(f, target::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=nothing) = f(fc)
-
