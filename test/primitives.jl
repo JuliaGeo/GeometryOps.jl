@@ -6,7 +6,7 @@ import GeometryOps as GO
 geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]), 
                    GI.LinearRing([(3, 4), (5, 6), (6, 7), (3, 4)])])
 
-flipped_geom = GO.map(GI.PointTrait, geom) do p
+flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 

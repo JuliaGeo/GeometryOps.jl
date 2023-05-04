@@ -1,5 +1,5 @@
 """
-    map(f, target::Type{<:AbstractTrait}, obj; crs)
+    apply(f, target::Type{<:AbstractTrait}, obj; crs)
 
 Reconstruct a geometry or feature using the function `f` on the `target` trait.
 
@@ -15,47 +15,47 @@ import GeometryOps as GO
 geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]), 
                    GI.LinearRing([(3, 4), (5, 6), (6, 7), (3, 4)])])
 
-flipped_geom = GO.map(GI.PointTrait, geom) do p
+flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 """
-function map end
+function apply end
 # Add dispatch argument for trait
-map(f, target::Type{<:GI.AbstractTrait}, geom; kw...) =
-    map(f, target, GI.trait(geom), geom; kw...)
-# Try to map over iterables
-map(f, target::Type, ::Nothing, iterable; kw...) =
-    Base.map(x -> Base.map(f, target, x), iterable; kw...)
+apply(f, target::Type{<:GI.AbstractTrait}, geom; kw...) =
+    apply(f, target, GI.trait(geom), geom; kw...)
+# Try to apply over iterables
+apply(f, target::Type, ::Nothing, iterable; kw...) =
+    map(x -> map(f, target, x), iterable; kw...)
 # Rewrap feature collections
-function map(f, target::Type, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc))
-    features = Base.map(GI.getfeature(fc)) do feature
-        map(f, target, feature)
+function apply(f, target::Type, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc))
+    features = map(GI.getfeature(fc)) do feature
+        apply(f, target, feature)
     end 
     return FeatureCollection(features; crs)
 end
 # Rewrap features
-function map(f, target::Type, ::GI.FeatureTrait, feature; crs=GI.crs(feature))
+function apply(f, target::Type, ::GI.FeatureTrait, feature; crs=GI.crs(feature))
     properties = GI.properties(feature)
-    geometry = map(f, target, geometry(feature); crs)
+    geometry = apply(f, target, geometry(feature); crs)
     return Feature(geometry; properties, crs)
 end
 # Reconstruct nested geometries
-function map(f, target::Type, trait, geom; crs=GI.crs(geom))::(GI.geointerface_geomtype(trait))
+function apply(f, target::Type, trait, geom; crs=GI.crs(geom))::(GI.geointerface_geomtype(trait))
     # TODO handle zero length...
-    geoms = Base.map(g -> map(f, target, g), GI.getgeom(geom))
+    geoms = map(g -> apply(f, target, g), GI.getgeom(geom))
     if GI.is3d(geom)
         return GI.geointerface_geomtype(trait){true,false}(geoms; crs)
-    else
+    els
         return GI.geointerface_geomtype(trait){false,false}(geoms; crs)
     end
 end
 # Apply f to the target geometry
-map(f, ::Type{Target}, ::Trait, geom; crs=nothing) where {Target,Trait<:Target} = f(geom)
+apply(f, ::Type{Target}, ::Trait, geom; crs=nothing) where {Target,Trait<:Target} = f(geom)
 # Fail if we hit PointTrait without running `f`
-map(f, target::Type, trait::GI.PointTrait, geom; crs=nothing) =
+apply(f, target::Type, trait::GI.PointTrait, geom; crs=nothing) =
     throw(ArgumentError("target $target not found, but reached a `PointTrait` leaf"))
 # Specific cases to avoid method ambiguity
-map(f, target::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing) = f(geom)
-map(f, target::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=nothing) = f(feature)
-map(f, target::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=nothing) = f(fc)
+apply(f, target::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing) = f(geom)
+apply(f, target::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=nothing) = f(feature)
+apply(f, target::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=nothing) = f(fc)
 
