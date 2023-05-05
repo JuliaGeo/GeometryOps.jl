@@ -13,9 +13,11 @@ const GB = GeometryBasics
 include("primitives.jl")
 include("utils.jl")
 
+include("methods/bools.jl")
 include("methods/signed_distance.jl")
 include("methods/signed_area.jl")
 include("methods/centroid.jl")
+include("methods/intersection.jl")
 include("methods/contains.jl")
 include("methods/barycentric.jl")
 
