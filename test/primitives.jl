@@ -2,6 +2,7 @@ using Test
 
 import GeoInterface as GI
 import GeometryOps as GO
+import GeometryBasics as GB
 
 pv1 = [(1, 2), (3, 4), (5, 6), (1, 2)]
 pv2 = [(3, 4), (5, 6), (6, 7), (3, 4)]
@@ -38,5 +39,19 @@ end
     revlr2 = GI.LinearRing(reverse(pv1))
     revpoly = GI.Polygon([revlr1, revlr2])
     points = collect(GO.flatten(GI.PointTrait, poly))
-    @test GO.reconstruct(poly, reverse(points)) == revpoly
+    reconstructed = GO.reconstruct(poly, reverse(points))
+    @test reconstructed == revpoly
+    @test reconstructed isa GI.Polygon
+
+
+    revlr1 = GB.LineString(GB.Point.(reverse(pv2)))
+    revlr2 = GB.LineString(GB.Point.(reverse(pv1)))
+    revpoly = GB.Polygon(revlr1, [revlr2])
+    lr1 = GB.LineString(GB.Point.(pv2))
+    lr2 = GB.LineString(GB.Point.(pv1))
+    poly = GB.Polygon(lr1, [lr2])
+    points = collect(GO.flatten(GI.PointTrait, poly))
+    @test 
+    GO.reconstruct(poly, reverse(points))
+    == revpoly
 end

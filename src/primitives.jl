@@ -172,13 +172,16 @@ _reconstruct(::Type{Target}, trait::GI.PointTrait, geom, components, iter) where
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 
 
+const BasicsGeoms = Union{GB.AbstractGeometry,GB.AbstractFace,GB.AbstractPoint,GB.AbstractMesh,
+    GB.AbstractPolygon,GB.LineString,GB.MultiPoint,GB.MultiLineString,GB.MultiPolygon,GB.Mesh}
+
 """
     rebuild(geom, child_geoms)
 
 Rebuild a geometry from child geometries.
 
-By default this will be rebuilt as a GeoInterface.Wrappers 
-object, but this method can have methods added to it to dispatch
+By default geometries will be rebuilt as a GeoInterface.Wrappers 
+geometry, but `rebuild` can have methods added to it to dispatch
 on geometries from other packages and specify how to rebuild them.
 
 (Maybe it should go into GeoInterface.jl)
@@ -186,8 +189,6 @@ on geometries from other packages and specify how to rebuild them.
 rebuild(geom, child_geoms) = rebuild(GI.trait(geom), geom, child_geoms)
 function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom))
     T = GI.geointerface_geomtype(trait)
-    @show child_geoms
-    @show T
     if GI.is3d(geom)
         # The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.
         return T{true,false}(child_geoms; crs)
@@ -195,3 +196,15 @@ function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom))
         return T{false,false}(child_geoms; crs)
     end
 end
+# So that GeometryBasics geoms rebuild as themselves
+function rebuild(trait::GI.AbstractTrait, geom::BasicsGeoms, child_geoms; crs=nothing)
+    GB.geointerface_geomtype(trait)(child_geoms)
+end
+function rebuild(trait::GI.AbstractTrait, geom::Union{GB.LineString,GB.MultiPoint}, child_geoms; crs=nothing)
+    GB.geointerface_geomtype(trait)(GI.convert.(GB.Point, child_geoms))
+end
+function rebuild(trait::GI.PolygonTrait, geom::GB.Polygon, child_geoms; crs=nothing)
+    Polygon(child_geoms[1], child_geoms[2:end])
+end
+
+
