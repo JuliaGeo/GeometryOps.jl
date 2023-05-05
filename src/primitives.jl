@@ -19,8 +19,7 @@ flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 """
-apply(f, ::Type{Target}, geom; crs=nothing)  where Target<:GI.AbstractTrait =
-    _apply(f, Target, geom; crs)
+apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw...)
 
 _apply(f, ::Type{Target}, geom; crs)  where Target =
     _apply(f, Target, GI.trait(geom), geom; crs)
@@ -32,13 +31,13 @@ function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(f
     features = map(GI.getfeature(fc)) do feature
         _apply(f, Target, feature)
     end 
-    return FeatureCollection(features; crs)
+    return GI.FeatureCollection(features; crs)
 end
 # Rewrap features
 function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; crs=GI.crs(feature)) where Target
     properties = GI.properties(feature)
-    geometry = _apply(f, Target, geometry(feature); crs)
-    return Feature(geometry; properties, crs)
+    geometry = _apply(f, Target, GI.geometry(feature); crs)
+    return GI.Feature(geometry; properties, crs)
 end
 # Reconstruct nested geometries
 function _apply(f, ::Type{Target}, trait, geom; crs=GI.crs(geom))::(GI.geointerface_geomtype(trait)) where Target
