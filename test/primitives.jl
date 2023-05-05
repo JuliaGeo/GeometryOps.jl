@@ -3,8 +3,8 @@ using Test
 import GeoInterface as GI
 import GeometryOps as GO
 
-pv1 = [(2, 1), (4, 3), (6, 5), (2, 1)]
-pv2 = [(4, 3), (6, 5), (7, 6), (4, 3)]
+pv1 = [(1, 2), (3, 4), (5, 6), (1, 2)]
+pv2 = [(3, 4), (5, 6), (6, 7), (3, 4)]
 lr1 = GI.LinearRing(pv1)
 lr2 =  GI.LinearRing(pv2)
 poly = GI.Polygon([lr1, lr2])

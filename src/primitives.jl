@@ -44,12 +44,7 @@ end
 function _apply(f, ::Type{Target}, trait, geom; crs=GI.crs(geom))::(GI.geointerface_geomtype(trait)) where Target
     # TODO handle zero length...
     geoms = map(g -> _apply(f, Target, g), GI.getgeom(geom))
-    if GI.is3d(geom)
-        # The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.
-        return GI.geointerface_geomtype(trait){true,false}(geoms; crs)
-    else
-        return GI.geointerface_geomtype(trait){false,false}(geoms; crs)
-    end
+    return rebuild(geom, geoms)
 end
 # Apply f to the target geometry
 _apply(f, ::Type{Target}, ::Trait, geom; crs=nothing) where {Target,Trait<:Target} = f(geom)
@@ -163,13 +158,7 @@ function _reconstruct(::Type{Target}, trait, geom, components, iter) where Targe
         subgeom1, iter = _reconstruct(Target, GI.trait(subgeom), subgeom, components, iter)
         subgeom1
     end
-    T = GI.geointerface_geomtype(trait)
-    if GI.is3d(geom)
-        # The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.
-        return T{true,false}(geoms; crs=GI.crs(geom)), iter
-    else
-        return T{false,false}(geoms; crs=GI.crs(geom)), iter
-    end
+    return rebuild(geom, geoms), iter
 end
 # Apply f to the target geometry
 _reconstruct(::Type{Target}, ::Trait, geom, components, iter) where {Target,Trait<:Target} =
@@ -181,3 +170,28 @@ _reconstruct(::Type{<:GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, f
 # Fail if we hit PointTrait without running `f`
 _reconstruct(::Type{Target}, trait::GI.PointTrait, geom, components, iter) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
+
+
+"""
+    rebuild(geom, child_geoms)
+
+Rebuild a geometry from child geometries.
+
+By default this will be rebuilt as a GeoInterface.Wrappers 
+object, but this method can have methods added to it to dispatch
+on geometries from other packages and specify how to rebuild them.
+
+(Maybe it should go into GeoInterface.jl)
+"""
+rebuild(geom, child_geoms) = rebuild(GI.trait(geom), geom, child_geoms)
+function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom))
+    T = GI.geointerface_geomtype(trait)
+    @show child_geoms
+    @show T
+    if GI.is3d(geom)
+        # The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.
+        return T{true,false}(child_geoms; crs)
+    else
+        return T{false,false}(child_geoms; crs)
+    end
+end
