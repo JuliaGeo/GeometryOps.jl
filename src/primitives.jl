@@ -111,7 +111,7 @@ function _flatten(::Type{Target}, ::GI.FeatureCollectionTrait, fc) where Target
     end 
 end
 _flatten(::Type{Target}, ::GI.FeatureTrait, feature) where Target = 
-    _flatten(Target, geometry(feature))
+    _flatten(Target, GI.geometry(feature))
 # Apply f to the target geometry
 _flatten(::Type{Target}, ::Trait, geom) where {Target,Trait<:Target} = (geom,)
 _flatten(::Type{Target}, trait, geom) where Target = 
@@ -134,30 +134,50 @@ All objects in `components` must have the same `GeoInterface.trait`.
 
 Ususally used in combination with `flatten`.
 """
-reconstruct(geom, components) = _reconstruct(Target, geom) 
+reconstruct(geom, components) = first(_reconstruct(geom, components))
 
-_reconstruct(geom, components) = _reconstruct(typeof(GI.trait(first(components))), geom, components) 
-_reconstruct(::Type{Target}, geom) where Target = 
-    _reconstruct(Target, GI.trait(geom), geom, components)
+_reconstruct(geom, components) = 
+    _reconstruct(typeof(GI.trait(first(components))), GI.trait(geom), geom, components, 1) 
 # Try to reconstruct over iterables
-_reconstruct(::Type{Target}, ::Nothing, iterable) where Target = 
-    map(x -> _reconstruct(Target, x), iterable)
-# Flatten feature collections
-function _reconstruct(::Type{Target}, ::GI.FeatureCollectionTrait, fc, components) where Target
-    map(GI.getfeature(fc)) do feature
-        _reconstruct(Target, feature, components)
-    end 
+function _reconstruct(::Type{Target}, ::Nothing, iterable, components, iter) where Target 
+    vect = map(iterable) do x
+        obj, iter = _reconstruct(Target, x, components, iter)
+        obj
+    end
+    return vect, iter
 end
-_reconstruct(::Type{Target}, ::GI.FeatureTrait, feature) where Target = 
-    _reconstruct(Target, geometry(feature))
+# Reconstruct feature collections
+function _reconstruct(::Type{Target}, ::GI.FeatureCollectionTrait, fc, components, iter) where Target
+    features = map(GI.getfeature(fc)) do feature
+        newfeature, iter = _reconstruct(Target, feature, components, iter)
+        newfeature
+    end
+    return FeatureCollection(features; crs=GI.crs(fc)), iter
+end
+function _reconstruct(::Type{Target}, ::GI.FeatureTrait, feature, components, iter) where Target 
+    geom, iter = _reconstruct(Target, geometry(feature), components, iter)
+    return Feature(geom; properties=GI.properties(feature), crs=GI.crs(feature)), iter
+end
+function _reconstruct(::Type{Target}, trait, geom, components, iter) where Target
+    geoms = map(GI.getgeom(geom)) do subgeom
+        subgeom1, iter = _reconstruct(Target, GI.trait(subgeom), subgeom, components, iter)
+        subgeom1
+    end
+    T = GI.geointerface_geomtype(trait)
+    if GI.is3d(geom)
+        # The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.
+        return T{true,false}(geoms; crs=GI.crs(geom)), iter
+    else
+        return T{false,false}(geoms; crs=GI.crs(geom)), iter
+    end
+end
 # Apply f to the target geometry
-_reconstruct(::Type{Target}, ::Trait, geom) where {Target,Trait<:Target} = geom
-_reconstruct(::Type{Target}, trait, geom) where Target = 
-    Iterators.flatmap(g -> _reconstruct(Target, g), GI.getgeom(geom))
-# Fail if we hit PointTrait without running `f`
-_reconstruct(::Type{Target}, trait::GI.PointTrait, geom) where Target =
-    throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
+_reconstruct(::Type{Target}, ::Trait, geom, components, iter) where {Target,Trait<:Target} =
+    iterate(components, iter)
 # Specific cases to avoid method ambiguity
-_reconstruct(::Type{<:GI.PointTrait}, ::GI.PointTrait, geom) = geom
-_reconstruct(::Type{<:GI.FeatureTrait}, ::GI.FeatureTrait, feature) = feature
-_reconstruct(::Type{<:GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc) = fc
+_reconstruct(::Type{<:GI.PointTrait}, ::GI.PointTrait, geom, components, iter) = iterate(components, iter)
+_reconstruct(::Type{<:GI.FeatureTrait}, ::GI.FeatureTrait, feature, components, iter) = iterate(feature, iter)
+_reconstruct(::Type{<:GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc, components, iter) = iterate(fc, iter)
+# Fail if we hit PointTrait without running `f`
+_reconstruct(::Type{Target}, trait::GI.PointTrait, geom, components, iter) where Target =
+    throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
