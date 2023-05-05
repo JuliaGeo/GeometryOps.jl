@@ -8,5 +8,6 @@ const GI = GeoInterface
 const AG = ArchGDAL
 
 @testset "GeometryOps.jl" begin
-    @testset "Signed Area" include("methods/signed_area.jl")
+    @testset "Primitives" begin include("primitives.jl") end
+    @testset "Signed Area" begin include("methods/signed_area.jl") end
 end

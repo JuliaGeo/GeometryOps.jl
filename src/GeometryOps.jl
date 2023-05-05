@@ -5,6 +5,7 @@ using GeometryBasics
 
 const GI = GeoInterface
 
+include("primitives.jl")
 include("methods/signed_distance.jl")
 include("methods/signed_area.jl")
 include("methods/centroid.jl")
