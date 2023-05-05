@@ -61,6 +61,36 @@ _apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing) = f(ge
 _apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=nothing) = f(feature)
 _apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=nothing) = f(fc)
 
+"""
+    unwrap(target::Type{<:AbstractTrait}, obj)
+    unwrap(f, target::Type{<:AbstractTrait}, obj)
+
+Unwrap the geometry to vectors, down to the target trait.
+
+If `f` is passed in it will be applied to the target geometries
+as they are found.
+"""
+function unwrap end
+unwrap(target::Type, geom; kw...) = unwrap(identity, target, geom; kw...)
+# Add dispatch argument for trait
+unwrap(f, target::Type, geom; kw...) = unwrap(f, target, GI.trait(geom), geom; kw...)
+# Try to unwrap over iterables
+unwrap(f, target::Type, ::Nothing, iterable; kw...) =
+    map(x -> unwrap(f, target, x), iterable; kw...)
+# Rewrap feature collections
+unwrap(f, target::Type, ::GI.FeatureCollectionTrait, fc) =
+    map(x -> unwrap(f, target, x), GI.getfeature(fc))
+unwrap(f, target::Type, ::GI.FeatureTrait, feature) = unwrap(f, target, geometry(feature))
+unwrap(f, target::Type, trait, geom) = map(g -> unwrap(f, target, g), GI.getgeom(geom))
+# Apply f to the target geometry
+unwrap(f, ::Type{Target}, ::Trait, geom) where {Target,Trait<:Target} = f(geom)
+# Fail if we hit PointTrait
+unwrap(f, target::Type, trait::GI.PointTrait, geom) =
+    throw(ArgumentError("target $target not found, but reached a `PointTrait` leaf"))
+# Specific cases to avoid method ambiguity
+unwrap(f, target::Type{GI.PointTrait}, trait::GI.PointTrait, geom) = f(geom)
+unwrap(f, target::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature) = f(feature)
+unwrap(f, target::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc) = f(fc)
 
 """
     flatten(target::Type{<:GI.AbstractTrait}, geom)
