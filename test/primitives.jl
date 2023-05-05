@@ -44,14 +44,14 @@ end
     @test reconstructed isa GI.Polygon
 
 
-    revlr1 = GB.LineString(GB.Point.(reverse(pv2)))
-    revlr2 = GB.LineString(GB.Point.(reverse(pv1)))
-    revpoly = GB.Polygon(revlr1, [revlr2])
-    lr1 = GB.LineString(GB.Point.(pv2))
-    lr2 = GB.LineString(GB.Point.(pv1))
-    poly = GB.Polygon(lr1, [lr2])
-    points = collect(GO.flatten(GI.PointTrait, poly))
-    @test 
-    GO.reconstruct(poly, reverse(points))
-    == revpoly
+    gb_revlr1 = GB.LineString(GB.Point.(reverse(pv2)))
+    gb_revlr2 = GB.LineString(GB.Point.(reverse(pv1)))
+    gb_revpoly = GB.Polygon(gb_revlr1, [gb_revlr2])
+    gb_lr1 = GB.LineString(GB.Point.(pv1))
+    gb_lr2 = GB.LineString(GB.Point.(pv2))
+    gb_poly = GB.Polygon(gb_lr1, [gb_lr2])
+    gb_points = collect(GO.flatten(GI.PointTrait, gb_poly))
+    gb_reconstructed = GO.reconstruct(gb_poly, reverse(gb_points))
+    @test gb_reconstructed == gb_revpoly
+    @test gb_reconstructed isa GB.Polygon
 end

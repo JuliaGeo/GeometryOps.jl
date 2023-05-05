@@ -98,19 +98,19 @@ flatten(::Type{Target}, geom) where {Target<:GI.AbstractTrait} = _flatten(Target
 _flatten(::Type{Target}, geom) where Target = _flatten(Target, GI.trait(geom), geom)
 # Try to flatten over iterables
 _flatten(::Type{Target}, ::Nothing, iterable) where Target = 
-    Iterators.flatmap(x -> _flatten(Target, x), iterable)
+    Iterators.flatten(Iterators.map((x -> _flatten(Target, x), iterable)))
 # Flatten feature collections
 function _flatten(::Type{Target}, ::GI.FeatureCollectionTrait, fc) where Target
-    Iterators.flatmap(GI.getfeature(fc)) do feature
+    Iterators.map(GI.getfeature(fc)) do feature
         _flatten(Target, feature)
-    end 
+    end > Iterators.flatten
 end
 _flatten(::Type{Target}, ::GI.FeatureTrait, feature) where Target = 
     _flatten(Target, GI.geometry(feature))
 # Apply f to the target geometry
 _flatten(::Type{Target}, ::Trait, geom) where {Target,Trait<:Target} = (geom,)
 _flatten(::Type{Target}, trait, geom) where Target = 
-    Iterators.flatmap(g -> _flatten(Target, g), GI.getgeom(geom))
+    Iterators.flatten(Iterators.map(g -> _flatten(Target, g), GI.getgeom(geom)))
 # Fail if we hit PointTrait without running `f`
 _flatten(::Type{Target}, trait::GI.PointTrait, geom) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
