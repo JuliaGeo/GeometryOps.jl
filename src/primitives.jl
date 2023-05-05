@@ -98,12 +98,12 @@ flatten(::Type{Target}, geom) where {Target<:GI.AbstractTrait} = _flatten(Target
 _flatten(::Type{Target}, geom) where Target = _flatten(Target, GI.trait(geom), geom)
 # Try to flatten over iterables
 _flatten(::Type{Target}, ::Nothing, iterable) where Target = 
-    Iterators.flatten(Iterators.map((x -> _flatten(Target, x), iterable)))
+    Iterators.flatten(Iterators.map(x -> _flatten(Target, x), iterable))
 # Flatten feature collections
 function _flatten(::Type{Target}, ::GI.FeatureCollectionTrait, fc) where Target
     Iterators.map(GI.getfeature(fc)) do feature
         _flatten(Target, feature)
-    end > Iterators.flatten
+    end |> Iterators.flatten
 end
 _flatten(::Type{Target}, ::GI.FeatureTrait, feature) where Target = 
     _flatten(Target, GI.geometry(feature))
