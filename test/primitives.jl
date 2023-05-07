@@ -32,6 +32,8 @@ end
     very_wrapped = [[GI.FeatureCollection([GI.Feature(poly; properties=(;))])]]
     @test collect(GO.flatten(GI.PointTrait, very_wrapped)) == vcat(pv1, pv2)
     @test collect(GO.flatten(GI.LinearRingTrait, [poly])) == [lr1, lr2]
+    @test collect(GO.flatten(GI.LinearRingTrait, [poly])) == [lr1, lr2]
+    @test collect(GO.flatten(GI.x, GI.PointTrait, very_wrapped)) == first.(vcat(pv1, pv2))
 end
 
 @testset "reconstruct" begin

@@ -93,31 +93,32 @@ unwrap(f, target::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, 
 Lazily flatten any geometry, feature or iterator of geometries or features
 so that objects with the specified trait are returned by the iterator.
 """
-flatten(::Type{Target}, geom) where {Target<:GI.AbstractTrait} = _flatten(Target, geom) 
+flatten(::Type{Target}, geom) where {Target<:GI.AbstractTrait} = flatten(identity, Target, geom) 
+flatten(f, ::Type{Target}, geom) where {Target<:GI.AbstractTrait} = _flatten(f, Target, geom) 
 
-_flatten(::Type{Target}, geom) where Target = _flatten(Target, GI.trait(geom), geom)
+_flatten(f, ::Type{Target}, geom) where Target = _flatten(f, Target, GI.trait(geom), geom)
 # Try to flatten over iterables
-_flatten(::Type{Target}, ::Nothing, iterable) where Target = 
-    Iterators.flatten(Iterators.map(x -> _flatten(Target, x), iterable))
+_flatten(f, ::Type{Target}, ::Nothing, iterable) where Target = 
+    Iterators.flatten(Iterators.map(x -> _flatten(f, Target, x), iterable))
 # Flatten feature collections
-function _flatten(::Type{Target}, ::GI.FeatureCollectionTrait, fc) where Target
+function _flatten(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc) where Target
     Iterators.map(GI.getfeature(fc)) do feature
-        _flatten(Target, feature)
+        _flatten(f, Target, feature)
     end |> Iterators.flatten
 end
-_flatten(::Type{Target}, ::GI.FeatureTrait, feature) where Target = 
-    _flatten(Target, GI.geometry(feature))
+_flatten(f, ::Type{Target}, ::GI.FeatureTrait, feature) where Target = 
+    _flatten(f, Target, GI.geometry(feature))
 # Apply f to the target geometry
-_flatten(::Type{Target}, ::Trait, geom) where {Target,Trait<:Target} = (geom,)
-_flatten(::Type{Target}, trait, geom) where Target = 
-    Iterators.flatten(Iterators.map(g -> _flatten(Target, g), GI.getgeom(geom)))
+_flatten(f, ::Type{Target}, ::Trait, geom) where {Target,Trait<:Target} = (f(geom),)
+_flatten(f, ::Type{Target}, trait, geom) where Target = 
+    Iterators.flatten(Iterators.map(g -> _flatten(f, Target, g), GI.getgeom(geom)))
 # Fail if we hit PointTrait without running `f`
-_flatten(::Type{Target}, trait::GI.PointTrait, geom) where Target =
+_flatten(f, ::Type{Target}, trait::GI.PointTrait, geom) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 # Specific cases to avoid method ambiguity
-_flatten(::Type{<:GI.PointTrait}, ::GI.PointTrait, geom) = (geom,)
-_flatten(::Type{<:GI.FeatureTrait}, ::GI.FeatureTrait, feature) = (feature,)
-_flatten(::Type{<:GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc) = (fc,)
+_flatten(f, ::Type{<:GI.PointTrait}, ::GI.PointTrait, geom) = (f(geom),)
+_flatten(f, ::Type{<:GI.FeatureTrait}, ::GI.FeatureTrait, feature) = (f(feature),)
+_flatten(f, ::Type{<:GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc) = (f(fc),)
 
 
 """
