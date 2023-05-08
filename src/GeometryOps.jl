@@ -5,6 +5,7 @@ using GeometryBasics
 import Proj
 
 const GI = GeoInterface
+const GB = GeometryBasics
 
 include("primitives.jl")
 include("methods/signed_distance.jl")
