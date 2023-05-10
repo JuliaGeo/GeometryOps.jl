@@ -19,14 +19,14 @@ flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 """
-apply(f, ::Type{Target}, geom; kw...)  where Target<:GI.AbstractTrait =
-    _apply(f, Target, geom; kw...)
+apply(f, ::Type{Target}, geom; crs=nothing)  where Target<:GI.AbstractTrait =
+    _apply(f, Target, geom; crs)
 
-_apply(f, ::Type{Target}, geom; kw...)  where Target =
-    _apply(f, Target, GI.trait(geom), geom; kw...)
+_apply(f, ::Type{Target}, geom; crs)  where Target =
+    _apply(f, Target, GI.trait(geom), geom; crs)
 # Try to _apply over iterables
-_apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
-    map(x -> _apply(f, Target, x), iterable; kw...)
+_apply(f, ::Type{Target}, ::Nothing, iterable; crs) where Target =
+    map(x -> _apply(f, Target, x; crs), iterable)
 # Rewrap feature collections
 function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc)) where Target
     features = map(GI.getfeature(fc)) do feature
@@ -66,12 +66,12 @@ If `f` is passed in it will be applied to the target geometries
 as they are found.
 """
 function unwrap end
-unwrap(target::Type, geom; kw...) = unwrap(identity, target, geom; kw...)
+unwrap(target::Type, geom) = unwrap(identity, target, geom)
 # Add dispatch argument for trait
-unwrap(f, target::Type, geom; kw...) = unwrap(f, target, GI.trait(geom), geom; kw...)
+unwrap(f, target::Type, geom) = unwrap(f, target, GI.trait(geom), geom)
 # Try to unwrap over iterables
-unwrap(f, target::Type, ::Nothing, iterable; kw...) =
-    map(x -> unwrap(f, target, x), iterable; kw...)
+unwrap(f, target::Type, ::Nothing, iterable) =
+    map(x -> unwrap(f, target, x), iterable)
 # Rewrap feature collections
 unwrap(f, target::Type, ::GI.FeatureCollectionTrait, fc) =
     map(x -> unwrap(f, target, x), GI.getfeature(fc))
