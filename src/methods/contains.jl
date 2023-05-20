@@ -1,44 +1,48 @@
 # More GeometryBasics code
 
-_cross(p1, p2, p3) = (p1[1] - p3[1]) * (p2[2] - p3[2]) - (p2[1] - p3[1]) * (p1[2] - p3[2])
+_cross(p1, p2, p3) = (GI.x(p1) - GI.x(p3)) * (GI.y(p2) - GI.y(p3)) - (GI.x(p2) - GI.x(p3)) * (GI.y(p1) - GI.y(p3))
+
+contains(pointlist, point) = contains(GI.trait(pointlist), GI.trait(point), pointlist, point)
 
 # Implementation of a point-in-polygon algorithm
 # from Luxor.jl.  This is the Hormann-Agathos (2001) algorithm.
 
 # For the source, see https://github.com/JuliaGraphics/Luxor.jl/blob/66d60fb51f6b1bb38690fe8dcc6c0084eeb80710/src/polygons.jl#L190-L229.
-function contains(ls::GeometryBasics.LineString{2, T1}, point::Point{2, T2}) where {T1, T2}
-    pointlist = decompose(Point{2, promote_type(T1, T2)}, ls)
+function contains(::GI.LineStringTrait, ::GI.PointTrait, pointlist, point)
+    n = GI.npoint(pointlist)
     c = false
-    @inbounds for counter in eachindex(pointlist)
-        q1 = pointlist[counter]
+    q1 = GI.getpoint(pointlist, 1)
+    q2 = GI.getpoint(pointlist, 1)
+    @inbounds for (counter, current_point) in enumerate(Iterators.drop(GI.getpoint(pointlist), 1))
+        q1 = q2
         # if reached last point, set "next point" to first point
-        if counter == length(pointlist)
-            q2 = pointlist[1]
+        if counter == (n-1)
+            q2 = GI.getpoint(pointlist, 1)
         else
-            q2 = pointlist[counter + 1]
+            q2 = current_point
         end
-        if q1 == point
+        if GI.x(q1) == GI.x(point) && GI.x(q1) == GI.y(point)
             # allowonedge || error("isinside(): VertexException a")
             continue
         end
-        if q2[2] == point[2]
-            if q2[1] == point[1]
+        if GI.y(q2) == GI.y(point)
+            if GI.x(q2) == GI.x(point)
                 # allowonedge || error("isinside(): VertexException b")
                 continue
-            elseif (q1[2] == point[2]) && ((q2[1] > point[1]) == (q1[1] < point[1]))
+            elseif (GI.y(q1) == GI.y(point)) && ((GI.x(q2) > GI.x(point)) == (GI.x(q1) < GI.x(point)))
                 # allowonedge || error("isinside(): EdgeException")
                 continue
             end
         end
-        if (q1[2] < point[2]) != (q2[2] < point[2]) # crossing
-            if q1[1] >= point[1]
-                if q2[1] > point[1]
+        if (GI.y(q1) < GI.y(point)) != (GI.y(q2) < GI.y(point)) # crossing
+            if GI.x(q1) >= GI.x(point)
+                if GI.x(q2) > GI.x(point)
                     c = !c
-                elseif ((_cross(q1, q2, point) > 0) == (q2[2] > q1[2]))
+                elseif ((_cross(q1, q2, point) > 0) == (GI.y(q2) > GI.y(q1)))
                     c = !c
                 end
-            elseif q2[1] > point[1]
-                if ((_cross(q1, q2, point) > 0) == (q2[2] > q1[2]))
+            elseif GI.x(q2) > GI.x(point)
+                if ((_cross(q1, q2, point) > 0) == (GI.y(q2) > GI.y(q1)))
                     c = !c
                 end
             end
