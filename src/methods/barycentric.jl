@@ -41,9 +41,9 @@ function mean_value_barycentric_coordinates(polypoints::Vector{<: Point{N1, T1}}
     # edges of the polygon, and then averaging these areas.
     for i in 1:n
 
-        prev = poly[mod1(i-2, n)]
+        prev = poly[mod1(i-1, n)]
         curr = poly[i]
-        next = poly[mod1(i, n)]
+        next = poly[mod1(i+1, n)]
 
         α1 = angle(prev, point, curr)
         α2 = angle(curr, point, next)
