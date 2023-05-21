@@ -43,7 +43,7 @@ end
 # Reconstruct nested geometries
 function _apply(f, ::Type{Target}, trait, geom; crs=GI.crs(geom))::(GI.geointerface_geomtype(trait)) where Target
     # TODO handle zero length...
-    geoms = map(g -> _apply(f, Target, g), GI.getgeom(geom))
+    geoms = map(g -> _apply(f, Target, g; crs), GI.getgeom(geom), )
     return rebuild(geom, geoms)
 end
 # Apply f to the target geometry
