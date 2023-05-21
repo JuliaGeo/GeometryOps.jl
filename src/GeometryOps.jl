@@ -3,6 +3,7 @@ module GeometryOps
 using GeoInterface
 using GeometryBasics
 import Proj
+using LinearAlgebra
 
 const GI = GeoInterface
 const GB = GeometryBasics
