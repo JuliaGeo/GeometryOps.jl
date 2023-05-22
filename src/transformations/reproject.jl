@@ -45,7 +45,7 @@ function reproject(geom, source_crs, target_crs;
     reproject(geom, transform; time, target_crs)
 end
 function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=nothing)
-    if GI.is3d(geom)
+    if _is3d(geom)
         return apply(PointTrait, geom; crs=target_crs) do p
             transform(GI.x(p), GI.y(p), GI.z(p))
         end
@@ -55,3 +55,9 @@ function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=no
         end
     end
 end
+
+_is3d(geom) = _is3d(GI.trait(geom), geom)
+_is3d(::GI.AbstractGeometryTrait, geom) = GI.is3d(geom)
+_is3d(::GI.Feature, feature) = _is3d(GI.geometry(feature))
+_is3d(::GI.FeatureCollection, fc) = _is3d(GI.getfeature(fc, 1))
+_is3d(::Nothing, geom) = _is3d(first(geom)) # Otherwise step into an itererable
