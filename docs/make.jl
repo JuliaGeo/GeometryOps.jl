@@ -12,13 +12,15 @@ mkpath(output_path)
 
 literate_pages = String[]
 
-for (root_path, dirs, files) in walkdir(source_path)
-    output_dir = joinpath(output_path, relpath(root_path, source_path))
-    for file in files
-        # convert the source file to Markdown
-        Literate.markdown(joinpath(root_path, file), output_dir; documenter = false)
-        # TODO: make this respect nesting somehow!
-        push!(literate_pages, joinpath("source", relpath(root_path, source_path), splitext(file)[1] * ".md"))
+withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape to the terminal!
+    for (root_path, dirs, files) in walkdir(source_path)
+        output_dir = joinpath(output_path, relpath(root_path, source_path))
+        for file in files
+            # convert the source file to Markdown
+            Literate.markdown(joinpath(root_path, file), output_dir; documenter = false)
+            # TODO: make this respect nesting somehow!
+            push!(literate_pages, joinpath("source", relpath(root_path, source_path), splitext(file)[1] * ".md"))
+        end
     end
 end
 
