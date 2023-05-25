@@ -17,120 +17,52 @@
 
 # As with the triangle case, the weights sum to 1, and each is non-negative.
 
-# ## Methods to find barycentric coordinates
+# ## Barycentric-coordinate API
+# In most cases, we actually want barycentric interpolation and have no interest in the coordinates themselves.  However, the coordinates can be useful for debugging, and so we provide an API for computing them as well.
+#
 
-function mean_value_barycentric_coordinates(polypoints::Vector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
-    n = length(polypoints)
-    λ = zeros(promote_type(T1, T2), n)
-    if (N1 == N2 && T1 == T2)
-        poly = polypoints
-    else
-        poly = Makie.to_ndim.((Point{N2, promote_type(T1, T2)},), polypoints, 0)
-    end
-    ## if !GeometryOps.contains(poly, point)
-    ##     return λ
-    ## end
-    ## Describe this loop
-    ## The loop computes barycentric coordinates by the mean-value method.
-    ## The mean-value method is a method for computing barycentric coordinates
-    ## for a point in a polygon. It is based on the observation that the
-    ## barycentric coordinates of a point in a polygon are proportional to the
-    ## areas of the triangles formed by the point and each pair of edges of the
-    ## polygon. The mean-value method computes the areas of these triangles by
-    ## computing the areas of the triangles formed by the point and each pair of
-    ## edges of the polygon, and then averaging these areas.
-    for i in 1:n
 
-        prev = poly[mod1(i-1, n)]
-        curr = poly[i]
-        next = poly[mod1(i+1, n)]
+"""
+    abstract type AbstractBarycentricCoordinateMethod
 
-        α1 = angle(prev, point, curr)
-        α2 = angle(curr, point, next)
-        d1 = distance(point, curr)
-        λ[i] = (tan(α1 / 2) + tan(α2 / 2)) / abs(d1)
+Abstract supertype for barycentric coordinate methods.  
+The subtypes may serve as dispatch types, or may cache 
+some information about the target polygon.  
 
-    end
-    ## Normalize the vector to sum to 1
-    λ /= sum(λ)
-    return λ
+## API
+The following methods must be implemented for all subtypes:
+- `barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polypoints::Vector{<: Point{N1, T1}}, point::Point{N2, T2})`
+"""
+abstract type AbstractBarycentricCoordinateMethod end
+
+
+Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
+    @boundscheck @assert length(λs) == length(polypoints)
+    @boundscheck @assert length(polypoints) >= 3
+
+    @error("Not implemented yet for method $(method).")
 end
 
-# Using trigonometry, we can actually decompose this stuff to:
-# tan
-
-function angle(a, b, c)
-    ab = a - b
-    cb = c - b
-    acos_param = dot(ab, cb) / (norm(ab) * norm(cb))
-    return if abs(acos_param) > 1
-        0.0
-    else
-        acos(acos_param)
-    end
+Base.@propagate_inbounds function barycentric_coordinates(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
+    λs = zeros(promote_type(T1, T2), length(polypoints))
+    barycentric_coordinates!(λs, method, polypoints, point)
+    return λs
 end
 
-function distance(a, b)
-    return norm(a - b)
+Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 <: Real, T2 <: Real, V}
+    @boundscheck @assert length(values) == length(polypoints)
+    @boundscheck @assert length(polypoints) >= 3
+    λs = barycentric_coordinates(method, polypoints, point)
+    return sum(λs .* values)
 end
 
-function mean_value_barycentric_coordinates(poly::Polygon{N1, T1}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
-    ext = decompose(Point{N2, T2}, poly.exterior)
-    ints = decompose.((Point{N2, T2},), poly.interiors)
-    n = length(ext) + if isempty(ints)
-        0
-    else
-        sum(length.(ints))
-    end
-    λ = zeros(promote_type(T1, T2), n)
-    ## if !GeometryOps.contains(poly, point)
-    ##     return λ
-    ## end
-    ## Describe this loop
-    ## The loop computes barycentric coordinates by the mean-value method.
-    ## The mean-value method is a method for computing barycentric coordinates
-    ## for a point in a polygon. It is based on the observation that the
-    ## barycentric coordinates of a point in a polygon are proportional to the
-    ## areas of the triangles formed by the point and each pair of edges of the
-    ## polygon. The mean-value method computes the areas of these triangles by
-    ## computing the areas of the triangles formed by the point and each pair of
-    ## edges of the polygon, and then averaging these areas.
-    current_ind = 1
-    l_ext = length(ext)
-    for i in 1:l_ext
 
-        prev = ext[mod1(i-1, l_ext)]
-        curr = ext[i]
-        next = ext[mod1(i+1, l_ext)]
 
-        α1 = angle(prev, point, curr)
-        α2 = angle(curr, point, next)
-        d1 = distance(point, curr)
-        λ[current_ind] = (tan(α1 / 2) + tan(α2 / 2)) / abs(d1)
-        current_ind += 1
-
-    end
-    for hole in ints
-        l_hole = length(hole)
-        for i in 1:l_hole
-
-            prev = hole[mod1(i-1, l_hole)]
-            curr = hole[i]
-            next = hole[mod1(i+1, l_hole)]
-
-            α1 = angle(prev, point, curr)
-            α2 = angle(curr, point, next)
-            d1 = distance(point, curr)
-            λ[current_ind] = (tan(α1 / 2) + tan(α2 / 2)) / abs(d1)
-            current_ind += 1
-
-        end
-    end
-    ## Normalize the vector to sum to 1
-    λ /= sum(λ)
-    return λ
+struct MeanValue <: AbstractBarycentricCoordinateMethod 
 end
 
+struct Wachspress <: AbstractBarycentricCoordinateMethod
+end
 # function mean_value_barycentric_coordinates(::PolygonTrait, ::PointTrait, )
 
 # ## Example
@@ -215,47 +147,6 @@ fig
 # ```
 
 
-"""
-    abstract type AbstractBarycentricCoordinateMethod
-
-Abstract supertype for barycentric coordinate methods.  
-The subtypes may serve as dispatch types, or may cache 
-some information about the target polygon.  
-
-## API
-The following methods must be implemented for all subtypes:
-- `barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polypoints::Vector{<: Point{N1, T1}}, point::Point{N2, T2})`
-"""
-abstract type AbstractBarycentricCoordinateMethod end
-
-# 
-# Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
-#     @boundscheck @assert length(λs) == length(polypoints)
-#     @boundscheck @assert length(polypoints) >= 3
-
-#     @error("Not implemented yet for method $(method).")
-# end
-
-# Base.@propagate_inbounds function barycentric_coordinates(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
-#     λs = zeros(promote_type(T1, T2), length(polypoints))
-#     barycentric_coordinates!(λs, method, polypoints, point)
-#     return λs
-# end
-
-# Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 <: Real, T2 <: Real, V}
-#     @boundscheck @assert length(values) == length(polypoints)
-#     @boundscheck @assert length(polypoints) >= 3
-#     λs = barycentric_coordinates(method, polypoints, point)
-#     return sum(λs .* values)
-# end
-
-
-
-struct MeanValue <: AbstractBarycentricCoordinateMethod 
-end
-
-struct Wachspress <: AbstractBarycentricCoordinateMethod
-end
 
 # ```@example barycentric
 n = 200
