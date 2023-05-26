@@ -53,7 +53,7 @@ export MeanValue
 # hidedecorations!(a)
 # f
 # ax_bbox = a.finallimits[]
-# ext = GeoInterface.Extent(NamedTuple{(:X, :Y)}(zip(minimum(ax_bbox), maximum(ax_bbox))))
+# ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(ax_bbox), maximum(ax_bbox))))
 # xrange = LinRange(ext.X..., widths(a.scene.px_area[])[1])
 # yrange = LinRange(ext.Y..., widths(a.scene.px_area[])[2])
 # @time mean_values = barycentric_interpolate.(
@@ -67,12 +67,16 @@ export MeanValue
 # hidedecorations!(ax)
 # cb = Colorbar(fig[1, 2], mvplt)
 # # Crop out everything outside the polygon
-# poly!(ax, GeometryBasics.Polygon(Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], [reverse(Point2f.(polygon_points))]); color = :white, xautolimits = false, yautolimits = false)
+# poly!(ax, GeometryOps.GeometryBasics.Polygon(Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], [reverse(Point2f.(polygon_points))]); color = :white, xautolimits = false, yautolimits = false)
 # fig
 # ```
 
 # ## Barycentric-coordinate API
-# In most cases, we actually want barycentric interpolation and have no interest in the coordinates themselves.  However, the coordinates can be useful for debugging, and so we provide an API for computing them as well.
+# In some cases, we actually want barycentric interpolation, and have no interest 
+# in the coordinates themselves.  
+# 
+# However, the coordinates can be useful for debugging, and when performing 3D rendering,
+# multiple barycentric values (depth, uv) are needed for depth buffering.
 #
 
 const _VecTypes = Union{Tuple{Vararg{T, N}}, GeometryBasics.StaticArraysCore.StaticArray{Tuple{N}, T, 1}} where {N, T}
