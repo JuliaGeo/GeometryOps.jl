@@ -2,6 +2,7 @@ using GeometryOps
 using Test
 
 using GeometryOps.GeoInterface
+using GeometryOps.GeometryBasics
 using ArchGDAL
 
 const GI = GeoInterface
