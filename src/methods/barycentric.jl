@@ -261,6 +261,18 @@ Specifically, this is:
 ```julia
 s1[1] * s2[2] - s1[2] * s2[1]
 ```
+
+## Extended help
+
+## Doctests
+
+```jldoctest
+julia> _det((1,0), (0,1))
+1
+
+julia> _det(Point2f(1, 2), Point2f(3, 4))
+-2.0f0
+```
 """
 function _det(s1::Point2{T1}, s2::Point2{T2}) where {T1 <: Real, T2 <: Real}
     return s1[1] * s2[2] - s1[2] * s2[1]
