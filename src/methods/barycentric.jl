@@ -26,7 +26,9 @@ export MeanValue
 # This example was taken from [this page of CGAL's documentation](https://doc.cgal.org/latest/Barycentric_coordinates_2/index.html).
 
 # ```@example barycentric
-# using GeometryBasics, GeometryOps, Makie
+# using GeometryOps, Makie
+# using GeometryOps.GeometryBasics
+# # Define a polygon
 # polygon_points = Point3f[
 # (0.03, 0.05, 0.00), (0.07, 0.04, 0.02), (0.10, 0.04, 0.04),
 # (0.14, 0.04, 0.06), (0.17, 0.07, 0.08), (0.20, 0.09, 0.10),
@@ -45,21 +47,23 @@ export MeanValue
 # (0.24, 0.25, 0.84), (0.21, 0.26, 0.86), (0.17, 0.26, 0.88),
 # (0.12, 0.24, 0.90), (0.07, 0.20, 0.92), (0.03, 0.15, 0.94),
 # (0.01, 0.10, 0.97), (0.02, 0.07, 1.00)]
+# # Plot it generally
 # f, a, p = poly(polygon_points; color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), shading = false, axis = (; aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "Makie"))
 # cb = Colorbar(f[1, 2], p.plots[1])
 # hidedecorations!(a)
 # f
 # ax_bbox = a.finallimits[]
 # ext = GeoInterface.Extent(NamedTuple{(:X, :Y)}(zip(minimum(ax_bbox), maximum(ax_bbox))))
-# poly_rast = Rasters.rasterize(GeometryBasics.Polygon(Point2f.(polygon_points)); ext = ext, size = tuple(round.(Int, widths(a.scene.px_area[]))...), fill = RGBAf(0,0,0,0))
+# xrange = LinRange(ext.X..., widths(a.scene.px_area[])[1])
+# yrange = LinRange(ext.Y..., widths(a.scene.px_area[])[2])
 # @time mean_values = barycentric_interpolate.(
 #     (MeanValue(),),
 #     (Point2f.(polygon_points),), 
 #     (last.(polygon_points,),),
-#     Point2f.(collect(poly_rast.dims[1]), collect(poly_rast.dims[2])')
+#     Point2f.(xrange, yrange')
 # )
 #
-# fig, ax, mvplt = heatmap(collect(poly_rast.dims[1]), collect(poly_rast.dims[2]), mean_values; colormap = cgrad(:jet, 18; categorical = true), axis = (; aspect = DataAspect(), title = "Barycentric coordinate based rendering", subtitle = "Mean value method"), colorrange = Makie.distinct_extrema_nan(zs))
+# fig, ax, mvplt = heatmap(xrange, yrange, mean_values; colormap = cgrad(:jet, 18; categorical = true), axis = (; aspect = DataAspect(), title = "Barycentric coordinate based rendering", subtitle = "Mean value method"), colorrange = Makie.distinct_extrema_nan(zs))
 # hidedecorations!(ax)
 # cb = Colorbar(fig[1, 2], mvplt)
 # # Crop out everything outside the polygon
@@ -406,8 +410,8 @@ function barycentric_interpolate(::MeanValue, exterior::AbstractVector{<: Point{
         rᵢ₋₁ = norm(sᵢ₋₁) # radius / Euclidean distance between points.
         rᵢ   = norm(sᵢ  ) # radius / Euclidean distance between points.
         rᵢ₊₁ = norm(sᵢ₊₁) # radius / Euclidean distance between points.
-        # Now, we set the interpolated value to the first point's value, multiplied
-        # by the weight computed relative to the first point in the polygon. 
+        ## Now, we set the interpolated value to the first point's value, multiplied
+        ## by the weight computed relative to the first point in the polygon. 
         wᵢ = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ
 
         interpolated_value += values[current_index] * wᵢ
@@ -416,13 +420,13 @@ function barycentric_interpolate(::MeanValue, exterior::AbstractVector{<: Point{
         current_index += 1
     
         for i in 2:l_hole
-            # Increment counters + set variables
+            ## Increment counters + set variables
             sᵢ₋₁ = sᵢ
             sᵢ   = sᵢ₊₁
             sᵢ₊₁ = hole[mod1(i+1, l_hole)] - point
             rᵢ₋₁ = rᵢ
             rᵢ   = rᵢ₊₁
-            rᵢ₊₁ = norm(sᵢ₊₁) # radius / Euclidean distance between points.
+            rᵢ₊₁ = norm(sᵢ₊₁) ## radius / Euclidean distance between points.
             wᵢ = (t_value(sᵢ₋₁, sᵢ, rᵢ₋₁, rᵢ) + t_value(sᵢ, sᵢ₊₁, rᵢ, rᵢ₊₁)) / rᵢ 
             interpolated_value += values[current_index] * wᵢ
             wₜₒₜ += wᵢ
