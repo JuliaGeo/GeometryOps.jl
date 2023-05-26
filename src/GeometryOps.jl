@@ -13,6 +13,7 @@ include("methods/signed_distance.jl")
 include("methods/signed_area.jl")
 include("methods/centroid.jl")
 include("methods/contains.jl")
+include("methods/barycentric.jl")
 include("transformations/reproject.jl")
 include("transformations/flip.jl")
 

@@ -1,4 +1,8 @@
 # # Barycentric coordinates
+
+export barycentric_coordinates, barycentric_coordinates!, barycentric_interpolate
+export MeanValue
+
 # Generalized barycentric coordinates are a generalization of barycentric coordinates, 
 # which are typically used in triangles, to arbitrary polygons. 
 
