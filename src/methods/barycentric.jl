@@ -45,32 +45,26 @@ export MeanValue
 # (0.24, 0.25, 0.84), (0.21, 0.26, 0.86), (0.17, 0.26, 0.88),
 # (0.12, 0.24, 0.90), (0.07, 0.20, 0.92), (0.03, 0.15, 0.94),
 # (0.01, 0.10, 0.97), (0.02, 0.07, 1.00)]
-# using MakieThemes
-# Makie.with_theme(MakieThemes.bbc()) do
-#     f, a, p = poly(polygon_points; color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), shading = false, axis = (; aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "Makie"))
-#     cb = Colorbar(f[1, 2], p.plots[1])
-#     hidedecorations!(a)
-#     f
-#     ax_bbox = a.finallimits[]
-#     ext = GeoInterface.Extent(NamedTuple{(:X, :Y)}(zip(minimum(ax_bbox), maximum(ax_bbox))))
-#     poly_rast = Rasters.rasterize(GeometryBasics.Polygon(Point2f.(polygon_points)); ext = ext, size = tuple(round.(Int, widths(a.scene.px_area[]))...), fill = RGBAf(0,0,0,0))
-#     @time mean_values = barycentric_interpolate.(
-#         (MeanValue(),),
-#         (Point2f.(polygon_points),), 
-#         (last.(polygon_points,),),
-#         Point2f.(collect(poly_rast.dims[1]), collect(poly_rast.dims[2])')
-#     )
-#     zs = last.(polygon_points)
-#     mean_values = map(mean_value_coordinate_field) do λs
-#         sum(λs .* zs)
-#     end
+# f, a, p = poly(polygon_points; color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), shading = false, axis = (; aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "Makie"))
+# cb = Colorbar(f[1, 2], p.plots[1])
+# hidedecorations!(a)
+# f
+# ax_bbox = a.finallimits[]
+# ext = GeoInterface.Extent(NamedTuple{(:X, :Y)}(zip(minimum(ax_bbox), maximum(ax_bbox))))
+# poly_rast = Rasters.rasterize(GeometryBasics.Polygon(Point2f.(polygon_points)); ext = ext, size = tuple(round.(Int, widths(a.scene.px_area[]))...), fill = RGBAf(0,0,0,0))
+# @time mean_values = barycentric_interpolate.(
+#     (MeanValue(),),
+#     (Point2f.(polygon_points),), 
+#     (last.(polygon_points,),),
+#     Point2f.(collect(poly_rast.dims[1]), collect(poly_rast.dims[2])')
+# )
 #
-#     fig, ax, mvplt = heatmap(collect(poly_rast.dims[1]), collect(poly_rast.dims[2]), mean_values; colormap = cgrad(:jet, 18; categorical = true), axis = (; aspect = DataAspect(), title = "Barycentric coordinate based rendering", subtitle = "Mean value method"), colorrange = Makie.distinct_extrema_nan(zs))
-#     hidedecorations!(ax)
-#     cb = Colorbar(fig[1, 2], mvplt)
-#     poly!(ax, GeometryBasics.Polygon(Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], [reverse(Point2f.(polygon_points))]); color = :white, xautolimits = false, yautolimits = false)
-#     fig
-# end
+# fig, ax, mvplt = heatmap(collect(poly_rast.dims[1]), collect(poly_rast.dims[2]), mean_values; colormap = cgrad(:jet, 18; categorical = true), axis = (; aspect = DataAspect(), title = "Barycentric coordinate based rendering", subtitle = "Mean value method"), colorrange = Makie.distinct_extrema_nan(zs))
+# hidedecorations!(ax)
+# cb = Colorbar(fig[1, 2], mvplt)
+# # Crop out everything outside the polygon
+# poly!(ax, GeometryBasics.Polygon(Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], [reverse(Point2f.(polygon_points))]); color = :white, xautolimits = false, yautolimits = false)
+# fig
 # ```
 
 # ## Barycentric-coordinate API
