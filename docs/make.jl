@@ -4,7 +4,7 @@ using Literate
 using Makie, CairoMakie
 CairoMakie.activate!(px_per_unit = 2, type = "png", inline = true) # TODO: make this svg
 
-DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps, GeometryBasics); recursive=true)
+DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps; using GeometryOps.GeometryBasics); recursive=true)
 
 source_path = joinpath(dirname(@__DIR__), "src")
 output_path = joinpath(@__DIR__, "src", "source")

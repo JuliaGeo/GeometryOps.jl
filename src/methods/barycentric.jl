@@ -63,7 +63,12 @@ export MeanValue
 #     Point2f.(xrange, yrange')
 # )
 #
-# fig, ax, mvplt = heatmap(xrange, yrange, mean_values; colormap = cgrad(:jet, 18; categorical = true), axis = (; aspect = DataAspect(), title = "Barycentric coordinate based rendering", subtitle = "Mean value method"), colorrange = Makie.distinct_extrema_nan(zs))
+# fig, ax, mvplt = heatmap(
+#     xrange, yrange, mean_values; 
+#     colormap = cgrad(:jet, 18; categorical = true), 
+#     axis = (; aspect = DataAspect(), title = "Barycentric coordinate based rendering", subtitle = "Mean value method"), 
+#     colorrange = Makie.distinct_extrema_nan(last.(polygon_points)),
+# )
 # hidedecorations!(ax)
 # cb = Colorbar(fig[1, 2], mvplt)
 # # Crop out everything outside the polygon
