@@ -3,7 +3,6 @@ using Test
 import GeoInterface as GI
 import GeometryOps as GO
 import GeoJSON
-using GeoInterfaceRecipes
 
 @testset "simplify" begin
     datadir = realpath(joinpath(dirname(pathof(GO)), "../test/data"))
