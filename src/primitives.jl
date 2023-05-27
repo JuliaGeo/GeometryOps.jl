@@ -19,7 +19,7 @@ flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 """
-apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw...)
+apply(f, ::Type{Target}, geom; crs=nothing) where Target = _apply(f, Target, geom; crs)
 
 _apply(f, ::Type{Target}, geom; crs)  where Target =
     _apply(f, Target, GI.trait(geom), geom; crs)
@@ -28,9 +28,8 @@ _apply(f, ::Type{Target}, ::Nothing, iterable; crs) where Target =
     map(x -> _apply(f, Target, x; crs), iterable)
 # Rewrap feature collections
 function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc)) where Target
-    features = map(GI.getfeature(fc)) do feature
-        _apply(f, Target, feature)
-    end 
+    applicator(feature) = _apply(f, Target, feature; crs)::GI.Feature
+    features = map(applicator, GI.getfeature(fc))
     return GI.FeatureCollection(features; crs)
 end
 # Rewrap features
@@ -42,7 +41,8 @@ end
 # Reconstruct nested geometries
 function _apply(f, ::Type{Target}, trait, geom; crs=GI.crs(geom))::(GI.geointerface_geomtype(trait)) where Target
     # TODO handle zero length...
-    geoms = map(g -> _apply(f, Target, g; crs), GI.getgeom(geom), )
+    applicator(g) = _apply(f, Target, g; crs)
+    geoms = map(applicator, GI.getgeom(geom))
     return rebuild(geom, geoms)
 end
 # Apply f to the target geometry
@@ -206,5 +206,3 @@ end
 function rebuild(trait::GI.PolygonTrait, geom::GB.Polygon, child_geoms; crs=nothing)
     Polygon(child_geoms[1], child_geoms[2:end])
 end
-
-

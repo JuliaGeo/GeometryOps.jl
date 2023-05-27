@@ -1,5 +1,23 @@
 abstract type SimplifyAlg end
 
+const MIN_POINTS = 3
+
+function checkargs(number, ratio, tol)
+    count(isnothing, (number, ratio, tol)) == 2 ||
+        error("Must provide one of `number`, `ratio` or `tol` keywords")
+    if !isnothing(ratio)
+        if ratio <= 0 || ratio > 1
+            error("`ratio` must be 0 < ratio <= 1. Got $ratio")
+        end
+    end
+    if !isnothing(number)
+        if number < MIN_POINTS
+            error("`number` must be $MIN_POINTS or larger. Got $number")
+        end
+    end
+    return nothing
+end
+
 """
     simplify(obj; tol=0.1, prefilter=true)
     simplify(::SimplifyAlg, obj)
@@ -56,39 +74,26 @@ simplify(alg::SimplifyAlg, data) = _simplify(alg, data)
 function _simplify(alg::SimplifyAlg, data)
     # Apply simplication to all curves, multipoints, and points,
     # reconstructing everything else around them.
-    apply(Union{PolygonTrait,AbstractCurveTrait,MultiPoint,PointTrait}, data) do geom
-        _simplify(trait(geom), alg, geom)
-    end
+    simplifier(geom) = _simplify(trait(geom), alg, geom)
+    apply(simplifier, Union{PolygonTrait,AbstractCurveTrait,MultiPoint,PointTrait}, data)
 end
 # For Point and MultiPoint traits we do nothing
 _simplify(::PointTrait, alg, geom) = geom
 _simplify(::MultiPointTrait, alg, geom) = geom
 function _simplify(::PolygonTrait, alg, geom)
     # Force treating children as LinearRing
-    lrs = map(GI.getgeom(geom)) do g
-        rebuild(g, _simplify(LinearRingTrait(), alg, g))
-    end
+    rebuilder(g) = rebuild(g, _simplify(LinearRingTrait(), alg, g))
+    lrs = map(rebuilder, GI.getgeom(geom))
     return rebuild(geom, lrs)
 end
 # For curves and rings we simplify
 _simplify(::AbstractCurveTrait, alg, geom) = rebuild(geom, simplify(alg, tuple_points(geom)))
 function _simplify(::LinearRingTrait, alg, geom)
-    GI.npoint(geom) < 4 && throw(ArgumentError("Invalid ring, has less than 4 points."))
-
     # Make a vector of points 
     points = tuple_points(geom)
 
     # Simplify it once
     simple = _simplify(alg, points)
-
-    # Reduce the tolerance and simplify until its valid
-    while !_isvalid(simple)
-        alg = settol(alg, alg.tol * 0.9)
-        simple = _simplify(alg, points)
-    end
-
-    # Close the ring if its not closed
-    point_equals_point(simple[begin], simple[end]) || push!(simple, simple[1])
 
     return rebuild(geom, simple)
 end
@@ -99,33 +104,36 @@ end
 Simplifies geometries by removing points less than
 `tol` distance from the line between its neighboring points.
 """
-@kwdef struct RadialDistance <: SimplifyAlg 
-    tol::Float64=0.1
+struct RadialDistance <: SimplifyAlg 
+    number::Union{Int64,Nothing}
+    ratio::Union{Float64,Nothing}
+    tol::Union{Float64,Nothing}
+end
+function RadialDistance(; number=nothing, ratio=nothing, tol=nothing)
+    checkargs(number, ratio, tol)
+    return RadialDistance(number, ratio, tol)
 end
 
-settol(::RadialDistance, tol) = RadialDistance(tol)
+settol(alg::RadialDistance, tol) = RadialDistance(alg.number, alg.radius, tol)
 
 function _simplify(alg::RadialDistance, points::Vector)
-    point = previous = points[1]
-    new_points = [previous]
-
+    previous = first(points)
+    distances = Array{Float64}(undef, length(points))
     for i in eachindex(points)
         point = points[i]
-        if squared_dist(point, previous) > alg.tol^2
-            push!(new_points, point)
-            previous = point
-        end
+        distances[i] = squared_dist(point, previous)
+        previous = point
     end
-
-    !isequal(previous, point) && push!(new_points, point)
-
-    return new_points
+    # This avoids taking the square root of each distance above
+    if !isnothing(alg.tol)
+        alg = settol(alg, tol^2)
+    end
+    return _get_points(alg, points, distances)
 end
 
 function squared_dist(p1, p2)
     dx = GI.x(p1) - GI.x(p2)
     dy = GI.y(p1) - GI.y(p2)
-
     return dx^2 + dy^2
 end
 
@@ -135,59 +143,68 @@ end
 Simplifies geometries by removing points below `tol`
 distance from the line between its neighboring points.
 """
-@kwdef struct DouglasPeucker <: SimplifyAlg
-    tol::Float64=0.1
-    prefilter::Bool=true
+struct DouglasPeucker <: SimplifyAlg
+    number::Union{Int64,Nothing}
+    ratio::Union{Float64,Nothing}
+    tol::Union{Float64,Nothing}
+    prefilter::Bool
+end
+function DouglasPeucker(; number=nothing, ratio=nothing, tol=nothing, prefilter=false)
+    checkargs(number, ratio, tol)
+    return DouglasPeucker(number, ratio, tol, prefilter)
 end
 
 settol(alg::DouglasPeucker, tol) = DouglasPeucker(tol, alg.prefilter)
 
 function _simplify(alg::DouglasPeucker, points::Vector)
-    length(points) <= 3 && return points
-    points = alg.prefilter ? simplify(RadialDistance(alg.tol), points) : points
+    length(points) <= MIN_POINTS && return points
+    # points = alg.prefilter ? simplify(RadialDistance(alg.tol), points) : points
+
+    distances = _build_tolerances(_squared_segdist, points)
+    @assert length(distances) == length(points)
+    return _get_points(alg, points, distances)
 
     # Defined the simplified point vector, starting with the first point
-    new_points = [points[1]]
-    # Iteratively add simplified points
-    _dp_step!(new_points, points, 1, length(points), alg.tol)
-    # Make sure the last point is included
-    push!(new_points, points[end])
-
-    return new_points
+    # new_points = [points[1]]
+    # # Iteratively add simplified points
+    # _dp_step!(new_points, points, 1, length(points), alg.tol)
+    # # Make sure the last point is included
+    # push!(new_points, points[end])
 end
 
-function _dp_step!(simplified, points::Vector, first::Integer, last::Integer, tol::Real)
-    max_dist = tol
-    index = 0
+# function _dp_step!(simplified, points::Vector, first::Integer, last::Integer, tol::Real)
+#     max_dist = tol
+#     index = 0
 
-    for i = first+1:last
-        dist = squared_segdist(points[i], points[first], points[last])
-        if dist > max_dist
-            index = i
-            max_dist = dist
-        end
-    end
+#     for i = first+1:last
+#         dist = squared_segdist(points[i], points[first], points[last])
+#         if dist > max_dist
+#             index = i
+#             max_dist = dist
+#         end
+#     end
 
-    if max_dist > tol
-        if (index - first > 1) 
-            _dp_step!(simplified, points, first, index, tol)
-        end
-        push!(simplified, points[index])
-        if (last - index > 1) 
-            _dp_step!(simplified, points, index, last, tol)
-        end
-    end
+#     if max_dist > tol
+#         if (index - first > 1) 
+#             _dp_step!(simplified, points, first, index, tol)
+#         end
+#         push!(simplified, points[index])
+#         if (last - index > 1) 
+#             _dp_step!(simplified, points, index, last, tol)
+#         end
+#     end
 
-    return nothing
-end
+#     return nothing
+# end
 
-function _isvalid(ring::Vector)
-    length(ring) < 3 && return false
-    length(ring) == 3 && point_equals_point(ring[3], ring[1]) && return false
-    return true
-end
+# function _isvalid(ring::Vector)
+#     length(ring) < 3 && return false
+#     length(ring) == 3 && point_equals_point(ring[3], ring[1]) && return false
+#     return true
+# end
+# point_equals_point(g1, g2) = !(GI.x(g1) == GI.x(g2) && GI.y(g1) == GI.y(g2))
 
-function squared_segdist(p, l1, l2)
+function _squared_segdist(l1, p, l2)
     x, y = GI.x(l1), GI.y(l1)
     dx = GI.x(l2) - x
     dy = GI.y(l2) - y
@@ -210,8 +227,6 @@ function squared_segdist(p, l1, l2)
     return dx^2 + dy^2
 end
 
-point_equals_point(g1, g2) = !(GI.x(g1) == GI.x(g2) && GI.y(g1) == GI.y(g2))
-tuple_points(geom) = map(p -> (Float64(GI.x(p)), Float64(GI.y(p))), GI.getpoint(geom))
 
 """
     VisvalingamWhyatt <: SimplifyAlg
@@ -236,105 +251,138 @@ struct VisvalingamWhyatt <: SimplifyAlg
     prefilter::Bool
 end
 function VisvalingamWhyatt(; number=nothing, ratio=nothing, tol=nothing, prefilter=false)
-    if count(isnothing, (number, ratio, tol)) == 2
-        return VisvalingamWhyatt(number, ratio, tol, prefilter)
-    else
-        error("Must provide one of `number`, `ratio` or `tol` keywords")
-    end
+    checkargs(number, ratio, tol)
+    return VisvalingamWhyatt(number, ratio, tol, prefilter)
 end
 
 settol(alg::VisvalingamWhyatt, tol) = VisvalingamWhyatt(alg.number, alg.ratio, tol, alg.prefilter)
 
 function _simplify(alg::VisvalingamWhyatt, points::Vector)
-    length(points) <= 2 && return points
-    areas = _build_areas(points)
+    length(points) <= MIN_POINTS && return points
+    areas = _build_tolerances(_triangle_double_area, points)
 
-    (; tol, number, ratio) = alg
-    isnothing(tol) || return _by_tol(alg, alg.tol, points, areas)
-    isnothing(number) || return _by_number(alg, alg.number, points, areas)
-    return _by_ratio(alg, alg.ratio, points, areas)
+    return _get_points(alg, points, areas)
 end
 
-_by_tol(alg, tol, points, areas) = points[areas .>= tol]
+# calculates the area of a triangle given its vertices
+_triangle_double_area(p1, p2, p3) =
+    abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2]))
 
-function _by_number(alg, n, points, areas)
-    tol = partialsort(areas, n)
-    return _by_tol(alg, tol, points, areas)[1:n]
-end
 
-function _by_ratio(alg, r, points, areas)
-    if r <= 0 || r > 1
-        error("Ratio must be 0 < r <= 1. Got $r")
-    end
-    return _by_number(alg, round(Int, r * length(points)), points, areas)
-end
+# Shared utils
 
-function _build_areas(points)
+function _build_tolerances(f, points)
     nmax = length(points)
-    real_areas = _triangle_areas(points)
+    real_tolerances = _flat_tolerances(f, points)
 
-    areas = copy(real_areas)
+    tolerances = copy(real_tolerances)
     i = collect(1:nmax)
 
-    min_vert = argmin(areas)
-    this_area = areas[min_vert]
-    _remove!(areas, min_vert)
+    min_vert = argmin(tolerances)
+    this_tolerance = tolerances[min_vert]
+    _remove!(tolerances, min_vert)
     deleteat!(i, min_vert)
 
-    while this_area < Inf
+    while this_tolerance < Inf
         skip = false
 
         if min_vert < length(i)
-            right_area = _triangle_area(
+            right_tolerance = f(
                 points[i[min_vert - 1]],
                 points[i[min_vert]],
                 points[i[min_vert + 1]],
             )
-            if right_area <= this_area
-                right_area = this_area
+            if right_tolerance <= this_tolerance
+                right_tolerance = this_tolerance
                 skip = min_vert == 1
             end
 
-            real_areas[i[min_vert]] = right_area
-            areas[min_vert] = right_area
+            real_tolerances[i[min_vert]] = right_tolerance
+            tolerances[min_vert] = right_tolerance
         end
 
         if min_vert > 2
-            left_area = _triangle_area(
+            left_tolerance = f(
                 points[i[min_vert - 2]],
                 points[i[min_vert - 1]],
                 points[i[min_vert]],
             )
-            if left_area <= this_area
-                left_area = this_area
+            if left_tolerance <= this_tolerance
+                left_tolerance = this_tolerance
                 skip = min_vert == 2
             end
-            real_areas[i[min_vert - 1]] = left_area
-            areas[min_vert - 1] = left_area
+            real_tolerances[i[min_vert - 1]] = left_tolerance
+            tolerances[min_vert - 1] = left_tolerance
         end
 
         if !skip
-            min_vert = argmin(areas)
+            min_vert = argmin(tolerances)
         end
         deleteat!(i, min_vert)
-        this_area = areas[min_vert]
-        _remove!(areas, min_vert)
+        this_tolerance = tolerances[min_vert]
+        _remove!(tolerances, min_vert)
     end
 
-    return real_areas
+    return real_tolerances
 end
 
+function tuple_points(geom)
+    points = Array{Tuple{Float64,Float64}}(undef, GI.ngeom(geom))
+    for (i, p) in enumerate(GI.getpoint(geom))
+        points[i] = (GI.x(p), GI.y(p))
+    end
+    return points
+end
 
-# calculates the area of a triangle given its vertices
-_triangle_area(p1, p2, p3) =
-    abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2])) / 2.0
+function _get_points(alg, points, tolerances)
+    (; tol, number, ratio) = alg
+    bit_indices = if !isnothing(tol) 
+        _tol_indices(alg.tol, points, tolerances)
+    elseif !isnothing(number) 
+        _number_indices(alg.number, points, tolerances)
+    else
+        _ratio_indices(alg.ratio, points, tolerances)
+    end
+    return points[bit_indices]
+end
 
-function _triangle_areas(points)
+function _tol_indices(tol, points, tolerances)
+    tolerances .>= tol
+end
+
+function _number_indices(n, points, tolerances)
+    tol = partialsort(tolerances, length(points) - n + 1)
+    bit_indices = _tol_indices(tol, points, tolerances)
+    nselected = sum(bit_indices)
+    # If there are multiple values exactly at `tol` we will get 
+    # the wrong output length. So we need to remove some.
+    while nselected > n
+        min_tol = Inf
+        min_i = 0
+        for i in eachindex(bit_indices)
+            bit_indices[i] || continue
+            if tolerances[i] < min_tol
+                min_tol = tolerances[i]
+                min_i = i
+            end
+        end
+        nselected -= 1
+        bit_indices[min_i] = false
+    end
+    return bit_indices 
+end
+
+function _ratio_indices(r, points, tolerances)
+    n = max(3, round(Int, r * length(points)))
+    return _number_indices(n, points, tolerances)
+end
+
+function _flat_tolerances(f, points)
     result = Array{Float64}(undef, length(points))
     result[1] = result[end] = Inf
 
     for i in 2:length(result) - 1
-        result[i] = _triangle_area(points[i-1], points[i], points[i+1])
+        result[i] = f(points[i-1], points[i], points[i+1])
     end
     return result
 end

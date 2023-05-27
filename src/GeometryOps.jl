@@ -8,6 +8,7 @@ const GI = GeoInterface
 const GB = GeometryBasics
 
 include("primitives.jl")
+include("utils.jl")
 include("methods/signed_distance.jl")
 include("methods/signed_area.jl")
 include("methods/centroid.jl")
