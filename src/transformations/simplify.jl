@@ -1,5 +1,13 @@
 abstract type SimplifyAlg end
 
+const SIMPLIFY_ALG_KEYWORDS = """
+## Keywords
+- `ratio`: the fraction of points that should remain after `simplify`. 
+    Useful as it will generalise for large collections of objects.
+- `number`: the number of points that should remain after `simplify`.
+    Less useful for large collections of mixed size objects.
+"""
+
 const MIN_POINTS = 3
 
 function checkargs(number, ratio, tol)
@@ -19,7 +27,7 @@ function checkargs(number, ratio, tol)
 end
 
 """
-    simplify(obj; tol=0.1)
+    simplify(obj; kw...)
     simplify(::SimplifyAlg, obj)
 
 Simplify a geometry, feature, feature collection, 
@@ -31,14 +39,14 @@ listed in order of increasing quality but decreaseing performance.
 
 `PoinTrait` and `MultiPointTrait` are returned unchanged.
 
-The default behaviour is `DouglasPeucker(; tol=0.1)`.
+The default behaviour is `simplify(DouglasPeucker(; kw...), obj)`.
+Pass in other [`SimplifyAlg`](@ref) to use other algorithms.
 
-Pass in constructed `SimplifyAlg`s to use other algorithms.
+# Example
 
-# Examples
+Simplify a polygon to have six points:
 
 ```jldoctest
-julia> 
 import GeoInterface as GI
 import GeometryOps as GO
 
@@ -64,11 +72,14 @@ poly = GI.Polygon([[
     [-70.594711, -33.406224],
     [-70.603637, -33.399918]]])
 
-julia> GO.simplify(DouglasPeucker(; tol=0.01), poly)
-Polygon(Array{Array{Float64,1},1}[[[-70.6036, -33.3999], [-70.684, -33.4045], [-70.7011, -33.4343], [-70.6943, -33.4584], [-70.6689, -33.4721], [-70.6098, -33.4681], [-70.5872, -33.4429], [-70.6036, -33.3999]]])
+simple = GO.simplify(poly; number=6)
+GI.npoint(simple)
+
+# output
+6
 ```
 """
-simplify(data; tol=0.1, prefilter=true) = _simplify(DouglasPeucker(; tol, prefilter), data)
+simplify(data; kw...) = _simplify(DouglasPeucker(; kw...), data)
 simplify(alg::SimplifyAlg, data) = _simplify(alg, data)
 
 function _simplify(alg::SimplifyAlg, data)
@@ -103,6 +114,9 @@ end
 
 Simplifies geometries by removing points less than
 `tol` distance from the line between its neighboring points.
+
+$SIMPLIFY_ALG_KEYWORDS
+- `tol`: the minimum distance between points.
 """
 struct RadialDistance <: SimplifyAlg 
     number::Union{Int64,Nothing}
@@ -121,9 +135,11 @@ function _simplify(alg::RadialDistance, points::Vector)
     distances = Array{Float64}(undef, length(points))
     for i in eachindex(points)
         point = points[i]
-        distances[i] = squared_dist(point, previous)
+        distances[i] = _squared_dist(point, previous)
         previous = point
     end
+    # Never remove the end points
+    distances[begin] = distances[end] = Inf
     # This avoids taking the square root of each distance above
     if !isnothing(alg.tol)
         alg = settol(alg, (alg.tol::Float64)^2)
@@ -131,7 +147,7 @@ function _simplify(alg::RadialDistance, points::Vector)
     return _get_points(alg, points, distances)
 end
 
-function squared_dist(p1, p2)
+function _squared_dist(p1, p2)
     dx = GI.x(p1) - GI.x(p2)
     dy = GI.y(p1) - GI.y(p2)
     return dx^2 + dy^2
@@ -140,8 +156,14 @@ end
 """
     DouglasPeucker <: SimplifyAlg
 
+    DouglasPeucker(; number, ratio, tol)
+
 Simplifies geometries by removing points below `tol`
 distance from the line between its neighboring points.
+
+$SIMPLIFY_ALG_KEYWORDS
+- `tol`: the minimum distance a point will be from the line
+    joining its neighboring points.
 """
 struct DouglasPeucker <: SimplifyAlg
     number::Union{Int64,Nothing}
@@ -158,51 +180,12 @@ settol(alg::DouglasPeucker, tol) = DouglasPeucker(alg.number, alg.ratio, tol, al
 
 function _simplify(alg::DouglasPeucker, points::Vector)
     length(points) <= MIN_POINTS && return points
+    # TODO do we need this?
     # points = alg.prefilter ? simplify(RadialDistance(alg.tol), points) : points
 
     distances = _build_tolerances(_squared_segdist, points)
-    @assert length(distances) == length(points)
     return _get_points(alg, points, distances)
-
-    # Defined the simplified point vector, starting with the first point
-    # new_points = [points[1]]
-    # # Iteratively add simplified points
-    # _dp_step!(new_points, points, 1, length(points), alg.tol)
-    # # Make sure the last point is included
-    # push!(new_points, points[end])
 end
-
-# function _dp_step!(simplified, points::Vector, first::Integer, last::Integer, tol::Real)
-#     max_dist = tol
-#     index = 0
-
-#     for i = first+1:last
-#         dist = squared_segdist(points[i], points[first], points[last])
-#         if dist > max_dist
-#             index = i
-#             max_dist = dist
-#         end
-#     end
-
-#     if max_dist > tol
-#         if (index - first > 1) 
-#             _dp_step!(simplified, points, first, index, tol)
-#         end
-#         push!(simplified, points[index])
-#         if (last - index > 1) 
-#             _dp_step!(simplified, points, index, last, tol)
-#         end
-#     end
-
-#     return nothing
-# end
-
-# function _isvalid(ring::Vector)
-#     length(ring) < 3 && return false
-#     length(ring) == 3 && point_equals_point(ring[3], ring[1]) && return false
-#     return true
-# end
-# point_equals_point(g1, g2) = !(GI.x(g1) == GI.x(g2) && GI.y(g1) == GI.y(g2))
 
 function _squared_segdist(l1, p, l2)
     x, y = GI.x(l1), GI.y(l1)
@@ -211,7 +194,6 @@ function _squared_segdist(l1, p, l2)
 
     if !iszero(dx) || !iszero(dy)
         t = ((GI.x(p) - x) * dx + (GI.y(p) - y) * dy) / (dx * dx + dy * dy)
-
         if t > 1
             x = GI.x(l2)
             y = GI.y(l2)
@@ -236,13 +218,9 @@ end
 Simplifies geometries by removing points below `tol`
 distance from the line between its neighboring points.
 
-# Keywords
-
-- `number`:
-- `ratio`:
-- `tol`:
-- `prefilter`: wether to use a `RadialDistance()` prefilter - 
-    for better performance with a slight loss of quality.
+$SIMPLIFY_ALG_KEYWORDS
+- `tol`: the minimum area of a triangle made with a point and
+    its neighboring points.
 """
 struct VisvalingamWhyatt <: SimplifyAlg 
     number::Union{Int,Nothing}
@@ -261,6 +239,10 @@ function _simplify(alg::VisvalingamWhyatt, points::Vector)
     length(points) <= MIN_POINTS && return points
     areas = _build_tolerances(_triangle_double_area, points)
 
+    # This avoids diving everything by two
+    if !isnothing(alg.tol)
+        alg = settol(alg, (alg.tol::Float64)*2)
+    end
     return _get_points(alg, points, areas)
 end
 
