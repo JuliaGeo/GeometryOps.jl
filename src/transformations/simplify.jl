@@ -19,7 +19,7 @@ function checkargs(number, ratio, tol)
 end
 
 """
-    simplify(obj; tol=0.1, prefilter=true)
+    simplify(obj; tol=0.1)
     simplify(::SimplifyAlg, obj)
 
 Simplify a geometry, feature, feature collection, 
@@ -31,7 +31,7 @@ listed in order of increasing quality but decreaseing performance.
 
 `PoinTrait` and `MultiPointTrait` are returned unchanged.
 
-The default behaviour is `DouglasPeucker(; tol=0.1, prefilter=true)`.
+The default behaviour is `DouglasPeucker(; tol=0.1)`.
 
 Pass in constructed `SimplifyAlg`s to use other algorithms.
 

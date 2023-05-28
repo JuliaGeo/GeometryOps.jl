@@ -19,13 +19,13 @@ flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 """
-apply(f, ::Type{Target}, geom; crs=nothing) where Target = _apply(f, Target, geom; crs)
+apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw...)
 
-_apply(f, ::Type{Target}, geom; crs)  where Target =
-    _apply(f, Target, GI.trait(geom), geom; crs)
+_apply(f, ::Type{Target}, geom; kw...)  where Target =
+    _apply(f, Target, GI.trait(geom), geom; kw...)
 # Try to _apply over iterables
-_apply(f, ::Type{Target}, ::Nothing, iterable; crs) where Target =
-    map(x -> _apply(f, Target, x; crs), iterable)
+_apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
+    map(x -> _apply(f, Target, x; kw...), iterable)
 # Rewrap feature collections
 function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc)) where Target
     applicator(feature) = _apply(f, Target, feature; crs)::GI.Feature
@@ -43,17 +43,17 @@ function _apply(f, ::Type{Target}, trait, geom; crs=GI.crs(geom))::(GI.geointerf
     # TODO handle zero length...
     applicator(g) = _apply(f, Target, g; crs)
     geoms = map(applicator, GI.getgeom(geom))
-    return rebuild(geom, geoms)
+    return rebuild(geom, geoms; crs)
 end
 # Apply f to the target geometry
-_apply(f, ::Type{Target}, ::Trait, geom; crs=nothing) where {Target,Trait<:Target} = f(geom)
+_apply(f, ::Type{Target}, ::Trait, geom; crs=crs(geom)) where {Target,Trait<:Target} = f(geom)
 # Fail if we hit PointTrait without running `f`
 _apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 # Specific cases to avoid method ambiguity
 _apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing) = f(geom)
-_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=nothing) = f(feature)
-_apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=nothing) = f(fc)
+_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=crs(feature)) = f(feature)
+_apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=crs(fc)) = f(fc)
 
 """
     unwrap(target::Type{<:AbstractTrait}, obj)
@@ -186,7 +186,7 @@ on geometries from other packages and specify how to rebuild them.
 
 (Maybe it should go into GeoInterface.jl)
 """
-rebuild(geom, child_geoms) = rebuild(GI.trait(geom), geom, child_geoms)
+rebuild(geom, child_geoms; kw...) = rebuild(GI.trait(geom), geom, child_geoms; kw...)
 function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom))
     T = GI.geointerface_geomtype(trait)
     if GI.is3d(geom)
