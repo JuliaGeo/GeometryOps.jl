@@ -114,7 +114,7 @@ function RadialDistance(; number=nothing, ratio=nothing, tol=nothing)
     return RadialDistance(number, ratio, tol)
 end
 
-settol(alg::RadialDistance, tol) = RadialDistance(alg.number, alg.radius, tol)
+settol(alg::RadialDistance, tol) = RadialDistance(alg.number, alg.ratio, tol)
 
 function _simplify(alg::RadialDistance, points::Vector)
     previous = first(points)
@@ -126,7 +126,7 @@ function _simplify(alg::RadialDistance, points::Vector)
     end
     # This avoids taking the square root of each distance above
     if !isnothing(alg.tol)
-        alg = settol(alg, tol^2)
+        alg = settol(alg, (alg.tol::Float64)^2)
     end
     return _get_points(alg, points, distances)
 end
@@ -154,7 +154,7 @@ function DouglasPeucker(; number=nothing, ratio=nothing, tol=nothing, prefilter=
     return DouglasPeucker(number, ratio, tol, prefilter)
 end
 
-settol(alg::DouglasPeucker, tol) = DouglasPeucker(tol, alg.prefilter)
+settol(alg::DouglasPeucker, tol) = DouglasPeucker(alg.number, alg.ratio, tol, alg.prefilter)
 
 function _simplify(alg::DouglasPeucker, points::Vector)
     length(points) <= MIN_POINTS && return points
@@ -337,11 +337,11 @@ end
 function _get_points(alg, points, tolerances)
     (; tol, number, ratio) = alg
     bit_indices = if !isnothing(tol) 
-        _tol_indices(alg.tol, points, tolerances)
+        _tol_indices(alg.tol::Float64, points, tolerances)
     elseif !isnothing(number) 
-        _number_indices(alg.number, points, tolerances)
+        _number_indices(alg.number::Int64, points, tolerances)
     else
-        _ratio_indices(alg.ratio, points, tolerances)
+        _ratio_indices(alg.ratio::Float64, points, tolerances)
     end
     return points[bit_indices]
 end

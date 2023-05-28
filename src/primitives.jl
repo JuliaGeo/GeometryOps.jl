@@ -46,14 +46,14 @@ function _apply(f, ::Type{Target}, trait, geom; crs=GI.crs(geom))::(GI.geointerf
     return rebuild(geom, geoms; crs)
 end
 # Apply f to the target geometry
-_apply(f, ::Type{Target}, ::Trait, geom; crs=crs(geom)) where {Target,Trait<:Target} = f(geom)
+_apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom)) where {Target,Trait<:Target} = f(geom)
 # Fail if we hit PointTrait without running `f`
 _apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 # Specific cases to avoid method ambiguity
 _apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing) = f(geom)
-_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=crs(feature)) = f(feature)
-_apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=crs(fc)) = f(fc)
+_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=GI.crs(feature)) = f(feature)
+_apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc)) = f(fc)
 
 """
     unwrap(target::Type{<:AbstractTrait}, obj)
@@ -74,7 +74,7 @@ unwrap(f, target::Type, ::Nothing, iterable) =
 # Rewrap feature collections
 unwrap(f, target::Type, ::GI.FeatureCollectionTrait, fc) =
     map(x -> unwrap(f, target, x), GI.getfeature(fc))
-unwrap(f, target::Type, ::GI.FeatureTrait, feature) = unwrap(f, target, geometry(feature))
+unwrap(f, target::Type, ::GI.FeatureTrait, feature) = unwrap(f, target, GI.geometry(feature))
 unwrap(f, target::Type, trait, geom) = map(g -> unwrap(f, target, g), GI.getgeom(geom))
 # Apply f to the target geometry
 unwrap(f, ::Type{Target}, ::Trait, geom) where {Target,Trait<:Target} = f(geom)
@@ -132,7 +132,9 @@ Ususally used in combination with `flatten`.
 reconstruct(geom, components) = first(_reconstruct(geom, components))
 
 _reconstruct(geom, components) = 
-    _reconstruct(typeof(GI.trait(first(components))), GI.trait(geom), geom, components, 1) 
+    _reconstruct(typeof(GI.trait(first(components))), geom, components, 1) 
+_reconstruct(::Type{Target}, geom, components, iter) where Target = 
+    _reconstruct(Target, GI.trait(geom), geom, components, iter)
 # Try to reconstruct over iterables
 function _reconstruct(::Type{Target}, ::Nothing, iterable, components, iter) where Target 
     vect = map(iterable) do x
@@ -147,11 +149,11 @@ function _reconstruct(::Type{Target}, ::GI.FeatureCollectionTrait, fc, component
         newfeature, iter = _reconstruct(Target, feature, components, iter)
         newfeature
     end
-    return FeatureCollection(features; crs=GI.crs(fc)), iter
+    return GI.FeatureCollection(features; crs=GI.crs(fc)), iter
 end
 function _reconstruct(::Type{Target}, ::GI.FeatureTrait, feature, components, iter) where Target 
-    geom, iter = _reconstruct(Target, geometry(feature), components, iter)
-    return Feature(geom; properties=GI.properties(feature), crs=GI.crs(feature)), iter
+    geom, iter = _reconstruct(Target, GI.geometry(feature), components, iter)
+    return GI.Feature(geom; properties=GI.properties(feature), crs=GI.crs(feature)), iter
 end
 function _reconstruct(::Type{Target}, trait, geom, components, iter) where Target
     geoms = map(GI.getgeom(geom)) do subgeom
