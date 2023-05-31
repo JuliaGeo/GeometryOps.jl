@@ -12,4 +12,7 @@ const AG = ArchGDAL
     @testset "Primitives" begin include("primitives.jl") end
     @testset "Signed Area" begin include("methods/signed_area.jl") end
     @testset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
+    @testset "Reproject" begin include("transformations/reproject.jl") end
+    @testset "Flip" begin include("transformations/flip.jl") end
+    @testset "Simplify" begin include("transformations/simplify.jl") end
 end

@@ -6,12 +6,12 @@ keeping the original structure (but not necessarily the
 original type).
 """
 function flip(geom) 
-    if GI.is3d(geom)
-        return apply(PointTrait, geom) do point
+    if _is3d(geom)
+        return apply(PointTrait, geom) do p
             (GI.y(p), GI.x(p), GI.z(p))
         end
     else
-        return apply(PointTrait, geom) do point
+        return apply(PointTrait, geom) do p
             (GI.y(p), GI.x(p))
         end
     end

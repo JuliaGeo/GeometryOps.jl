@@ -55,9 +55,3 @@ function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=no
         end
     end
 end
-
-_is3d(geom) = _is3d(GI.trait(geom), geom)
-_is3d(::GI.AbstractGeometryTrait, geom) = GI.is3d(geom)
-_is3d(::GI.Feature, feature) = _is3d(GI.geometry(feature))
-_is3d(::GI.FeatureCollection, fc) = _is3d(GI.getfeature(fc, 1))
-_is3d(::Nothing, geom) = _is3d(first(geom)) # Otherwise step into an itererable
