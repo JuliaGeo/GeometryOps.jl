@@ -51,7 +51,7 @@ export MeanValue
 # f, a, p = poly(polygon_points; color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), shading = false, axis = (; aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "Makie"))
 # cb = Colorbar(f[1, 2], p.plots[1])
 # hidedecorations!(a)
-# f
+# display(f)
 # ax_bbox = a.finallimits[]
 # ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(ax_bbox), maximum(ax_bbox))))
 # xrange = LinRange(ext.X..., widths(a.scene.px_area[])[1])
