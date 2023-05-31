@@ -209,18 +209,6 @@ Specifically, this is:
 ```julia
 s1[1] * s2[2] - s1[2] * s2[1]
 ```
-
-## Extended help
-
-## Doctests
-
-```jldoctest
-julia> _det((1,0), (0,1))
-1
-
-julia> _det(Point2f(1, 2), Point2f(3, 4))
--2.0f0
-```
 """
 function _det(s1::_VecTypes{2, T1}, s2::_VecTypes{2, T2}) where {T1 <: Real, T2 <: Real}
     return s1[1] * s2[2] - s1[2] * s2[1]
@@ -240,19 +228,6 @@ tᵢ = \\frac{\\mathrm{det}\\left(sᵢ, sᵢ₊₁\\right)}{rᵢ * rᵢ₊₁ + 
 ```
 
 [^HormannPresentation]: K. Hormann and N. Sukumar. Generalized Barycentric Coordinates in Computer Graphics and Computational Mechanics. Taylor & Fancis, CRC Press, 2017.
-
-## Extended help
-
-## Doctests
-
-First, we can test whether the T-value is 0 when the two points are the same:
-
-```jldoctest
-julia> t_value(Point2f(0,0), Point2f(1,0), 1, 1)
-0
-
-julia> t_value(Point2f(0, 1), Point2f(1, 0), 1, 2)
--0.5f0
 ```
 
 """

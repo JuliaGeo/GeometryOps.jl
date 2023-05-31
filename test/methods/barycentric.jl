@@ -13,4 +13,14 @@
         # Test that calculations with different number types (in this case Float64) are also accurate
         @test all(barycentric_coordinates(MeanValue(), Point2{Float64}[(0,0), (1,0), (0,1)], Point2{Float64}(1,1)) .≈ (-1,1,1))
     end
+    @testset "Tests for helper methods" begin
+        @testset "`t_value`" begin
+            @test GeometryOps.t_value(Point2f(0,0), Point2f(1,0), 1, 1) == 0
+            @test GeometryOps.t_value(Point2f(0, 1), Point2f(1, 0), 1, 2) == -0.5f0
+        end
+        @testset "`_det`" begin
+            @test GeometryOps._det((1,0), (0,1)) == 1f0
+            @test GeometryOps._det(Point2f(1, 2), Point2f(3, 4)) == -2.0f0
+        end
+    end
 end
