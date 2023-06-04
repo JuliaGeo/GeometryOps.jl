@@ -1,3 +1,7 @@
+# # Containment
+
+# This currently works for point-in-linestring or point-in-polygon.
+
 # More GeometryBasics code
 
 _cross(p1, p2, p3) = (GI.x(p1) - GI.x(p3)) * (GI.y(p2) - GI.y(p3)) - (GI.x(p2) - GI.x(p3)) * (GI.y(p1) - GI.y(p3))

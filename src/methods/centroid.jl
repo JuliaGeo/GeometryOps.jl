@@ -1,3 +1,5 @@
+# # Centroid
+
 export centroid
 
 # These are all GeometryBasics.jl methods so far.

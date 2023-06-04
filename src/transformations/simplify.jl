@@ -1,3 +1,23 @@
+# # Geometry simplification
+
+# This file holds implementations for the Douglas-Peucker and Visvalingam-Whyatt
+# algorithms for simplifying geometries (specifically polygons and lines).
+
+export simplify, VisvalingamWhyatt, DouglasPeucker
+
+
+"""
+    abstract type SimplifyAlg
+
+Abstract type for simplification algorithms.
+
+## API
+
+For now, the algorithm must hold the `number`, `ratio` and `tol` properties.  
+
+Simplification algorithm types can hook into the interface by implementing 
+the `_simplify(trait, alg, geom)` methods for whichever traits are necessary.
+"""
 abstract type SimplifyAlg end
 
 const SIMPLIFY_ALG_KEYWORDS = """
@@ -83,27 +103,27 @@ simplify(data; kw...) = _simplify(DouglasPeucker(; kw...), data)
 simplify(alg::SimplifyAlg, data) = _simplify(alg, data)
 
 function _simplify(alg::SimplifyAlg, data)
-    # Apply simplication to all curves, multipoints, and points,
-    # reconstructing everything else around them.
+    ## Apply simplication to all curves, multipoints, and points,
+    ## reconstructing everything else around them.
     simplifier(geom) = _simplify(trait(geom), alg, geom)
     apply(simplifier, Union{PolygonTrait,AbstractCurveTrait,MultiPoint,PointTrait}, data)
 end
-# For Point and MultiPoint traits we do nothing
+## For Point and MultiPoint traits we do nothing
 _simplify(::PointTrait, alg, geom) = geom
 _simplify(::MultiPointTrait, alg, geom) = geom
 function _simplify(::PolygonTrait, alg, geom)
-    # Force treating children as LinearRing
+    ## Force treating children as LinearRing
     rebuilder(g) = rebuild(g, _simplify(LinearRingTrait(), alg, g))
     lrs = map(rebuilder, GI.getgeom(geom))
     return rebuild(geom, lrs)
 end
-# For curves and rings we simplify
+## For curves and rings we simplify
 _simplify(::AbstractCurveTrait, alg, geom) = rebuild(geom, simplify(alg, tuple_points(geom)))
 function _simplify(::LinearRingTrait, alg, geom)
-    # Make a vector of points 
+    ## Make a vector of points 
     points = tuple_points(geom)
 
-    # Simplify it once
+    ## Simplify it once
     simple = _simplify(alg, points)
 
     return rebuild(geom, simple)
@@ -138,9 +158,9 @@ function _simplify(alg::RadialDistance, points::Vector)
         distances[i] = _squared_dist(point, previous)
         previous = point
     end
-    # Never remove the end points
+    ## Never remove the end points
     distances[begin] = distances[end] = Inf
-    # This avoids taking the square root of each distance above
+    ## This avoids taking the square root of each distance above
     if !isnothing(alg.tol)
         alg = settol(alg, (alg.tol::Float64)^2)
     end
@@ -180,8 +200,8 @@ settol(alg::DouglasPeucker, tol) = DouglasPeucker(alg.number, alg.ratio, tol, al
 
 function _simplify(alg::DouglasPeucker, points::Vector)
     length(points) <= MIN_POINTS && return points
-    # TODO do we need this?
-    # points = alg.prefilter ? simplify(RadialDistance(alg.tol), points) : points
+    ## TODO do we need this?
+    ## points = alg.prefilter ? simplify(RadialDistance(alg.tol), points) : points
 
     distances = _build_tolerances(_squared_segdist, points)
     return _get_points(alg, points, distances)
@@ -239,19 +259,19 @@ function _simplify(alg::VisvalingamWhyatt, points::Vector)
     length(points) <= MIN_POINTS && return points
     areas = _build_tolerances(_triangle_double_area, points)
 
-    # This avoids diving everything by two
+    ## This avoids diving everything by two
     if !isnothing(alg.tol)
         alg = settol(alg, (alg.tol::Float64)*2)
     end
     return _get_points(alg, points, areas)
 end
 
-# calculates the area of a triangle given its vertices
+## calculates the area of a triangle given its vertices
 _triangle_double_area(p1, p2, p3) =
     abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2]))
 
 
-# Shared utils
+# ### Shared utils
 
 function _build_tolerances(f, points)
     nmax = length(points)
@@ -340,8 +360,8 @@ function _number_indices(n, points, tolerances)
     tol = partialsort(tolerances, length(points) - n + 1)
     bit_indices = _tol_indices(tol, points, tolerances)
     nselected = sum(bit_indices)
-    # If there are multiple values exactly at `tol` we will get 
-    # the wrong output length. So we need to remove some.
+    ## If there are multiple values exactly at `tol` we will get 
+    ## the wrong output length. So we need to remove some.
     while nselected > n
         min_tol = Inf
         min_i = 0

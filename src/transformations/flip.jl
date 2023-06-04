@@ -1,3 +1,8 @@
+# # Coordinate flipping
+
+# This is a simple example of how to use the `apply` functionality in a function,
+# by flipping the x and y coordinates of a geometry.
+
 """
     flip(obj)
 

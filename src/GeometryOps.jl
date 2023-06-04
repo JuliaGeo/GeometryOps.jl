@@ -1,3 +1,5 @@
+# # GeometryOps.jl
+
 module GeometryOps
 
 using GeoInterface
