@@ -317,7 +317,11 @@ function tuple_points(geom)
 end
 
 function _get_points(alg, points, tolerances)
-    (; tol, number, ratio) = alg
+    ## This assumes that `alg` has the properties
+    ## `tol`, `number`, and `ratio` available...
+    tol = alg.tol
+    number = alg.number
+    ratio = alg.ratio
     bit_indices = if !isnothing(tol) 
         _tol_indices(alg.tol::Float64, points, tolerances)
     elseif !isnothing(number) 
