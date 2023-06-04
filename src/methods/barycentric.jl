@@ -47,33 +47,56 @@ export MeanValue
 # (0.24, 0.25, 0.84), (0.21, 0.26, 0.86), (0.17, 0.26, 0.88),
 # (0.12, 0.24, 0.90), (0.07, 0.20, 0.92), (0.03, 0.15, 0.94),
 # (0.01, 0.10, 0.97), (0.02, 0.07, 1.00)]
-# # Plot it generally
-# f, a, p = poly(polygon_points; color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), shading = false, axis = (; aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "Makie"))
-# cb = Colorbar(f[1, 2], p.plots[1])
-# hidedecorations!(a)
-# display(f)
-# ax_bbox = a.finallimits[]
-# ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(ax_bbox), maximum(ax_bbox))))
-# xrange = LinRange(ext.X..., widths(a.scene.px_area[])[1])
-# yrange = LinRange(ext.Y..., widths(a.scene.px_area[])[2])
-# @time mean_values = barycentric_interpolate.(
-#     (MeanValue(),),
-#     (Point2f.(polygon_points),), 
-#     (last.(polygon_points,),),
-#     Point2f.(xrange, yrange')
+# # Plot it!
+# # First, we'll plot the polygon using Makie's rendering:
+# f, a1, p1 = poly(
+#     polygon_points; 
+#     color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), 
+#     axis = (; 
+#         aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
+#     ), 
+#     figure = (; resolution = (800, 400),)
 # )
 #
-# fig, ax, mvplt = heatmap(
-#     xrange, yrange, mean_values; 
-#     colormap = cgrad(:jet, 18; categorical = true), 
-#     axis = (; aspect = DataAspect(), title = "Barycentric coordinate based rendering", subtitle = "Mean value method"), 
-#     colorrange = Makie.distinct_extrema_nan(last.(polygon_points)),
+# Makie.update_state_before_display!(f) # We have to call this explicitly, to get the axis limits correct
+# # Now that we've plotted the first polygon,
+# # we can render it using barycentric coordinates.
+# a1_bbox = a1.finallimits[] # First we get the extent of the axis
+# ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(a1_bbox), maximum(a1_bbox))))
+#
+# a2, p2box = poly( # Now, we plot a cropping rectangle around the axis so we only show the polygon
+#     f[1, 2], 
+#     GeometryOps.GeometryBasics.Polygon( # This is a rectangle with an internal hole shaped like the polygon.
+#         Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], 
+#         [reverse(Point2f.(polygon_points))]
+#     ); 
+#     color = :white, xautolimits = false, yautolimits = false,
+#     axis = (; 
+#         aspect = DataAspect(), title = "Barycentric coordinate based polygon rendering", subtitle = "GeometryOps",
+#         limits = (ext.X, ext.Y), 
+#     )
 # )
-# hidedecorations!(ax)
-# cb = Colorbar(fig[1, 2], mvplt)
-# # Crop out everything outside the polygon
-# poly!(ax, GeometryOps.GeometryBasics.Polygon(Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], [reverse(Point2f.(polygon_points))]); color = :white, xautolimits = false, yautolimits = false)
-# fig
+# hidedecorations!(a1)
+# hidedecorations!(a2)
+# cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
+# # Finally, we perform barycentric interpolation on a grid,
+# xrange = LinRange(ext.X..., widths(a2.scene.px_area[])[1] * 4) # 2 rendered pixels per "physical" pixel
+# yrange = LinRange(ext.Y..., widths(a2.scene.px_area[])[2] * 4) # 2 rendered pixels per "physical" pixel
+# @time mean_values = barycentric_interpolate.(
+#     (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
+#     (Point2f.(polygon_points),), # The polygon points as `Point2f`
+#     (last.(polygon_points,),),   # The values per polygon point - can be anything which supports addition and division
+#     Point2f.(xrange, yrange')    # The points at which to interpolate
+# )
+# # and render!
+# hm = heatmap!(
+#     a2, xrange, yrange, mean_values;
+#     colormap = p1.colormap, # Use the same colormap as the original polygon plot
+#     colorrange = p1.plots[1].colorrange[], # Access the rendered mesh plot's colorrange directly
+#     transformation = (; translation = Vec3f(0,0,-1)), # This gets the heatmap to render "behind" the previously plotted polygon
+#     xautolimits = false, yautolimits = false
+# )
+# f
 # ```
 
 # ## Barycentric-coordinate API
@@ -145,7 +168,7 @@ end
 # 3D polygons are considered to have their vertices in the XY plane, 
 # and the Z coordinate must represent some value.  This is to say that
 # the Z coordinate is interpreted as an M coordinate.
-Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polygon::Polygon{3, T1}, point::Point{2, T2}) where {T1 <: Real, T2 <: Real, V}
+Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polygon::Polygon{3, T1}, point::Point{2, T2}) where {T1 <: Real, T2 <: Real}
     exterior_point3s = decompose(Point{3, promote_type(T1, T2)}, polygon.exterior)
     exterior_values = getindex.(exterior_point3s, 3)
     exterior_points = Point2f.(exterior_point3s)
