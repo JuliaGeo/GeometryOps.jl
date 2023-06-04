@@ -132,12 +132,14 @@ Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{<: Real},
 
     @error("Not implemented yet for method $(method).")
 end
+Base.@propagate_inbounds barycentric_coordinates!(λs::Vector{<: Real}, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real} = barycentric_coordinates!(λs, MeanValue(), polypoints, point)
 
 Base.@propagate_inbounds function barycentric_coordinates(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
     λs = zeros(promote_type(T1, T2), length(polypoints))
     barycentric_coordinates!(λs, method, polypoints, point)
     return λs
 end
+Base.@propagate_inbounds barycentric_coordinates(polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real} = barycentric_coordinates(MeanValue(), polypoints, point)
 
 Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 <: Real, T2 <: Real, V}
     @boundscheck @assert length(values) == length(polypoints)
@@ -145,6 +147,7 @@ Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBaryce
     λs = barycentric_coordinates(method, polypoints, point)
     return sum(λs .* values)
 end
+Base.@propagate_inbounds barycentric_interpolate(polypoints::AbstractVector{<: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 <: Real, T2 <: Real, V} = barycentric_interpolate(MeanValue(), polypoints, values, point)
 
 Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, exterior::AbstractVector{<: Point{N, T1}}, interiors::AbstractVector{<: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 <: Real, T2 <: Real, V}
     @boundscheck @assert length(values) == length(exterior) + isempty(interiors) ? 0 : sum(length.(interiors))
@@ -152,6 +155,7 @@ Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBaryce
     λs = barycentric_coordinates(method, exterior, interiors, point)
     return sum(λs .* values)
 end
+Base.@propagate_inbounds barycentric_interpolate(exterior::AbstractVector{<: Point{N, T1}}, interiors::AbstractVector{<: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 <: Real, T2 <: Real, V} = barycentric_interpolate(MeanValue(), exterior, interiors, values, point)
 
 Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polygon::Polygon{2, T1}, values::AbstractVector{V}, point::Point{2, T2}) where {T1 <: Real, T2 <: Real, V}
     exterior = decompose(Point{2, promote_type(T1, T2)}, polygon.exterior)
@@ -164,6 +168,7 @@ Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBaryce
         return barycentric_interpolate(method, exterior, interiors, values, point)
     end
 end
+Base.@propagate_inbounds barycentric_interpolate(polygon::Polygon{2, T1}, values::AbstractVector{V}, point::Point{2, T2}) where {T1 <: Real, T2 <: Real, V} = barycentric_interpolate(MeanValue(), polygon, values, point)
 
 # 3D polygons are considered to have their vertices in the XY plane, 
 # and the Z coordinate must represent some value.  This is to say that
@@ -181,6 +186,7 @@ Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBaryce
         return barycentric_interpolate(method, exterior_points, interior_points, vcat(exterior_values, interior_values), point)
     end
 end
+Base.@propagate_inbounds barycentric_interpolate(polygon::Polygon{3, T1}, point::Point{2, T2}) where {T1 <: Real, T2 <: Real} = barycentric_interpolate(MeanValue(), polygon, point)
 
 # This method is the one which supports GeoInterface.
 Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polygon, values::AbstractVector{V}, point) where V
@@ -192,7 +198,7 @@ Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBaryce
     passable_point = GeoInterface.convert(GeometryBasics, point)
     return barycentric_interpolate(method, passable_polygon, Point2(passable_point))
 end
-
+Base.@propagate_inbounds barycentric_interpolate(polygon, values::AbstractVector{V}, point) where V = barycentric_interpolate(MeanValue(), polygon, values, point)
 
 """
     weighted_mean(weight::Real, x1, x2)
