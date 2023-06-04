@@ -1,3 +1,7 @@
+# # Primitive functions
+
+# This file mainly defines the [`apply`](@ref) function.
+
 """
     apply(f, target::Type{<:AbstractTrait}, obj; crs)
 
