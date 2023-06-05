@@ -1,3 +1,4 @@
+# # Utility functions
 
 _is3d(geom) = _is3d(GI.trait(geom), geom)
 _is3d(::GI.AbstractGeometryTrait, geom) = GI.is3d(geom)

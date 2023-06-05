@@ -1,4 +1,12 @@
+# # Geometry reprojection
 
+export reproject
+
+# This file is pretty simple - it simply reprojects a geometry pointwise from one CRS
+# to another. It uses the `Proj` package for the transformation, but this could be 
+# moved to an extension if needed.
+
+# This works using the [`apply`](@ref) functionality.
 
 """
     reproject(geometry; source_crs, target_crs, transform, always_xy, time)

@@ -1,4 +1,5 @@
 # # Signed area
+
 export signed_area
 
 # ## What is signed area?
@@ -11,7 +12,10 @@ export signed_area
 
 # To provide an example, consider this rectangle:
 # ```@example rect
-# using GeometryBasics
+# using GeometryOps
+# using GeometryOps.GeometryBasics
+# using Makie
+# 
 # rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
 # f, a, p = poly(rect; axis = (; aspect = DataAspect()))
 # ```
