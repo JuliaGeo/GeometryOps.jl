@@ -1,3 +1,11 @@
+# # Overlap checks
+
+export overlaps
+
+# This code checks whether geometries overlap with each other.  
+
+# It does not compute the overlap or intersection geometry.
+
 """
     overlaps(geom1, geom2)::Bool
 
@@ -5,7 +13,7 @@ Compare two Geometries of the same dimension and return true if their intersecti
 different from both but of the same dimension. It applies to Polygon/Polygon, LineString/LineString,
 Multipoint/Multipoint, MultiLineString/MultiLineString and MultiPolygon/MultiPolygon.
 
-# Examples
+## Examples
 ```jldoctest
 julia> poly1 = Polygon([[[0,0],[0,5],[5,5],[5,0],[0,0]]])
 Polygon(Array{Array{Float64,1},1}[[[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]]])

@@ -1,3 +1,13 @@
+# # Intersection checks
+
+export intersects, intersection
+
+# This code checks whether geometries intersect with each other. 
+
+# !!! note
+#     This does not compute intersections, only checks if they exist.
+
+
 """
     intersects(line_a, line_b)
 

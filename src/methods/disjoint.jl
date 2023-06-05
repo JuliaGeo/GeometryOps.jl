@@ -1,3 +1,5 @@
+# # Disjointness checks
+
 """
     disjoint(geom1, geom2)::Bool
 

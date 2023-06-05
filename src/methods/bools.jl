@@ -1,12 +1,19 @@
-# These are all adapted from Turf.jl
-# The may not necessarily be what want in the end but work for now
+# # Boolean conditions
+
+export isclockwise, isconcave
+export point_on_line, point_in_polygon, point_in_ring
+export line_on_line, line_in_polygon, polygon_in_polygon
+
+# These are all adapted from Turf.jl.
+
+# The may not necessarily be what want in the end but work for now!
 
 """
     isclockwise(line::Union{LineString, Vector{Position}})::Bool
 
 Take a ring and return true or false whether or not the ring is clockwise or counter-clockwise.
 
-# Examples
+## Examples
 ```jldoctest
 import GeoInterface as GI, GeometryOps as GO
 julia> 
@@ -35,7 +42,7 @@ end
 
 Take a polygon and return true or false as to whether it is concave or not.
 
-# Examples
+## Examples
 ```jldoctest
 import GeoInterface as GI, GeometryOps as GO
 julia> poly = GI.Polygon([[(0, 0), (0, 1), (1, 1), (1, 0), (0, 0)]])
@@ -108,7 +115,7 @@ end
 
 # Return `true` if each segment of `line1` is parallel to the correspondent segment of `line2`
 
-# # Examples
+# ## Examples
 # ```jldoctest
 # import GeoInterface as GI, GeometryOps as GO
 # julia> line1 = GI.LineString([(9.170356, 45.477985), (9.164434, 45.482551), (9.166644, 45.484003)])
@@ -149,7 +156,7 @@ end
 Return true if a point is on a line. Accept a optional parameter to ignore the
 start and end vertices of the linestring.
 
-# Examples
+## Examples
 ```jldoctest
 import GeoInterface as GI, GeometryOps as GO
 julia> point = GI.Point(1, 1)
@@ -229,7 +236,7 @@ end
 Take a Point and a Polygon and determine if the point
 resides inside the polygon. The polygon can be convex or concave. The function accounts for holes.
 
-# Examples
+## Examples
 ```jldoctest
 import GeoInterface as GI, GeometryOps as GO
 julia> point = (-77.0, 44.0)
@@ -347,7 +354,7 @@ function line_in_polygon(::LineStringTrait, line, ::PolygonTrait, poly)
     return inside
 end
 
-# TODO why were there two methods for this in Turf.jl?
+# TODO - why were there two methods for this in Turf.jl?
 function polygon_in_polygon(ft1, ft2, reverse::Bool=false)
     polybox1 = bbox(ft1)
     polybox2 = bbox(ft2)

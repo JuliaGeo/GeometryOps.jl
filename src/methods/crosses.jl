@@ -1,3 +1,4 @@
+# # Crossing checks
 
 """
      crosses(ft1::AbstractGeometry, ft2::AbstractGeometry)::Bool
@@ -6,7 +7,7 @@ Return `true` if the intersection results in a geometry whose dimension is one l
 the maximum dimension of the two source geometries and the intersection set is interior to
 both source geometries.
 
-# Examples
+## Examples
 ```jldoctest
 julia> line = LineString([[1, 1], [1, 2], [1, 3], [1, 4]])
 LineString(Array{Float64,1}[[1.0, 1.0], [1.0, 2.0], [1.0, 3.0], [1.0, 4.0]])

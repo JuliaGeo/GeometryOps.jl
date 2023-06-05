@@ -1,3 +1,8 @@
+# # Containment/withinness
+
+export within
+
+
 """
     within(geom1, geom)::Bool
 
@@ -6,8 +11,8 @@ The interiors of both geometries must intersect and, the interior and boundary o
 must not intersect the exterior of the secondary (geometry b).
 `within` returns the exact opposite result of `contains`.
 
-# Examples
-```jldoctest
+## Examples
+```jldoctest setup=:(using GeometryOps, GeometryBasics)
 julia> line = LineString([[1, 1], [1, 2], [1, 3], [1, 4]])
 LineString(Array{Float64,1}[[1.0, 1.0], [1.0, 2.0], [1.0, 3.0], [1.0, 4.0]])
 
