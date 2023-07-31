@@ -15,9 +15,8 @@ Take a ring and return true or false whether or not the ring is clockwise or cou
 
 ## Examples
 ```jldoctest
-import GeoInterface as GI, GeometryOps as GO
-julia> 
-line = GI.LineString([(0, 0), (1, 1), (1, 0), (0, 0)])
+julia> import GeoInterface as GI, GeometryOps as GO
+julia> line = GI.LineString([(0, 0), (1, 1), (1, 0), (0, 0)])
 GeoInterface.Wrappers.LineString{false, false, Vector{Tuple{Int64, Int64}}, Nothing, Nothing}([(0, 0), (1, 1), (1, 0), (0, 0)], nothing, nothing)
 
 julia> GO.isclockwise(line)
@@ -44,7 +43,7 @@ Take a polygon and return true or false as to whether it is concave or not.
 
 ## Examples
 ```jldoctest
-import GeoInterface as GI, GeometryOps as GO
+julia> import GeoInterface as GI, GeometryOps as GO
 julia> poly = GI.Polygon([[(0, 0), (0, 1), (1, 1), (1, 0), (0, 0)]])
 Polygon(Array{Array{Float64,1},1}[[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]])
 
@@ -158,7 +157,7 @@ start and end vertices of the linestring.
 
 ## Examples
 ```jldoctest
-import GeoInterface as GI, GeometryOps as GO
+julia> import GeoInterface as GI, GeometryOps as GO
 julia> point = GI.Point(1, 1)
 GeoInterface.Wrappers.Point{false, false, Tuple{Int64, Int64}, Nothing}((1, 1), nothing)
 
