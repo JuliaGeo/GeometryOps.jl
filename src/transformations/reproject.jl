@@ -18,7 +18,7 @@ Reproject any GeoInterface.jl compatible `geometry` from `source_crs` to `target
 The returned object will be constructed from `GeoInterface.WrapperGeometry`
 geometries, wrapping views of a `Vector{Proj.Point{D}}`, where `D` is the dimension.
 
-# Arguments
+## Arguments
 
 - `geometry`: Any GeoInterface.jl compatible geometries.
 - `source_crs`: the source coordinate referece system, as a GeoFormatTypes.jl object or a string.
@@ -28,7 +28,7 @@ If these a passed as keywords, `transform` will take priority.
 Without it `target_crs` is always needed, and `source_crs` is
 needed if it is not retreivable from the geometry with `GeoInterface.crs(geometry)`.
 
-# Keywords
+## Keywords
 
 -`always_xy`: force x, y coordinate order, `true` by default.
     `false` will expect and return points in the crs coordinate order.
