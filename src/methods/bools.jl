@@ -113,7 +113,7 @@ end
 # Return `true` if each segment of `line1` is parallel to the correspondent segment of `line2`
 
 # ## Examples
-# ```jldoctest
+# ```julia
 # import GeoInterface as GI, GeometryOps as GO
 # julia> line1 = GI.LineString([(9.170356, 45.477985), (9.164434, 45.482551), (9.166644, 45.484003)])
 # GeoInterface.Wrappers.LineString{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}([(9.170356, 45.477985), (9.164434, 45.482551), (9.166644, 45.484003)], nothing, nothing)
