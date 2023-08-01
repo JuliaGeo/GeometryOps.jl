@@ -27,16 +27,13 @@ Returns `nothing` if no point is found.
 # Examples
 
 ```jldoctest
-julia> 
-line1 = LineString([[124.584961,-12.768946],[126.738281,-17.224758]])
-LineString(Array{Float64,1}[[124.585, -12.7689], [126.738, -17.2248]])
-
-julia> line2 = LineString([[123.354492,-15.961329],[127.22168,-14.008696]])
-LineString(Array{Float64,1}[[123.354, -15.9613], [127.222, -14.0087]])
-
-julia> 
-intersection(line1, line2)
-Point([125.584, -14.8357])
+import GeoInterface as GI
+import GeometryOps as GO
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+GO.intersection(line1, line2)
+# output
+(125.58375366067547, -14.83572303404496)
 ```
 """
 intersection(line_a, line_b) = intersection(trait(line_a), line_a, trait(line_b), line_b)
@@ -50,7 +47,7 @@ function intersection(
 
     # TODO we can check all of these against the extent 
     # of line_b and continue the loop if theyre outside
-    for i in 1:GI.npoint(line1) - 1
+    for i in 1:GI.npoint(line_a) - 1
         for j in 1:GI.npoint(line_b) - 1
             a2 = GI.getpoint(line_a, i + 1)
             b2 = GI.getpoint(line_b, j + 1)

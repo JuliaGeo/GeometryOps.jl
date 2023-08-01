@@ -15,11 +15,10 @@ Take a ring and return true or false whether or not the ring is clockwise or cou
 
 ## Examples
 ```jldoctest
-julia> import GeoInterface as GI, GeometryOps as GO
-julia> line = GI.LineString([(0, 0), (1, 1), (1, 0), (0, 0)])
-GeoInterface.Wrappers.LineString{false, false, Vector{Tuple{Int64, Int64}}, Nothing, Nothing}([(0, 0), (1, 1), (1, 0), (0, 0)], nothing, nothing)
-
-julia> GO.isclockwise(line)
+import GeoInterface as GI, GeometryOps as GO
+line = GI.LineString([(0, 0), (1, 1), (1, 0), (0, 0)])
+GO.isclockwise(line)
+# output
 true
 ```
 """
@@ -43,11 +42,10 @@ Take a polygon and return true or false as to whether it is concave or not.
 
 ## Examples
 ```jldoctest
-julia> import GeoInterface as GI, GeometryOps as GO
-julia> poly = GI.Polygon([[(0, 0), (0, 1), (1, 1), (1, 0), (0, 0)]])
-Polygon(Array{Array{Float64,1},1}[[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]])
-
-julia> GO.isconcave(poly)
+import GeoInterface as GI, GeometryOps as GO
+poly = GI.Polygon([[(0, 0), (0, 1), (1, 1), (1, 0), (0, 0)]])
+GO.isconcave(poly)
+# output
 false
 ```
 """
@@ -157,14 +155,11 @@ start and end vertices of the linestring.
 
 ## Examples
 ```jldoctest
-julia> import GeoInterface as GI, GeometryOps as GO
-julia> point = GI.Point(1, 1)
-GeoInterface.Wrappers.Point{false, false, Tuple{Int64, Int64}, Nothing}((1, 1), nothing)
-
-julia> line = GI.LineString([(0, 0), (3, 3), (4, 4)])
-GeoInterface.Wrappers.LineString{false, false, Vector{Tuple{Int64, Int64}}, Nothing, Nothing}([(0, 0), (3, 3), (4, 4)], nothing, nothing)
-
-julia> GO.point_on_line(point, line)
+import GeoInterface as GI, GeometryOps as GO
+point = GI.Point(1, 1)
+line = GI.LineString([(0, 0), (3, 3), (4, 4)])
+GO.point_on_line(point, line)
+# output
 true
 ```
 """
@@ -238,13 +233,10 @@ resides inside the polygon. The polygon can be convex or concave. The function a
 ## Examples
 ```jldoctest
 import GeoInterface as GI, GeometryOps as GO
-julia> point = (-77.0, 44.0)
-(-77.0, 44.0)
-
-julia> poly = GI.Polygon([[[-81, 41], [-81, 47], [-72, 47], [-72, 41], [-81, 41]]])
-Polygon(Array{Array{Float64,1},1}[[[-81.0, 41.0], [-81.0, 47.0], [-72.0, 47.0], [-72.0, 41.0], [-81.0, 41.0]]])
-
-julia> GO.point_in_polygon(point, poly)
+point = (-77.0, 44.0)
+poly = GI.Polygon([[[-81, 41], [-81, 47], [-72, 47], [-72, 41], [-81, 41]]])
+GO.point_in_polygon(point, poly)
+# output
 true
 ```
 """
@@ -261,7 +253,7 @@ function point_in_polygon(p, polygon, ignore_boundary::Bool=false)::Bool
 end
 
 function point_in_ring(pt, ring, ignore_boundary::Bool=false)
-    GI.trait(polygon) isa Union{LineStringTrait,LinearRingTrait} || throw(ArgumentError("Not a ring"))
+    GI.trait(ring) isa Union{LineStringTrait,LinearRingTrait} || throw(ArgumentError("Not a ring"))
     inside = false
     n = GI.npoint(ring)
     p1 = first(GI.getpoint(ring))
