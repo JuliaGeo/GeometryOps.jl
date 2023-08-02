@@ -29,8 +29,8 @@ GO.intersection(line1, line2)
 ```
 """
 function intersects(a, b)
-    Extents.intersects(GI.extent(poly), GI.extent(line)) && return false
-    return isnothing(intersection(a, b)) # Probably faster ways to do this
+    Extents.intersects(GI.extent(a), GI.extent(b)) || return false
+    return !isnothing(intersection(a, b)) # Probably faster ways to do this
 end
 
 """
@@ -59,7 +59,7 @@ function _intersection(
     ::Union{LineStringTrait,LinearRingTrait}, line_b,
 )
     ext_a = GI.extent(line_a)
-    ext_a = GI.extent(line_b)
+    ext_b = GI.extent(line_b)
     Extents.intersects(ext_a, ext_b) || return false
 
     result = Tuple{Float64,Float64}[] # TODO handle 3d, and other Real ?

@@ -91,11 +91,11 @@ end
 equals(geo1, geo2) = _equals(trait(geo1), geo1, trait(geo2), geo2)
 
 _equals(::T, geo1, ::T, geo2) where T = error("Cant compare $T yet")
-function _equals(::T, geo1, ::T, geo2) where {T<:PointTrait}
+function _equals(::T, p1, ::T, p2) where {T<:PointTrait}
     GI.ncoord(p1) == GI.ncoord(p2) || return false
     GI.x(p1) == GI.x(p2) || return false
     GI.y(p1) == GI.y(p2) || return false
-    if is3d(p1)
+    if GI.is3d(p1)
         GI.z(p1) == GI.z(p2) || return false 
     end
     return true
@@ -113,7 +113,7 @@ end
 _equals(t1, geo1, t2, geo2) = false
 
 # """
-#     parallel(line1::LineString, line2::LineString)::Bool
+#     isparallel(line1::LineString, line2::LineString)::Bool
 
 # Return `true` if each segment of `line1` is parallel to the correspondent segment of `line2`
 
@@ -233,7 +233,7 @@ function point_on_segment(point, (start, stop); exclude_boundary::Symbol=:none):
 end
 
 """
-    point_in_polygon(point::Point, polygon::Union{Polygon, MultiPolygon}, ignoreBoundary::Bool=false)::Bool
+    point_in_polygon(point::Point, polygon::Union{Polygon, MultiPolygon}, ignore_boundary::Bool=false)::Bool
 
 Take a Point and a Polygon and determine if the point
 resides inside the polygon. The polygon can be convex or concave. The function accounts for holes.
@@ -265,7 +265,7 @@ function point_in_polygon(
     end
 
     # Then check the point is inside the exterior ring
-    point_in_ring(point, GI.getexterior(poly); ignore_boundary, check_extent=false) || return false
+    point_in_polygon(point, GI.getexterior(poly); ignore_boundary, check_extent=false) || return false
 
     # Finally make sure the point is not in any of the holes,
     # flipping the boundary condition
@@ -276,8 +276,8 @@ function point_in_polygon(
 end
 function point_in_polygon(
     ::PointTrait, pt, 
-    ::Union{LineStringTrait,LineStringTrait}, ring; 
-    ignore_boundary::Bool=false
+    ::Union{LineStringTrait,LinearRingTrait}, ring; 
+    ignore_boundary::Bool=false,
     check_extent::Bool=false,
 )::Bool
     # Cheaply check that the point is inside the ring extent
@@ -385,17 +385,20 @@ function line_in_polygon(
     return inside
 end
 
-function poly_in_poly(poly1, poly2)
+function polygon_in_polygon(poly1, poly2)
      # Check the extents intersect
-     Extents.instersects(GI.extent(poly1), GI.extent(poly2)) || return false
+     Extents.intersects(GI.extent(poly1), GI.extent(poly2)) || return false
      # Check all points in poly1 are in poly2
      for point in GI.getpoint(poly1)
          point_in_polygon(point, poly2) || return false
      end
+     # Check no points in poly2 are in poly1
      for point in GI.getpoint(poly2)
-         (point_in_polygon(point, poly1)) && return false
+         point_in_polygon(point, poly1; ignore_boundary=true) && return false
      end
-     
-     intersects(poly1, poly2)
-     return 
+     # Check poly1 does not intersect poly2
+     intersects(poly1, poly2) && return false
+
+     # poly1 must be in poly2
+     return true
  end

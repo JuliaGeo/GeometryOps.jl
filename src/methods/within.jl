@@ -24,10 +24,10 @@ true
 ```
 """
 within(g1, g2)::Bool = within(trait(g1), g1, trait(g2), g2)::Bool
-within(t1::FeatureTrait, g1, t2, g2)::Bool = within(GI.geometry(g1), g2)
-within(t1, g1, t2::FeatureTrait, g2)::Bool = within(g1, geometry(g2))
-within(t1::PointTrait, g1::LineStringTrait, t2, g2)::Bool = point_on_line(ft1, ft2, true)
-within(t1::PointTrait, g1, t2::PolygonTrait, g2)::Bool = point_in_polygon(ft1, ft2, true)
-within(t1::LineStringTrait, g1, t2::PolygonTrait, g2)::Bool = line_in_polygon(ft1, ft2)
-within(t1::LineStringTrait, g1, t2::LineStringTrait, g2)::Bool = line_on_line(ft1, ft2)
-within(t1::PolygonTrait, g1, t2::PolygonTrait, g2)::Bool = polygon_in_polygon(ft1, ft2, true)
+within(::FeatureTrait, g1, ::Any, g2)::Bool = within(GI.geometry(g1), g2)
+within(::Any, g1, t2::FeatureTrait, g2)::Bool = within(g1, geometry(g2))
+within(::PointTrait, g1, ::LineStringTrait, g2)::Bool = point_on_line(g1, g2; ignore_end_vertices=true)
+within(::PointTrait, g1, ::PolygonTrait, g2)::Bool = point_in_polygon(g1, g2; ignore_boundary=true)
+within(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = line_in_polygon(g1, g2)
+within(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_on_line(g1, g2)
+within(::PolygonTrait, g1, ::PolygonTrait, g2)::Bool = polygon_in_polygon(g1, g2)

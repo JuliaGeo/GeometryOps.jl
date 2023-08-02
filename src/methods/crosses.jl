@@ -22,8 +22,8 @@ true
 crosses(g1, g2)::Bool = crosses(trait(g1), g1, trait(g2), g2)::Bool
 crosses(t1::FeatureTrait, g1, t2, g2)::Bool = crosses(GI.geometry(g1), g2)
 crosses(t1, g1, t2::FeatureTrait, g2)::Bool = crosses(g1, geometry(g2))
-crosses(::MultiPointTrait, g1::LineStringTrait, , g2)::Bool = multipoint_cross_line(g1, g2)
-crosses(::MultiPointTrait, g1::PolygonTrait, , g2)::Bool = multipoint_cross_poly(g1, g2)
+crosses(::MultiPointTrait, g1, ::LineStringTrait, g2)::Bool = multipoint_cross_line(g1, g2)
+crosses(::MultiPointTrait, g1, ::PolygonTrait, g2)::Bool = multipoint_cross_poly(g1, g2)
 crosses(::LineStringTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_cross_lines(g2, g1)
 crosses(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = line_cross_poly(g1, g2)
 crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_cross_line(g1, g2)
@@ -36,16 +36,14 @@ function multipoint_cross_line(geom1, geom2)
     i = 1
     np2 = GI.npoint(geom2)
 
-    while i < GI.npoint(geom1) && !intPoint && !extPoint
+    while i < GI.npoint(geom1) && !int_point && !ext_point
         for j in 1:GI.npoint(geom2) - 1
-            inc_vertices = (j === 1 || j === np2 - 2) ? :none : :both
-
-            if is_point_on_segment(GI.getpoint(geom2, j), GI.getpoint(geom2.coordinates, j + 1), GI.getpoint(geom1, i), inc_vertices)
+            exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
+            if point_on_segment(GI.getpoint(geom1, i), (GI.getpoint(geom2, j), GI.getpoint(geom2, j + 1)); exclude_boundary)
                 int_point = true
             else
                 ext_point = true
             end
-
         end
         i += 1
     end
@@ -60,22 +58,22 @@ function line_cross_line(line1, line2)
     if !isnothing(inter)
         for i in 1:GI.npoint(line1) - 1
             for j in 1:GI.npoint(line2) - 1
-                inc_vertices = (j === 1 || j === np2 - 2) ? :none : :both
+                exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
                 pa = GI.getpoint(line1, i)
                 pb = GI.getpoint(line1, i + 1)
                 p = GI.getpoint(line2, j)
-                is_point_on_segment(pa, pb, p, inc_vertices) && return true
+                point_on_segment(p, (pa, pb); exclude_boundary) && return true
             end
         end
     end
     return false
 end
 
-function line_cross_poly(line, poly) = 
-
-    for line in flatten(AbstractCurveTrait, poly)
-        intersects(line)
+function line_cross_poly(line, poly)
+    for l in flatten(AbstractCurveTrait, poly)
+        intersects(line, l) && return true
     end
+    return false
 end
 
 function multipoint_cross_poly(mp, poly)
@@ -88,7 +86,7 @@ function multipoint_cross_poly(mp, poly)
         else
             ext_point = true
         end
-        in_point && ext_point && return true
+        int_point && ext_point && return true
     end
     return false
 end
