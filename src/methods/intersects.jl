@@ -14,8 +14,24 @@ export intersects, intersection
 Check if `line_a` intersects with `line_b`.
 
 These can be `LineTrait`, `LineStringTrait` or `LinearRingTrait`
+
+## Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+GO.intersection(line1, line2)
+
+# output
+(125.58375366067547, -14.83572303404496)
+```
 """
-intersects(a, b) = isnothing(intersection) # Probably faster ways to do this
+function intersects(a, b)
+    Extents.intersects(GI.extent(poly), GI.extent(line)) && return false
+    return isnothing(intersection(a, b)) # Probably faster ways to do this
+end
 
 """
     intersection(line_a, line_b)
@@ -24,43 +40,47 @@ Find a point that intersects LineStrings with two coordinates each.
 
 Returns `nothing` if no point is found.
 
-# Examples
+## Example
 
 ```jldoctest
-import GeoInterface as GI
-import GeometryOps as GO
+import GeoInterface as GI, GeometryOps as GO
+
 line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
 line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
 GO.intersection(line1, line2)
+
 # output
 (125.58375366067547, -14.83572303404496)
 ```
 """
-intersection(line_a, line_b) = intersection(trait(line_a), line_a, trait(line_b), line_b)
-function intersection(
+intersection(line_a, line_b) = _intersection(trait(line_a), line_a, trait(line_b), line_b)
+function _intersection(
     ::Union{LineStringTrait,LinearRingTrait}, line_a, 
     ::Union{LineStringTrait,LinearRingTrait}, line_b,
 )
+    ext_a = GI.extent(line_a)
+    ext_a = GI.extent(line_b)
+    Extents.intersects(ext_a, ext_b) || return false
+
     result = Tuple{Float64,Float64}[] # TODO handle 3d, and other Real ?
     a1 = GI.getpoint(line_a, 1)
     b1 = GI.getpoint(line_b, 1)
 
     # TODO we can check all of these against the extent 
-    # of line_b and continue the loop if theyre outside
+    # of line_b and continue the loop if they're outside
     for i in 1:GI.npoint(line_a) - 1
+        a2 = GI.getpoint(line_a, i + 1)
         for j in 1:GI.npoint(line_b) - 1
-            a2 = GI.getpoint(line_a, i + 1)
             b2 = GI.getpoint(line_b, j + 1)
             inter = _intersection((a1, a2), (b1, b2))
             isnothing(inter) || push!(result, inter)
-            a1 = a2
             b1 = b2
         end
+        a1 = a2
     end
     return unique!(result)
 end
-
-function intersection(::LineTrait, line_a, ::LineTrait, line_b)
+function _intersection(::LineTrait, line_a, ::LineTrait, line_b)
     a1 = GI.getpoint(line_a, 1)
     b1 = GI.getpoint(line_b, 1)
     a2 = GI.getpoint(line_a, 2)

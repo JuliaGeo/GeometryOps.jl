@@ -1,0 +1,8 @@
+isclockwise
+isconcave
+equals
+point_on_line
+point_in_polygon
+line_on_line
+line_in_polygon
+polygon_in_polygon
