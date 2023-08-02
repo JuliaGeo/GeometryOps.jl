@@ -100,12 +100,12 @@ function _equals(::T, p1, ::T, p2) where {T<:PointTrait}
     end
     return true
 end
-function _equals(::T, geo1, ::T, geo2) where {T<:AbstractCurveTrait}
+function _equals(::T, l1, ::T, l2) where {T<:AbstractCurveTrait}
     # Check line lengths match
-    GI.npoint(l1[1]) == GI.npoint(l2[1]) || return false
+    GI.npoint(l1) == GI.npoint(l2) || return false
 
     # Then check all points are the same
-    for (p1, p2) in zip(GI.getpoint(geo1), GI.getpoint(geo2))
+    for (p1, p2) in zip(GI.getpoint(l1), GI.getpoint(l2))
         equals(p1, p2) || return false
     end
     return true

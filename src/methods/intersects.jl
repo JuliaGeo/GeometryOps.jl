@@ -58,25 +58,24 @@ function _intersection(
     ::Union{LineStringTrait,LinearRingTrait}, line_a, 
     ::Union{LineStringTrait,LinearRingTrait}, line_b,
 )
-    ext_a = GI.extent(line_a)
-    ext_b = GI.extent(line_b)
-    Extents.intersects(ext_a, ext_b) || return false
-
     result = Tuple{Float64,Float64}[] # TODO handle 3d, and other Real ?
-    a1 = GI.getpoint(line_a, 1)
-    b1 = GI.getpoint(line_b, 1)
+    Extents.intersects(GI.extent(line_a), GI.extent(line_b)) || return result
 
-    # TODO we can check all of these against the extent 
-    # of line_b and continue the loop if they're outside
+    # a1 = GI.getpoint(line_a, 1)
+    # b1 = GI.getpoint(line_b, 1)
+
     for i in 1:GI.npoint(line_a) - 1
+        a1 = GI.getpoint(line_a, i)
         a2 = GI.getpoint(line_a, i + 1)
         for j in 1:GI.npoint(line_b) - 1
+            b1 = GI.getpoint(line_b, j)
             b2 = GI.getpoint(line_b, j + 1)
             inter = _intersection((a1, a2), (b1, b2))
+            @show a1 a2 b1 b2 inter
             isnothing(inter) || push!(result, inter)
-            b1 = b2
+            # b1 = b2
         end
-        a1 = a2
+        # a1 = a2
     end
     return unique!(result)
 end
@@ -88,7 +87,6 @@ function _intersection(::LineTrait, line_a, ::LineTrait, line_b)
 
     return _intersection((a1, a2), (b1, b2))
 end
-
 function _intersection((p11, p12)::Tuple, (p21, p22)::Tuple)
     # Get points from lines
     x1, y1 = GI.x(p11), GI.y(p11) 
@@ -105,6 +103,8 @@ function _intersection((p11, p12)::Tuple, (p21, p22)::Tuple)
             return nothing
         end
         return nothing
+    else
+        @show d a b
     end
 
     ã  = a / d
