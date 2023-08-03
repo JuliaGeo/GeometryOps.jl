@@ -63,154 +63,62 @@ If `xs` and `ys` are passed in they are used as the pixel center points.
 - `minpoints`: ignore polygons with less than `minpoints` points. 
 """
 polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...) 
-
-function polygonize(xs, ys, A::AbstractMatrix; minpoints=10)
-    ## This function uses a lazy map to get contours.  
-    contours = Iterators.map(get_contours(A)) do contour
-        poly = map(contour) do xy
-            x, y = Tuple(xy)
-            Point2f(x + first(xs) - 1, y + first(ys) - 1)
+function polygonize(xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix{Bool}; minpoints=3)
+    edges = Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}[] 
+    xstep, ystep = step(xs), step(ys)
+    rings = Vector{Tuple{Float64,Float64}}[]
+    for i in 2:size(A, 1)-1, j in 2:size(A, 2)-1
+        if A[i, j]
+            x1, y1 = xs[i], ys[j]
+            x2, y2 = x1 + xstep, y1 + ystep
+            A[i, j-1] || push!(edges, ((x1, y1), (x2, y1)))
+            A[i, j+1] || push!(edges, ((x1, y2), (x2, y2)))
+            A[i-1, j] || push!(edges, ((x1, y1), (x1, y2)))
+            A[i+1, j] || push!(edges, ((x2, y1), (x2, y2)))
+        end
+        @show edges
+    end
+    ring = Tuple{Float64,Float64}[]
+    dir = 1
+    while length(edges) > 0
+        edge = pop!(edges)
+        firstpoint = first(edge)
+        nextpoint = last(edge)
+        ring = [firstpoint, nextpoint]
+        push!(rings, ring)
+        while length(edges) > 0
+            i = findfirst(e -> nextpoint in e, edges)
+            isnothing(i) && break
+            edge = popat!(edges, i)
+            newpoint = otherpoint(edge, nextpoint)
+            if newpoint == firstpoint
+                push!(ring, newpoint)
+                break
+            # elseif newpoint in ring
+            #     i = findfirst(==(newpoint), ring)
+            #     splitring = ring[i:lastindex(ring)]
+            #     deleteat!(ring, i:lastindex(ring))
+            #     push!(splitring, newpoint)
+            #     push!(rings, splitring)
+            #     nextpoint = last(ring)
+            #     continue
+            else
+                push!(ring, newpoint)
+                nextpoint = newpoint
+            end
         end
     end
-    ## If we filter off the minimum points, then it's a hair more efficient
-    ## not to convert contours with length < missingpoints to polygons.
-    if minpoints > 1
-        contours = Iterators.filter(contours) do contour
-            length(contour) > minpoints
-        end
-       return map(Polygon, contours)
-    else
-        return map(Polygon, contours)
+    map(rings) do ring
+        GB.Polygon(map(GB.Point, ring))
     end
 end
+
+otherpoint(edge, point) = first(edge) == point ? last(edge) : first(edge)
+
+_position(mode, dir) = _deltas(mode)[dir]
+
 
 ## rotate direction clockwise
-rot_clockwise(dir) = (dir) % 8 + 1
+rot_clockwise(dir) = dir % 4 + 1
 ## rotate direction counterclockwise
-rot_counterclockwise(dir) = (dir + 6) % 8 + 1
-
-## move from current pixel to next in given direction
-function move(pixel, image, dir, dir_delta)
-    newp = pixel + dir_delta[dir]
-    height, width = size(image)
-    if (0 < newp[1] <= height) && (0 < newp[2] <= width)
-        if image[newp] != 0
-            return newp
-        end
-    end
-    return CartesianIndex(0, 0)
-end
-
-## finds direction between two given pixels
-function from_to(from, to, dir_delta)
-    delta = to - from
-    return findall(x -> x == delta, dir_delta)[1]
-end
-
-function detect_move(image, p0, p2, nbd, border, done, dir_delta)
-    dir = from_to(p0, p2, dir_delta)
-    moved = rot_clockwise(dir)
-    p1 = CartesianIndex(0, 0)
-    while moved != dir ## 3.1
-        newp = move(p0, image, moved, dir_delta)
-        if newp[1] != 0
-            p1 = newp
-            break
-        end
-        moved = rot_clockwise(moved)
-    end
-
-    if p1 == CartesianIndex(0, 0)
-        return
-    end
-
-    p2 = p1 ## 3.2
-    p3 = p0 ## 3.2
-    done .= false
-    while true
-        dir = from_to(p3, p2, dir_delta)
-        moved = rot_counterclockwise(dir)
-        p4 = CartesianIndex(0, 0)
-        done .= false
-        while true ## 3.3
-            p4 = move(p3, image, moved, dir_delta)
-            if p4[1] != 0
-                break
-            end
-            done[moved] = true
-            moved = rot_counterclockwise(moved)
-        end
-        push!(border, p3) ## 3.4
-        if p3[1] == size(image, 1) || done[3]
-            image[p3] = -nbd
-        elseif image[p3] == 1
-            image[p3] = nbd
-        end
-
-        if (p4 == p0 && p3 == p1) ## 3.5
-            break
-        end
-        p2 = p3
-        p3 = p4
-    end
-end
-
-"""
-   get_contours(A::AbstractMatrix)
-
-Returns contours as vectors of `CartesianIndex`.
-"""
-function get_contours(image::AbstractMatrix)
-    nbd = 1
-    lnbd = 1
-    image = Float64.(image)
-    contour_list = Vector{typeof(CartesianIndex[])}()
-    done = [false, false, false, false, false, false, false, false]
-
-    ## Clockwise Moore neighborhood.
-    dir_delta = (CartesianIndex(-1, 0), CartesianIndex(-1, 1), CartesianIndex(0, 1), CartesianIndex(1, 1), 
-                 CartesianIndex(1, 0), CartesianIndex(1, -1), CartesianIndex(0, -1), CartesianIndex(-1, -1))
-
-    height, width = size(image)
-
-    for i = 1:height
-        lnbd = 1
-        for j = 1:width
-            fji = image[i, j]
-            is_outer = (image[i, j] == 1 && (j == 1 || image[i, j-1] == 0)) ## 1 (a)
-            is_hole = (image[i, j] >= 1 && (j == width || image[i, j+1] == 0))
-
-            if is_outer || is_hole
-                ## 2
-                border = CartesianIndex[]
-                from = CartesianIndex(i, j)
-
-                if is_outer
-                    nbd += 1
-                    from -= CartesianIndex(0, 1)
-
-                else
-                    nbd += 1
-                    if fji > 1
-                        lnbd = fji
-                    end
-                    from += CartesianIndex(0, 1)
-                end
-
-                p0 = CartesianIndex(i, j)
-                detect_move(image, p0, from, nbd, border, done, dir_delta) ## 3
-                if isempty(border) ##TODO
-                    push!(border, p0)
-                    image[p0] = -nbd
-                end
-                push!(contour_list, border)
-            end
-            if fji != 0 && fji != 1
-                lnbd = abs(fji)
-            end
-
-        end
-    end
-
-    return contour_list
-end
+rot_counterclockwise(dir) = (dir + 2) % 4 + 1
