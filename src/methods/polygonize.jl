@@ -2,20 +2,14 @@
 
 export polygonize
 
-#= 
-
-The methods in this file convert a raster image into a set of polygons, 
-by contour detection using a clockwise Moore neighborhood method.
-
-The main entry point is the [`polygonize`](@ref) function.
-
-```@docs
-polygonize
-```
+# The methods in this file are able to convert a raster image into a set of polygons,
+# by contour detection using a clockwise Moore neighborhood method.
 
 ## Example
 
+#=
 Here's a basic example, using the `Makie.peaks()` function.  First, let's investigate the nature of the function:
+
 ```@example polygonize
 using Makie, GeometryOps
 n = 49
@@ -65,157 +59,122 @@ Convert matrix `A` to polygons.
 If `xs` and `ys` are passed in they are used as the pixel center points.
 
 # Keywords
-- `minpoints`: ignore polygons with less than `minpoints` points. 
+- `minpoints`: ignore polygons with less than `minpoints` points.
 """
-polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...) 
-
-function polygonize(xs, ys, A::AbstractMatrix; minpoints=10)
-    ## This function uses a lazy map to get contours.  
-    contours = Iterators.map(get_contours(A)) do contour
-        poly = map(contour) do xy
-            x, y = Tuple(xy)
-            Point2f(xs[x], ys[y])
-        end
-    end
-    ## If we filter off the minimum points, then it's a hair more efficient
-    ## not to convert contours with length < missingpoints to polygons.
-    if minpoints > 1
-        contours = Iterators.filter(contours) do contour
-            length(contour) > minpoints
-        end
-       return map(Polygon, contours)
-    else
-        return map(Polygon, contours)
-    end
+polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...)
+function polygonize(xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix{Bool})
+    # Make ranges of pixel bounds
+    xbounds = first(xs) - step(xs) / 2 : step(xs) : last(xs) + step(xs) / 2 
+    ybounds = first(ys) - step(ys) / 2 : step(ys) : last(ys) + step(ys) / 2 
+    return _polygonize(xbounds, ybounds, A)
+end
+function polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix{Bool})
+    _polygonize(xs, ys, A)
 end
 
-## rotate direction clockwise
-rot_clockwise(dir) = (dir) % 8 + 1
-## rotate direction counterclockwise
-rot_counterclockwise(dir) = (dir + 6) % 8 + 1
+function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix{Bool}) where T
+    # Define buffers for edges and rings
+    edges = Tuple{Tuple{T,T},Tuple{T,T}}[]
+    rings = Vector{Tuple{T,T}}[]
 
-## move from current pixel to next in given direction
-function move(pixel, image, dir, dir_delta)
-    newp = pixel + dir_delta[dir]
-    height, width = size(image)
-    if (0 < newp[1] <= height) && (0 < newp[2] <= width)
-        if image[newp] != 0
-            return newp
+    # First get all the valid edges between filled and empty pixels
+    si, sj = map(last, axes(A))
+    for i in axes(A, 1), j in axes(A, 2)
+        if A[i, j] # This is a pixel inside a polygon
+            # xs and ys hold pixel bounds
+            x1, x2 = xs[i], xs[i + 1] 
+            y1, y2 = ys[j], ys[j + 1] 
+            # We check the Von Neumann neighborhood to
+            # decide what edges are needed, if any.
+            (j == 1 || !A[i, j-1]) && push!(edges, ((x1, y1), (x2, y1)))
+            (i == 1 || !A[i-1, j]) && push!(edges, ((x1, y2), (x1, y1)))
+            (j == sj || !A[i, j+1]) && push!(edges, ((x2, y2), (x1, y2)))
+            (i == si || !A[i+1, j]) && push!(edges, ((x2, y1), (x2, y2)))
         end
     end
-    return CartesianIndex(0, 0)
-end
 
-## finds direction between two given pixels
-function from_to(from, to, dir_delta)
-    delta = to - from
-    return findall(x -> x == delta, dir_delta)[1]
-end
-
-function detect_move(image, p0, p2, nbd, border, done, dir_delta)
-    dir = from_to(p0, p2, dir_delta)
-    moved = rot_clockwise(dir)
-    p1 = CartesianIndex(0, 0)
-    while moved != dir ## 3.1
-        newp = move(p0, image, moved, dir_delta)
-        if newp[1] != 0
-            p1 = newp
-            break
-        end
-        moved = rot_clockwise(moved)
-    end
-
-    if p1 == CartesianIndex(0, 0)
-        return
-    end
-
-    p2 = p1 ## 3.2
-    p3 = p0 ## 3.2
-    done .= false
-    while true
-        dir = from_to(p3, p2, dir_delta)
-        moved = rot_counterclockwise(dir)
-        p4 = CartesianIndex(0, 0)
-        done .= false
-        while true ## 3.3
-            p4 = move(p3, image, moved, dir_delta)
-            if p4[1] != 0
+    # Then we join the edges into rings
+    # Sorting now lets us use `searchsortedlast` for speed later
+    sort!(edges)
+    while length(edges) > 0
+        # Take the last edge from the array
+        edge = pop!(edges)
+        firstpoint::Tuple{T,T} = first(edge)
+        nextpoint::Tuple{T,T} = last(edge)
+        ring = [firstpoint, nextpoint]
+        push!(rings, ring)
+        while length(edges) > 0
+            # Find an edge that matches the next point
+            i = searchsortedlast(edges, (nextpoint, nextpoint); by=first)
+            newedge = edges[i]
+            # When there are two possible edges, 
+            # choose the edge that has turned a corner
+            if (i > 1) && (otheredge = edges[i - 1]; otheredge[1] == newedge[1]) &&
+                (edge[2][1] == newedge[2][1] || edge[2][2] == newedge[2][2]) 
+                newedge = otheredge
+                deleteat!(edges, i - 1)
+            else
+                deleteat!(edges, i)
+            end
+            edge = newedge
+            # TODO: Here we actually need to check which edge maintains
+            # the winding direction
+            nextpoint = last(edge)
+            # Close the ring if we get to the start
+            if nextpoint == firstpoint
+                push!(ring, nextpoint)
                 break
+            # Split off another ring if we touch the current ring anywhere else
+            elseif nextpoint in ring
+                i = findfirst(==(nextpoint), ring)
+                splitring = ring[i:lastindex(ring)]
+                deleteat!(ring, i:lastindex(ring))
+                push!(ring, nextpoint)
+                push!(splitring, nextpoint)
+                push!(rings, splitring)
+                continue
+            # Otherwise keep adding points to the ring
+            else
+                push!(ring, nextpoint)
             end
-            done[moved] = true
-            moved = rot_counterclockwise(moved)
-        end
-        push!(border, p3) ## 3.4
-        if p3[1] == size(image, 1) || done[3]
-            image[p3] = -nbd
-        elseif image[p3] == 1
-            image[p3] = nbd
-        end
-
-        if (p4 == p0 && p3 == p1) ## 3.5
-            break
-        end
-        p2 = p3
-        p3 = p4
-    end
-end
-
-"""
-   get_contours(A::AbstractMatrix)
-
-Returns contours as vectors of `CartesianIndex`.
-"""
-function get_contours(image::AbstractMatrix)
-    nbd = 1
-    lnbd = 1
-    image = Float64.(image)
-    contour_list = Vector{typeof(CartesianIndex[])}()
-    done = [false, false, false, false, false, false, false, false]
-
-    ## Clockwise Moore neighborhood.
-    dir_delta = (CartesianIndex(-1, 0), CartesianIndex(-1, 1), CartesianIndex(0, 1), CartesianIndex(1, 1), 
-                 CartesianIndex(1, 0), CartesianIndex(1, -1), CartesianIndex(0, -1), CartesianIndex(-1, -1))
-
-    height, width = size(image)
-
-    for i = 1:height
-        lnbd = 1
-        for j = 1:width
-            fji = image[i, j]
-            is_outer = (image[i, j] == 1 && (j == 1 || image[i, j-1] == 0)) ## 1 (a)
-            is_hole = (image[i, j] >= 1 && (j == width || image[i, j+1] == 0))
-
-            if is_outer || is_hole
-                ## 2
-                border = CartesianIndex[]
-                from = CartesianIndex(i, j)
-
-                if is_outer
-                    nbd += 1
-                    from -= CartesianIndex(0, 1)
-
-                else
-                    nbd += 1
-                    if fji > 1
-                        lnbd = fji
-                    end
-                    from += CartesianIndex(0, 1)
-                end
-
-                p0 = CartesianIndex(i, j)
-                detect_move(image, p0, from, nbd, border, done, dir_delta) ## 3
-                if isempty(border) ##TODO
-                    push!(border, p0)
-                    image[p0] = -nbd
-                end
-                push!(contour_list, border)
-            end
-            if fji != 0 && fji != 1
-                lnbd = abs(fji)
-            end
-
         end
     end
 
-    return contour_list
+    # Define wrapped LinearRings, with embedded extents
+    # so we only calculate them once
+    linearrings = map(rings) do ring
+        extent = GI.extent(GI.LinearRing(ring))
+        GI.LinearRing(ring; extent)
+    end
+
+    # Separate exteriors from holes by winding direction
+    direction = last(xs) - first(xs) * last(ys) - first(ys)
+    exterior_inds = if direction > 0 
+        .!isclockwise.(linearrings)
+    else
+        isclockwise.(linearrings)
+    end
+    holes = map(x -> x, linearrings[.!exterior_inds])
+    exteriors = map(x -> x, linearrings[exterior_inds])
+    polygons = map(x -> [x], linearrings[exterior_inds])
+
+    # Then we add the holes to the polygons they are inside of
+    blacklist = Set{Int}()
+    for rings in polygons
+        exterior = rings[1]
+        for i in eachindex(holes)
+            i in blacklist && continue
+            hole = holes[i]
+            if polygon_in_polygon(hole, exterior)
+                # Hole is in the exterior, so add it to the ring list
+                push!(rings, hole)
+                # And blacklist it so we don't check it again
+                push!(blacklist, i)
+            end
+        end
+    end
+
+    # Finally, return wrapped Polygons
+    return GI.Polygon.(polygons)
 end
+
