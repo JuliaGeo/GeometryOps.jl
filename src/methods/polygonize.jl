@@ -64,23 +64,31 @@ If `xs` and `ys` are passed in they are used as the pixel center points.
 """
 polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...) 
 function polygonize(xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix{Bool}; minpoints=3)
+    # Define buffers for edges and rings
     edges = Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}[] 
-    xstep, ystep = step(xs) / 2, step(ys) /2
     rings = Vector{Tuple{Float64,Float64}}[]
-    # Get all the valid edges
-    for i in 2:size(A, 1)-1, j in 2:size(A, 2)-1
-        if A[i, j]
+
+    # First get all the valid edges between 
+    # filled an empty pixels
+    halfxstep, halfystep = step(xs) / 2, step(ys) /2
+    si, sj = map(last, axes(A))
+    for i in axes(A, 1), j in axes(A, 2)
+        if A[i, j] # This is a pixel inside a polygon
+            # xs and ys hold pixel centers
             x, y = xs[i], ys[j]
-            x1, y1 = x - xstep, y - ystep
-            x2, y2 = x + xstep, y + ystep
-            A[i, j-1] || push!(edges, ((x1, y1), (x2, y1)))
-            A[i-1, j] || push!(edges, ((x1, y2), (x1, y1)))
-            A[i, j+1] || push!(edges, ((x2, y2), (x1, y2)))
-            A[i+1, j] || push!(edges, ((x2, y1), (x2, y2)))
+            # So we need to offset the edges by half
+            x1, y1 = x - halfxstep, y - halfystep
+            x2, y2 = x + halfxstep, y + halfystep
+            # Then we check the Von Neumann neighborhood to
+            # decide what edges are needed, if any.
+            j >= 1 && !A[i, j-1] && push!(edges, ((x1, y1), (x2, y1)))
+            i >= 1 && !A[i-1, j] && push!(edges, ((x1, y2), (x1, y1)))
+            j <= sj && !A[i, j+1] && push!(edges, ((x2, y2), (x1, y2)))
+            i <= si && !A[i+1, j] && push!(edges, ((x2, y1), (x2, y2)))
         end
     end
-    # Then join them into polygons
-    ring = Tuple{Float64,Float64}[]
+
+    # Then we join the edges into rings
     sort!(edges)
     while length(edges) > 0
         edge = pop!(edges)
@@ -93,11 +101,11 @@ function polygonize(xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix{Bool
             i = searchsortedlast(edges, (nextpoint, nextpoint); by=first)
             edge = popat!(edges, i)
             nextpoint = last(edge)
-            # Close if we get to the start
+            # Close the ring if we get to the start
             if nextpoint == firstpoint
                 push!(ring, nextpoint)
                 break
-            # Split if we touch the ring
+                # Split off another ring if we touch the current ring anywhere else
             elseif nextpoint in ring
                 i = findfirst(==(nextpoint), ring)
                 splitring = ring[i:lastindex(ring)]
@@ -106,32 +114,41 @@ function polygonize(xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix{Bool
                 push!(splitring, nextpoint)
                 push!(rings, splitring)
                 continue
-            # Otherwise keep adding points
+            # Otherwise keep adding points to the ring
             else
                 push!(ring, nextpoint)
             end
         end
     end
-    i = 1
-    blacklist = Set{Int}()
-    polylist = Set{Int}()
-    lrings = map(rings) do ring
+
+    # Define wrapped LinearRings, with embedded extents 
+    # so we only calculate them once
+    linearrings = map(rings) do ring
         extent = GI.extent(GI.LinearRing(ring))
         GI.LinearRing(ring; extent)
     end
-    clk = isclockwise.(lrings)
-    exteriors = map(x -> [x], lrings[.!clk])
-    holes = map(x -> x, lrings[clk])
+    # Separate exteriors from holes by winding direction
+    clockwise = isclockwise.(linearrings)
+    polygons = map(x -> [x], linearrings[.!clockwise])
+    holes = map(x -> x, linearrings[clockwise])
+
+    # Then we add holes to the polygons
     blacklist = Set{Int}()
-    foreach(exteriors) do e
+    polylist = Set{Int}()
+    foreach(polygons) do rings
         for i in eachindex(holes)
             i in blacklist && continue
-            h = holes[i]
-            if polygon_in_polygon(h, e[1])
-                push!(e, h)
+            exterior = rings[1]
+            hole = holes[i]
+            if polygon_in_polygon(hole, exterior)
+                # Hole is in the exterior, so add it to the ring list
+                push!(rings, hole)
+                # And blacklist it so we don't check it again
                 push!(blacklist, i)
             end
         end
     end
-    return GI.Polygon.(exteriors)
+
+    # Finally, return wrapped Polygons
+    return GI.Polygon.(polygons)
 end
