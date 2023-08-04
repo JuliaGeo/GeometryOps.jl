@@ -397,7 +397,7 @@ function polygon_in_polygon(poly1, poly2)
          point_in_polygon(point, poly1; ignore_boundary=true) && return false
      end
      # Check poly1 does not intersect poly2
-     intersects(poly1, poly2) && return false
+     # overlaps(poly1, poly2) && return false
 
      # poly1 must be in poly2
      return true

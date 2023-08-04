@@ -71,7 +71,6 @@ function _intersection(
             b1 = GI.getpoint(line_b, j)
             b2 = GI.getpoint(line_b, j + 1)
             inter = _intersection((a1, a2), (b1, b2))
-            @show a1 a2 b1 b2 inter
             isnothing(inter) || push!(result, inter)
             # b1 = b2
         end
@@ -103,8 +102,6 @@ function _intersection((p11, p12)::Tuple, (p21, p22)::Tuple)
             return nothing
         end
         return nothing
-    else
-        @show d a b
     end
 
     ã  = a / d
