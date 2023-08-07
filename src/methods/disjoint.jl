@@ -27,4 +27,14 @@ disjoint(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = !line_on_line(g1,
 disjoint(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = !line_in_polygon(g2, g1)
 disjoint(::PolygonTrait, g1, ::PointTrait, g2)::Bool = !point_in_polygon(g2, g1)
 disjoint(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = !line_in_polygon(g2, g1)
-disjoint(::PolygonTrait, g1, ::PolygonTrait, g2)::Bool = !polygon_in_polygon(g2, g1)
+disjoint(::PolygonTrait, g1, ::PolygonTrait, g2)::Bool = polygon_disjoint(g2, g1)
+
+function polygon_disjoint(poly1, poly2)
+    for point in GI.getpoint(poly1)
+        point_in_polygon(point, poly2) && return false
+    end
+    for point in GI.getpoint(poly2)
+        point_in_polygon(point, poly1) && return false
+    end
+    return !line_intersects(poly1, poly2)
+end

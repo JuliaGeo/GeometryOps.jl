@@ -28,6 +28,8 @@ true
 overlaps(g1, g2)::Bool = overlaps(trait(g1), g1, trait(g2), g2)::Bool
 overlaps(t1::FeatureTrait, g1, t2, g2)::Bool = overlaps(GI.geometry(g1), g2)
 overlaps(t1, g1, t2::FeatureTrait, g2)::Bool = overlaps(g1, geometry(g2))
+overlaps(t1::FeatureTrait, g1, t2::FeatureTrait, g2)::Bool = overlaps(geometry(g1), geometry(g2))
+overlaps(::PolygonTrait, mp, ::MultiPolygonTrait, p)::Bool = overlaps(p, mp)
 function overlaps(::MultiPointTrait, g1, ::MultiPointTrait, g2)::Bool 
     for p1 in GI.getpoint(g1)
         for p2 in GI.getpoint(g2)
@@ -36,18 +38,15 @@ function overlaps(::MultiPointTrait, g1, ::MultiPointTrait, g2)::Bool
     end
 end
 function overlaps(::PolygonTrait, g1, ::PolygonTrait, g2)::Bool
-    line1 = polygon_to_line(g1)
-    line2 = polygon_to_line(g2)
-    return intersects(line1, line2)
+    return line_intersects(g1, g2)
 end
-overlaps(::PolygonTrait, mp, ::MultiPointTrait, p)::Bool = overlaps(p, mp)
-function overlaps(t1::MultiPolygonTrait, mp, t2::Polygon, p1)::Bool
+function overlaps(t1::MultiPolygonTrait, mp, t2::PolygonTrait, p1)::Bool
     for p2 in GI.getgeom(mp)
-        overlaps(p1, thp2)
+        overlaps(p1, thp2) && return true
     end
 end
 function overlaps(::MultiPolygonTrait, g1, ::MultiPolygonTrait, g2)::Bool
     for p1 in GI.getgeom(g1)
-        overlaps(PolygonTrait(), mp, PolygonTrait(), p1)
+        overlaps(PolygonTrait(), mp, PolygonTrait(), p1) && return true
     end
 end

@@ -7,9 +7,11 @@ export intersects, intersection
 # !!! note
 #     This does not compute intersections, only checks if they exist.
 
+const MEETS_OPEN = 1
+const MEETS_CLOSED = 0
 
 """
-    intersects(line_a, line_b)
+    line_intersects(line_a, line_b)
 
 Check if `line_a` intersects with `line_b`.
 
@@ -28,13 +30,33 @@ GO.intersection(line1, line2)
 (125.58375366067547, -14.83572303404496)
 ```
 """
-function intersects(a, b)
-    Extents.intersects(GI.extent(a), GI.extent(b)) || return false
-    return !isnothing(intersection(a, b)) # Probably faster ways to do this
+line_intersects(a, b; kw...) = line_intersects(trait(a), a, trait(b), b; kw...)
+# Skip to_edges for LineTrait
+function line_intersects(::GI.LineTrait, a, ::GI.LineTrait, b; meets=MEETS_OPEN)
+    a1 = _tuple_point(GI.getpoint(a, 1))
+    b1 = _tuple_point(GI.getpoint(b, 1))
+    a2 = _tuple_point(GI.getpoint(a, 2))
+    b2 = _tuple_point(GI.getpoint(b, 2))
+    return ExactPredicates.meet(a1, a2, b1, b2) == meets
+end
+function line_intersects(::GI.AbstractTrait, a, ::GI.AbstractTrait, b; kw...)
+    edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
+    return line_intersects(edges_a, edges_b; kw...)
+end
+function line_intersects(edges_a::Vector{Edge}, edges_b::Vector{Edge}; meets=MEETS_OPEN)
+    # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
+
+    for edge_a in edges_a
+        for edge_b in edges_b
+            @show edge_a edge_b
+            ExactPredicates.meet(edge_a..., edge_b...) == meets && return true 
+        end
+    end
+    return false
 end
 
 """
-    intersection(line_a, line_b)
+    line_intersection(line_a, line_b)
 
 Find a point that intersects LineStrings with two coordinates each.
 
@@ -53,41 +75,28 @@ GO.intersection(line1, line2)
 (125.58375366067547, -14.83572303404496)
 ```
 """
-intersection(line_a, line_b) = _intersection(trait(line_a), line_a, trait(line_b), line_b)
-function _intersection(
-    ::Union{LineStringTrait,LinearRingTrait}, line_a, 
-    ::Union{LineStringTrait,LinearRingTrait}, line_b,
-)
-    result = Tuple{Float64,Float64}[] # TODO handle 3d, and other Real ?
-    Extents.intersects(GI.extent(line_a), GI.extent(line_b)) || return result
-
-    # a1 = GI.getpoint(line_a, 1)
-    # b1 = GI.getpoint(line_b, 1)
-
-    for i in 1:GI.npoint(line_a) - 1
-        a1 = GI.getpoint(line_a, i)
-        a2 = GI.getpoint(line_a, i + 1)
-        for j in 1:GI.npoint(line_b) - 1
-            b1 = GI.getpoint(line_b, j)
-            b2 = GI.getpoint(line_b, j + 1)
-            inter = _intersection((a1, a2), (b1, b2))
-            @show a1 a2 b1 b2 inter
-            isnothing(inter) || push!(result, inter)
-            # b1 = b2
+line_intersection(line_a, line_b) = line_intersection(trait(line_a), line_a, trait(line_b), line_b)
+function line_intersection(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)
+    Extents.intersects(GI.extent(a), GI.extent(b)) || return nothing
+    result = Tuple{Float64,Float64}[]
+    edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
+    for edge_a in edges_a
+        for edge_b in edges_b
+            x = _line_intersection(edge_a, edge_b)
+            isnothing(x) || push!(result, x)
         end
-        # a1 = a2
     end
-    return unique!(result)
+    return result
 end
-function _intersection(::LineTrait, line_a, ::LineTrait, line_b)
+function line_intersection(::GI.LineTrait, line_a, ::GI.LineTrait, line_b)
     a1 = GI.getpoint(line_a, 1)
     b1 = GI.getpoint(line_b, 1)
     a2 = GI.getpoint(line_a, 2)
     b2 = GI.getpoint(line_b, 2)
 
-    return _intersection((a1, a2), (b1, b2))
+    return _line_intersection((a1, a2), (b1, b2))
 end
-function _intersection((p11, p12)::Tuple, (p21, p22)::Tuple)
+function _line_intersection((p11, p12)::Tuple, (p21, p22)::Tuple)
     # Get points from lines
     x1, y1 = GI.x(p11), GI.y(p11) 
     x2, y2 = GI.x(p12), GI.y(p12)
@@ -103,8 +112,6 @@ function _intersection((p11, p12)::Tuple, (p21, p22)::Tuple)
             return nothing
         end
         return nothing
-    else
-        @show d a b
     end
 
     ã  = a / d

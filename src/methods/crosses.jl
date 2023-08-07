@@ -1,7 +1,7 @@
 # # Crossing checks
 
 """
-     crosses(ft1::AbstractGeometry, ft2::AbstractGeometry)::Bool
+     crosses(geom1, geom2)::Bool
 
 Return `true` if the intersection results in a geometry whose dimension is one less than
 the maximum dimension of the two source geometries and the intersection set is interior to
@@ -9,28 +9,28 @@ both source geometries.
 
 ## Examples
 ```jldoctest
-julia> line = LineString([[1, 1], [1, 2], [1, 3], [1, 4]])
-LineString(Array{Float64,1}[[1.0, 1.0], [1.0, 2.0], [1.0, 3.0], [1.0, 4.0]])
+line1 = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
+line2 = GI.LineString([(-2, 2), (4, 2)])
 
-julia> line2 = LineString([[-2, 2], [4, 2]])
-LineString(Array{Float64,1}[[-2.0, 2.0], [4.0, 2.0]])
-
-julia> crosses(line2, line)
+GO.crosses(line1, line2)
+GO.line_intersects(line1, line2)
+GO.to_edges(line1)
+GO.to_edges(line2)
 true
 ```
 """
 crosses(g1, g2)::Bool = crosses(trait(g1), g1, trait(g2), g2)::Bool
 crosses(t1::FeatureTrait, g1, t2, g2)::Bool = crosses(GI.geometry(g1), g2)
 crosses(t1, g1, t2::FeatureTrait, g2)::Bool = crosses(g1, geometry(g2))
-crosses(::MultiPointTrait, g1, ::LineStringTrait, g2)::Bool = multipoint_cross_line(g1, g2)
-crosses(::MultiPointTrait, g1, ::PolygonTrait, g2)::Bool = multipoint_cross_poly(g1, g2)
-crosses(::LineStringTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_cross_lines(g2, g1)
-crosses(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = line_cross_poly(g1, g2)
-crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_cross_line(g1, g2)
-crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_cross_poly(g2, g1)
-crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_cross_poly(g2, g1)
+crosses(::MultiPointTrait, g1, ::LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)
+crosses(::MultiPointTrait, g1, ::PolygonTrait, g2)::Bool = multipoint_crosses_poly(g1, g2)
+crosses(::LineStringTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_lines(g2, g1)
+crosses(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = line_crosses_poly(g1, g2)
+crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_line(g1, g2)
+crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
+crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
 
-function multipoint_cross_line(geom1, geom2)
+function multipoint_crosses_line(geom1, geom2)
     int_point = false
     ext_point = false
     i = 1
@@ -51,11 +51,9 @@ function multipoint_cross_line(geom1, geom2)
     return int_point && ext_point
 end
 
-function line_cross_line(line1, line2)
-    inter = intersection(line1, line2)
-
+function line_crosses_line(line1, line2)
     np2 = GI.npoint(line2)
-    if !isnothing(inter)
+    if line_intersects(line1, line2; meets=MEETS_CLOSED)
         for i in 1:GI.npoint(line1) - 1
             for j in 1:GI.npoint(line2) - 1
                 exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
@@ -69,14 +67,14 @@ function line_cross_line(line1, line2)
     return false
 end
 
-function line_cross_poly(line, poly)
+function line_crosses_poly(line, poly)
     for l in flatten(AbstractCurveTrait, poly)
-        intersects(line, l) && return true
+        line_intersects(line, l) && return true
     end
     return false
 end
 
-function multipoint_cross_poly(mp, poly)
+function multipoint_crosses_poly(mp, poly)
     int_point = false
     ext_point = false
 

@@ -330,27 +330,6 @@ function point_in_extent(p, extent::Extents.Extent)
     return x1 <= GI.x(p) && y1 <= GI.y(p) && x2 >= GI.x(p) && y2 >= GI.y(p)
 end
 
-function line_in_polygon(line, polygon)
-    out = false
-
-    Extents.intersects(GI.extent(polygon), GI.extent(line)) || return false
-
-    p1 = GI.getpoint(line, 1)
-
-    for i in 1:GI.npoint(line)
-        p2 = GI.getpoint(line, i)
-        mid = (GI.x(p1) + GI.x(p2)) / 2, (GI.y(p1) + GI.y(p2)) / 2
-
-        # FIXME mid point in the polygon? what is that testing?
-        if point_in_polygon(mid, poly; ignore_boundary=true)
-            out = true
-            break
-        end
-        p1 = p2
-    end
-    return out
-end
-
 line_on_line(line1, line2) = line_on_line(trait(line1), line1, trait(line2), line2)
 function line_on_line(t1::GI.AbstractCurveTrait, line1, t2::AbstractCurveTrait, line2)
     for p in GI.getpoint(line1)
@@ -363,15 +342,15 @@ end
 
 line_in_polygon(line, poly) = line_in_polygon(trait(line), line, trait(poly), poly)
 function line_in_polygon(
-    ::LineStringTrait, line, 
+    ::AbstractCurveTrait, line, 
     ::Union{AbstractPolygonTrait,LinearRingTrait}, poly
 )
-    Extents.intersects(GI.extent(poly), GI.extent(line)) && return false
+    Extents.intersects(GI.extent(poly), GI.extent(line)) || return false
 
     inside = false
     for i in 1:GI.npoint(line) - 1
-        p = GI.getpont(line, i)
-        p2 = GI.getpont(line, i + 1)
+        p = GI.getpoint(line, i)
+        p2 = GI.getpoint(line, i + 1)
         point_in_polygon(p, poly) || return false
         if !inside 
             inside = point_in_polygon(p, poly; ignore_boundary=true)
@@ -379,25 +358,35 @@ function line_in_polygon(
         # FIXME This seems like a hack, we should check for intersections rather than midpoint??
         if !inside
             mid = ((GI.x(p) + GI.x(p2)) / 2, (GI.y(p) + GI.y(p2)) / 2)
-            inside = point_in_polygon(Point(mid), poly; ignore_boundary=true)
+            inside = point_in_polygon(mid, poly; ignore_boundary=true)
         end
     end
     return inside
 end
 
 function polygon_in_polygon(poly1, poly2)
+     @show "start"
+     # edges1, edges2 = to_edges(poly1), to_edges(poly2)
+     # extent1, extent2 = to_extent(edges1), to_extent(edges2)
      # Check the extents intersect
      Extents.intersects(GI.extent(poly1), GI.extent(poly2)) || return false
+     @show "in1"
+
      # Check all points in poly1 are in poly2
      for point in GI.getpoint(poly1)
          point_in_polygon(point, poly2) || return false
      end
+     @show "in2"
+
      # Check no points in poly2 are in poly1
      for point in GI.getpoint(poly2)
          point_in_polygon(point, poly1; ignore_boundary=true) && return false
      end
-     # Check poly1 does not intersect poly2
-     intersects(poly1, poly2) && return false
+     @show "in3"
+
+     # Check the line of poly1 does not intersect the line of poly2
+     line_intersects(poly1, poly2) && return false
+     @show "in4"
 
      # poly1 must be in poly2
      return true

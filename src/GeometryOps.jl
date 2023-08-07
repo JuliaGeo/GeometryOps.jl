@@ -6,6 +6,7 @@ using GeoInterface
 using GeometryBasics
 import Proj
 using LinearAlgebra
+import ExactPredicates
 
 using GeoInterface.Extents: Extents
 
