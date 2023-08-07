@@ -45,10 +45,8 @@ function line_intersects(::GI.AbstractTrait, a, ::GI.AbstractTrait, b; kw...)
 end
 function line_intersects(edges_a::Vector{Edge}, edges_b::Vector{Edge}; meets=MEETS_OPEN)
     # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
-
     for edge_a in edges_a
         for edge_b in edges_b
-            @show edge_a edge_b
             ExactPredicates.meet(edge_a..., edge_b...) == meets && return true 
         end
     end
