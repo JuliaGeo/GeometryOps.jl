@@ -107,9 +107,19 @@ function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMa
         while length(edges) > 0
             # Find an edge that matches the next point
             i = searchsortedlast(edges, (nextpoint, nextpoint); by=first)
+            newedge = edges[i]
+            # When there are two possible edges, 
+            # choose the edge that has turned a corner
+            if (i > 1) && (otheredge = edges[i - 1]; otheredge[1] == newedge[1]) &&
+                (edge[2][1] == newedge[2][1] || edge[2][2] == newedge[2][2]) 
+                newedge = otheredge
+                deleteat!(edges, i - 1)
+            else
+                deleteat!(edges, i)
+            end
+            edge = newedge
             # TODO: Here we actually need to check which edge maintains
             # the winding direction
-            edge = popat!(edges, i)
             nextpoint = last(edge)
             # Close the ring if we get to the start
             if nextpoint == firstpoint
@@ -145,8 +155,9 @@ function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMa
     else
         isclockwise.(linearrings)
     end
-    polygons = map(x -> [x], linearrings[exterior_inds])
     holes = map(x -> x, linearrings[.!exterior_inds])
+    exteriors = map(x -> x, linearrings[exterior_inds])
+    polygons = map(x -> [x], linearrings[exterior_inds])
 
     # Then we add the holes to the polygons they are inside of
     blacklist = Set{Int}()
@@ -165,5 +176,6 @@ function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMa
     end
 
     # Finally, return wrapped Polygons
-    return GI.Polygon.(polygons)
+    return (x -> GI.Polygon([x])).(exteriors), (x -> GI.Polygon([x])).(holes)
 end
+
