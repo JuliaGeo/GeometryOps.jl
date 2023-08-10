@@ -176,6 +176,7 @@ function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMa
     end
 
     # Finally, return wrapped Polygons
-    return (x -> GI.Polygon([x])).(exteriors), (x -> GI.Polygon([x])).(holes)
+    return GI.Polygon.(polygons)
+    # return (x -> GI.Polygon([x])).(exteriors), (x -> GI.Polygon([x])).(holes)
 end
 
