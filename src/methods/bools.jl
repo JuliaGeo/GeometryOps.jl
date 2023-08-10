@@ -375,11 +375,6 @@ function polygon_in_polygon(poly1, poly2)
          point_in_polygon(point, poly2) || return false
      end
 
-     # Check no points in poly2 are in poly1
-     for point in GI.getpoint(poly2)
-         point_in_polygon(point, poly1; ignore_boundary=true) && return false
-     end
-
      # Check the line of poly1 does not intersect the line of poly2
      line_intersects(poly1, poly2) && return false
 
