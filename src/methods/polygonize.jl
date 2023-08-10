@@ -162,9 +162,9 @@ function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMa
     # Then we add the holes to the polygons they are inside of
     blacklist = Set{Int}()
     for rings in polygons
+        exterior = rings[1]
         for i in eachindex(holes)
             i in blacklist && continue
-            exterior = rings[1]
             hole = holes[i]
             if polygon_in_polygon(hole, exterior)
                 # Hole is in the exterior, so add it to the ring list
@@ -176,6 +176,6 @@ function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMa
     end
 
     # Finally, return wrapped Polygons
-    return (x -> GI.Polygon([x])).(exteriors), (x -> GI.Polygon([x])).(holes)
+    return GI.Polygon.(polygons)
 end
 
