@@ -33,6 +33,7 @@ _nedge(::GI.PointTrait, x) = error("Cant get edges from points")
 Converts a Polygon to LineString or MultiLineString
 
 # Examples
+
 ```jldoctest
 import GeometryOps as GO, GeoInterface as GI
 
