@@ -33,12 +33,14 @@ _nedge(::GI.PointTrait, x) = error("Cant get edges from points")
 Converts a Polygon to LineString or MultiLineString
 
 # Examples
-```jldoctest
-julia> poly = Polygon([[[-2.275543, 53.464547],[-2.275543, 53.489271],[-2.215118, 53.489271],[-2.215118, 53.464547],[-2.275543, 53.464547]]])
-Polygon(Array{Array{Float64,1},1}[[[-2.27554, 53.4645], [-2.27554, 53.4893], [-2.21512, 53.4893], [-2.21512, 53.4645], [-2.27554, 53.4645]]])
 
-julia> polygon_to_line(poly)
-LineString(Array{Float64,1}[[-2.27554, 53.4645], [-2.27554, 53.4893], [-2.21512, 53.4893], [-2.21512, 53.4645], [-2.27554, 53.4645]])
+```jldoctest
+import GeometryOps as GO, GeoInterface as GI
+
+poly = GI.Polygon([[(-2.275543, 53.464547), (-2.275543, 53.489271), (-2.215118, 53.489271), (-2.215118, 53.464547), (-2.275543, 53.464547)]])
+GO.polygon_to_line(poly)
+# output
+GeoInterface.Wrappers.LineString{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}([(-2.275543, 53.464547), (-2.275543, 53.489271), (-2.215118, 53.489271), (-2.215118, 53.464547), (-2.275543, 53.464547)], nothing, nothing)
 ```
 """
 function polygon_to_line(poly)
