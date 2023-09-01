@@ -6,6 +6,7 @@ using GeoInterface
 using GeometryBasics
 import Proj
 using LinearAlgebra
+import ExactPredicates
 
 using GeoInterface.Extents: Extents
 
@@ -21,6 +22,10 @@ include("methods/signed_area.jl")
 include("methods/centroid.jl")
 include("methods/intersects.jl")
 include("methods/contains.jl")
+include("methods/crosses.jl")
+include("methods/disjoint.jl")
+include("methods/overlaps.jl")
+include("methods/within.jl")
 include("methods/polygonize.jl")
 include("methods/barycentric.jl")
 

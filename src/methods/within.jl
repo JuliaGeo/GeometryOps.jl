@@ -13,21 +13,21 @@ must not intersect the exterior of the secondary (geometry b).
 
 ## Examples
 ```jldoctest setup=:(using GeometryOps, GeometryBasics)
-julia> line = LineString([[1, 1], [1, 2], [1, 3], [1, 4]])
-LineString(Array{Float64,1}[[1.0, 1.0], [1.0, 2.0], [1.0, 3.0], [1.0, 4.0]])
+import GeometryOps as GO, GeoInterface as GI
 
-julia> point = Point([1, 2])
-Point([1.0, 2.0])
+line = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
+point = (1, 2)
+GO.within(point, line)
 
-julia> within(point, line)
+# output
 true
 ```
 """
 within(g1, g2)::Bool = within(trait(g1), g1, trait(g2), g2)::Bool
-within(t1::FeatureTrait, g1, t2, g2)::Bool = within(GI.geometry(g1), g2)
-within(t1, g1, t2::FeatureTrait, g2)::Bool = within(g1, geometry(g2))
-within(t1::PointTrait, g1::LineStringTrait, t2, g2)::Bool = point_on_line(ft1, ft2, true)
-within(t1::PointTrait, g1, t2::PolygonTrait, g2)::Bool = point_in_polygon(ft1, ft2, true)
-within(t1::LineStringTrait, g1, t2::PolygonTrait, g2)::Bool = line_in_polygon(ft1, ft2)
-within(t1::LineStringTrait, g1, t2::LineStringTrait, g2)::Bool = line_on_line(ft1, ft2)
-within(t1::PolygonTrait, g1, t2::PolygonTrait, g2)::Bool = polygon_in_polygon(ft1, ft2, true)
+within(::GI.FeatureTrait, g1, ::Any, g2)::Bool = within(GI.geometry(g1), g2)
+within(::Any, g1, t2::GI.FeatureTrait, g2)::Bool = within(g1, geometry(g2))
+within(::GI.PointTrait, g1, ::GI.LineStringTrait, g2)::Bool = point_on_line(g1, g2; ignore_end_vertices=true)
+within(::GI.PointTrait, g1, ::GI.PolygonTrait, g2)::Bool = point_in_polygon(g1, g2; ignore_boundary=true)
+within(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool = line_in_polygon(g1, g2)
+within(::GI.LineStringTrait, g1, ::GI.LineStringTrait, g2)::Bool = line_on_line(g1, g2)
+within(::GI.PolygonTrait, g1, ::GI.PolygonTrait, g2)::Bool = polygon_in_polygon(g1, g2)

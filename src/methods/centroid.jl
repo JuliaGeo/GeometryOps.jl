@@ -14,7 +14,7 @@ export centroid
 # However, it's totally fine to ignore this and not have this code path.  
 # We simply need to decide on this.
 
-function centroid(ls::LineString{2, T}) where T
+function centroid(ls::GB.LineString{2, T}) where T
     centroid = Point{2, T}(0)
     total_area = T(0)
     if length(ls) == 1
@@ -34,7 +34,7 @@ function centroid(ls::LineString{2, T}) where T
 end
 
 # a more optimized function, so we only calculate signed area once!
-function centroid_and_signed_area(ls::LineString{2, T}) where T
+function centroid_and_signed_area(ls::GB.LineString{2, T}) where T
     centroid = Point{2, T}(0)
     total_area = T(0)
     if length(ls) == 1
@@ -53,7 +53,7 @@ function centroid_and_signed_area(ls::LineString{2, T}) where T
     return (centroid ./ total_area, total_area)
 end
 
-function centroid(poly::GeometryBasics.Polygon{2, T}) where T
+function centroid(poly::GB.Polygon{2, T}) where T
     exterior_centroid, exterior_area = centroid_and_signed_area(poly.exterior)
 
     total_area = exterior_area
@@ -68,7 +68,7 @@ function centroid(poly::GeometryBasics.Polygon{2, T}) where T
 
 end
 
-function centroid(multipoly::MultiPolygon)
+function centroid(multipoly::GB.MultiPolygon)
     centroids = centroid.(multipoly.polygons)
     areas = signed_area.(multipoly.polygons)
     areas ./= sum(areas)
@@ -77,10 +77,10 @@ function centroid(multipoly::MultiPolygon)
 end
 
 
-function centroid(rect::Rect{N, T}) where {N, T}
+function centroid(rect::GB.Rect{N, T}) where {N, T}
     return Point{N, T}(rect.origin .- rect.widths ./ 2)
 end
 
-function centroid(sphere::HyperSphere{N, T}) where {N, T}
+function centroid(sphere::GB.HyperSphere{N, T}) where {N, T}
     return sphere.center
 end
