@@ -15,13 +15,12 @@ Multipoint/Multipoint, MultiLineString/MultiLineString and MultiPolygon/MultiPol
 
 ## Examples
 ```jldoctest
-julia> poly1 = Polygon([[[0,0],[0,5],[5,5],[5,0],[0,0]]])
-Polygon(Array{Array{Float64,1},1}[[[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]]])
+import GeometryOps as GO, GeoInterface as GI
+poly1 = GI.Polygon([[(0,0), (0,5), (5,5), (5,0), (0,0)]])
+poly2 = GI.Polygon([[(1,1), (1,6), (6,6), (6,1), (1,1)]])
 
-julia> poly2 = Polygon([[[1,1],[1,6],[6,6],[6,1],[1,1]]])
-Polygon(Array{Array{Float64,1},1}[[[1.0, 1.0], [1.0, 6.0], [6.0, 6.0], [6.0, 1.0], [1.0, 1.0]]])
-
-julia> overlap(poly1, poly2)
+GO.overlaps(poly1, poly2)
+# output
 true
 ```
 """

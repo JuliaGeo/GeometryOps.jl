@@ -13,9 +13,11 @@ must not intersect the exterior of the primary (geometry a).
 ## Examples
 
 ```jldoctest
-line = GI.LineString([[1, 1], [1, 2], [1, 3], [1, 4]])
-point = Point([1, 2])
-contains(line, point)
+import GeometryOps as GO, GeoInterface as GI
+line = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
+point = (1, 2)
+
+GO.contains(line, point)
 # output
 true
 ```

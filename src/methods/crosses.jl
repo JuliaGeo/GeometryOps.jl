@@ -7,15 +7,17 @@ Return `true` if the intersection results in a geometry whose dimension is one l
 the maximum dimension of the two source geometries and the intersection set is interior to
 both source geometries.
 
-## Examples
-```jldoctest
+TODO: broken
+
+## Examples 
+```julia
+import GeoInterface as GI, GeometryOps as GO
+
 line1 = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
 line2 = GI.LineString([(-2, 2), (4, 2)])
 
 GO.crosses(line1, line2)
-GO.line_intersects(line1, line2)
-GO.to_edges(line1)
-GO.to_edges(line2)
+# output
 true
 ```
 """

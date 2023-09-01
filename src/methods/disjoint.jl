@@ -8,10 +8,12 @@ Return `true` if the intersection of the two geometries is an empty set.
 # Examples
 
 ```jldoctest
-poly = Polygon([[[-1, 2], [3, 2], [3, 3], [-1, 3], [-1, 2]]])
-point = (1, 1)
+import GeometryOps as GO, GeoInterface as GI
 
-disjoint(poly, point)
+poly = GI.Polygon([[(-1, 2), (3, 2), (3, 3), (-1, 3), (-1, 2)]])
+point = (1, 1)
+GO.disjoint(poly, point)
+
 # output
 true
 ```

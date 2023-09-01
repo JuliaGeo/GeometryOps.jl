@@ -13,13 +13,13 @@ must not intersect the exterior of the secondary (geometry b).
 
 ## Examples
 ```jldoctest setup=:(using GeometryOps, GeometryBasics)
-julia> line = LineString([[1, 1], [1, 2], [1, 3], [1, 4]])
-LineString(Array{Float64,1}[[1.0, 1.0], [1.0, 2.0], [1.0, 3.0], [1.0, 4.0]])
+import GeometryOps as GO, GeoInterface as GI
 
-julia> point = Point([1, 2])
-Point([1.0, 2.0])
+line = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
+point = (1, 2)
+GO.within(point, line)
 
-julia> within(point, line)
+# output
 true
 ```
 """

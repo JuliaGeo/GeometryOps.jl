@@ -18,8 +18,8 @@ Take a ring and return true or false whether or not the ring is clockwise or cou
 ```jldoctest
 import GeoInterface as GI, GeometryOps as GO
 
-line = GI.LineString([(0, 0), (1, 1), (1, 0), (0, 0)])
-GO.isclockwise(line)
+ring = GI.LinearRing([(0, 0), (1, 1), (1, 0), (0, 0)])
+GO.isclockwise(ring)
 
 # output
 true
