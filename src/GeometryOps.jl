@@ -13,6 +13,9 @@ using GeoInterface.Extents: Extents
 const GI = GeoInterface
 const GB = GeometryBasics
 
+const TuplePoint = Tuple{Float64,Float64}
+const Edge = Tuple{TuplePoint,TuplePoint}
+
 include("primitives.jl")
 include("utils.jl")
 
@@ -32,5 +35,6 @@ include("methods/barycentric.jl")
 include("transformations/flip.jl")
 include("transformations/simplify.jl")
 include("transformations/reproject.jl")
+include("transformations/tuples.jl")
 
 end

@@ -99,14 +99,14 @@ GI.npoint(simple)
 6
 ```
 """
-simplify(data; kw...) = _simplify(DouglasPeucker(; kw...), data)
-simplify(alg::SimplifyAlg, data) = _simplify(alg, data)
+simplify(data; calc_extent=false, kw...) = _simplify(DouglasPeucker(; kw...), data; calc_extent)
+simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
 
-function _simplify(alg::SimplifyAlg, data)
+function _simplify(alg::SimplifyAlg, data; kw...)
     ## Apply simplication to all curves, multipoints, and points,
     ## reconstructing everything else around them.
     simplifier(geom) = _simplify(trait(geom), alg, geom)
-    apply(simplifier, Union{PolygonTrait,AbstractCurveTrait,MultiPoint,PointTrait}, data)
+    apply(simplifier, Union{PolygonTrait,AbstractCurveTrait,MultiPoint,PointTrait}, data; kw...)
 end
 ## For Point and MultiPoint traits we do nothing
 _simplify(::PointTrait, alg, geom) = geom
