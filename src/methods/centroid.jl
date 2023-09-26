@@ -2,85 +2,88 @@
 
 export centroid
 
-# These are all GeometryBasics.jl methods so far.
-# They need to be converted to GeoInterface.
+# ## What is the centroid?
 
-# The reason that there is a `centroid_and_signed_area` function, 
-# is because in conputing the centroid, you end up computing the signed area.  
+# The centroid is the geometric center of a line or area. Note that the
+# centroid does not need to be inside of a concave area or volume.
 
-# In some computational geometry applications this may be a useful
-# source of efficiency, so I added it here.
+# TODO: Add an example
 
-# However, it's totally fine to ignore this and not have this code path.  
-# We simply need to decide on this.
+# ## Implementation
 
-function centroid(ls::LineString{2, T}) where T
-    centroid = Point{2, T}(0)
-    total_area = T(0)
-    if length(ls) == 1
-        return sum(ls[1])/2
+# This is the GeoInterface-compatible implementation.
+
+# First, we implement a wrapper method that dispatches to the correct
+# implementation based on the geometry trait.
+# 
+# This is also used in the implementation, since it's a lot less work! 
+
+"""
+
+"""
+centroid(x) = centroid(GI.trait(x), x)
+centroid_and_signed_area(x) = centroid_and_signed_area(GI.trait(x), x)
+
+function centroid(::LineStringTrait, geom)
+    FT = Float64
+    centroid = GI.Point(FT(0), FT(0))
+    length = FT(0)
+    point₁ = GI.getpoint(geom, 1)
+    for point₂ in GI.getpoint(geom)
+        length_component = sqrt(
+            (GI.x(point₂) - GI.x(point₁))^2 +
+            (GI.y(point₂) - GI.y(point₁))^2
+        )
+        # Accumulate the segment length into `length``
+        length += length_component
+        # Weighted average of segment centroids
+        centroid = centroid .+ (point₁ .+ point₂) .* length_component / 2
+        # Advance the point buffer by 1 point
+        point₁ = point₂
     end
-
-    p0 = ls[1][1]
-
-    for i in 1:(length(ls)-1)
-        p1 = ls[i][2]
-        p2 = ls[i+1][2]
-        area = signed_area(p0, p1, p2)
-        centroid = centroid .+ Point{2, T}((p0[1] + p1[1] + p2[1])/3, (p0[2] + p1[2] + p2[2])/3) * area
-        total_area += area
-    end
-    return centroid ./ total_area
+    return centroid ./= length
 end
 
-# a more optimized function, so we only calculate signed area once!
-function centroid_and_signed_area(ls::LineString{2, T}) where T
-    centroid = Point{2, T}(0)
-    total_area = T(0)
-    if length(ls) == 1
-        return sum(ls[1])/2
+function centroid_and_signed_area(::LinearRingTrait, geom)
+    FT = Float64
+    centroid = GI.Point(FT(0), FT(0))
+    area = FT(0)
+    point₁ = GI.getpoint(geom, 1)
+    for point₂ in GI.getpoint(geom)
+        area_component = GI.x(point₁) * GI.y(point₂) -
+            GI.x(point₁) * GI.y(point₂)
+        # Accumulate the segment length into `area``
+        area += area_component
+        # Weighted average of segment centroids
+        centroid = centroid .+ (point₁ .+ point₂) .* area_component
+        # Advance the point buffer by 1 point
+        point₁ = point₂
     end
+    area /= 2
+    return centroid ./= 6area, area
+end
 
-    p0 = ls[1][1]
-
-    for i in 1:(length(ls)-1)
-        p1 = ls[i][2]
-        p2 = ls[i+1][2]
-        area = signed_area(p0, p1, p2)
-        centroid = centroid .+ Point{2, T}((p0[1] + p1[1] + p2[1])/3, (p0[2] + p1[2] + p2[2])/3) * area
-        total_area += area
+function centroid_and_signed_area(::PolygonTrait, geom)
+    # Exterior polygon centroid and area
+    centroid, area = centroid_and_signed_area(GI.getexterior(geom))
+    centroid *= abs(signed_area)
+    for hole in GI.gethole(geom)
+        interior_centroid, interior_area = centroid_and_signed_area(hole)
+        interior_area = abs(interior_area)
+        area -= interior_area
+        centroid = centroid .= interior_centroid .* interior_area
     end
-    return (centroid ./ total_area, total_area)
+    return centroid ./= abs(area), area
 end
 
-function centroid(poly::GeometryBasics.Polygon{2, T}) where T
-    exterior_centroid, exterior_area = centroid_and_signed_area(poly.exterior)
-
-    total_area = exterior_area
-    interior_numerator = Point{2, T}(0)
-    for interior in poly.interiors
-        interior_centroid, interior_area = centroid_and_signed_area(interior)
-        total_area += interior_area
-        interior_numerator += interior_centroid * interior_area
+function centroid_and_signed_area(::MultiPolygonTrait, geom)
+    FT = Float64
+    centroid = GI.Point(FT(0), FT(0))
+    area = FT(0)
+    for poly in GI.getpolygon(geom)
+        poly_centroid, poly_area = centroid_and_signed_area(poly)
+        centroid = centroid .+ poly_centroid .* poly_area
+        area += poly_area
     end
-
-    return (exterior_centroid * exterior_area - interior_numerator) / total_area
-
-end
-
-function centroid(multipoly::MultiPolygon)
-    centroids = centroid.(multipoly.polygons)
-    areas = signed_area.(multipoly.polygons)
-    areas ./= sum(areas)
-
-    return sum(centroids .* areas) / sum(areas)
-end
-
-
-function centroid(rect::Rect{N, T}) where {N, T}
-    return Point{N, T}(rect.origin .- rect.widths ./ 2)
-end
-
-function centroid(sphere::HyperSphere{N, T}) where {N, T}
-    return sphere.center
+    return centroid ./= area, area
 end
