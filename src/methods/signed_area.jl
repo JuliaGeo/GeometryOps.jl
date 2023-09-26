@@ -45,7 +45,7 @@ signed_area(x) = signed_area(GI.trait(x), x)
 # TODOS here:
 # 1. This could conceivably be multithreaded.  How to indicate that it should be so?
 # 2. What to do for corner cases (nan point, etc)?
-function signed_area(::Union{LineStringTrait, LinearRingTrait}, geom)
+function signed_area(::Union{GI.LineStringTrait,GI.LinearRingTrait}, geom)
     # Basically, we integrate the area under the line string, which gives us
     # the signed area.
     point₁ = GI.getpoint(geom, 1)
@@ -63,7 +63,7 @@ function signed_area(::Union{LineStringTrait, LinearRingTrait}, geom)
 end
 
 # This subtracts the 
-function signed_area(::PolygonTrait, geom)
+function signed_area(::GI.PolygonTrait, geom)
     s_area = signed_area(GI.getexterior(geom))
     area = abs(s_area)
     for hole in GI.gethole(geom)
@@ -72,7 +72,7 @@ function signed_area(::PolygonTrait, geom)
     return area * sign(s_area)
 end
 
-signed_area(::MultiPolygonTrait, geom) = sum((signed_area(poly) for poly in GI.getpolygon(geom)))
+signed_area(::GI.MultiPolygonTrait, geom) = sum((signed_area(poly) for poly in GI.getpolygon(geom)))
 
 # This should _theoretically_ work for anything, but I haven't actually tested yet!
 

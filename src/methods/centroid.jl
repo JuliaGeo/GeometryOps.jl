@@ -44,6 +44,9 @@ function centroid(::LineStringTrait, geom)
     return centroid ./= length
 end
 
+centroid(::LienarRingTrait, geom) = 
+    centroid_and_signed_area(::LinearRingTrait, geom)[1]
+
 function centroid_and_signed_area(::LinearRingTrait, geom)
     FT = Float64
     centroid = GI.Point(FT(0), FT(0))
@@ -63,6 +66,10 @@ function centroid_and_signed_area(::LinearRingTrait, geom)
     return centroid ./= 6area, area
 end
 
+
+centroid(::PolygonTrait, geom) = 
+    centroid_and_signed_area(::PolygonTrait, geom)[1]
+
 function centroid_and_signed_area(::PolygonTrait, geom)
     # Exterior polygon centroid and area
     centroid, area = centroid_and_signed_area(GI.getexterior(geom))
@@ -76,6 +83,9 @@ function centroid_and_signed_area(::PolygonTrait, geom)
     return centroid ./= abs(area), area
 end
 
+centroid(::MultiPolygonTrait, geom) = 
+    centroid_and_signed_area(::MultiPolygonTrait, geom)[1]
+    
 function centroid_and_signed_area(::MultiPolygonTrait, geom)
     FT = Float64
     centroid = GI.Point(FT(0), FT(0))
