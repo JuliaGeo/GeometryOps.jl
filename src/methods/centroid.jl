@@ -143,10 +143,7 @@ Returns the centroid and signed area of a given polygon.
 """
 function centroid_and_signed_area(::GI.PolygonTrait, geom)
     # Exterior polygon centroid and area
-    centroid, area = centroid_and_signed_area(
-        GI.LinearRingTrait,
-        GI.getexterior(geom),
-    )
+    centroid, area = centroid_and_signed_area(GI.getexterior(geom))
     # Weight exterior centroid by area
     centroid *= abs(signed_area)
     # Loop over any holes within the polygon
