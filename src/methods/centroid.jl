@@ -21,10 +21,10 @@ cshape = Polygon([
 ])
 f, a, p = poly(cshape; axis = (; aspect = DataAspect()))
 ```
-Let's see what the centroid looks like:
+Let's see what the centroid looks like (plotted in red):
 ```@example cshape
 cent = centroid(cshape)
-plot!(a, cent)
+scatter!(a, GI.x(cent), GI.y(cent), color = :red)
 f
 ```
 The points are ordered in a clockwise fashion, which means that the signed area
@@ -47,27 +47,12 @@ mutlipolygon.
 """
 centroid(geom) = centroid(GI.trait(geom), geom)
 
-"""
-    centroid(geom)::GI.Point
+centroid(trait::GI.LineStringTrait, geom) = centroid_and_length(trait, geom)[1]
 
-Returns the centroid of a given line segment.
-"""
-centroid(trait::GI.LineStringTrait, geom)  =
-    centroid_and_length(trait, geom)[1]
+centroid(trait, geom) = centroid_and_signed_area(trait, geom)[1]
 
 """
-    centroid(geom)::GI.Point
-
-Returns the centroid of a given linear ring, polygon, or
-mutlipolygon.
-"""
-centroid(
-    trait::Union{GI.LinearRingTrait, GI.PolygonTrait, GI.MultiPolygonTrait}, 
-    geom
-) = centroid_and_signed_area(trait, geom)[1]
-
-"""
-    centroid_and_length(geom)::GI.Point
+    centroid_and_length(geom)::(GI.Point, ::Real)
 
 Returns the centroid and length of a given geom. Note this is only valid for
 line strings.
@@ -75,14 +60,20 @@ line strings.
 centroid_and_length(geom) = centroid_and_length(GI.trait(geom), geom)
 
 """
-    centroid_and_length(::GI.LineStringTrait, geom)::(GI.Point, ::Real)
+    centroid_and_signed_area(geom)::(GI.Point, ::Real)
 
-Returns the centroid and length of a given line segment.
+Returns the centroid and area of a given geom. Note this is only valid for
+linear rings, polygons, and multipolygons.
 """
+centroid_and_signed_area(geom) = centroid_and_signed_area(GI.trait(geom), geom)
+
+
+
 function centroid_and_length(::GI.LineStringTrait, geom)
     FT = Float64
     # Initialize starting values
-    centroid = GI.Point(FT(0), FT(0))
+    xcentroid = FT(0)
+    ycentroid = FT(0)
     length = FT(0)
     point₁ = GI.getpoint(geom, 1)
     # Loop over line segments of line string
@@ -95,45 +86,53 @@ function centroid_and_length(::GI.LineStringTrait, geom)
         # Accumulate the line segment length into `length`
         length += length_component
         # Weighted average of line segment centroids
-        centroid = centroid .+ ((point₁ .+ point₂) .* (length_component / 2))
+        xcentroid += (GI.x(point₁) + GI.x(point₂)) * (length_component / 2)
+        ycentroid += (GI.y(point₁) + GI.y(point₂)) * (length_component / 2)
+        #centroid = centroid .+ ((point₁ .+ point₂) .* (length_component / 2))
         # Advance the point buffer by 1 point to move to next line segment
         point₁ = point₂
     end
-    return centroid ./= length, length
+    xcentroid /= length
+    ycentroid /= length
+    return GI.Point(xcentroid, ycentroid), length
 end
 
 """
-    centroid_and_length(geom)::GI.Point
+    centroid_and_signed_area(
+        ::Union{GI.LineStringTrait, GI.LinearRingTrait},
+        geom,
+    )::(GI.Point, ::Real)
 
-Returns the centroid and area of a given geom. Note this is only valid for
-linear rings, polygons, and multipolygons.
+Returns the centroid and signed area of a given a line string or a linear ring.
+Note that the area doesn't have much meaning as for a line string, and isn't
+valid if the line segment isn't closed. 
 """
-centroid_and_signed_area(geom) = centroid_and_signed_area(GI.trait(geom), geom)
-
-"""
-    centroid_and_signed_area(::GI.LinearRingTrait, geom)::(GI.Point, ::Real)
-
-Returns the centroid and signed area of a given linear ring.
-"""
-function centroid_and_signed_area(::GI.LinearRingTrait, geom)
+function centroid_and_signed_area(
+    ::Union{GI.LineStringTrait, GI.LinearRingTrait},
+    geom,
+)
     FT = Float64
     # Initialize starting values
-    centroid = GI.Point(FT(0), FT(0))
+    xcentroid = FT(0)
+    ycentroid = FT(0)
     area = FT(0)
     point₁ = GI.getpoint(geom, 1)
     # Loop over line segments of linear ring
     for point₂ in GI.getpoint(geom)
         area_component = GI.x(point₁) * GI.y(point₂) -
-            GI.x(point₁) * GI.y(point₂)
+            GI.x(point₂) * GI.y(point₁)
         # Accumulate the area component into `area`
         area += area_component
         # Weighted average of centroid components
-        centroid = centroid .+ (point₁ .+ point₂) .* area_component
+        xcentroid += (GI.x(point₁) + GI.x(point₂)) * area_component
+        ycentroid += (GI.y(point₁) + GI.y(point₂)) * area_component
         # Advance the point buffer by 1 point
         point₁ = point₂
     end
     area /= 2
-    return centroid ./= 6area, area
+    xcentroid /= 6area
+    ycentroid /= 6area
+    return GI.Point(xcentroid, ycentroid), area
 end
 
 """
@@ -142,10 +141,18 @@ end
 Returns the centroid and signed area of a given polygon.
 """
 function centroid_and_signed_area(::GI.PolygonTrait, geom)
+    FT = Float64
+    # Initialize starting values
+    xcentroid = FT(0)
+    ycentroid = FT(0)
+    area = FT(0)
     # Exterior polygon centroid and area
-    centroid, area = centroid_and_signed_area(GI.getexterior(geom))
+    ext_centroid, ext_area = centroid_and_signed_area(GI.getexterior(geom))
+    area += ext_area
+    ext_area = abs(ext_area)
     # Weight exterior centroid by area
-    centroid *= abs(signed_area)
+    xcentroid += GI.x(ext_centroid) * ext_area
+    ycentroid += GI.y(ext_centroid) * ext_area
     # Loop over any holes within the polygon
     for hole in GI.gethole(geom)
         # Hole polygon's centroid and area
@@ -154,9 +161,12 @@ function centroid_and_signed_area(::GI.PolygonTrait, geom)
         # Accumulate the area component into `area`
         area -= interior_area
         # Weighted average of centroid components
-        centroid = centroid .- (interior_centroid .* interior_area)
+        xcentroid -= GI.x(interior_centroid) * interior_area
+        ycentroid -= GI.y(interior_centroid) * interior_area
     end
-    return centroid ./= abs(area), area
+    xcentroid /= abs(area)
+    ycentroid /= abs(area)
+    return GI.Point(xcentroid, ycentroid), area
 end
 
 """
@@ -167,7 +177,8 @@ Returns the centroid and signed area of a given multipolygon.
 function centroid_and_signed_area(::GI.MultiPolygonTrait, geom)
     FT = Float64
     # Initialize starting values
-    centroid = GI.Point(FT(0), FT(0))
+    xcentroid = FT(0)
+    ycentroid = FT(0)
     area = FT(0)
     # Loop over any polygons within the multipolygon
     for poly in GI.getpolygon(geom)
@@ -176,7 +187,10 @@ function centroid_and_signed_area(::GI.MultiPolygonTrait, geom)
         # Accumulate the area component into `area`
         area += poly_area
         # Weighted average of centroid components
-        centroid = centroid .+ (poly_centroid .* poly_area)
+        xcentroid += Gi.x(poly_centroid) * poly_area
+        ycentroid += Gi.y(poly_centroid) * poly_area
     end
-    return centroid ./= area, area
+    xcentroid /= area
+    ycentroid /= area
+    return GI.Point(xcentroid, ycentroid), area
 end
