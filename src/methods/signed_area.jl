@@ -25,7 +25,7 @@ export signed_area
 # f
 # ```
 # The points are ordered in a clockwise fashion, which means that the signed area
-# is positive.  If we reverse the order of the points, we get a negative area.
+# is negative.  If we reverse the order of the points, we get a postive area.
 
 # ## Implementation
 

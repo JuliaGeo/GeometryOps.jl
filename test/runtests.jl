@@ -10,6 +10,7 @@ using Random, Distributions
 const GI = GeoInterface
 const AG = ArchGDAL
 const LG = LibGEOS
+const GO = GeometryOps
 
 @testset "GeometryOps.jl" begin
     @testset "Primitives" begin include("primitives.jl") end

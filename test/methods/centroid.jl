@@ -1,28 +1,32 @@
 @testset "Lines/Rings" begin
     # Basic line string
     l1 = LG.LineString([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]])
-    c1 = GO.centroid(l1)
+    c1, len1 = GO.centroid_and_length(l1)
     c1_from_LG = LG.centroid(l1)
-    @test GI.x(c1) ≈ GI.x(c1_from_LG)  # I got this from 
+    @test GI.x(c1) ≈ GI.x(c1_from_LG)
     @test GI.y(c1) ≈ GI.y(c1_from_LG)
+    @test len1 ≈ 20.0
 
     # Spiral line string
     l2 = LG.LineString([[0.0, 0.0], [2.5, -2.5], [-5.0, -3.0], [-4.0, 6.0], [10.0, 10.0], [12.0, -14.56]])
-    c2 = GO.centroid(l2)
+    c2, len2 = GO.centroid_and_length(l2)
     c2_from_LG = LG.centroid(l2)
     @test GI.x(c2) ≈ GI.x(c2_from_LG) 
     @test GI.y(c2) ≈ GI.y(c2_from_LG)
+    @test len2 ≈ 59.3090856788928
 
-    # Basic linear ring
+    # Test that non-closed line strings throw an error for centroid_and_area
+    @test_throws AssertionError GO.centroid_and_area(l2)
+
+    # Basic linear ring - note that this still uses weighting by length
     r1 = LG.LinearRing([[0.0, 0.0], [3456.0, 7894.0], [6291.0, 1954.0], [0.0, 0.0]])
     c3 = GO.centroid(r1)
     c3_from_LG = LG.centroid(r1)
     @test GI.x(c3) ≈ GI.x(c3_from_LG) 
     @test GI.y(c3) ≈ GI.y(c3_from_LG)
 
-    # Fancier linear ring
-
 end
+
 @testset "Polygons" begin
     # Basic rectangle
     p1 = AG.fromWKT("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))")
@@ -35,10 +39,11 @@ end
         [11.0, 0.0], [11.0, 3.0], [14.0, 3.0], [14.0, 2.0], [12.0, 2.0],
         [12.0, 1.0], [14.0, 1.0], [14.0, 0.0], [11.0, 0.0],
     ]])
-    c2 = GO.centroid(p2)
+    c2, area2 = GO.centroid_and_area(p2)
     c2_from_LG = LG.centroid(p2)
     @test GI.x(c2) ≈ GI.x(c2_from_LG)
     @test GI.y(c2) ≈ GI.y(c2_from_LG)
+    @test area2 ≈ LG.area(p2)
 
     # Randomly generated polygon with lots of sides
     p3 = LG.Polygon([[
@@ -48,27 +53,48 @@ end
         [7.989, 12.081], [8.787, 11.930], [7.568, 13.926], [9.330, 13.340],
         [9.6817, 13.913], [10.391, 12.222], [12.150, 12.032], [14.567, 8.974],
     ]])
-    c3 = GO.centroid(p3)
+    c3, area3 = GO.centroid_and_area(p3)
     c3_from_LG = LG.centroid(p3)
-    @test GI.x(c3) ≈ GI.x(c3_from_LG)  # I got this from 
+    @test GI.x(c3) ≈ GI.x(c3_from_LG)
     @test GI.y(c3) ≈ GI.y(c3_from_LG)
+    @test area3 ≈ LG.area(p3)
 
     # Polygon with one hole
     p4 = LG.Polygon([
         [[0.0, 0.0], [10.0, 0.0], [10.0, 10.0], [0.0, 10.0], [0.0, 0.0]],
         [[2.3, 2.7], [2.5, 4.9], [4.1, 5.2], [4.2, 1.9], [2.3, 2.7]],
     ])
-    c4 = GO.centroid(p4)
+    c4, area4 = GO.centroid_and_area(p4)
     c4_from_LG = LG.centroid(p4)
     @test GI.x(c4) ≈ GI.x(c4_from_LG)
     @test GI.y(c4) ≈ GI.y(c4_from_LG)
+    @test area4 ≈ LG.area(p4)
 
     # Polygon with two holes
+    p5 = LG.Polygon([
+        [[-10.0, -10.0], [-2.0, 0.0], [6.0, -10.0], [-10.0, -10.0]],
+        [[-8.0, -8.0], [-8.0, -7.0], [-4.0, -7.0], [-4.0, -8.0], [-8.0, -8.0]],
+        [[-3.0,-9.0], [3.0, -9.0], [3.0, -8.5], [-3.0, -8.5], [-3.0, -9.0]],
+    ])
+    c5 = GO.centroid(p5)
+    c5_from_LG = LG.centroid(p5)
+    @test GI.x(c5) ≈ GI.x(c5_from_LG)
+    @test GI.y(c5) ≈ GI.y(c5_from_LG)
+
+    # Same polygon as P5 but using a GeoInterface polygon
+    p6 = GI.Polygon([
+        [(-10.0, -10.0), (-2.0, 0.0), (6.0, -10.0), (-10.0, -10.0)],
+        [(-8.0, -8.0), (-8.0, -7.0), (-4.0, -7.0), (-4.0, -8.0), (-8.0, -8.0)],
+        [(-3.0, -9.0), (3.0, -9.0), (3.0, -8.5), (-3.0, -8.5), (-3.0, -9.0)],
+    ])
+    c6 = GO.centroid(p6)
+    @test GI.x(c6) ≈ GI.x(c5)
+    @test GI.y(c6) ≈ GI.y(c5)
     
 end
 @testset "MultiPolygons" begin
     # Combine poylgons made above
-    m1 = LibGEOS.MultiPolygon([
+    m1 = LG.MultiPolygon([
         [
             [[11.0, 0.0], [11.0, 3.0], [14.0, 3.0], [14.0, 2.0], [12.0, 2.0],
             [12.0, 1.0], [14.0, 1.0], [14.0, 0.0], [11.0, 0.0]],
@@ -78,9 +104,9 @@ end
             [[2.3, 2.7], [2.5, 4.9], [4.1, 5.2], [4.2, 1.9], [2.3, 2.7]],
         ]
     ])
-    c1 = GO.centroid(m1)
+    c1, area1 = GO.centroid_and_area(m1)
     c1_from_LG = LG.centroid(m1)
-    # TODO: This these is failing
-    # @test GI.x(c1) ≈ GI.x(c1_from_LG)
-    # @test GI.y(c1) ≈ GI.y(c1_from_LG)
+    @test GI.x(c1) ≈ GI.x(c1_from_LG)
+    @test GI.y(c1) ≈ GI.y(c1_from_LG)
+    @test area1 ≈ LG.area(m1)
 end

@@ -1,6 +1,6 @@
 # # Centroid
 
-export centroid
+export centroid, centroid_and_length, centroid_and_area
 
 #=
 ## What is the centroid?
@@ -31,8 +31,6 @@ cent = centroid(cshape)
 scatter!(a, GI.x(cent), GI.y(cent), color = :red)
 f
 ```
-The points are ordered in a clockwise fashion, which means that the signed area
-is positive.  If we reverse the order of the points, we get a negative area.
 
 ## Implementation
 
@@ -44,13 +42,13 @@ implementation, since it's a lot less work!
 
 Note that if you call centroid on a LineString or LinearRing, the
 centroid_and_length function will be called due to the weighting scheme
-described above, while centroid_and_signed_area is called for polygons and
-multipolygons. However, centroid_and_signed_area can still be called on a
+described above, while centroid_and_area is called for polygons and
+multipolygons. However, centroid_and_area can still be called on a
 LineString or LinearRing when they are closed, for example as the interior hole
 of a polygon.
 
-The helper functions centroid_and_length and centroid_and_signed_area are made
-availible just in case the user also needs the signed area or length to decrease
+The helper functions centroid_and_length and centroid_and_area are made
+availible just in case the user also needs the area or length to decrease
 repeat computation.
 =#
 """
@@ -81,7 +79,7 @@ centroid(
 Returns the centroid of a polygon or multipolygon, which is calculated by
 weighting edges by their `area component` by convention.
 """
-centroid(trait, geom) = centroid_and_signed_area(trait, geom)[1]
+centroid(trait, geom) = centroid_and_area(trait, geom)[1]
 
 """
     centroid_and_length(geom)::(GI.Point, ::Real)
@@ -92,14 +90,14 @@ for line strings and linear rings.
 centroid_and_length(geom) = centroid_and_length(GI.trait(geom), geom)
 
 """
-    centroid_and_signed_area(
+    centroid_and_area(
         ::Union{GI.LineStringTrait, GI.LinearRingTrait}, 
         geom,
     )::(GI.Point, ::Real)
 
-Returns the centroid and signed area of a given geom.
+Returns the centroid and area of a given geom.
 """
-centroid_and_signed_area(geom) = centroid_and_signed_area(GI.trait(geom), geom)
+centroid_and_area(geom) = centroid_and_area(GI.trait(geom), geom)
 
 """
     centroid_and_length(geom)::(GI.Point, ::Real)
@@ -111,11 +109,11 @@ function centroid_and_length(
     ::Union{GI.LineStringTrait, GI.LinearRingTrait},
     geom,
 )
-    FT = Float64
+    T = Float64
     # Initialize starting values
-    xcentroid = FT(0)
-    ycentroid = FT(0)
-    length = FT(0)
+    xcentroid = T(0)
+    ycentroid = T(0)
+    length = T(0)
     point₁ = GI.getpoint(geom, 1)
     # Loop over line segments of line string
     for point₂ in GI.getpoint(geom)
@@ -139,24 +137,28 @@ function centroid_and_length(
 end
 
 """
-    centroid_and_signed_area(
+    centroid_and_area(
         ::Union{GI.LineStringTrait, GI.LinearRingTrait},
         geom,
     )::(GI.Point, ::Real)
 
-Returns the centroid and signed area of a given a line string or a linear ring.
-Note that the area doesn't have much meaning as for a line string, and isn't
-valid if the line segment isn't closed. 
+Returns the centroid and area of a given a line string or a linear ring.
+Note that this is only valid if the line segment or linear ring is closed. 
 """
-function centroid_and_signed_area(
+function centroid_and_area(
     ::Union{GI.LineStringTrait, GI.LinearRingTrait},
     geom,
 )
-    FT = Float64
+    T = Float64
+    # Check that the geometry is closed
+    @assert(
+        GI.getpoint(geom, 1) == GI.getpoint(geom, GI.ngeom(geom)),
+        "centroid_and_area should only be used with closed geometries"
+    )
     # Initialize starting values
-    xcentroid = FT(0)
-    ycentroid = FT(0)
-    area = FT(0)
+    xcentroid = T(0)
+    ycentroid = T(0)
+    area = T(0)
     point₁ = GI.getpoint(geom, 1)
     # Loop over line segments of linear ring
     for point₂ in GI.getpoint(geom)
@@ -173,58 +175,56 @@ function centroid_and_signed_area(
     area /= 2
     xcentroid /= 6area
     ycentroid /= 6area
-    return GI.Point(xcentroid, ycentroid), area
+    return GI.Point(xcentroid, ycentroid), abs(area)
 end
 
 """
-    centroid_and_signed_area(::GI.PolygonTrait, geom)::(GI.Point, ::Real)
+    centroid_and_area(::GI.PolygonTrait, geom)::(GI.Point, ::Real)
 
-Returns the centroid and signed area of a given polygon.
+Returns the centroid and area of a given polygon.
 """
-function centroid_and_signed_area(::GI.PolygonTrait, geom)
-    FT = Float64
+function centroid_and_area(::GI.PolygonTrait, geom)
+    T = Float64
     # Initialize starting values
-    xcentroid = FT(0)
-    ycentroid = FT(0)
-    area = FT(0)
+    xcentroid = T(0)
+    ycentroid = T(0)
+    area = T(0)
     # Exterior polygon centroid and area
-    ext_centroid, ext_area = centroid_and_signed_area(GI.getexterior(geom))
+    ext_centroid, ext_area = centroid_and_area(GI.getexterior(geom))
     area += ext_area
-    ext_area = abs(ext_area)
     # Weight exterior centroid by area
     xcentroid += GI.x(ext_centroid) * ext_area
     ycentroid += GI.y(ext_centroid) * ext_area
     # Loop over any holes within the polygon
     for hole in GI.gethole(geom)
         # Hole polygon's centroid and area
-        interior_centroid, interior_area = centroid_and_signed_area(hole)
-        interior_area = abs(interior_area)
+        interior_centroid, interior_area = centroid_and_area(hole)
         # Accumulate the area component into `area`
         area -= interior_area
         # Weighted average of centroid components
         xcentroid -= GI.x(interior_centroid) * interior_area
         ycentroid -= GI.y(interior_centroid) * interior_area
     end
-    xcentroid /= abs(area)
-    ycentroid /= abs(area)
+    xcentroid /= area
+    ycentroid /= area
     return GI.Point(xcentroid, ycentroid), area
 end
 
 """
-    centroid_and_signed_area(::GI.MultiPolygonTrait, geom)::(GI.Point, ::Real)
+    centroid_and_area(::GI.MultiPolygonTrait, geom)::(GI.Point, ::Real)
 
-Returns the centroid and signed area of a given multipolygon.
+Returns the centroid and area of a given multipolygon.
 """
-function centroid_and_signed_area(::GI.MultiPolygonTrait, geom)
-    FT = Float64
+function centroid_and_area(::GI.MultiPolygonTrait, geom)
+    T = Float64
     # Initialize starting values
-    xcentroid = FT(0)
-    ycentroid = FT(0)
-    area = FT(0)
+    xcentroid = T(0)
+    ycentroid = T(0)
+    area = T(0)
     # Loop over any polygons within the multipolygon
     for poly in GI.getpolygon(geom)
         # Polygon centroid and area
-        poly_centroid, poly_area = centroid_and_signed_area(poly)
+        poly_centroid, poly_area = centroid_and_area(poly)
         # Accumulate the area component into `area`
         area += poly_area
         # Weighted average of centroid components

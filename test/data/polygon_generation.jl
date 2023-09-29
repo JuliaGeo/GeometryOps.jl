@@ -19,6 +19,10 @@ Inputs:
     spikiness       <Real> measure of randomness for difference in radius
                         between points (between 0 and 1)
     rng             <RNG> random number generator for polygon creation
+Output:
+    Vector{Vector{Vector{T}}} representing polygon coordinates
+Note:
+    Check your outputs! No guarentee that the polygon's aren't self-intersecting
 """
 function generate_random_poly(
     x,
