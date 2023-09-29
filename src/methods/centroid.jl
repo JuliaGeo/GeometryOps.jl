@@ -8,6 +8,10 @@ export centroid
 The centroid is the geometric center of a line string or area(s). Note that
 the centroid does not need to be inside of a concave area.
 
+Further note that by convention a line, or linear ring, is calculated by
+weighting the line segments by their length, while polygons and multipolygon
+centroids are calculated by weighting edge's by their 'area components'.
+
 To provide an example, consider this concave polygon in the shape of a 'C':
 ```@example cshape
 using GeometryOps
@@ -35,9 +39,19 @@ is positive.  If we reverse the order of the points, we get a negative area.
 This is the GeoInterface-compatible implementation.
 
 First, we implement a wrapper method that dispatches to the correct
-implementation based on the geometry trait.
+implementation based on the geometry trait. This is also used in the
+implementation, since it's a lot less work! 
 
-This is also used in the implementation, since it's a lot less work! 
+Note that if you call centroid on a LineString or LinearRing, the
+centroid_and_length function will be called due to the weighting scheme
+described above, while centroid_and_signed_area is called for polygons and
+multipolygons. However, centroid_and_signed_area can still be called on a
+LineString or LinearRing when they are closed, for example as the interior hole
+of a polygon.
+
+The helper functions centroid_and_length and centroid_and_signed_area are made
+availible just in case the user also needs the signed area or length to decrease
+repeat computation.
 =#
 """
     centroid(geom)::GI.Point
@@ -47,29 +61,56 @@ mutlipolygon.
 """
 centroid(geom) = centroid(GI.trait(geom), geom)
 
-centroid(trait::GI.LineStringTrait, geom) = centroid_and_length(trait, geom)[1]
+"""
+    centroid(
+        trait::Union{GI.LineStringTrait, GI.LinearRingTrait},
+        geom,
+    )
 
+Returns the centroid of a line string or linear ring, which is calculated by
+weighting line segments by their length by convention.
+"""
+centroid(
+    trait::Union{GI.LineStringTrait, GI.LinearRingTrait},
+    geom,
+) = centroid_and_length(trait, geom)[1]
+
+"""
+    centroid(trait, geom)
+
+Returns the centroid of a polygon or multipolygon, which is calculated by
+weighting edges by their `area component` by convention.
+"""
 centroid(trait, geom) = centroid_and_signed_area(trait, geom)[1]
 
 """
     centroid_and_length(geom)::(GI.Point, ::Real)
 
-Returns the centroid and length of a given geom. Note this is only valid for
-line strings.
+Returns the centroid and length of a given line/ring. Note this is only valid
+for line strings and linear rings.
 """
 centroid_and_length(geom) = centroid_and_length(GI.trait(geom), geom)
 
 """
-    centroid_and_signed_area(geom)::(GI.Point, ::Real)
+    centroid_and_signed_area(
+        ::Union{GI.LineStringTrait, GI.LinearRingTrait}, 
+        geom,
+    )::(GI.Point, ::Real)
 
-Returns the centroid and area of a given geom. Note this is only valid for
-linear rings, polygons, and multipolygons.
+Returns the centroid and signed area of a given geom.
 """
 centroid_and_signed_area(geom) = centroid_and_signed_area(GI.trait(geom), geom)
 
+"""
+    centroid_and_length(geom)::(GI.Point, ::Real)
 
-
-function centroid_and_length(::GI.LineStringTrait, geom)
+Returns the centroid and length of a given line/ring. Note this is only valid
+for line strings and linear rings.
+"""
+function centroid_and_length(
+    ::Union{GI.LineStringTrait, GI.LinearRingTrait},
+    geom,
+)
     FT = Float64
     # Initialize starting values
     xcentroid = FT(0)
@@ -187,8 +228,8 @@ function centroid_and_signed_area(::GI.MultiPolygonTrait, geom)
         # Accumulate the area component into `area`
         area += poly_area
         # Weighted average of centroid components
-        xcentroid += Gi.x(poly_centroid) * poly_area
-        ycentroid += Gi.y(poly_centroid) * poly_area
+        xcentroid += GI.x(poly_centroid) * poly_area
+        ycentroid += GI.y(poly_centroid) * poly_area
     end
     xcentroid /= area
     ycentroid /= area
