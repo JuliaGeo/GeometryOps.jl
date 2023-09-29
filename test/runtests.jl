@@ -5,6 +5,7 @@ using GeometryOps.GeoInterface
 using GeometryOps.GeometryBasics
 using ArchGDAL
 using LibGEOS
+using Random, Distributions
 
 const GI = GeoInterface
 const AG = ArchGDAL
