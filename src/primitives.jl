@@ -31,32 +31,54 @@ _apply(f, ::Type{Target}, geom; kw...)  where Target =
 _apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
     map(x -> _apply(f, Target, x; kw...), iterable)
 # Rewrap feature collections
-function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc)) where Target
-    applicator(feature) = _apply(f, Target, feature; crs)::GI.Feature
+function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc), calc_extent=false) where Target
+    applicator(feature) = _apply(f, Target, feature; crs, calc_extent)::GI.Feature
     features = map(applicator, GI.getfeature(fc))
-    return GI.FeatureCollection(features; crs)
+    if calc_extent
+        extent = rebuce(features; init=GI.extent(first(features))) do (acc, f)
+            Extents.union(acc, Extents.extent(f))
+        end
+        return GI.FeatureCollection(features; crs, extent)
+    else
+        return GI.FeatureCollection(features; crs)
+    end
 end
 # Rewrap features
-function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; crs=GI.crs(feature)) where Target
+function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; crs=GI.crs(feature), calc_extent=false) where Target
     properties = GI.properties(feature)
-    geometry = _apply(f, Target, GI.geometry(feature); crs)
-    return GI.Feature(geometry; properties, crs)
+    geometry = _apply(f, Target, GI.geometry(feature); crs, calc_extent)
+    if calc_extent
+        extent = GI.extent(geometry)
+        return GI.Feature(geometry; properties, crs, extent)
+    else
+        return GI.Feature(geometry; properties, crs)
+    end
 end
 # Reconstruct nested geometries
-function _apply(f, ::Type{Target}, trait, geom; crs=GI.crs(geom))::(GI.geointerface_geomtype(trait)) where Target
+function _apply(f, ::Type{Target}, trait, geom; 
+    crs=GI.crs(geom), calc_extent=false
+)::(GI.geointerface_geomtype(trait)) where Target
     # TODO handle zero length...
-    applicator(g) = _apply(f, Target, g; crs)
+    applicator(g) = _apply(f, Target, g; crs, calc_extent)
     geoms = map(applicator, GI.getgeom(geom))
-    return rebuild(geom, geoms; crs)
+    if calc_extent
+        extent = GI.extent(first(geoms))
+        for g in geoms
+            extent = Extents.union(extent, GI.extent(g))
+        end
+        return rebuild(geom, geoms; crs, extent)
+    else
+        return rebuild(geom, geoms; crs)
+    end
 end
 # Apply f to the target geometry
-_apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom)) where {Target,Trait<:Target} = f(geom)
+_apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom), calc_extent=false) where {Target,Trait<:Target} = f(geom)
 # Fail if we hit PointTrait without running `f`
-_apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing) where Target =
+_apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing, calc_extent=false) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 # Specific cases to avoid method ambiguity
-_apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing) = f(geom)
-_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=GI.crs(feature)) = f(feature)
+_apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing, calc_extent=false) = f(geom)
+_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=GI.crs(feature), calc_extent=false) = f(feature)
 _apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc)) = f(fc)
 
 """
@@ -193,13 +215,13 @@ on geometries from other packages and specify how to rebuild them.
 (Maybe it should go into GeoInterface.jl)
 """
 rebuild(geom, child_geoms; kw...) = rebuild(GI.trait(geom), geom, child_geoms; kw...)
-function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom))
+function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom), extent=nothing)
     T = GI.geointerface_geomtype(trait)
     if GI.is3d(geom)
         # The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.
-        return T{true,false}(child_geoms; crs)
+        return T{true,false}(child_geoms; crs, extent)
     else
-        return T{false,false}(child_geoms; crs)
+        return T{false,false}(child_geoms; crs, extent)
     end
 end
 # So that GeometryBasics geoms rebuild as themselves

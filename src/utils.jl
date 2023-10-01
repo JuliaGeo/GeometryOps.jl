@@ -50,9 +50,6 @@ function polygon_to_line(poly)
 end
 
 
-const TuplePoint = Tuple{Float64,Float64}
-const Edge = Tuple{TuplePoint,TuplePoint}
-
 """
     to_edges()
 
