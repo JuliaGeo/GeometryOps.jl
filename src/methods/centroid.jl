@@ -109,7 +109,7 @@ function centroid_and_length(
     ::Union{GI.LineStringTrait, GI.LinearRingTrait},
     geom,
 )
-    T = Float64
+    T = typeof(GI.x(GI.getpoint(geom, 1)))
     # Initialize starting values
     xcentroid = T(0)
     ycentroid = T(0)
@@ -133,7 +133,7 @@ function centroid_and_length(
     end
     xcentroid /= length
     ycentroid /= length
-    return GI.Point(xcentroid, ycentroid), length
+    return (xcentroid, ycentroid), length
 end
 
 """
@@ -149,7 +149,7 @@ function centroid_and_area(
     ::Union{GI.LineStringTrait, GI.LinearRingTrait},
     geom,
 )
-    T = Float64
+    T = typeof(GI.x(GI.getpoint(geom, 1)))
     # Check that the geometry is closed
     @assert(
         GI.getpoint(geom, 1) == GI.getpoint(geom, GI.ngeom(geom)),
@@ -175,7 +175,7 @@ function centroid_and_area(
     area /= 2
     xcentroid /= 6area
     ycentroid /= 6area
-    return GI.Point(xcentroid, ycentroid), abs(area)
+    return (xcentroid, ycentroid), abs(area)
 end
 
 """
@@ -184,30 +184,24 @@ end
 Returns the centroid and area of a given polygon.
 """
 function centroid_and_area(::GI.PolygonTrait, geom)
-    T = Float64
-    # Initialize starting values
-    xcentroid = T(0)
-    ycentroid = T(0)
-    area = T(0)
-    # Exterior polygon centroid and area
-    ext_centroid, ext_area = centroid_and_area(GI.getexterior(geom))
-    area += ext_area
+    # Exterior ring's centroid and area
+    (xcentroid, ycentroid), area = centroid_and_area(GI.getexterior(geom))
     # Weight exterior centroid by area
-    xcentroid += GI.x(ext_centroid) * ext_area
-    ycentroid += GI.y(ext_centroid) * ext_area
+    xcentroid *= area
+    ycentroid *= area
     # Loop over any holes within the polygon
     for hole in GI.gethole(geom)
         # Hole polygon's centroid and area
-        interior_centroid, interior_area = centroid_and_area(hole)
+        (xinterior, yinterior), interior_area = centroid_and_area(hole)
         # Accumulate the area component into `area`
         area -= interior_area
         # Weighted average of centroid components
-        xcentroid -= GI.x(interior_centroid) * interior_area
-        ycentroid -= GI.y(interior_centroid) * interior_area
+        xcentroid -= xinterior * interior_area
+        ycentroid -= yinterior * interior_area
     end
     xcentroid /= area
     ycentroid /= area
-    return GI.Point(xcentroid, ycentroid), area
+    return (xcentroid, ycentroid), area
 end
 
 """
@@ -216,22 +210,22 @@ end
 Returns the centroid and area of a given multipolygon.
 """
 function centroid_and_area(::GI.MultiPolygonTrait, geom)
-    T = Float64
-    # Initialize starting values
-    xcentroid = T(0)
-    ycentroid = T(0)
-    area = T(0)
+    # First polygon's centroid and area
+    (xcentroid, ycentroid), area = centroid_and_area(GI.getpolygon(geom, 1))
+    # Weight first polygon's centroid by area
+    xcentroid *= area
+    ycentroid *= area
     # Loop over any polygons within the multipolygon
-    for poly in GI.getpolygon(geom)
+    for i in 2:GI.ngeom(geom) #poly in GI.getpolygon(geom)
         # Polygon centroid and area
-        poly_centroid, poly_area = centroid_and_area(poly)
+        (xpoly, ypoly), poly_area = centroid_and_area(GI.getpolygon(geom, i))
         # Accumulate the area component into `area`
         area += poly_area
         # Weighted average of centroid components
-        xcentroid += GI.x(poly_centroid) * poly_area
-        ycentroid += GI.y(poly_centroid) * poly_area
+        xcentroid += xpoly * poly_area
+        ycentroid += ypoly * poly_area
     end
     xcentroid /= area
     ycentroid /= area
-    return GI.Point(xcentroid, ycentroid), area
+    return (xcentroid, ycentroid), area
 end
