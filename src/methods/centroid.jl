@@ -52,7 +52,7 @@ availible just in case the user also needs the area or length to decrease
 repeat computation.
 =#
 """
-    centroid(geom)::GI.Point
+    centroid(geom)::Tuple{T, T}
 
 Returns the centroid of a given line segment, linear ring, polygon, or
 mutlipolygon.
@@ -63,7 +63,7 @@ centroid(geom) = centroid(GI.trait(geom), geom)
     centroid(
         trait::Union{GI.LineStringTrait, GI.LinearRingTrait},
         geom,
-    )
+    )::Tuple{T, T}
 
 Returns the centroid of a line string or linear ring, which is calculated by
 weighting line segments by their length by convention.
@@ -74,7 +74,7 @@ centroid(
 ) = centroid_and_length(trait, geom)[1]
 
 """
-    centroid(trait, geom)
+    centroid(trait, geom)::Tuple{T, T}
 
 Returns the centroid of a polygon or multipolygon, which is calculated by
 weighting edges by their `area component` by convention.
@@ -82,7 +82,7 @@ weighting edges by their `area component` by convention.
 centroid(trait, geom) = centroid_and_area(trait, geom)[1]
 
 """
-    centroid_and_length(geom)::(GI.Point, ::Real)
+    centroid_and_length(geom)::(::Tuple{T, T}, ::Real)
 
 Returns the centroid and length of a given line/ring. Note this is only valid
 for line strings and linear rings.
@@ -93,14 +93,14 @@ centroid_and_length(geom) = centroid_and_length(GI.trait(geom), geom)
     centroid_and_area(
         ::Union{GI.LineStringTrait, GI.LinearRingTrait}, 
         geom,
-    )::(GI.Point, ::Real)
+    )::(::Tuple{T, T}, ::Real)
 
 Returns the centroid and area of a given geom.
 """
 centroid_and_area(geom) = centroid_and_area(GI.trait(geom), geom)
 
 """
-    centroid_and_length(geom)::(GI.Point, ::Real)
+    centroid_and_length(geom)::(::Tuple{T, T}, ::Real)
 
 Returns the centroid and length of a given line/ring. Note this is only valid
 for line strings and linear rings.
@@ -140,7 +140,7 @@ end
     centroid_and_area(
         ::Union{GI.LineStringTrait, GI.LinearRingTrait},
         geom,
-    )::(GI.Point, ::Real)
+    )::(::Tuple{T, T}, ::Real)
 
 Returns the centroid and area of a given a line string or a linear ring.
 Note that this is only valid if the line segment or linear ring is closed. 
@@ -179,7 +179,7 @@ function centroid_and_area(
 end
 
 """
-    centroid_and_area(::GI.PolygonTrait, geom)::(GI.Point, ::Real)
+    centroid_and_area(::GI.PolygonTrait, geom)::(::Tuple{T, T}, ::Real)
 
 Returns the centroid and area of a given polygon.
 """
@@ -205,7 +205,7 @@ function centroid_and_area(::GI.PolygonTrait, geom)
 end
 
 """
-    centroid_and_area(::GI.MultiPolygonTrait, geom)::(GI.Point, ::Real)
+    centroid_and_area(::GI.MultiPolygonTrait, geom)::(::Tuple{T, T}, ::Real)
 
 Returns the centroid and area of a given multipolygon.
 """
