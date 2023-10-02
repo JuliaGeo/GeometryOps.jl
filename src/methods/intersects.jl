@@ -2,13 +2,65 @@
 
 export intersects, intersection
 
-# This code checks whether geometries intersect with each other. 
+#=
+## What is `intersects` vs `intersection`?
 
-# !!! note
-#     This does not compute intersections, only checks if they exist.
+The `intersects` methods check whether two geometries intersect with each other.
+The `intersection` methods return the intersection between the two geometries.
+
+The `intersects` methods will always return a Boolean. However, note that the
+`intersection` methods will not all return the same type. For example, the
+intersection of two lines will be a point in most cases, unless the lines are
+parallel. On the other hand, the intersection of two polygons will be another
+polygon in most cases.
+
+To provide an example, consider this # TODO update this example:
+```@example cshape
+using GeometryOps
+using GeometryOps.GeometryBasics
+using Makie
+using CairoMakie
+
+cshape = Polygon([
+    Point(0,0), Point(0,3), Point(3,3), Point(3,2), Point(1,2),
+    Point(1,1), Point(3,1), Point(3,0), Point(0,0),
+])
+f, a, p = poly(cshape; axis = (; aspect = DataAspect()))
+```
+Let's see what the centroid looks like (plotted in red):
+```@example cshape
+cent = centroid(cshape)
+scatter!(a, GI.x(cent), GI.y(cent), color = :red)
+f
+```
+
+## Implementation
+
+This is the GeoInterface-compatible implementation.
+
+First, we implement a wrapper method that dispatches to the correct
+implementation based on the geometry trait. This is also used in the
+implementation, since it's a lot less work! 
+
+# TODO fill this in!
+=#
 
 const MEETS_OPEN = 1
 const MEETS_CLOSED = 0
+
+intersects(geom1, geom2) = GO.intersects(
+    GI.trait(geom1),
+    geom1,
+    GI.trait(geom2),
+    geom2,
+)
+
+GO.intersects(
+    trait1::Union{GI.LineStringTrait, GI.LinearRingTrait},
+    geom1,
+    trait2::Union{GI.LineStringTrait, GI.LinearRingTrait},
+    geom2,
+) = line_intersects(trait1, geom1, trait2, geom2)
 
 """
     line_intersects(line_a, line_b)
@@ -73,53 +125,91 @@ GO.line_intersection(line1, line2)
 (125.58375366067547, -14.83572303404496)
 ```
 """
-line_intersection(line_a, line_b) = line_intersection(trait(line_a), line_a, trait(line_b), line_b)
-function line_intersection(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)
+line_intersection(line_a, line_b) = intersection_points(trait(line_a), line_a, trait(line_b), line_b)
+
+"""
+    intersection_points(
+        ::GI.AbstractTrait, geom_a,
+        ::GI.AbstractTrait, geom_b,
+    )::Vector{::Tuple{::Real, ::Real}}
+
+Calculates the list of intersection points between two geometries. 
+"""
+function intersection_points(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)
     Extents.intersects(GI.extent(a), GI.extent(b)) || return nothing
     result = Tuple{Float64,Float64}[]
     edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
     for edge_a in edges_a
         for edge_b in edges_b
-            x = _line_intersection(edge_a, edge_b)
+            x = _intersection_point(edge_a, edge_b)
             isnothing(x) || push!(result, x)
         end
     end
     return result
 end
-function line_intersection(::GI.LineTrait, line_a, ::GI.LineTrait, line_b)
+
+"""
+    intersection_point(
+        ::GI.LineTrait, line_a,
+        ::GI.LineTrait, line_b,
+    )::Union{
+        ::Tuple{::Real, ::Real},
+        ::Nothing
+    }
+
+Calculates the intersection point between two lines if it exists and return
+`nothing` if it doesn't exist.
+"""
+function intersection_point(::GI.LineTrait, line_a, ::GI.LineTrait, line_b)
+    # Get start and end points for both lines
     a1 = GI.getpoint(line_a, 1)
-    b1 = GI.getpoint(line_b, 1)
     a2 = GI.getpoint(line_a, 2)
+    b1 = GI.getpoint(line_b, 1)
     b2 = GI.getpoint(line_b, 2)
-
-    return _line_intersection((a1, a2), (b1, b2))
+    # Determine the intersection point
+    point, _ = _intersection_point((a1, a2), (b1, b2))
+    return point
 end
-function _line_intersection((p11, p12)::Tuple, (p21, p22)::Tuple)
-    # Get points from lines
-    x1, y1 = GI.x(p11), GI.y(p11) 
-    x2, y2 = GI.x(p12), GI.y(p12)
-    x3, y3 = GI.x(p21), GI.y(p21)
-    x4, y4 = GI.x(p22), GI.y(p22)
 
-    d = ((y4 - y3) * (x2 - x1)) - ((x4 - x3) * (y2 - y1))
-    a = ((x4 - x3) * (y1 - y3)) - ((y4 - y3) * (x1 - x3))
-    b = ((x2 - x1) * (y1 - y3)) - ((y2 - y1) * (x1 - x3))
+"""
+    _intersection_point(
+        (p11, p12)::Tuple,
+        (p21, p22)::Tuple,
+    )
 
-    if d == 0
-        if a == 0 && b == 0
-            return nothing
+Calculates the intersection point between two lines if it exists, and the
+fractional component of each line from the initial end point to the
+intersection point.
+Inputs:
+    (p11, p12)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} first line
+    (p21, p22)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} second line
+Outputs:
+    (x, y)::Tuple{::Real, ::Real} intersection point
+    (t, u)::Tuple{::Real, ::Real} fractional length of lines to intersection
+    Both are ::Nothing if point doesn't exist!
+
+Calculation derivation can be found here:
+    https://stackoverflow.com/questions/563198/
+"""
+function _intersection_point((p11, p12)::Tuple, (p21, p22)::Tuple)
+    # First line runs from p to p + r
+    px, py = GI.x(p11), GI.y(p11)
+    rx, ry = GI.x(p12) - px, GI.y(p12) - py
+    # Second line runs from q to q + s 
+    qx, qy = GI.x(p21), GI.y(p21)
+    sx, sy = GI.x(p22) - qx, GI.y(p22) - qy
+    # Intersection will be where p + tr = q + us where 0 < t, u < 1 and
+    r_cross_s = rx * sy - ry * sx
+    if r_cross_s != 0
+        Δpq_x = px - qx
+        Δpq_y = py - qy
+        t = (Δpq_x * sy - Δpq_y * sx) / r_cross_s
+        u = (Δpq_x * ry - Δpq_y * rx) / r_cross_s
+        if 0 <= t <= 1 && 0 <= u <= 1
+            x = px + t * rx
+            y = py + t * ry
+            return (x, y), (t, u)
         end
-        return nothing
     end
-
-    ã  = a / d
-    b̃  = b / d
-
-    if ã  >= 0 && ã  <= 1 && b̃  >= 0 && b̃  <= 1
-        x = x1 + (ã  * (x2 - x1))
-        y = y1 + (ã  * (y2 - y1))
-        return (x, y)
-    end
-
-    return nothing
+    return nothing, nothing
 end
