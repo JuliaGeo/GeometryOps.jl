@@ -94,11 +94,6 @@ function to_extent(edges::Vector{Edge})
     Extents.Extent(X=x, Y=y)
 end
 
-function to_extent(edges::Vector{Edge})
-    x, y = extrema(first, edges)
-    Extents.Extent(X=x, Y=y)
-end
-
 function to_points(xs)
     points = Vector{TuplePoint}(undef, _npoint(x))
     _to_points!(points, x, 1)
