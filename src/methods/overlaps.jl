@@ -37,11 +37,11 @@ function overlaps(::MultiPointTrait, g1, ::MultiPointTrait, g2)::Bool
     end
 end
 function overlaps(::PolygonTrait, g1, ::PolygonTrait, g2)::Bool
-    return intersects(g1, g2)
+    return line_intersects(g1, g2)
 end
 function overlaps(t1::MultiPolygonTrait, mp, t2::PolygonTrait, p1)::Bool
     for p2 in GI.getgeom(mp)
-        overlaps(p1, p2) && return true
+        overlaps(p1, thp2) && return true
     end
 end
 function overlaps(::MultiPolygonTrait, g1, ::MultiPolygonTrait, g2)::Bool

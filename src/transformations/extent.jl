@@ -10,7 +10,7 @@ embed_extent(x) = apply(extent_applicator, AbstractTrait, x)
 
 extent_applicator(x) = extent_applicator(trait(x), x)
 extent_applicator(::Nothing, xs::AbstractArray) = embed_extent.(xs)
-extent_applicator(::Union{AbstractCurveTrait,MultiPointTrait}, point) = point
+function extent_applicator(::Union{AbstractCurveTrait,MultiPointTrait}, point) = point
     
 function extent_applicator(trait::AbstractGeometryTrait, geom)
     children_with_extents = map(GI.getgeom(geom)) do g
