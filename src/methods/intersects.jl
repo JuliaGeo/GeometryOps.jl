@@ -107,9 +107,14 @@ Returns true if two geometries intersect with one another and false
 otherwise. For all geometries but lines, conver the geometry to a list of edges
 and cross compare the edges for intersections.
 """
-function intersects(::GI.AbstractTrait, a, ::GI.AbstractTrait, b; kw...)
+function intersects(
+    trait_a::GI.AbstractTrait, a,
+    trait_b::GI.AbstractTrait, b;
+    kw...,
+)
     edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
-    return _line_intersects(edges_a, edges_b; kw...)
+    return _line_intersects(edges_a, edges_b; kw...) ||
+        within(trait_a, a, trait_b, b) || within(trait_b, b, trait_a, a) 
 end
 
 """
@@ -271,8 +276,8 @@ function intersection_points(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)
     # Create a list of edges from the two input geometries
     edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
     npoints_a, npoints_b  = length(edges_a), length(edges_b)
-    a_closed = edges_a[1][1] == edges_a[end][1]
-    b_closed = edges_b[1][1] == edges_b[end][1]
+    a_closed = npoints_a > 1 && edges_a[1][1] == edges_a[end][1]
+    b_closed = npoints_b > 1 && edges_b[1][1] == edges_b[end][1]
     if npoints_a > 0 && npoints_b > 0
         # Initialize an empty list of points
         T = typeof(edges_a[1][1][1]) # x-coordinate of first point in first edge

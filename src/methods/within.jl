@@ -23,11 +23,21 @@ GO.within(point, line)
 true
 ```
 """
+# Syntactic sugar
 within(g1, g2)::Bool = within(trait(g1), g1, trait(g2), g2)::Bool
 within(::GI.FeatureTrait, g1, ::Any, g2)::Bool = within(GI.geometry(g1), g2)
-within(::Any, g1, t2::GI.FeatureTrait, g2)::Bool = within(g1, geometry(g2))
+within(::Any, g1, t2::GI.FeatureTrait, g2)::Bool = within(g1, GI.geometry(g2))
+# Points in geometries
 within(::GI.PointTrait, g1, ::GI.LineStringTrait, g2)::Bool = point_on_line(g1, g2; ignore_end_vertices=true)
+within(::GI.PointTrait, g1, ::GI.LinearRingTrait, g2)::Bool = point_on_line(g1, g2; ignore_end_vertices=true)
 within(::GI.PointTrait, g1, ::GI.PolygonTrait, g2)::Bool = point_in_polygon(g1, g2; ignore_boundary=true)
+# Lines in  geometries
+within(::GI.LineStringTrait, g1, ::GI.LineStringTrait, g2)::Bool = line_on_line(g1, g2)  
+within(::GI.LineStringTrait, g1, ::GI.LinearRingTrait, g2)::Bool = line_on_line(g1, g2)
 within(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool = line_in_polygon(g1, g2)
-within(::GI.LineStringTrait, g1, ::GI.LineStringTrait, g2)::Bool = line_on_line(g1, g2)
+# Polygons within geometries
 within(::GI.PolygonTrait, g1, ::GI.PolygonTrait, g2)::Bool = polygon_in_polygon(g1, g2)
+
+# Everything not specified
+# TODO: Add multipolygons
+within(::GI.AbstractTrait, g1, ::GI.AbstractCurveTrait, g2)::Bool = false

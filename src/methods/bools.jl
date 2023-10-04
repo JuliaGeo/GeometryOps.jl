@@ -365,19 +365,19 @@ function line_in_polygon(
 end
 
 function polygon_in_polygon(poly1, poly2)
-     # edges1, edges2 = to_edges(poly1), to_edges(poly2)
-     # extent1, extent2 = to_extent(edges1), to_extent(edges2)
-     # Check the extents intersect
-     Extents.intersects(GI.extent(poly1), GI.extent(poly2)) || return false
+    # edges1, edges2 = to_edges(poly1), to_edges(poly2)
+    # extent1, extent2 = to_extent(edges1), to_extent(edges2)
+    # Check the extents intersect
+    Extents.intersects(GI.extent(poly1), GI.extent(poly2)) || return false
 
-     # Check all points in poly1 are in poly2
-     for point in GI.getpoint(poly1)
-         point_in_polygon(point, poly2) || return false
-     end
+    # Check all points in poly1 are in poly2
+    for point in GI.getpoint(poly1)
+        point_in_polygon(point, poly2) || return false
+    end
 
-     # Check the line of poly1 does not intersect the line of poly2
-     line_intersects(poly1, poly2) && return false
+    # Check the line of poly1 does not intersect the line of poly2
+    #intersects(poly1, poly2) && return false
 
-     # poly1 must be in poly2
-     return true
+    # poly1 must be in poly2
+    return true
  end

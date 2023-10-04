@@ -67,38 +67,92 @@
     )
 
     # Line strings far apart so extents don't overlap
+    l1 = LG.LineString([[100.0, 0.0], [101.0, 0.0], [103.0, 0.0]])
+    l2 = LG.LineString([[0.0, 0.0], [1.0, 0.0], [3.0, 0.0]])
+    @test !GO.intersects(l1, l2; meets = 0)
+    @test !GO.intersects(l1, l2; meets = 1)
+    @test isnothing(GO.intersection(l1, l2))
 
     # Line strings close together that don't overlap
-
-    # Line string with empty line string
+    l1 = LG.LineString([[3.0, 0.25], [5.0, 0.25], [7.0, 0.25]])
+    l2 = LG.LineString([[0.0, 0.0], [5.0, 10.0], [10.0, 0.0]])
+    @test !GO.intersects(l1, l2; meets = 0)
+    @test !GO.intersects(l1, l2; meets = 1)
+    @test isempty(GO.intersection(l1, l2))
 
     # Closed linear ring with open line string
+    r1 = LG.LinearRing([[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]])
+    l2 = LG.LineString([[0.0, -2.0], [12.0, 10.0],])
+    @test GO.intersects(r1, l2; meets = 0)
+    @test GO.intersects(r1, l2; meets = 1)
+    go_inter = GO.intersection(r1, l2)
+    @test length(go_inter) == 2
+    lg_inter = LG.intersection(r1, l2)
+    @test issetequal(
+        Set(go_inter),
+        Set(GO._tuple_point.(GI.getpoint(lg_inter)))
+    )
 
     # Closed linear ring with closed linear ring
-
-    # @test issetequal(
-    #     Subzero.intersect_lines(l1, l2),
-    #     Set([(0.5, -0.0), (1.5, 0), (2.5, -0.0)]),
-    # )
-    # l2 = [[[10., 10]]]
-    # @test issetequal(
-    #     Subzero.intersect_lines(l1, l2),
-    #     Set{Tuple{Float64, Float64}}(),
-    # )
-
-
+    r1 = LG.LinearRing([[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]])
+    r2 = LG.LineString([[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]])
+    @test GO.intersects(r1, r2; meets = 0)
+    @test GO.intersects(r1, r2; meets = 1)
+    go_inter = GO.intersection(r1, r2)
+    @test length(go_inter) == 2
+    lg_inter = LG.intersection(r1, r2)
+    @test issetequal(
+        Set(go_inter),
+        Set(GO._tuple_point.(GI.getpoint(lg_inter)))
+    )
 end
 
 @testset "Polygons" begin
     # Two polygons that intersect
+    p1 = LG.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
+    p2 = LG.Polygon([[[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]])
+    @test GO.intersects(p1, p2; meets = 0)
+    @test GO.intersects(p1, p2; meets = 1)
+    @test all(GO.intersection_points(p1, p2) .== [(6.5, 3.5), (6.5, -3.5)])
 
     # Two polygons that don't intersect
+    p1 = LG.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
+    p2 = LG.Polygon([[[13.0, 0.0], [18.0, 5.0], [23.0, 0.0], [18.0, -5.0], [13.0, 0.0]]])
+    @test !GO.intersects(p1, p2; meets = 0)
+    @test !GO.intersects(p1, p2; meets = 1)
+    @test isnothing(GO.intersection_points(p1, p2))
 
     # Polygon that intersects with linestring
+    p1 = LG.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
+    l2 = LG.LineString([[0.0, 0.0], [10.0, 0.0]])
+    @test GO.intersects(p1, l2; meets = 0)
+    @test GO.intersects(p1, l2; meets = 1)
+    GO.intersection_points(p1, l2)
+    @test all(GO.intersection_points(p1, l2) .== [(0.0, 0.0), (10.0, 0.0)])
 
+    # Polygon with a hole, line through polygon and hole
+    p1 = LG.Polygon([
+        [[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]],
+        [[2.0, -1.0], [2.0, 1.0], [3.0, 1.0], [3.0, -1.0], [2.0, -1.0]]
+    ])
+    l2 = LG.LineString([[0.0, 0.0], [10.0, 0.0]])
+    @test GO.intersects(p1, l2; meets = 0)
+    @test GO.intersects(p1, l2; meets = 1)
+    @test all(GO.intersection_points(p1, l2) .== [(0.0, 0.0), (2.0, 0.0), (3.0, 0.0), (10.0, 0.0)])
+
+    # Polygon with a hole, line only within the hole
+    p1 = LG.Polygon([
+        [[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]],
+        [[2.0, -1.0], [2.0, 1.0], [3.0, 1.0], [3.0, -1.0], [2.0, -1.0]]
+    ])
+    l2 = LG.LineString([[2.25, 0.0], [2.75, 0.0]])
+    @test !GO.intersects(p1, l2; meets = 0)
+    @test !GO.intersects(p1, l2; meets = 1)
+    @test isempty(GO.intersection_points(p1, l2))
 end
 
 @testset "MultiPolygons" begin
+    # TODO: Add these tests
     # Multi-polygon and polygon that intersect
 
     # Multi-polygon and polygon that don't intersect
