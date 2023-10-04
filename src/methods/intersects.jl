@@ -123,3 +123,10 @@ function _line_intersection((p11, p12)::Tuple, (p21, p22)::Tuple)
 
     return nothing
 end
+
+mutable struct node
+    idx::Int
+    inter::Bool
+    neighbor::Int
+    ent_exit::Bool
+end
