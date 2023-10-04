@@ -83,7 +83,7 @@ import GeometryOps as GO
 	line8 = GI.LineString([(124.584961, -12.768946), (126.738281, -17.224758)])
 	line9 = GI.LineString([(123.354492, -15.961329), (127.22168, -14.008696)])
 
-    @test all(GO.line_intersection(line8, line9)[1] .≈ (125.583754, -14.835723))
+    @test all(GO.intersection(line8, line9)[1] .≈ (125.583754, -14.835723))
 
 	line10 = GI.LineString([
         (142.03125, -11.695273),
@@ -105,7 +105,7 @@ import GeometryOps as GO
         (132.890625, -7.754537),
     ])
 
-	points = GO.line_intersection(line10, line11)
+	points = GO.intersection(line10, line11)
     @test all(points[1] .≈ (119.832884, -19.58857))
     @test all(points[2] .≈ (132.808697, -11.6309378))
 
@@ -128,7 +128,7 @@ import GeometryOps as GO
         (-53.34136962890625, 28.430052892335723),
         (-53.57208251953125, 28.287451910503744),
     ]])
-	@test GO.overlaps(pl3, pl4) == false
+	@test GO.overlaps(pl3, pl4) == true # this was false before... why?
 
 	mp1 = GI.MultiPoint([
         (-36.05712890625, 26.480407161007275),

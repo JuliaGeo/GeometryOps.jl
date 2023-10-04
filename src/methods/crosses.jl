@@ -55,7 +55,7 @@ end
 
 function line_crosses_line(line1, line2)
     np2 = GI.npoint(line2)
-    if line_intersects(line1, line2; meets=MEETS_CLOSED)
+    if intersects(line1, line2; meets=MEETS_CLOSED)
         for i in 1:GI.npoint(line1) - 1
             for j in 1:GI.npoint(line2) - 1
                 exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
@@ -71,7 +71,7 @@ end
 
 function line_crosses_poly(line, poly)
     for l in flatten(AbstractCurveTrait, poly)
-        line_intersects(line, l) && return true
+        intersects(line, l) && return true
     end
     return false
 end
