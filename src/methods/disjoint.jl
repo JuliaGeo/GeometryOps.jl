@@ -38,5 +38,5 @@ function polygon_disjoint(poly1, poly2)
     for point in GI.getpoint(poly2)
         point_in_polygon(point, poly1) && return false
     end
-    return !line_intersects(poly1, poly2)
+    return !intersects(poly1, poly2)
 end

@@ -54,7 +54,7 @@ end
     to_edges()
 
 Convert any geometry or collection of geometries into a flat 
-vector of `Tuple{Tuple{Float64,Float64},{Float64,Float64}}` edges.
+vector of `Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}` edges.
 """
 function to_edges(x)
     edges = Vector{Edge}(undef, _nedge(x))
