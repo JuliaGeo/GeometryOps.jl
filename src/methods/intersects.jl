@@ -212,16 +212,24 @@ intersection(
 Calculates the intersection between two line segments. Return nothing if
 there isn't one.
 """
+
+
+# example polygon from Greiner paper
+# p3 = GI.Polygon([[[0.0, 0.0], [0.0, 4.0], [7.0, 4.0], [7.0, 0.0], [0.0, 0.0]]])
+# p4 = GI.Polygon([[[1.0, -3.0], [1.0, 1.0], [3.5, -1.5], [6.0, 1.0], [6.0, -3.0], [1.0, -3.0]]])
+
+
 function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     # makes a list for each polygon
     a_list = Array{PolyNode, 1}(undef, _nedge(poly_a))
     b_list = Array{PolyNode, 1}(undef, _nedge(poly_b))
 
-    # I guess that the example that I'm using does not have that many intersection points
+    # fix guess of 10
     intr_list = Array{Tuple{Real, Real}, 1}(undef, 10)
     a_idx_list = Array{Int, 1}(undef, 10)
     b_idx_list = Array{Int, 1}(undef, 10)
-    alpha_list = Array{Tuple{Real, Real}}(undef, 10)
+    alpha_a_list = Array{Real, 1}(undef, 10)
+    alpha_b_list = Array{Real, 1}(undef, 10)
 
     edges_a = to_edges(poly_a)
     edges_b = to_edges(poly_b)
@@ -231,66 +239,85 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     for ii in eachindex(edges_a)
         # add the first point of the edge to the list of points in a
         if acount <= length(a_list)
-            a_list[acount] = PolyNode(ii, false, 0, false, (0,0))
+            a_list[acount] = PolyNode(ii, false, 0, false, 0)
         else
-            push!(a_list, PolyNode(ii, false, 0, false, (0,0)))
+            push!(a_list, PolyNode(ii, false, 0, false, 0))
         end
         acount = acount + 1
+        prev_counter = counter
 
         for jj in eachindex(edges_b)
 
             # add the first point of the edge to the list of points in b
             if ii == 1 
-                b_list[jj] = PolyNode(jj, false, 0, false, (0,0))
+                b_list[jj] = PolyNode(jj, false, 0, false, 0)
             end
 
-            
             # checks if edges intersect
             # there is got to be a better way to check if the edges intersect
-            if intersects(GI.Line([edges_a[ii][1], edges_a[ii][2]]), GI.Line([edges_b[jj][1], edges_b[jj][2]]))
+            if _line_intersects([edges_a[ii]], [edges_b[jj]]);
                 
                 int_pt, alphas = _intersection_point(edges_a[ii], edges_b[jj])
                 intr_list[counter] = int_pt
                 b_idx_list[counter] = jj
-                alpha_list[counter] = alphas
-                a_idx_list[counter] = acount
-                
-
-                # add the intersection point to a list
-                if acount <= length(a_list)
-                    a_list[acount] = PolyNode(counter, true, 0, false, alphas)
-                else
-                    push!(a_list, PolyNode(counter, true, 0, false, alphas))
-                end
+                alpha_a_list[counter] = alphas[1]
+                alpha_b_list[counter] = alphas[2]
 
                 counter = counter + 1
-                acount = acount + 1
             else
                 continue
             end
         end
+
+         # add the intersection point to a list if we found any
+        if prev_counter < counter
+            new_order = sortperm(alpha_a_list[prev_counter:counter-1])
+            pts_to_add = Array{PolyNode, 1}(undef, counter - prev_counter)
+            for kk in eachindex(new_order)
+                pts_to_add[new_order[kk]] = PolyNode(prev_counter+kk-1, true, 0, false, alpha_a_list[prev_counter+kk-1])
+                a_idx_list[prev_counter+kk-1] = acount + new_order[kk] - 1;
+            end
+
+            splice!(a_list, acount:(acount-1), pts_to_add)
+            acount = acount + counter - prev_counter
+            
+        end
+        
     end
 
     intr_list = intr_list[1:counter-1] 
     a_idx_list = a_idx_list[1:counter-1]
     b_idx_list = b_idx_list[1:counter-1]
-    alpha_list = alpha_list[1:counter-1]
+    alpha_a_list = alpha_a_list[1:counter-1]
+    alpha_b_list = alpha_b_list[1:counter-1]
 
     # now iterate through the b_list and add in intersection points
     skip = false
+    num_skips = 0
     b_neighbors = Array{Int, 1}(undef, 10)
     for ii in 1:(length(b_list)+length(intr_list))
+        # TODO: this skipping scheme could be made nicer
         if skip
-            skip = false
+            num_skips = num_skips - 1
+            if num_skips == 0
+                skip = false
+            end
             continue
         end
         # find the idx in the intr_list (same as b_idx_list) where the intr point is
         i = findall(x->x==b_list[ii].idx, b_idx_list)
         if !isempty(i)     
-            i = i[1]      
-            splice!(b_list, ii+1:ii, [PolyNode(i, true, a_idx_list[i], false, alpha_list[i])])
-            b_neighbors[i] = ii+1
+            # sort perm puts intersection pts in order of alpha value
+            new_order = sortperm(alpha_b_list[i])
+            pts_to_add = Array{PolyNode, 1}(undef, length(i))
+            for m in eachindex(i)
+                pts_to_add[new_order[m]] = PolyNode(i[m], true, a_idx_list[i[m]], false, alpha_b_list[i[m]])
+                b_neighbors[i[m]] = ii + new_order[m]
+            end   
+            # I use splice instead of insert so I can insert array   
+            splice!(b_list, ii+1:ii, pts_to_add)
             skip = true
+            num_skips = length(i)
         end
     end
 
@@ -302,7 +329,7 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
         end
     end
 
-    return (a_list, b_list, intr_list, counter)
+    return (a_list, b_list)
 
     # @assert false "Polygon intersection isn't implemented yet."
     # return nothing
@@ -445,5 +472,5 @@ mutable struct PolyNode
     inter::Bool
     neighbor::Int
     ent_exit::Bool
-    alpha::Tuple{Real, Real}
+    alpha::Real
 end
