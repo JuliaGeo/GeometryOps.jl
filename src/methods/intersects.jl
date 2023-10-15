@@ -239,9 +239,9 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     for ii in eachindex(edges_a)
         # add the first point of the edge to the list of points in a
         if acount <= length(a_list)
-            a_list[acount] = PolyNode(ii, false, 0, false, 0)
+            a_list[acount] = PolyNode(ii, false, 0, false, 0, false)
         else
-            push!(a_list, PolyNode(ii, false, 0, false, 0))
+            push!(a_list, PolyNode(ii, false, 0, false, 0, false))
         end
         acount = acount + 1
         prev_counter = counter
@@ -250,7 +250,7 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
 
             # add the first point of the edge to the list of points in b
             if ii == 1 
-                b_list[jj] = PolyNode(jj, false, 0, false, 0)
+                b_list[jj] = PolyNode(jj, false, 0, false, 0, false)
             end
 
             # checks if edges intersect
@@ -274,7 +274,7 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
             new_order = sortperm(alpha_a_list[prev_counter:counter-1])
             pts_to_add = Array{PolyNode, 1}(undef, counter - prev_counter)
             for kk in eachindex(new_order)
-                pts_to_add[new_order[kk]] = PolyNode(prev_counter+kk-1, true, 0, false, alpha_a_list[prev_counter+kk-1])
+                pts_to_add[new_order[kk]] = PolyNode(prev_counter+kk-1, true, 0, false, alpha_a_list[prev_counter+kk-1], false)
                 a_idx_list[prev_counter+kk-1] = acount + new_order[kk] - 1;
             end
 
@@ -305,13 +305,14 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
             continue
         end
         # find the idx in the intr_list (same as b_idx_list) where the intr point is
+        # find all is inefficient though, so it might be better to make dictionary of indices
         i = findall(x->x==b_list[ii].idx, b_idx_list)
         if !isempty(i)     
             # sort perm puts intersection pts in order of alpha value
             new_order = sortperm(alpha_b_list[i])
             pts_to_add = Array{PolyNode, 1}(undef, length(i))
             for m in eachindex(i)
-                pts_to_add[new_order[m]] = PolyNode(i[m], true, a_idx_list[i[m]], false, alpha_b_list[i[m]])
+                pts_to_add[new_order[m]] = PolyNode(i[m], true, a_idx_list[i[m]], false, alpha_b_list[i[m]], false)
                 b_neighbors[i[m]] = ii + new_order[m]
             end   
             # I use splice instead of insert so I can insert array   
@@ -329,7 +330,144 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
         end
     end
 
-    return (a_list, b_list)
+    # put in ent exit flags for polygon a
+    status = false
+    for ii in eachindex(a_list)
+        if ii == 1
+            status = !point_in_polygon(edges_a[ii][1], poly_b)
+            continue
+        end
+        if a_list[ii].inter
+            a_list[ii].ent_exit = status
+            status = !status
+        end
+    end
+
+    # put in ent exit flags for polygon b
+    status = false
+    for ii in eachindex(b_list)
+        if ii == 1
+            status = !point_in_polygon(edges_b[ii][1], poly_a)
+            continue
+        end
+        if b_list[ii].inter
+            b_list[ii].ent_exit = status
+            status = !status
+        end
+    end
+
+    # array for return polygons
+    return_polys = []
+    counter = 1
+    
+    # keeping track of processed intersection points
+    processed_pts = 0
+    tracker = copy(a_idx_list)
+    
+    while processed_pts < length(intr_list)
+        # way to toggle between the lists
+        list_edges = edges_a
+        list = a_list
+
+        # finding index of first unprocessed intersecting point in subject polygon
+        starting_pt = minimum(tracker)
+        idx = starting_pt
+
+        # Getting current first unprocessed intersection point
+        current = a_list[idx]
+        # array to store the intersection polygon points
+        pt_list = []
+        push!(pt_list, [intr_list[current.idx][1], intr_list[current.idx][2]])
+        
+        # marking frist intersection point as processes
+        processed_pts = processed_pts + 1
+
+        # TODO: deletat! slow, change to using dictionary of indices
+        deleteat!(tracker, findfirst(x->x==starting_pt, tracker))
+
+        while true # while the current node isn't the starting one
+            if current.ent_exit # if it's an entry point
+                while true # the current node isn't an intersection
+                    idx = idx + 1
+
+                    # wrapping around the point list
+                    if idx > length(list)
+                        idx = mod(idx, length(list))
+                    elseif idx == 0
+                        idx = length(list)
+                    end
+
+                    # getting current node
+                    current = list[idx]
+
+                    # adding the current node to the pt_list is a little complicated
+                    if current.inter
+                        # add coords from inter list
+                        push!(pt_list, [intr_list[current.idx][1], intr_list[current.idx][2]])
+                        
+                        # keeping track of processed intersection points
+                        if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
+                            processed_pts = processed_pts + 1
+                            deleteat!(tracker, findfirst(x->x==a_idx_list[current.idx], tracker))
+                        end
+                        
+                    else
+                        # add coords from "list", which should point to either a or b list
+                        push!(pt_list, [list_edges[current.idx][1][1], list_edges[current.idx][1][2]])
+                    end
+                    !current.inter || break
+                end
+            else
+                while true # the current node isn't an intersection
+                    idx = idx - 1 # going to prev point in polygon
+                    if idx > length(list)
+                        idx = mod(idx, length(list))
+                    elseif idx == 0
+                        idx = length(list)
+                    end
+                    current = list[idx]
+                    # adding the current node to the pt_list is a little complicated
+                    if current.inter
+                        # add coords from inter list
+                        push!(pt_list, [intr_list[current.idx][1], intr_list[current.idx][2]])
+
+                        # keeping track of processed intersection points
+                        if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
+                            processed_pts = processed_pts + 1
+                            deleteat!(tracker, findfirst(x->x==a_idx_list[current.idx], tracker))
+                        end
+                    else
+                        # add coords from "list", which should point to either a or b list
+                        push!(pt_list, [list_edges[current.idx][1][1], list_edges[current.idx][1][2]])
+                    end
+                    !current.inter || break
+                end
+            end
+
+            # break once get back to starting point
+            (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor]) || break
+
+            # switch to neighbor list
+            if list == a_list
+                list = b_list
+                list_edges = edges_b
+            else
+                list = a_list
+                list_edges = edges_a
+            end
+            idx = current.neighbor
+            current = list[idx]
+
+            
+        end
+
+        push!(return_polys, [pt_list])
+        counter = counter + 1
+    end
+    
+    
+
+    return (a_list, b_list, return_polys)
 
     # @assert false "Polygon intersection isn't implemented yet."
     # return nothing
@@ -473,4 +611,5 @@ mutable struct PolyNode
     neighbor::Int
     ent_exit::Bool
     alpha::Real
+    proc::Bool
 end
