@@ -130,9 +130,14 @@ function equals(::T, l1, ::T, l2) where {T<:GI.AbstractCurveTrait}
     
     # Find first matching point if it exists
     p1 = GI.getpoint(l1, 1)
-    offset = findfirst(p2 -> equals(p1, p2), GI.getpoint(l2))
+    offset = nothing
+    for i in 1:n2
+        if equals(p1, GI.getpoint(l2, i))
+            offset = i - 1
+            break
+        end
+    end
     isnothing(offset) && return false
-    offset -= 1
 
     # Then check all points are the same wrapping around line
     for i in 1:n1

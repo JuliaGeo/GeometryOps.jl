@@ -67,6 +67,8 @@ end
     ])
     # Test basic polygons that don't overlap
     @test GO.overlaps(p1, p2) == LG.overlaps(p1, p2)
+    @test !GO.overlaps(p1, (1, 1))
+    @test !GO.overlaps((1, 1), p2)
 
     p3 = LG.Polygon([[[1.0, 1.0], [1.0, 6.0], [6.0, 6.0], [6.0, 1.0], [1.0, 1.0]]])
     # Test basic polygons that overlap
@@ -75,9 +77,6 @@ end
     p4 = LG.Polygon([[[20.0, 5.0], [20.0, 10.0], [18.0, 10.0], [18.0, 5.0], [20.0, 5.0]]])
     # Test one polygon within the other
     @test GO.overlaps(p2, p4) == GO.overlaps(p4, p2) == LG.overlaps(p2, p4)
-
-    # @test_throws MethodError GO.overlaps(pl1, (1, 1))  # I think these should be false
-    # @test_throws MethodError GO.overlaps((1, 1), pl2)
 
     p5 = LG.Polygon(
         [[
