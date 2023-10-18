@@ -217,6 +217,7 @@ there isn't one.
 # example polygon from Greiner paper
 # p3 = GI.Polygon([[[0.0, 0.0], [0.0, 4.0], [7.0, 4.0], [7.0, 0.0], [0.0, 0.0]]])
 # p4 = GI.Polygon([[[1.0, -3.0], [1.0, 1.0], [3.5, -1.5], [6.0, 1.0], [6.0, -3.0], [1.0, -3.0]]])
+# p5 = GI.Polygon([[(1.0, -3.0), (1.0, 1.0), (3.5, -1.5), (6.0, 1.0), (6.0, -3.0), (1.0, -3.0)]])
 
 
 function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
@@ -358,7 +359,7 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
 
     # array for return polygons
     return_polys = []
-    counter = 1
+    counter = 0
     
     # keeping track of processed intersection points
     processed_pts = 0
@@ -377,75 +378,59 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
         current = a_list[idx]
         # array to store the intersection polygon points
         pt_list = []
-        push!(pt_list, [intr_list[current.idx][1], intr_list[current.idx][2]])
+        push!(pt_list, (intr_list[current.idx][1], intr_list[current.idx][2]))
         
         # marking frist intersection point as processes
         processed_pts = processed_pts + 1
+        tracker[current.idx] = typemax(Int)
 
-        # TODO: deletat! slow, change to using dictionary of indices
-        deleteat!(tracker, findfirst(x->x==starting_pt, tracker))
+        current_node_not_starting = true
+        while current_node_not_starting # while the current node isn't the starting one
+            status2 = false
+            current_node_not_intersection = true
+            while current_node_not_intersection # the current node isn't an intersection
+                
+                if current.inter
+                    status2 = current.ent_exit
+                end
 
-        while true # while the current node isn't the starting one
-            if current.ent_exit # if it's an entry point
-                while true # the current node isn't an intersection
+                if status2
                     idx = idx + 1
-
-                    # wrapping around the point list
-                    if idx > length(list)
-                        idx = mod(idx, length(list))
-                    elseif idx == 0
-                        idx = length(list)
-                    end
-
-                    # getting current node
-                    current = list[idx]
-
-                    # adding the current node to the pt_list is a little complicated
-                    if current.inter
-                        # add coords from inter list
-                        push!(pt_list, [intr_list[current.idx][1], intr_list[current.idx][2]])
-                        
-                        # keeping track of processed intersection points
-                        if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
-                            processed_pts = processed_pts + 1
-                            deleteat!(tracker, findfirst(x->x==a_idx_list[current.idx], tracker))
-                        end
-                        
-                    else
-                        # add coords from "list", which should point to either a or b list
-                        push!(pt_list, [list_edges[current.idx][1][1], list_edges[current.idx][1][2]])
-                    end
-                    !current.inter || break
+                else
+                    idx = idx -1
                 end
-            else
-                while true # the current node isn't an intersection
-                    idx = idx - 1 # going to prev point in polygon
-                    if idx > length(list)
-                        idx = mod(idx, length(list))
-                    elseif idx == 0
-                        idx = length(list)
-                    end
-                    current = list[idx]
-                    # adding the current node to the pt_list is a little complicated
-                    if current.inter
-                        # add coords from inter list
-                        push!(pt_list, [intr_list[current.idx][1], intr_list[current.idx][2]])
 
-                        # keeping track of processed intersection points
-                        if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
-                            processed_pts = processed_pts + 1
-                            deleteat!(tracker, findfirst(x->x==a_idx_list[current.idx], tracker))
-                        end
-                    else
-                        # add coords from "list", which should point to either a or b list
-                        push!(pt_list, [list_edges[current.idx][1][1], list_edges[current.idx][1][2]])
-                    end
-                    !current.inter || break
+                # wrapping around the point list
+                if idx > length(list)
+                    idx = mod(idx, length(list))
+                elseif idx == 0
+                    idx = length(list)
                 end
+
+                # getting current node
+                current = list[idx]
+
+                # adding the current node to the pt_list is a little complicated
+                if current.inter
+                    # add coords from inter list
+                    push!(pt_list, (intr_list[current.idx][1], intr_list[current.idx][2]))
+                    
+                    # keeping track of processed intersection points
+                    if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
+                        processed_pts = processed_pts + 1
+                        tracker[current.idx] = typemax(Int)
+                    end
+                    
+                else
+                    # add coords from "list", which should point to either a or b list
+                    push!(pt_list, (list_edges[current.idx][1][1], list_edges[current.idx][1][2]))
+                end
+
+                current_node_not_intersection = !current.inter
             end
-
+               
             # break once get back to starting point
-            (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor]) || break
+            current_node_not_starting = (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
 
             # switch to neighbor list
             if list == a_list
@@ -457,20 +442,12 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
             end
             idx = current.neighbor
             current = list[idx]
-
-            
         end
 
         push!(return_polys, [pt_list])
         counter = counter + 1
     end
-    
-    
-
-    return (a_list, b_list, return_polys)
-
-    # @assert false "Polygon intersection isn't implemented yet."
-    # return nothing
+    return return_polys
 end
 
 """
