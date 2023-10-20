@@ -52,16 +52,10 @@ intersect and _intersection_point which determines the intersection point
 between two line segments.
 =#
 
-const MEETS_CLOSED = 0
-const MEETS_OPEN = 1
-
 """
-    intersects(geom1, geom2; kw...)::Bool
+    intersects(geom1, geom2)::Bool
 
 Check if two geometries intersect, returning true if so and false otherwise.
-Takes in a Int keyword meets, which can either be  MEETS_OPEN (1), meaning that
-only intersections through open edges where edge endpoints are not included are
-recorded, versus MEETS_CLOSED (0) where edge endpoints are included.
 
 ## Example
 
@@ -76,71 +70,76 @@ GO.intersects(line1, line2)
 true
 ```
 """
-intersects(geom1, geom2; kw...) = intersects(
+intersects(geom1, geom2) = intersects(
     GI.trait(geom1),
     geom1,
     GI.trait(geom2),
-    geom2;
-    kw...
+    geom2
 )
 
 """
-    intersects(::GI.LineTrait, a, ::GI.LineTrait, b; meets = MEETS_OPEN)::Bool
+    intersects(::GI.LineTrait, a, ::GI.LineTrait, b)::Bool
 
-Returns true if two line segments intersect and false otherwise. Line segment
-endpoints are excluded in check if `meets = MEETS_OPEN` (1) and included if
-`meets = MEETS_CLOSED` (0).
+Returns true if two line segments intersect and false otherwise.
 """
-function intersects(::GI.LineTrait, a, ::GI.LineTrait, b; meets = MEETS_OPEN)
+function intersects(::GI.LineTrait, a, ::GI.LineTrait, b)
     a1 = _tuple_point(GI.getpoint(a, 1))
     a2 = _tuple_point(GI.getpoint(a, 2))
     b1 = _tuple_point(GI.getpoint(b, 1))
     b2 = _tuple_point(GI.getpoint(b, 2))
     meet_type = ExactPredicates.meet(a1, a2, b1, b2)
-    return meet_type == MEETS_OPEN || meet_type == meets
+    return meet_type == 0 || meet_type == 1
 end
 
 """
-    intersects(::GI.AbstractTrait, a, ::GI.AbstractTrait, b; kw...)::Bool
+    intersects(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)::Bool
 
 Returns true if two geometries intersect with one another and false
-otherwise. For all geometries but lines, conver the geometry to a list of edges
+otherwise. For all geometries but lines, convert the geometry to a list of edges
 and cross compare the edges for intersections.
 """
 function intersects(
-    trait_a::GI.AbstractTrait, a,
-    trait_b::GI.AbstractTrait, b;
-    kw...,
-)
-    edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
-    return _line_intersects(edges_a, edges_b; kw...) ||
-        within(trait_a, a, trait_b, b) || within(trait_b, b, trait_a, a) 
+    trait_a::GI.AbstractTrait, a_geom,
+    trait_b::GI.AbstractTrait, b_geom,
+)   edges_a, edges_b = map(sort! ∘ to_edges, (a_geom, b_geom))
+    return _line_intersects(edges_a, edges_b) ||
+        within(trait_a, a_geom, trait_b, b_geom) ||
+        within(trait_b, b_geom, trait_a, a_geom) 
 end
 
 """
     _line_intersects(
         edges_a::Vector{Edge},
-        edges_b::Vector{Edge};
-        meets = MEETS_OPEN,
+        edges_b::Vector{Edge}
     )::Bool
 
 Returns true if there is at least one intersection between edges within the
-two lists. Line segment endpoints are excluded in check if `meets = MEETS_OPEN`
-(1) and included if `meets = MEETS_CLOSED` (0).
+two lists of edges.
 """
 function _line_intersects(
     edges_a::Vector{Edge},
-    edges_b::Vector{Edge};
-    meets = MEETS_OPEN,
+    edges_b::Vector{Edge}
 )
     # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
     for edge_a in edges_a
         for edge_b in edges_b
-            meet_type = ExactPredicates.meet(edge_a..., edge_b...)
-            (meet_type == MEETS_OPEN || meet_type == meets) && return true 
+            _line_intersects(edge_a, edge_b) && return true 
         end
     end
     return false
+end
+
+"""
+    _line_intersects(
+        edge_a::Edge,
+        edge_b::Edge,
+    )::Bool
+
+Returns true if there is at least one intersection between two edges.
+"""
+function _line_intersects(edge_a::Edge, edge_b::Edge)
+    meet_type = ExactPredicates.meet(edge_a..., edge_b...)
+    return meet_type == 0 || meet_type == 1
 end
 
 """
