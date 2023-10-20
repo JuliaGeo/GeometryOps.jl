@@ -6,7 +6,7 @@ export equals
 ## What is equals?
 
 The equals function checks if two geometries are equal. They are equal if they
-share the same set of points and edges.
+share the same set of points and edges to define the same shape.
 
 To provide an example, consider these two lines:
 ```@example cshape
@@ -40,7 +40,8 @@ Note that while we need the same set of points and edges, they don't need to be
 provided in the same order for polygons. For for example, we need the same set
 points for two multipoints to be equal, but they don't have to be saved in the
 same order. This requires checking every point against every other point in the
-two geometries we are comparing.  
+two geometries we are comparing. Additionally, geometries and multi-geometries
+can be equal if the multi-geometry only includes that single geometry.
 =#
 
 """
@@ -95,6 +96,14 @@ function equals(::GI.PointTrait, p1, ::GI.PointTrait, p2)
     return true
 end
 
+function equals(::GI.PointTrait, p1, ::GI.MultiPointTrait, mp2)
+    GI.npoint(mp2) == 1 || return false
+    return equals(p1, GI.getpoint(mp2, 1))
+end
+
+equals(trait1::GI.MultiPointTrait, mp1, trait2::GI.PointTrait, p2) =
+    equals(trait2, p2, trait1, mp1)
+
 """
     equals(::GI.MultiPointTrait, mp1, ::GI.MultiPointTrait, mp2)::Bool
 
@@ -121,7 +130,10 @@ end
 Two curves are equal if they share the same set of points going around the
 curve. 
 """
-function equals(::T, l1, ::T, l2) where {T<:GI.AbstractCurveTrait}
+function equals(
+    ::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, l1,
+    ::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, l2,
+)
     # Check line lengths match
     n1 = GI.npoint(l1)
     n2 = GI.npoint(l2)
@@ -173,6 +185,14 @@ function equals(::GI.PolygonTrait, geom_a, ::GI.PolygonTrait, geom_b)
     end
     return true
 end
+
+function equals(::GI.PolygonTrait, geom_a, ::MultiPolygonTrait, geom_b)
+    GI.npolygon(geom_b) == 1 || return false
+    return equals(geom_a, GI.getpolygon(geom_b, 1))
+end
+
+equals(trait_a::GI.MultiPolygonTrait, geom_a, trait_b::PolygonTrait, geom_b) = 
+    equals(trait_b, geom_b, trait_a, geom_a)
 
 """
     equals(::GI.PolygonTrait, geom_a, ::GI.PolygonTrait, geom_b)::Bool
