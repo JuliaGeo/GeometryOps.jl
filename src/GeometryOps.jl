@@ -32,6 +32,7 @@ include("methods/overlaps.jl")
 include("methods/within.jl")
 include("methods/polygonize.jl")
 include("methods/barycentric.jl")
+include("methods/equals.jl")
 
 include("transformations/flip.jl")
 include("transformations/simplify.jl")

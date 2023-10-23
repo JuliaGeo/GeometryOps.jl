@@ -11,7 +11,8 @@ export line_on_line, line_in_polygon, polygon_in_polygon
 """
     isclockwise(line::Union{LineString, Vector{Position}})::Bool
 
-Take a ring and return true or false whether or not the ring is clockwise or counter-clockwise.
+Take a ring and return true or false whether or not the ring is clockwise or
+counter-clockwise.
 
 ## Example
 
@@ -26,6 +27,7 @@ true
 ```
 """
 isclockwise(geom)::Bool = isclockwise(GI.trait(geom), geom)
+
 function isclockwise(::AbstractCurveTrait, line)::Bool
     sum = 0.0
     prev = GI.getpoint(line, 1)
@@ -87,30 +89,6 @@ function isconcave(poly)::Bool
 
     return false
 end
-
-equals(geo1, geo2) = _equals(trait(geo1), geo1, trait(geo2), geo2)
-
-_equals(::T, geo1, ::T, geo2) where T = error("Cant compare $T yet")
-function _equals(::T, p1, ::T, p2) where {T<:PointTrait}
-    GI.ncoord(p1) == GI.ncoord(p2) || return false
-    GI.x(p1) == GI.x(p2) || return false
-    GI.y(p1) == GI.y(p2) || return false
-    if GI.is3d(p1)
-        GI.z(p1) == GI.z(p2) || return false 
-    end
-    return true
-end
-function _equals(::T, l1, ::T, l2) where {T<:AbstractCurveTrait}
-    # Check line lengths match
-    GI.npoint(l1) == GI.npoint(l2) || return false
-
-    # Then check all points are the same
-    for (p1, p2) in zip(GI.getpoint(l1), GI.getpoint(l2))
-        equals(p1, p2) || return false
-    end
-    return true
-end
-_equals(t1, geo1, t2, geo2) = false
 
 # """
 #     isparallel(line1::LineString, line2::LineString)::Bool
@@ -188,6 +166,26 @@ function point_on_line(point, line; ignore_end_vertices::Bool=false)::Bool
         end
         if point_on_segment(point, (line_points[i], line_points[i + 1]); exclude_boundary) 
             return true
+        end
+    end
+    return false
+end
+
+function point_on_seg(point, start, stop)
+    # Parse out points
+    x, y = GI.x(point), GI.y(point)
+    x1, y1 = GI.x(start), GI.y(start)
+    x2, y2 = GI.x(stop), GI.y(stop)
+    Δxl = x2 - x1
+    Δyl = y2 - y1
+    # Determine if point is on segment
+    cross = (x - x1) * Δyl - (y - y1) * Δxl
+    if cross == 0  # point is on line extending to infinity
+        # is line between endpoints
+        if abs(Δxl) >= abs(Δyl)  # is line between endpoints
+            return Δxl > 0 ? x1 <= x <= x2 : x2 <= x <= x1
+        else
+            return Δyl > 0 ? y1 <= y <= y2 : y2 <= y <= y1
         end
     end
     return false
