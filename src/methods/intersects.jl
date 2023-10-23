@@ -357,7 +357,7 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     end
 
     # array for return polygons
-    return_polys = []
+    return_polys = Array{Array{Tuple{Float64, Float64}, 1}, 1}(undef, 0)
     counter = 0
     
     # keeping track of processed intersection points
@@ -376,7 +376,7 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
         # Getting current first unprocessed intersection point
         current = a_list[idx]
         # array to store the intersection polygon points
-        pt_list = []
+        pt_list = Array{Tuple{Float64, Float64}, 1}(undef, 0)
         push!(pt_list, (intr_list[current.idx][1], intr_list[current.idx][2]))
         
         # marking frist intersection point as processes
@@ -443,7 +443,7 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
             current = list[idx]
         end
 
-        push!(return_polys, [pt_list])
+        push!(return_polys, pt_list)
         counter = counter + 1
     end
     return return_polys
