@@ -94,6 +94,7 @@ function to_extent(edges::Vector{Edge})
     Extents.Extent(X=x, Y=y)
 end
 
+# is this a typo? I tried changing xs to x but then it still doesn't work
 function to_points(xs)
     points = Vector{TuplePoint}(undef, _npoint(x))
     _to_points!(points, x, 1)

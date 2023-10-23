@@ -7,6 +7,7 @@ using GeometryBasics
 import Proj
 using LinearAlgebra
 import ExactPredicates
+using Random
 
 using GeoInterface.Extents: Extents
 

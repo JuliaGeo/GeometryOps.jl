@@ -151,6 +151,10 @@ end
     @test isempty(GO.intersection_points(p1, l2))
 end
 
+@testset "Intersection_polygons" begin
+    
+end
+
 @testset "MultiPolygons" begin
     # TODO: Add these tests
     # Multi-polygon and polygon that intersect
