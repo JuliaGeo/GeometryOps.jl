@@ -2,6 +2,6 @@ import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG
 
-p2 = LG.Point([0.0, 1.0])
-mp3 = LG.MultiPoint([p2])
-GO.equals(p2, mp3)
+r1 = LG.LinearRing([[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]])
+r2 = LG.LinearRing([[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]])
+GO.equals(r1, r1)
