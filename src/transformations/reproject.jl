@@ -38,8 +38,18 @@ function reproject(geom;
     source_crs=nothing, target_crs=nothing, transform=nothing, kw...
 )
     if isnothing(transform)
-        source_crs = isnothing(source_crs) ? GeoInterface.crs(geom) : source_crs
+        if isnothing(source_crs) 
+            source_crs = if GI.trait(geom) isa Nothing && geom isa AbstractArray
+                GeoInterface.crs(first(geom))
+            else
+                GeoInterface.crs(geom)
+            end
+        end
+
+        # If its still nothing, error
         isnothing(source_crs) && throw(ArgumentError("geom has no crs attatched. Pass a `source_crs` keyword"))
+
+        # Otherwise reproject
         reproject(geom, source_crs, target_crs; kw...)
     else
         reproject(geom, transform; kw...)

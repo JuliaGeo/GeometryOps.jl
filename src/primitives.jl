@@ -24,16 +24,7 @@ flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 """
-function apply(f, ::Type{Target}, geom; calc_extent=nothing, kw...) where Target 
-    # Catch the type instability here in the outer method
-    # so false is nothing::Nothing and true is true::Bool
-    # we can think of a nicer way to do this later...
-    if isnothing(calc_extent) || !calc_extent
-        _apply(f, Target, geom; calc_extent=nothing, kw...)
-    else
-        _apply(f, Target, geom; calc_extent=true, kw...)
-    end
-end
+apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw...)
 
 _apply(f, ::Type{Target}, geom; kw...)  where Target =
     _apply(f, Target, GI.trait(geom), geom; kw...)
@@ -47,14 +38,14 @@ _apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
     map(x -> _apply(f, Target, x; kw...), iterable)
 # Rewrap feature collections
 function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; 
-    crs=GI.crs(fc), calc_extent=nothng, threaded=false
+    crs=GI.crs(fc), calc_extent=false, threaded=false
 ) where Target
     features = _maptasks(GI.nfeature(fc); threaded) do i
         feature = GI.getfeature(fc, i)
         _apply(f, Target, feature; crs, calc_extent)::GI.Feature
     end
-    if !isnothing(calc_extent)
-        extent = reduce(features; init=GI.extent(first(features))) do (acc, f)
+    if calc_extent
+        extent = reduce(features; init=GI.extent(first(features))) do acc, f
             Extents.union(acc, Extents.extent(f))
         end
         return GI.FeatureCollection(features; crs, extent)
@@ -64,11 +55,11 @@ function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc;
 end
 # Rewrap features
 function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; 
-    crs=GI.crs(feature), calc_extent=nothing, threaded=false
+    crs=GI.crs(feature), calc_extent=false, threaded=false
 ) where Target
     properties = GI.properties(feature)
     geometry = _apply(f, Target, GI.geometry(feature); crs, calc_extent)
-    if !isnothing(calc_extent)
+    if calc_extent
         extent = GI.extent(geometry)
         return GI.Feature(geometry; properties, crs, extent)
     else
@@ -77,20 +68,20 @@ function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature;
 end
 # Reconstruct nested geometries
 function _apply(f, ::Type{Target}, trait, geom; 
-    crs=GI.crs(geom), calc_extent=nothing, threaded=false
+    crs=GI.crs(geom), calc_extent=false, threaded=false
 )::(GI.geointerface_geomtype(trait)) where Target
     # TODO handle zero length...
     geoms = _maptasks(GI.ngeom(geom); threaded) do i
         _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent)
     end
-    extent = _calc_extent(geoms)
-    return rebuild(geom, geoms; crs, extent)
-end
-
-function _calc_extent(geoms)
-    extent = GI.extent(first(geoms))
-    for g in geoms
-        extent = Extents.union(extent, GI.extent(g))
+    if calc_extent
+        extent = GI.extent(first(geoms))
+        for g in geoms
+            extent = Extents.union(extent, GI.extent(g))
+        end
+        return rebuild(geom, geoms; crs, extent)
+    else
+        return rebuild(geom, geoms; crs)
     end
 end
 # Apply f to the target geometry
@@ -263,15 +254,15 @@ using Base.Threads: nthreads, @threads, @spawn
 # Threading utility, modified Mason Protters threading PSA
 # run `f` over ntasks, where f recieves an AbstractArray/range
 # of linear indices
-function _maptasks(f, ntasks; threaded=false)
+function _maptasks(f, ntasks::Int; threaded=false)
     if threaded
         # Customize this as needed. 
         # More tasks have more overhead, but better load balancing
         tasks_per_thread = 2 
         chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
         # partition your data into chunks that
-        data_chunks = Iterators.partition(some_data, chunk_size) 
-        map(data_chunks) do chunk
+        data_chunks = Iterators.partition(1:ntasks, chunk_size) 
+        tasks = map(data_chunks) do chunk
             # Each chunk of your data gets its own spawned task that does its own local, 
             # sequential work and then returns the result
             @spawn begin
@@ -279,7 +270,7 @@ function _maptasks(f, ntasks; threaded=false)
             end
         end
 
-        return retuce(vcat, map(fetch, tasks))
+        return reduce(vcat, map(fetch, tasks))
     else
         return map(f, 1:ntasks)
     end
