@@ -29,7 +29,7 @@ apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw.
 _apply(f, ::Type{Target}, geom; kw...)  where Target =
     _apply(f, Target, GI.trait(geom), geom; kw...)
 function _apply(f, ::Type{Target}, ::Nothing, A::AbstractArray; threaded=false, kw...) where Target
-    _maptasks(length(A); threaded) do i
+    _maptasks(eachindex(A); threaded) do i
         _apply(f, Target, A[i]; kw...)
     end
 end
@@ -40,7 +40,7 @@ _apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
 function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; 
     crs=GI.crs(fc), calc_extent=false, threaded=false
 ) where Target
-    features = _maptasks(GI.nfeature(fc); threaded) do i
+    features = _maptasks(1:GI.nfeature(fc); threaded) do i
         feature = GI.getfeature(fc, i)
         _apply(f, Target, feature; crs, calc_extent)::GI.Feature
     end
@@ -71,7 +71,7 @@ function _apply(f, ::Type{Target}, trait, geom;
     crs=GI.crs(geom), calc_extent=false, threaded=false
 )::(GI.geointerface_geomtype(trait)) where Target
     # TODO handle zero length...
-    geoms = _maptasks(GI.ngeom(geom); threaded) do i
+    geoms = _maptasks(1:GI.ngeom(geom); threaded) do i
         _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent)
     end
     if calc_extent
@@ -254,24 +254,27 @@ using Base.Threads: nthreads, @threads, @spawn
 # Threading utility, modified Mason Protters threading PSA
 # run `f` over ntasks, where f recieves an AbstractArray/range
 # of linear indices
-function _maptasks(f, ntasks::Int; threaded=false)
+function _maptasks(f, taskrange; threaded=false)
     if threaded
+        ntasks = length(taskrange)
         # Customize this as needed. 
         # More tasks have more overhead, but better load balancing
         tasks_per_thread = 2 
         chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
-        # partition your data into chunks that
-        data_chunks = Iterators.partition(1:ntasks, chunk_size) 
-        tasks = map(data_chunks) do chunk
-            # Each chunk of your data gets its own spawned task that does its own local, 
-            # sequential work and then returns the result
+        # partition the range into chunks
+        task_chunks = Iterators.partition(taskrange, chunk_size) 
+        # Map over the chunks
+        tasks = map(task_chunks) do chunk
+            # Spawn a task to process this chunk
             @spawn begin
+                # Where we map `f` over the chunk indices 
                 map(f, chunk)
             end
         end
 
+        # Finally we join the results into a new vector
         return reduce(vcat, map(fetch, tasks))
     else
-        return map(f, 1:ntasks)
+        return map(f, taskrange)
     end
 end
