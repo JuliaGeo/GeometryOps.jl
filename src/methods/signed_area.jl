@@ -1,53 +1,144 @@
-# # Signed area
+# # Area and signed area
 
-export signed_area
+export area, signed_area
 
-# ## What is signed area?
+#=
+## What is area? What is signed area?
 
-# Signed area is simply the integral over the exterior path of a polygon, 
-# minus the sum of integrals over its interior holes.
+Area is the amount of space occupied by a two-dimensional figure. It is always
+a positive value. Signed area is simply the integral over the exterior path of
+a polygon, minus the sum of integrals over its interior holes. It is signed such
+that a clockwise path has a positive area, and a counterclockwise path has a
+negative area. The area is the absolute value of the signed area.
 
-# It is signed such that a clockwise path has a positive area, and a
-# counterclockwise path has a negative area.
+To provide an example, consider this rectangle:
+```@example rect
+using GeometryOps
+using GeometryOps.GeometryBasics
+using Makie
 
-# To provide an example, consider this rectangle:
-# ```@example rect
-# using GeometryOps
-# using GeometryOps.GeometryBasics
-# using Makie
-# 
-# rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
-# f, a, p = poly(rect; axis = (; aspect = DataAspect()))
-# ```
-# This is clearly a rectangle, etc.  But now let's look at how the points look:
-# ```@example rect
-# lines!(a, rect; color = 1:length(coordinates(rect))+1)
-# f
-# ```
-# The points are ordered in a clockwise fashion, which means that the signed area
-# is negative.  If we reverse the order of the points, we get a postive area.
+rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
+f, a, p = poly(rect; axis = (; aspect = DataAspect()))
+```
+This is clearly a rectangle, etc.  But now let's look at how the points look:
+```@example rect
+lines!(a, rect; color = 1:length(coordinates(rect))+1)
+f
+```
+The points are ordered in a clockwise fashion, which means that the signed area
+is negative.  If we reverse the order of the points, we get a postive area.
 
-# ## Implementation
+## Implementation
 
-# This is the GeoInterface-compatible implementation.
+This is the GeoInterface-compatible implementation. First, we implement a
+wrapper method that dispatches to the correct implementation based on the
+geometry trait. This is also used in the implementation, since it's a lot less
+work!
 
-# First, we implement a wrapper method that dispatches to the correct
-# implementation based on the geometry trait.
-# 
-# This is also used in the implementation, since it's a lot less work! 
+Note that area (and signed area) are zero for all points and curves, even
+if the curves are closed like with a linear ring. Also note that signed area
+really only makes sense for polygons, given with a multipolygon can have several
+polygons each with a different orientation and thus the absolute value of the
+signed area might not be the area. Caution when using this function!
+=#
+
+"""
+    area(geom)::Real
+
+Returns the area of the geometry.
+"""
+area(geom) = area(GI.trait(geom), geom)
+
 """
     signed_area(geom)::Real
 
 Returns the signed area of the geometry, based on winding order.
 """
-signed_area(x) = signed_area(GI.trait(x), x)
+signed_area(geom) = signed_area(GI.trait(geom), geom)
 
-# TODOS here:
-# 1. This could conceivably be multithreaded.  How to indicate that it should be so?
-# 2. What to do for corner cases (nan point, etc)?
-function signed_area(::Union{GI.LineStringTrait,GI.LinearRingTrait}, geom)
-    # Basically, we integrate the area under the line string, which gives us
-    # the signed area.
+"""
+    area(::GI.PointTrait, point)::Real
+
+The area of a point is always zero. 
+"""
+function area(::GI.PointTrait, point)
+    T = typeof(GI.x(point))
+    return T(0)
+end
+
+"""
+    signed_area(::GI.PointTrait, point)::Real
+
+The signed area of a point is always zero. 
+"""
+signed_area(trait::GI.PointTrait, point) = signed_area(trait, point)
+
+"""
+    area(::GI.AbstractCurveTrait, curve)::Real
+
+The area of a curve is always zero. 
+"""
+function area(::CT, curve) where CT <: GI.AbstractCurveTrait
+    T = typeof(GI.x(GI.getpoint(curve, 1)))
+    return T(0)
+end
+
+"""
+    signed_area(::GI.AbstractCurveTrait, curve)::Real
+
+The signed area of a curve is always zero. 
+"""
+signed_area(trait::CT, curve) where CT <: GI.AbstractCurveTrait =
+    area(trait, curve)
+
+"""
+    area(::GI.PolygonTrait, curve)::Real
+
+Finds the area of a polygon, which is the absolute value of the signed area.
+"""
+area(trait::GI.PolygonTrait, geom) = abs(signed_area(trait, geom))
+
+"""
+    signed_area(::GI.PolygonTrait, curve)::Real
+
+Finds the signed area of a polygon. This is positive if the polygon is clockwise
+and negative if it is a counterclockwise path.
+"""
+function signed_area(::GI.PolygonTrait, poly)
+    s_area = _signed_area(GI.getexterior(poly))
+    area = abs(s_area)
+    for hole in GI.gethole(poly)
+        area -= abs(_signed_area(hole))
+    end
+    return area * sign(s_area)
+end
+
+"""
+    area(::GI.MultiPolygonTrait, curve)::Real
+
+Finds the area of a multi-polygon, which is the sum of the areas of all of the
+sub-polygons.
+"""
+area(::GI.MultiPolygonTrait, geom) =
+    sum((area(poly) for poly in GI.getpolygon(geom)))
+
+"""
+    signed_area(::GI.MultiPolygonTrait, curve)::Real
+
+Finds the signed area of a multi-polygon. This value doesn't really have an
+inuitive meaning given each sub-polygon can be clockwise or couterclockwise.
+"""
+signed_area(::GI.MultiPolygonTrait, geom) =
+    sum((signed_area(poly) for poly in GI.getpolygon(geom)))
+
+"""
+    _signed_area(geom)::Real
+
+Calculates the signed area of a given curve. This is equivalent to integrating
+to find the area under the curve.
+"""
+function _signed_area(geom)
+    # Integrate the area under the curve
     point₁ = GI.getpoint(geom, 1)
     point₂ = GI.getpoint(geom, 2)
     area = GI.x(point₁) * GI.y(point₂) - GI.y(point₁) * GI.x(point₂)
@@ -61,47 +152,3 @@ function signed_area(::Union{GI.LineStringTrait,GI.LinearRingTrait}, geom)
     area /= 2
     return area
 end
-
-# This subtracts the 
-function signed_area(::GI.PolygonTrait, geom)
-    s_area = signed_area(GI.getexterior(geom))
-    area = abs(s_area)
-    for hole in GI.gethole(geom)
-        area -= abs(signed_area(hole))
-    end
-    return area * sign(s_area)
-end
-
-signed_area(::GI.MultiPolygonTrait, geom) = sum((signed_area(poly) for poly in GI.getpolygon(geom)))
-
-# This should _theoretically_ work for anything, but I haven't actually tested yet!
-
-# Below is the original GeometryBasics implementation:
-
-# # ```julia
-# function signed_area(a::Point{2, T}, b::Point{2, T}, c::Point{2, T}) where T
-#     return ((b[1] - a[1]) * (c[2] - a[2]) - (c[1] - a[1]) * (b[2] - a[2])) / 2
-# end
-#
-# function signed_area(points::AbstractVector{<: Point{2, T}}) where {T}
-#     area = sum((points[i][1] * points[i+1][2] - points[i][2] * points[i+1][1] for i in 1:(length(points)-1))) / 2.0
-# end
-#
-# function signed_area(ls::GeometryBasics.LineString)
-#     # coords = GeometryBasics.decompose(Point2f, ls)
-#     return sum((p1[1] * p2[2] - p1[2] * p2[1] for (p1, p2) in ls)) / 2.0#signed_area(coords)
-# end
-#
-# function signed_area(poly::GeometryBasics.Polygon{2})
-#     s_area = signed_area(poly.exterior)
-#     area = abs(s_area)
-#     for hole in poly.interiors
-#         area -= abs(signed_area(hole))
-#     end
-#     return area * sign(s_area)
-# end
-#
-# # WARNING: this may not do what you expect, since it's
-# # sensitive to winding order.  Use GeoInterface.area instead.
-# signed_area(mp::MultiPolygon) = sum(signed_area.(mp.polygons))
-# ```
