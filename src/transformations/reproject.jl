@@ -65,20 +65,12 @@ function reproject(geom, source_crs, target_crs;
 end
 function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=nothing, kw...)
     if _is3d(geom)
-        return apply(Union{GI.LineStringTrait,GI.LinearRingTrait,GI.MultiPointTrait}, geom; crs=target_crs, kw...) do geom
-            points = map(GI.getpoint(geom)) do p
-                transform(GI.x(p), GI.y(p), GI.z(p))
-            end
-            extent = Extents.Extent(X=extrema(first, points), Y=extrema(p -> p[2], points), Z=extrema(last, points))
-            rebuild(geom, points; extent, crs=target_crs)
+        return apply(PointTrait, geom; crs=target_crs, kw...) do p
+            transform(GI.x(p), GI.y(p), GI.z(p))
         end
     else
-        return apply(Union{GI.LineStringTrait,GI.LinearRingTrait,GI.MultiPointTrait}, geom; crs=target_crs, kw...) do geom
-            points = map(GI.getpoint(geom)) do p
-                transform(GI.x(p), GI.y(p))
-            end
-            extent = Extents.Extent(X=extrema(first, points), Y=extrema(last, points))
-            rebuild(geom, points; extent, crs=target_crs)
+        return apply(PointTrait, geom; crs=target_crs, kw...) do p
+            transform(GI.x(p), GI.y(p))
         end
     end
 end
