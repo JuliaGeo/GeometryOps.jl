@@ -24,7 +24,7 @@ flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 """
-function apply(f, ::Type{Target}, geom; calc_extent=nothing, crs=nothing, kw...) where Target 
+function apply(f, ::Type{Target}, geom; calc_extent=nothing, kw...) where Target 
     # Catch the type instability here in the outer method
     # so false is nothing::Nothing and true is true::Bool
     # we can think of a nicer way to do this later...
