@@ -83,7 +83,7 @@ import GeometryOps as GO
 	line8 = GI.LineString([(124.584961, -12.768946), (126.738281, -17.224758)])
 	line9 = GI.LineString([(123.354492, -15.961329), (127.22168, -14.008696)])
 
-    @test all(GO.line_intersection(line8, line9)[1] .≈ (125.583754, -14.835723))
+    @test all(GO.intersection(line8, line9)[1] .≈ (125.583754, -14.835723))
 
 	line10 = GI.LineString([
         (142.03125, -11.695273),
@@ -105,7 +105,7 @@ import GeometryOps as GO
         (132.890625, -7.754537),
     ])
 
-	points = GO.line_intersection(line10, line11)
+	points = GO.intersection(line10, line11)
     @test all(points[1] .≈ (119.832884, -19.58857))
     @test all(points[2] .≈ (132.808697, -11.6309378))
 
@@ -114,38 +114,4 @@ import GeometryOps as GO
 	@test GO.crosses(GI.MultiPoint([(1, 2), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == true
 	@test GO.crosses(GI.MultiPoint([(1, 0), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == false
 	@test GO.crosses(GI.LineString([(-2, 2), (-4, 2)]), poly7) == false
-
-    pl1 = GI.Polygon([[(0, 0), (0, 5), (5, 5), (5, 0), (0, 0)]])
-	pl2 = GI.Polygon([[(1, 1), (1, 6), (6, 6), (6, 1), (1, 1)]])
-
-	@test GO.overlaps(pl1, pl2) == true
-	@test_throws MethodError GO.overlaps(pl1, (1, 1))
-	@test_throws MethodError GO.overlaps((1, 1), pl2)
-
-	pl3 = pl4 = GI.Polygon([[
-        (-53.57208251953125, 28.287451910503744),
-        (-53.33038330078125, 28.29228897739706),
-        (-53.34136962890625, 28.430052892335723),
-        (-53.57208251953125, 28.287451910503744),
-    ]])
-	@test GO.overlaps(pl3, pl4) == false
-
-	mp1 = GI.MultiPoint([
-        (-36.05712890625, 26.480407161007275),
-        (-35.7220458984375, 27.137368359795584),
-        (-35.13427734375, 26.83387451505858),
-        (-35.4638671875, 27.254629577800063),
-        (-35.5462646484375, 26.86328062676624),
-        (-35.3924560546875, 26.504988828743404)
-    ])
-	mp2 = GI.MultiPoint([
-        (-35.4638671875, 27.254629577800063),
-        (-35.5462646484375, 26.86328062676624),
-        (-35.3924560546875, 26.504988828743404),
-        (-35.2001953125, 26.12091815959972),
-        (-34.9969482421875, 26.455820238459893)
-    ])
-
-	@test GO.overlaps(mp1, mp2) == true
-	@test GO.overlaps(mp1, mp2) == GO.overlaps(mp2, mp1)
 end

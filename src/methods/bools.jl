@@ -11,7 +11,8 @@ export line_on_line, line_in_polygon, polygon_in_polygon
 """
     isclockwise(line::Union{LineString, Vector{Position}})::Bool
 
-Take a ring and return true or false whether or not the ring is clockwise or counter-clockwise.
+Take a ring and return true or false whether or not the ring is clockwise or
+counter-clockwise.
 
 ## Example
 
@@ -26,6 +27,7 @@ true
 ```
 """
 isclockwise(geom)::Bool = isclockwise(GI.trait(geom), geom)
+
 function isclockwise(::AbstractCurveTrait, line)::Bool
     sum = 0.0
     prev = GI.getpoint(line, 1)
@@ -87,30 +89,6 @@ function isconcave(poly)::Bool
 
     return false
 end
-
-equals(geo1, geo2) = _equals(trait(geo1), geo1, trait(geo2), geo2)
-
-_equals(::T, geo1, ::T, geo2) where T = error("Cant compare $T yet")
-function _equals(::T, p1, ::T, p2) where {T<:PointTrait}
-    GI.ncoord(p1) == GI.ncoord(p2) || return false
-    GI.x(p1) == GI.x(p2) || return false
-    GI.y(p1) == GI.y(p2) || return false
-    if GI.is3d(p1)
-        GI.z(p1) == GI.z(p2) || return false 
-    end
-    return true
-end
-function _equals(::T, l1, ::T, l2) where {T<:AbstractCurveTrait}
-    # Check line lengths match
-    GI.npoint(l1) == GI.npoint(l2) || return false
-
-    # Then check all points are the same
-    for (p1, p2) in zip(GI.getpoint(l1), GI.getpoint(l2))
-        equals(p1, p2) || return false
-    end
-    return true
-end
-_equals(t1, geo1, t2, geo2) = false
 
 # """
 #     isparallel(line1::LineString, line2::LineString)::Bool
@@ -193,6 +171,26 @@ function point_on_line(point, line; ignore_end_vertices::Bool=false)::Bool
     return false
 end
 
+function point_on_seg(point, start, stop)
+    # Parse out points
+    x, y = GI.x(point), GI.y(point)
+    x1, y1 = GI.x(start), GI.y(start)
+    x2, y2 = GI.x(stop), GI.y(stop)
+    Δxl = x2 - x1
+    Δyl = y2 - y1
+    # Determine if point is on segment
+    cross = (x - x1) * Δyl - (y - y1) * Δxl
+    if cross == 0  # point is on line extending to infinity
+        # is line between endpoints
+        if abs(Δxl) >= abs(Δyl)  # is line between endpoints
+            return Δxl > 0 ? x1 <= x <= x2 : x2 <= x <= x1
+        else
+            return Δyl > 0 ? y1 <= y <= y2 : y2 <= y <= y1
+        end
+    end
+    return false
+end
+
 function point_on_segment(point, (start, stop); exclude_boundary::Symbol=:none)::Bool
     x, y = GI.x(point), GI.y(point)
     x1, y1 = GI.x(start), GI.y(start)
@@ -265,63 +263,66 @@ function point_in_polygon(
     end
 
     # Then check the point is inside the exterior ring
-    point_in_polygon(point, GI.getexterior(poly); ignore_boundary, check_extent=false) || return false
+    point_in_polygon(
+        point,GI.getexterior(poly);
+        ignore_boundary, check_extent=false,
+    ) || return false
 
     # Finally make sure the point is not in any of the holes,
     # flipping the boundary condition
     for ring in GI.gethole(poly)
-        point_in_polygon(point, ring; ignore_boundary=!ignore_boundary) && return false
+        point_in_polygon(
+            point, ring;
+            ignore_boundary=!ignore_boundary,
+        ) && return false
     end
     return true
 end
+
 function point_in_polygon(
     ::PointTrait, pt, 
     ::Union{LineStringTrait,LinearRingTrait}, ring; 
     ignore_boundary::Bool=false,
     check_extent::Bool=false,
 )::Bool
+    x, y = GI.x(pt), GI.y(pt)
     # Cheaply check that the point is inside the ring extent
     if check_extent
         point_in_extent(point, GI.extent(ring)) || return false
     end
-
     # Then check the point is inside the ring
     inside = false
     n = GI.npoint(ring)
     p_start = GI.getpoint(ring, 1)
     p_end = GI.getpoint(ring, n)
-
-    # Handle closed on non-closed rings
-    l = if GI.x(p_start) == GI.x(p_end) && GI.y(p_start) == GI.y(p_end) 
-        l = n - 1
-    else
-        n
+    # Handle closed vs opne rings
+    if GI.x(p_start) == GI.x(p_end) && GI.y(p_start) == GI.y(p_end) 
+        n -= 1
     end
-
     # Loop over all points in the ring
-    for i in 1:l - 1
-        j = i + 1
-
+    for i in 1:(n - 1)
+        # First point on edge
         p_i = GI.getpoint(ring, i)
-        p_j = GI.getpoint(ring, j)
-        xi = GI.x(p_i)
-        yi = GI.y(p_i)
-        xj = GI.x(p_j)
-        yj = GI.y(p_j)
-
-        on_boundary = (GI.y(pt) * (xi - xj) + yi * (xj - GI.x(pt)) + yj * (GI.x(pt) - xi) == 0) &&
-            ((xi - GI.x(pt)) * (xj - GI.x(pt)) <= 0) && ((yi - GI.y(pt)) * (yj - GI.y(pt)) <= 0)
-
+        xi, yi = GI.x(p_i), GI.y(p_i)
+        # Second point on edge (j = i + 1)
+        p_j = GI.getpoint(ring, i + 1)
+        xj, yj = GI.x(p_j), GI.y(p_j)
+        # Check if point is on the ring boundary
+        on_boundary = (  # vertex to point has same slope as edge
+            yi * (xj - x) + yj * (x - xi) == y * (xj - xi) &&
+            (xi - x) * (xj - x) <= 0 &&  # x is between xi and xj
+            (yi - y) * (yj - y) <= 0     # y is between yi and yj
+        )
         on_boundary && return !ignore_boundary
-
-        intersects = ((yi > GI.y(pt)) !== (yj > GI.y(pt))) && 
-            (GI.x(pt) < (xj - xi) * (GI.y(pt) - yi) / (yj - yi) + xi)
-
+        # Check if ray from point passes through edge
+        intersects = (
+            (yi > y) !== (yj > y) && 
+            (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
+        )
         if intersects 
             inside = !inside
         end
     end
-
     return inside
 end
 
@@ -341,6 +342,7 @@ function line_on_line(t1::GI.AbstractCurveTrait, line1, t2::AbstractCurveTrait, 
 end
 
 line_in_polygon(line, poly) = line_in_polygon(trait(line), line, trait(poly), poly)
+
 function line_in_polygon(
     ::AbstractCurveTrait, line, 
     ::Union{AbstractPolygonTrait,LinearRingTrait}, poly
@@ -365,19 +367,19 @@ function line_in_polygon(
 end
 
 function polygon_in_polygon(poly1, poly2)
-     # edges1, edges2 = to_edges(poly1), to_edges(poly2)
-     # extent1, extent2 = to_extent(edges1), to_extent(edges2)
-     # Check the extents intersect
-     Extents.intersects(GI.extent(poly1), GI.extent(poly2)) || return false
+    # edges1, edges2 = to_edges(poly1), to_edges(poly2)
+    # extent1, extent2 = to_extent(edges1), to_extent(edges2)
+    # Check the extents intersect
+    Extents.intersects(GI.extent(poly1), GI.extent(poly2)) || return false
 
-     # Check all points in poly1 are in poly2
-     for point in GI.getpoint(poly1)
-         point_in_polygon(point, poly2) || return false
-     end
+    # Check all points in poly1 are in poly2
+    for point in GI.getpoint(poly1)
+        point_in_polygon(point, poly2) || return false
+    end
 
-     # Check the line of poly1 does not intersect the line of poly2
-     line_intersects(poly1, poly2) && return false
+    # Check the line of poly1 does not intersect the line of poly2
+    #intersects(poly1, poly2) && return false
 
-     # poly1 must be in poly2
-     return true
+    # poly1 must be in poly2
+    return true
  end

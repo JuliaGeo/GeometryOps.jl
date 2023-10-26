@@ -216,7 +216,7 @@ function centroid_and_area(::GI.MultiPolygonTrait, geom)
     xcentroid *= area
     ycentroid *= area
     # Loop over any polygons within the multipolygon
-    for i in 2:GI.ngeom(geom) #poly in GI.getpolygon(geom)
+    for i in 2:GI.ngeom(geom)
         # Polygon centroid and area
         (xpoly, ypoly), poly_area = centroid_and_area(GI.getpolygon(geom, i))
         # Accumulate the area component into `area`
