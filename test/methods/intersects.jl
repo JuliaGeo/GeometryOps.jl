@@ -1,4 +1,4 @@
-function compareGO_LG(poly_1,poly_2)
+function compareGO_LG(poly_1,poly_2, ϵ)
     p1 = GI.Polygon([poly_1])
     p2 = GI.Polygon([poly_2])
     LG_p1p2 = LG.intersection(p1, p2)
@@ -12,7 +12,7 @@ function compareGO_LG(poly_1,poly_2)
         temp = convert_tuple_to_array(GO_p1p2)
         inter_GO = LG.MultiPolygon([temp])
     end
-    return LG.equals(inter_GO, LG_p1p2)
+    return LG.area(LG.difference(inter_GO, LG_p1p2)) < ϵ
 end
 
 function convert_tuple_to_array(tups)
