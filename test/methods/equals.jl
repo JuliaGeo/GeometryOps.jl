@@ -31,19 +31,25 @@ end
 
     r1 = LG.LinearRing([[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]])
     r2 = LG.LinearRing([[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]])
+    r3 =  GI.LinearRing([[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0]])
     l3 = LG.LineString([[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]])
     # Equal rings
     @test GO.equals(r1, r1) == LG.equals(r1, r1)
     @test GO.equals(r2, r2) == LG.equals(r2, r2)
+    # Test equal rings without closing point
+    @test GO.equals(r2, r3)
+    @test GO.equals(r3, l3)
     # Different rings
     @test GO.equals(r1, r2) == GO.equals(r2, r1) == LG.equals(r1, r2)
     # Equal linear ring and line string
     @test GO.equals(r2, l3) == LG.equals(r2, l3)
-    # Equal linear ring and line
+    # Equal line string and line
     @test GO.equals(l1, GI.Line([(0.0, 0.0), (0.0, 10.0)]))
 end
 
 @testset "Polygons/MultiPolygons" begin
+    pt1 = LG.Point([0.0, 0.0])
+    r1 = GI.LinearRing([(0, 0), (0, 5), (5, 5), (5, 0), (0, 0)])
     p1 = GI.Polygon([[(0, 0), (0, 5), (5, 5), (5, 0), (0, 0)]])
     p2 = GI.Polygon([[(1, 1), (1, 6), (6, 6), (6, 1), (1, 1)]])
     p3 = LG.Polygon(
@@ -65,9 +71,22 @@ end
             [[11.0, 1.0], [11.0, 2.0], [12.0, 2.0], [12.0, 1.0], [11.0, 1.0]]
         ]
     )
+    p6 = GI.Polygon([[(6, 6), (6, 1), (1, 1), (1, 6), (6, 6)]])
+    p7 = GI.Polygon([[(6, 6), (1, 6), (1, 1), (6, 1), (6, 6)]])
+    p8 = GI.Polygon([[(6, 6), (1, 6), (1, 1), (6, 1)]])
+    # Point and polygon aren't equal
+    GO.equals(pt1, p1) == LG.equals(pt1, p1)
+    # Linear ring and polygon aren't equal
+    @test GO.equals(r1, p1) == LG.equals(r1, p1)
     # Equal polygon
     @test GO.equals(p1, p1) == LG.equals(p1, p1)
     @test GO.equals(p2, p2) == LG.equals(p2, p2)
+    # Equal but offset polygons
+    @test GO.equals(p2, p6) == LG.equals(p2, p6)
+    # Equal but opposite winding orders
+    @test GO.equals(p2, p7) == LG.equals(p2, p7)
+    # Equal but without closing point (implied)
+    @test GO.equals(p7, p8) 
     # Different polygons
     @test GO.equals(p1, p2) == LG.equals(p1, p2)
     # Equal polygons with holes
@@ -77,7 +96,7 @@ end
     # Same exterior and first hole, has an extra hole
     @test GO.equals(p3, p5) == LG.equals(p3, p5)
 
-    p6 = LG.Polygon(
+    p9 = LG.Polygon(
         [[
             [-53.57208251953125, 28.287451910503744],
             [-53.33038330078125, 28.29228897739706],
@@ -86,7 +105,7 @@ end
         ]]
     )
     # Complex polygon
-    @test GO.equals(p6, p6) == LG.equals(p6, p6)
+    @test GO.equals(p9, p9) == LG.equals(p9, p9)
 
     m1 = LG.MultiPolygon([
         [[[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]]],
@@ -105,7 +124,7 @@ end
     # Equal multipolygon
     @test GO.equals(m1, m1) == LG.equals(m1, m1)
     # Equal multipolygon with different order
-    @test GO.equals(m1, m2) == LG.equals(m2, m2)
+    @test GO.equals(m2, m2) == LG.equals(m2, m2)
     # Equal polygon to multipolygon
     m3 = LG.MultiPolygon([p3])
     @test GO.equals(p1, m3) == LG.equals(p1, m3)
