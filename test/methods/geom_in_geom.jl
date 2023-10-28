@@ -2,7 +2,8 @@ const in_geom = (true, false)
 const on_geom = (false, true)
 const not_in_on_geom = (false, false)
 
-@testset "Point in Polygon" begin
+
+@testset "Point in Geom" begin
     # Convex polygons
     rect = LG.Polygon([[
         [0.0, 0.0], [0.0, 10.0], [10.0, 10.0], [10.0, 0.0], [0.0, 0.0]

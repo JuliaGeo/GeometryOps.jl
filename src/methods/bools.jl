@@ -1,8 +1,6 @@
 # # Boolean conditions
 
 export isclockwise, isconcave
-export point_on_line, point_in_polygon, point_in_ring
-export line_on_line, line_in_polygon, polygon_in_polygon
 
 # These are all adapted from Turf.jl.
 
