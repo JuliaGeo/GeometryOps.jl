@@ -338,7 +338,8 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     status = false
     for ii in eachindex(a_list)
         if ii == 1
-            status = !point_in_polygon(edges_a[ii][1], poly_b)
+            temp = point_in_polygon(edges_a[ii][1], poly_b)
+            status = !(temp[1])
             continue
         end
         if a_list[ii].inter
@@ -351,7 +352,8 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     status = false
     for ii in eachindex(b_list)
         if ii == 1
-            status = !point_in_polygon(edges_b[ii][1], poly_a)
+            temp = point_in_polygon(edges_b[ii][1], poly_a)
+            status = !(temp[1])
             continue
         end
         if b_list[ii].inter
