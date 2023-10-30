@@ -12,34 +12,34 @@ using Random
 const TuplePoint = Tuple{Float64,Float64}
 const Edge = Tuple{TuplePoint,TuplePoint}
 
-# function compareGO_LG(poly_1,poly_2, ϵ)
-#     p1 = GI.Polygon([poly_1])
-#     p2 = GI.Polygon([poly_2])
-#     LG_p1p2 = LG.intersection(p1, p2)
-#     GO_p1p2 = GO.intersection(p1, p2)
-#     # if I do GI.equals(LG_p1p2, GO_p1p2) here I get false even when it is true
-#     # if I wrap output of LG.intersection in GI Polygon, it still gets false
-#     # the only thing that returns true is turning both in LG polygon
-#     if length(GO_p1p2)==1
-#         inter_GO = LG.Polygon(convert_tuple_to_array(GO_p1p2))
-#     else
-#         temp = convert_tuple_to_array(GO_p1p2)
-#         inter_GO = LG.MultiPolygon([temp])
-#     end
-#     return LG.area(LG.difference(inter_GO, LG_p1p2)) < ϵ
-# end
+function compareGO_LG(poly_1,poly_2, ϵ)
+    p1 = GI.Polygon([poly_1])
+    p2 = GI.Polygon([poly_2])
+    LG_p1p2 = LG.intersection(p1, p2)
+    GO_p1p2 = GO.intersection(p1, p2)
+    # if I do GI.equals(LG_p1p2, GO_p1p2) here I get false even when it is true
+    # if I wrap output of LG.intersection in GI Polygon, it still gets false
+    # the only thing that returns true is turning both in LG polygon
+    if length(GO_p1p2)==1
+        inter_GO = LG.Polygon(convert_tuple_to_array(GO_p1p2))
+    else
+        temp = convert_tuple_to_array(GO_p1p2)
+        inter_GO = LG.MultiPolygon([temp])
+    end
+    return LG.area(LG.difference(inter_GO, LG_p1p2)) < ϵ
+end
 
-# function convert_tuple_to_array(tups)
-#     return_polys = Array{Array{Array{Float64, 1}, 1}, 1}(undef, 0)
-#     for polygon in tups
-#         pt_list = Array{Array{Float64, 1}, 1}(undef, 0)
-#         for point in polygon
-#             push!(pt_list, [point[1], point[2]])
-#         end
-#         push!(return_polys, pt_list)
-#     end
-#     return return_polys
-# end
+function convert_tuple_to_array(tups)
+    return_polys = Array{Array{Array{Float64, 1}, 1}, 1}(undef, 0)
+    for polygon in tups
+        pt_list = Array{Array{Float64, 1}, 1}(undef, 0)
+        for point in polygon
+            push!(pt_list, [point[1], point[2]])
+        end
+        push!(return_polys, pt_list)
+    end
+    return return_polys
+end
 
 p1 = [[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]
 p2 = [[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]
@@ -76,7 +76,7 @@ edges_b = to_edges(poly_b);
 
 include(raw"C:\Users\Lana\.julia\dev\GeometryOps\src\methods\bools.jl")
 
-point_in_polygon(edges_b[1][1], poly_a; check_extent=true)
+point_in_polygon(edges_b[1][1], poly_a)
 # GO.intersection(poly_a, poly_b)
 
 # p2 = LG.Point([0.0, 1.0])

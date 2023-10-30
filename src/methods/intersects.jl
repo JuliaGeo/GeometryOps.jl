@@ -220,6 +220,10 @@ there isn't one.
 
 
 function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+    # check if they intersect
+    if !intersects(poly_a, poly_b)
+        return [[]]
+    end
     # makes a list for each polygon
     a_list = Array{PolyNode, 1}(undef, _nedge(poly_a))
     b_list = Array{PolyNode, 1}(undef, _nedge(poly_b))
