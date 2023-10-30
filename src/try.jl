@@ -82,3 +82,7 @@ point_in_polygon(edges_b[1][1], poly_a)
 # p2 = LG.Point([0.0, 1.0])
 # mp3 = LG.MultiPoint([p2])
 # GO.equals(p2, mp3)
+diamond = LG.Polygon([[
+    [0.0, 0.0], [-5.0, 5.0], [0.0, 10.0], [5.0, 5.0], [0.0, 0.0],
+]])
+GO.point_in_polygon((-2.5, 2.5), diamond) == on_geom

@@ -32,26 +32,26 @@ crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_line(
 crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
 crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
 
-function multipoint_crosses_line(geom1, geom2)
-    int_point = false
-    ext_point = false
-    i = 1
-    np2 = GI.npoint(geom2)
+# function multipoint_crosses_line(geom1, geom2)
+#     int_point = false
+#     ext_point = false
+#     i = 1
+#     np2 = GI.npoint(geom2)
 
-    while i < GI.npoint(geom1) && !int_point && !ext_point
-        for j in 1:GI.npoint(geom2) - 1
-            exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
-            if point_on_segment(GI.getpoint(geom1, i), (GI.getpoint(geom2, j), GI.getpoint(geom2, j + 1)); exclude_boundary)
-                int_point = true
-            else
-                ext_point = true
-            end
-        end
-        i += 1
-    end
+#     while i < GI.npoint(geom1) && !int_point && !ext_point
+#         for j in 1:GI.npoint(geom2) - 1
+#             exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
+#             if point_on_segment(GI.getpoint(geom1, i), (GI.getpoint(geom2, j), GI.getpoint(geom2, j + 1)); exclude_boundary)
+#                 int_point = true
+#             else
+#                 ext_point = true
+#             end
+#         end
+#         i += 1
+#     end
 
-    return int_point && ext_point
-end
+#     return int_point && ext_point
+# end
 
 function line_crosses_line(line1, line2)
     np2 = GI.npoint(line2)

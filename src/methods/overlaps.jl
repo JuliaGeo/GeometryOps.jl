@@ -227,7 +227,7 @@ function _overlaps(
     # meets in more than one point
     on_top = ExactPredicates.meet(a1, a2, b1, b2) == 0
     # one end point is outside of other segment
-    a_fully_within = point_on_seg(a1, b1, b2) && point_on_seg(a2, b1, b2)
-    b_fully_within = point_on_seg(b1, a1, a2) && point_on_seg(b2, a1, a2)
+    a_fully_within = point_on_segment(a1, b1, b2) && point_on_segment(a2, b1, b2)
+    b_fully_within = point_on_segment(b1, a1, a2) && point_on_segment(b2, a1, a2)
     return on_top && (!a_fully_within && !b_fully_within)
 end

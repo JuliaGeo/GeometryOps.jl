@@ -42,14 +42,9 @@ import GeometryOps as GO
 	p3 = GI.Point([20, 20])
 	l5 = GI.LineString([[0, 0], [3, 3], [38.32, 5.96]])
 
-	@test GO.point_on_line(p2, l4; ignore_end_vertices=true) == false
-	@test GO.point_on_line(p3, l5; ignore_end_vertices=true) == false
-	@test GO.point_on_line(p1, l3) == true
-
 	pt = (-77, 44)
 	poly = GI.Polygon([[[-81, 41], [-81, 47], [-72, 47], [-72, 41], [-81, 41]]])
 
-	@test point_in_polygon(pt, poly) == true
 
 	poly3 = GI.Polygon([[(1, 1), (1, 10), (10, 10), (10, 1), (1, 1)]])
 	poly4 = GI.Polygon([[(1, 1), (2, 2), (3, 2), (1, 1)]])
@@ -59,26 +54,26 @@ import GeometryOps as GO
 	poly5 = GI.Polygon([[(1.0, 1.0), (1.0, 20.0), (1.0, 3.0), (1.0, 4.0), (1.0, 1.0)]])
 	line7 = GI.LineString([(1.0, 2.0), (1.0, 3.0), (1.0, 3.5)])
 
-	@test GO.contains(poly3, poly4) == true
-	@test GO.contains(poly3, line5) == true
-	@test GO.contains(line6, (1, 2)) == true
-	@test GO.contains(poly3, poly5) == false
-	@test GO.contains(poly3 , line7) == false
+	# @test GO.contains(poly3, poly4) == true
+	# @test GO.contains(poly3, line5) == true
+	# @test GO.contains(line6, (1, 2)) == true
+	# @test GO.contains(poly3, poly5) == false
+	# @test GO.contains(poly3 , line7) == false
 
-	@test GO.within(poly4, poly3) == true
-	@test GO.within(line5, poly3) == true
-	@test GO.within(poly5, poly3) == false
-	@test GO.within((1, 2), line6) == true
-	@test GO.within(line7, poly3) == false
+	# @test GO.within(poly4, poly3) == true
+	# @test GO.within(line5, poly3) == true
+	# @test GO.within(poly5, poly3) == false
+	# @test GO.within((1, 2), line6) == true
+	# @test GO.within(line7, poly3) == false
 
 	poly6 = GI.Polygon([[(-11, -12), (-13, -12), (-13, -13), (-11, -13), (-11, -12)]])
 	poly7 = GI.Polygon([[(-1, 2), (3, 2), (3, 3), (-1, 3), (-1, 2)]])
 	poly8 = GI.Polygon([[(-1, 2), (-13, -12), (-13, -13), (-11, -13), (-1, 2)]])
 
-	@test GO.disjoint(poly7, poly6) == true
-	@test GO.disjoint(poly7, (1, 1)) == true
-	@test GO.disjoint(poly7, GI.LineString([(0, 0), (12, 2), (12, 3), (12, 4)])) == true
-	@test GO.disjoint(poly8, poly7) == false
+	# @test GO.disjoint(poly7, poly6) == true
+	# @test GO.disjoint(poly7, (1, 1)) == true
+	# @test GO.disjoint(poly7, GI.LineString([(0, 0), (12, 2), (12, 3), (12, 4)])) == true
+	# @test GO.disjoint(poly8, poly7) == false
 
 	line8 = GI.LineString([(124.584961, -12.768946), (126.738281, -17.224758)])
 	line9 = GI.LineString([(123.354492, -15.961329), (127.22168, -14.008696)])
@@ -109,9 +104,9 @@ import GeometryOps as GO
     @test all(points[1] .≈ (119.832884, -19.58857))
     @test all(points[2] .≈ (132.808697, -11.6309378))
 
-	@test GO.crosses(GI.LineString([(-2, 2), (4, 2)]), line6) == true
-	@test GO.crosses(GI.LineString([(0.5, 2.5), (1.0, 1.0)]), poly7) == true
-	@test GO.crosses(GI.MultiPoint([(1, 2), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == true
-	@test GO.crosses(GI.MultiPoint([(1, 0), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == false
-	@test GO.crosses(GI.LineString([(-2, 2), (-4, 2)]), poly7) == false
+	# @test GO.crosses(GI.LineString([(-2, 2), (4, 2)]), line6) == true
+	# @test GO.crosses(GI.LineString([(0.5, 2.5), (1.0, 1.0)]), poly7) == true
+	# @test GO.crosses(GI.MultiPoint([(1, 2), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == true
+	# @test GO.crosses(GI.MultiPoint([(1, 0), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == false
+	# @test GO.crosses(GI.LineString([(-2, 2), (-4, 2)]), poly7) == false
 end

@@ -30,11 +30,11 @@ within(::Any, g1, t2::GI.FeatureTrait, g2)::Bool = within(g1, GI.geometry(g2))
 # Points in geometries
 within(::GI.PointTrait, g1, ::GI.LineStringTrait, g2)::Bool = point_on_line(g1, g2; ignore_end_vertices=true)
 within(::GI.PointTrait, g1, ::GI.LinearRingTrait, g2)::Bool = point_on_line(g1, g2; ignore_end_vertices=true)
-within(::GI.PointTrait, g1, ::GI.PolygonTrait, g2)::Bool = point_in_polygon(g1, g2; ignore_boundary=true)
+within(::GI.PointTrait, g1, ::GI.PolygonTrait, g2)::Bool = point_in_polygon(g1, g2)[1]
 # Lines in  geometries
 within(::GI.LineStringTrait, g1, ::GI.LineStringTrait, g2)::Bool = line_on_line(g1, g2)  
 within(::GI.LineStringTrait, g1, ::GI.LinearRingTrait, g2)::Bool = line_on_line(g1, g2)
-within(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool = line_in_polygon(g1, g2)
+within(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool = any(line_in_polygon(g1, g2))
 # Polygons within geometries
 within(::GI.PolygonTrait, g1, ::GI.PolygonTrait, g2)::Bool = polygon_in_polygon(g1, g2)
 
