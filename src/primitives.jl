@@ -1,3 +1,4 @@
+
 # # Primitive functions
 
 # This file mainly defines the [`apply`](@ref) function.
@@ -27,15 +28,24 @@ apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw.
 
 _apply(f, ::Type{Target}, geom; kw...)  where Target =
     _apply(f, Target, GI.trait(geom), geom; kw...)
+function _apply(f, ::Type{Target}, ::Nothing, A::AbstractArray; threaded=false, kw...) where Target
+    _maptasks(eachindex(A); threaded) do i
+        _apply(f, Target, A[i]; kw...)
+    end
+end
 # Try to _apply over iterables
 _apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
     map(x -> _apply(f, Target, x; kw...), iterable)
 # Rewrap feature collections
-function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc), calc_extent=false) where Target
-    applicator(feature) = _apply(f, Target, feature; crs, calc_extent)::GI.Feature
-    features = map(applicator, GI.getfeature(fc))
+function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; 
+    crs=GI.crs(fc), calc_extent=false, threaded=false
+) where Target
+    features = _maptasks(1:GI.nfeature(fc); threaded) do i
+        feature = GI.getfeature(fc, i)
+        _apply(f, Target, feature; crs, calc_extent)::GI.Feature
+    end
     if calc_extent
-        extent = rebuce(features; init=GI.extent(first(features))) do (acc, f)
+        extent = reduce(features; init=GI.extent(first(features))) do acc, f
             Extents.union(acc, Extents.extent(f))
         end
         return GI.FeatureCollection(features; crs, extent)
@@ -44,7 +54,9 @@ function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(f
     end
 end
 # Rewrap features
-function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; crs=GI.crs(feature), calc_extent=false) where Target
+function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; 
+    crs=GI.crs(feature), calc_extent=false, threaded=false
+) where Target
     properties = GI.properties(feature)
     geometry = _apply(f, Target, GI.geometry(feature); crs, calc_extent)
     if calc_extent
@@ -56,11 +68,12 @@ function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; crs=GI.crs(featur
 end
 # Reconstruct nested geometries
 function _apply(f, ::Type{Target}, trait, geom; 
-    crs=GI.crs(geom), calc_extent=false
+    crs=GI.crs(geom), calc_extent=false, threaded=false
 )::(GI.geointerface_geomtype(trait)) where Target
     # TODO handle zero length...
-    applicator(g) = _apply(f, Target, g; crs, calc_extent)
-    geoms = map(applicator, GI.getgeom(geom))
+    geoms = _maptasks(1:GI.ngeom(geom); threaded) do i
+        _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent)
+    end
     if calc_extent
         extent = GI.extent(first(geoms))
         for g in geoms
@@ -72,14 +85,14 @@ function _apply(f, ::Type{Target}, trait, geom;
     end
 end
 # Apply f to the target geometry
-_apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom), calc_extent=false) where {Target,Trait<:Target} = f(geom)
+_apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {Target,Trait<:Target} = f(geom)
 # Fail if we hit PointTrait without running `f`
-_apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing, calc_extent=false) where Target =
+_apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing, kw...) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 # Specific cases to avoid method ambiguity
-_apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; crs=nothing, calc_extent=false) = f(geom)
-_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; crs=GI.crs(feature), calc_extent=false) = f(feature)
-_apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; crs=GI.crs(fc)) = f(fc)
+_apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; kw...) = f(geom)
+_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; kw...) = f(feature)
+_apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; kw...) = f(fc)
 
 """
     unwrap(target::Type{<:AbstractTrait}, obj)
@@ -233,4 +246,35 @@ function rebuild(trait::GI.AbstractTrait, geom::Union{GB.LineString,GB.MultiPoin
 end
 function rebuild(trait::GI.PolygonTrait, geom::GB.Polygon, child_geoms; crs=nothing)
     Polygon(child_geoms[1], child_geoms[2:end])
+end
+
+using Base.Threads: nthreads, @threads, @spawn
+
+
+# Threading utility, modified Mason Protters threading PSA
+# run `f` over ntasks, where f recieves an AbstractArray/range
+# of linear indices
+function _maptasks(f, taskrange; threaded=false)
+    if threaded
+        ntasks = length(taskrange)
+        # Customize this as needed. 
+        # More tasks have more overhead, but better load balancing
+        tasks_per_thread = 2 
+        chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
+        # partition the range into chunks
+        task_chunks = Iterators.partition(taskrange, chunk_size) 
+        # Map over the chunks
+        tasks = map(task_chunks) do chunk
+            # Spawn a task to process this chunk
+            @spawn begin
+                # Where we map `f` over the chunk indices 
+                map(f, chunk)
+            end
+        end
+
+        # Finally we join the results into a new vector
+        return reduce(vcat, map(fetch, tasks))
+    else
+        return map(f, taskrange)
+    end
 end
