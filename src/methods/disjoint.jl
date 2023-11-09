@@ -40,3 +40,15 @@ function polygon_disjoint(poly1, poly2)
     end
     return !intersects(poly1, poly2)
 end
+
+_line_disjoint_closed_curve(
+    line, curve;
+    exclude_boundaries = false,
+    close = false,
+) = _line_orient_closed_curve(
+    line, curve;
+    disjoint = true,
+    exclude_boundaries = exclude_boundaries,
+    close = close,
+)
+

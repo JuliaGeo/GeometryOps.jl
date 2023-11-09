@@ -41,3 +41,4 @@ within(::GI.PolygonTrait, g1, ::GI.PolygonTrait, g2)::Bool = polygon_in_polygon(
 # Everything not specified
 # TODO: Add multipolygons
 within(::GI.AbstractTrait, g1, ::GI.AbstractCurveTrait, g2)::Bool = false
+

@@ -452,7 +452,10 @@ function _line_in_closed_curve(
     nl = GI.npoint(line)
     nl -= (close && equals(GI.getpoint(line, 1), GI.getpoint(line, nl))) ? 1 : 0
     # Check to see if first point in line is within curve
-    point_val = _point_in_closed_curve(GI.getpoint(line, 1), curve)
+    point_val = _point_in_closed_curve(
+        GI.getpoint(line, 1), curve;
+        in = in, on = on, out = out,
+    )
     # point is outside curve, line can't be within curve
     point_val == out && return out
     # Check for any intersections between line and curve
@@ -595,4 +598,129 @@ Returns true if the point is the bounding box of the extent and false otherwise.
 function _point_in_extent(p, extent::Extents.Extent)
     (x1, x2), (y1, y2) = extent.X, extent.Y
     return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
+end
+
+function _line_in_out_closed_curve(
+    line, curve;
+    disjoint = false,
+    exclude_boundaries = false,
+    close = false,
+)
+    #=
+    Set variables based off if we are determining within or disjoint.
+    If `_point_in_closed_curve` returns `true_orientation` it is on the right
+    side of the curve for the check. If it returns `false_orientation`, it is
+    on the wrong side of the curve for the check.
+    =#
+    false_orientation = disjoint ? 1 : 0 # if checking within, want points in
+    on = -1  # as used for point in closed curve
+
+    # Determine number of points in curve and line
+    nc = GI.npoint(curve)
+    nc -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc)) ? 1 : 0
+    nl = GI.npoint(line)
+    nl -= (close && equals(GI.getpoint(line, 1), GI.getpoint(line, nl))) ? 1 : 0
+
+    # Check to see if first point in line is within curve
+    point_val = _point_in_closed_curve(GI.getpoint(line, 1), curve)
+    # point is out (for within) or in curve (for disjoint) -> wrong orientation
+    point_val == false_orientation && return false
+    # point is on boundary and don't want boundary points -> wrong orientation
+    exclude_boundaries && point_val == on && return false
+
+    # Check for any intersections between line and curve
+    l_start = _tuple_point(GI.getpoint(line, close ? nl : 1))
+    for i in (close ? 1 : 2):nl
+        l_end = _tuple_point(GI.getpoint(line, i))
+        c_start = _tuple_point(GI.getpoint(curve, nc))
+        for j in 1:nc
+            c_end = _tuple_point(GI.getpoint(curve, j))
+            # Check if edges intersect --> line crosses --> wrong orientation
+            meet_type = ExactPredicates.meet(l_start, l_end, c_start, c_end)
+            # open line segments meet in a single point
+            meet_type == 1 && return false
+            #=
+            closed line segments meet in one or several points -> meet at a
+            vertex or on the edge itself (parallel)
+            =#
+            if meet_type == 0
+                # See if segment is parallel and within curve edge
+                p1_on_seg = point_on_segment(l_start, c_start, c_end)
+                exclude_boundaries && p1_on_seg && return false
+                p2_on_seg = point_on_segment(l_end, c_start, c_end)
+                exclude_boundaries && p2_on_seg && return false
+                # if segment isn't contained within curve edge
+                if !p1_on_seg || !p2_on_seg 
+                    # Make sure l_start is in corrent orientation
+                    p1_val = p1_on_seg ?
+                        on :
+                        _point_in_closed_curve(l_start, curve)
+                    p1_val == false_orientation && return false
+                    exclude_boundaries && p1_val == on && return false
+                    # Make sure l_end is in is in corrent orientation
+                    p2_val = p2_on_seg ?
+                        on :
+                        _point_in_closed_curve(l_end, curve)
+                    p2_val == false_orientation && return false
+                    exclude_boundaries && p2_val == on && return false
+                    #=
+                    If both endpoints are in the correct orientation, but not
+                    parallel to the edge, make sure that midpoints between the
+                    intersections along the segment are also in the correct
+                    orientation
+                    =# 
+                    !_segment_mids_in_out_curve(
+                        l_start, l_end, curve;
+                        disjoint = disjoint,
+                        exclude_boundaries = exclude_boundaries,
+                    ) && return false  # midpoint on the wrong side of the curve
+                    # line segment is fully within or on curve 
+                    break 
+                end
+            end
+            c_start = c_end
+        end
+        l_start = l_end
+    end
+    # check if line is on any curve edges or vertcies
+    return true
+end
+
+function _segment_mids_in_out_curve(
+    l_start, l_end, curve;
+    disjoint = false,
+    exclude_boundaries = false,
+)
+    false_orientation = disjoint ? 1 : 0 # if checking within, want points in
+    on = -1  # as used for point in closed curve
+    # Find intersection points
+    ipoints = intersection_points(
+        GI.Line([l_start, l_end]),
+        curve
+    )
+    npoints = length(ipoints)
+    if npoints < 3  # only intersection points are the endpoints
+        mid_val = _point_in_closed_curve(
+            (l_start .+ l_end) ./ 2, curve;
+            in = in, on = on, out = out,
+        )
+        mid_val == false_orientation && return false
+        exclude_boundaries && mid_val == on && return false
+    else  # more intersection points than the endpoints
+        # sort intersection points along the line
+        sort!(ipoints, by = p -> euclid_distance(p, l_start))
+        p_start = ipoints[1]
+        for i in 2:npoints
+            p_end = ipoints[i]
+            # check if midpoint of intersection points is within the curve
+            mid_val = _point_in_closed_curve(
+                (p_start .+ p_end) ./ 2, curve;
+                in = in, on = on, out = out,
+            )
+            # if it is out, return false
+            mid_val == false_orientation && return false
+            exclude_boundaries && mid_val == on && return false
+        end
+    end
+    return true  # all intersection point midpoints were in or on the curve
 end
