@@ -782,26 +782,28 @@ function trace_difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, 
 
     # # Check if one polygon totally within other
     # # TODO: use point list instead of edges once to_points is fixed
-    # if isempty(return_polys)
-    #     list_b = []
-    #     for i in eachindex(edges_b)
-    #         push!(list_b, edges_b[i][1])
-    #     end
-    #     push!(list_b, edges_b[1][1])
+    if isempty(return_polys)
+        if point_in_polygon(edges_a[1][1], poly_b)[1]
+            return return_polys
+        end
+        list_b = []
+        for i in eachindex(edges_b)
+            push!(list_b, edges_b[i][1])
+        end
+        push!(list_b, edges_b[1][1])
 
-    #     list_a = []
-    #     for i in eachindex(edges_a)
-    #         push!(list_a, edges_a[i][1])
-    #     end
-    #     push!(list_a, edges_a[1][1])
+        list_a = []
+        for i in eachindex(edges_a)
+            push!(list_a, edges_a[i][1])
+        end
+        push!(list_a, edges_a[1][1])
         
-    #     if point_in_polygon(edges_a[1][1], poly_b)[1]
-    #         push!()
-    #     elseif point_in_polygon(edges_b[1][1], poly_a)[1]
-            
-    #         push!(return_polys, list)
-    #     end
-    # end
+        if point_in_polygon(edges_b[1][1], poly_a)[1]
+            push!(return_polys, list_a)
+            push!(return_polys, list_b)
+            return return_polys
+        end
+    end
     return return_polys
 end
     
