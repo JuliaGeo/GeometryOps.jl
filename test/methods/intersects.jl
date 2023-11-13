@@ -258,8 +258,23 @@ end
     # The two polygons that intersect from the Greiner paper
     greiner_1 = [(0.0, 0.0), (0.0, 4.0), (7.0, 4.0), (7.0, 0.0), (0.0, 0.0)]
     greiner_2 = [(1.0, -3.0), (1.0, 1.0), (3.5, -1.5), (6.0, 1.0), (6.0, -3.0), (1.0, -3.0)]
-
     @test compareGO_LG(greiner_1, greiner_2, 1e-5)
+
+    # Two polygons with two separate polygons as their intersection
+    poly_11 = [(1.0, 1.0), (4.0, 1.0), (4.0, 2.0), (2.0, 2.0), (2.0, 3.0), (4.0, 3.0), (4.0, 4.0), (1.0, 4.0), (1.0, 1.0)]
+    poly_12 = [(3.0, 0.0), (5.0, 0.0), (5.0, 5.0), (3.0, 5.0), (3.0, 0.0)]
+    @test compareGO_LG(poly_11, poly_12, 1e-5)
+
+    # Two polygons with four separate polygons as their intersection
+    poly_13 = [(1.0, 1.0), (4.0, 1.0), (4.0, 2.0), (2.0, 2.0), (2.0, 3.0), (4.0, 3.0), (4.0, 4.0), (2.0, 4.0), (2.0, 5.0),
+               (4.0, 5.0), (4.0, 6.0), (2.0, 6.0), (2.0, 7.0), (4.0, 7.0), (4.0, 8.0), (1.0, 8.0), (1.0, 1.0)]
+    poly_14 = [(3.0, 0.0), (5.0, 0.0), (5.0, 9.0), (3.0, 9.0), (3.0, 0.0)]
+    @test compareGO_LG(poly_13, poly_14, 1e-5)
+
+    # Polygon completely inside other polygon (no holes)
+    poly_in = [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]
+    poly_out = [(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0)]
+    @test compareGO_LG(poly_in, poly_out, 1e-5)
     
     
     # Intersection of convex and concave polygon

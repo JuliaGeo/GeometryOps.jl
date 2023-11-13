@@ -211,7 +211,7 @@ function polygon_in_polygon(poly1, poly2)
 
     # Check all points in poly1 are in poly2
     for point in GI.getpoint(poly1)
-        point_in_polygon(point, poly2) || return false
+        point_in_polygon(point, poly2)[1] || return false
     end
 
     # Check the line of poly1 does not intersect the line of poly2

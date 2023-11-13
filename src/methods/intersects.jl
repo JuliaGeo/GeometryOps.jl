@@ -1,6 +1,6 @@
 # # Intersection checks
 
-export intersects, intersection, intersection_points
+export intersects, intersection, intersection_points, union_test, difference_test
 
 #=
 ## What is `intersects` vs `intersection` vs `intersection_points`?
@@ -51,6 +51,17 @@ geometry dispatches are _line_intersects, which determines if two line segments
 intersect and _intersection_point which determines the intersection point
 between two line segments.
 =#
+
+
+# tempory poly_in_poly, only works if entirely contained
+# Checks if polya in poly b
+function poly_in_poly(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+    p_a = to_edges(poly_a)[1][1]
+    return point_in_polygon(p_a, poly_b)
+end
+
+poly_in_poly(geom_a, geom_b) =
+    poly_in_poly(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 
 """
     intersects(geom1, geom2)::Bool
@@ -199,33 +210,8 @@ intersection(
     geom_b,
 ) = intersection_points(trait_a, geom_a, trait_b, geom_b)
 
-"""
-    intersection(
-        ::GI.PolygonTrait, poly_a,
-        ::GI.PolygonTrait, poly_b,
-    )::Union{
-        ::Vector{Vector{Tuple{::Real, ::Real}}}, # is this a good return type?
-        ::Nothing
-    }
 
-Calculates the intersection between two line segments. Return nothing if
-there isn't one.
-## Example
-
-```jldoctest
-import GeoInterface as GI, GeometryOps as GO
-
-p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
-p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
-GO.intersection(p1, p2)
-
-# output
-1-element Vector{Vector{Tuple{Float64, Float64}}}:
-[(6.5, 3.5), (10.0, 0.0), (6.5, -3.5), (3.0, 0.0), (6.5, 3.5)]
-```
-"""
-function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
-        
+function build_ab_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     # Make a list for nodes of each polygon. Note the definition of PolyNode
     a_list = Array{PolyNode, 1}(undef, _nedge(poly_a))
     b_list = Array{PolyNode, 1}(undef, _nedge(poly_b))
@@ -251,24 +237,6 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     # These lists store the cartesian coordinates of poly_a and poly_b
     edges_a = to_edges(poly_a)
     edges_b = to_edges(poly_b)
-
-    # # if poly_a contained in poly_b, doesn't work yet
-    # if polygon_in_polygon(poly_a, poly_b)
-    #     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
-    #     for edge in edges_a
-    #         push!(return_polys, edge[1])
-    #     end
-    #     return return_polys
-    # end
-
-    # # if poly_b contained in poly_a, doesn't work yet
-    # if polygon_in_polygon(poly_b, poly_a)
-    #     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
-    #     for edge in edges_b
-    #         push!(return_polys, edge[1])
-    #     end
-    #     return return_polys
-    # end
 
     # Find intersection points and adds them to a_list
     # "counter" is used to index all inter-related lists
@@ -409,15 +377,19 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
         end
     end
 
+    return a_list, b_list, a_idx_list, intr_list, edges_a, edges_b
+end
+
+function trace_intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
     # TODO: Make sure can remove this counter
     # counter = 0
-    
+
     # Keep track of number of processed intersection points
     processed_pts = 0
     tracker = copy(a_idx_list)
-    
+
     while processed_pts < length(intr_list)
         # Create variables "list_edges" and "list" so that we can toggle between
         # a_list and b_list
@@ -440,10 +412,10 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
         tracker[current.idx] = typemax(Int)
 
         current_node_not_starting = true
-        while current_node_not_starting # while the current node isn't the starting one
+        while current_node_not_starting # While the current node isn't the starting one
             status2 = false
             current_node_not_intersection = true
-            while current_node_not_intersection # the current node isn't an intersection
+            while current_node_not_intersection # The current node isn't an intersection
                 
                 if current.inter
                     status2 = current.ent_exit
@@ -485,7 +457,7 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
 
                 current_node_not_intersection = !current.inter
             end
-               
+            
             # Break once get back to starting point
             current_node_not_starting = (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
 
@@ -505,8 +477,341 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
         # TODO: Make sure can remove this counter
         # counter = counter + 1
     end
+
+    # Check if one polygon totally within other
+    # TODO: use point list instead of edges once to_points is fixed
+    if isempty(return_polys)
+        if point_in_polygon(edges_a[1][1], poly_b)[1]
+            list = []
+            for i in eachindex(edges_a)
+                push!(list, edges_a[i][1])
+            end
+            push!(list, edges_a[1][1])
+            push!(return_polys, list)
+        elseif point_in_polygon(edges_b[1][1], poly_a)[1]
+            list = []
+            for i in eachindex(edges_b)
+                push!(list, edges_b[i][1])
+            end
+            push!(list, edges_b[1][1])
+            push!(return_polys, list)
+        end
+    end
     return return_polys
 end
+
+"""
+    intersection(
+        ::GI.PolygonTrait, poly_a,
+        ::GI.PolygonTrait, poly_b,
+    )::Union{
+        ::Vector{Vector{Tuple{::Real, ::Real}}}, # is this a good return type?
+        ::Nothing
+    }
+
+Calculates the intersection between two line segments. Return nothing if
+there isn't one.
+## Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
+p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
+GO.intersection(p1, p2)
+
+# output
+1-element Vector{Vector{Tuple{Float64, Float64}}}:
+[(6.5, 3.5), (10.0, 0.0), (6.5, -3.5), (3.0, 0.0), (6.5, 3.5)]
+```
+"""
+function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = build_ab_list(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b)
+    return trace_intersection(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+end
+
+function trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    # Pre-allocate array for return polygons
+    return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
+    # TODO: Make sure can remove this counter
+    # counter = 0
+
+    # Keep track of number of processed intersection points
+    processed_pts = 0
+    tracker = copy(a_idx_list)
+
+    while processed_pts < length(intr_list)
+        # Create variables "list_edges" and "list" so that we can toggle between
+        # a_list and b_list
+        list_edges = edges_a
+        list = a_list
+
+        # Find index of first unprocessed intersecting point in subject polygon
+        starting_pt = minimum(tracker)
+        idx = starting_pt
+
+        # Get current first unprocessed intersection point PolyNode
+        current = a_list[idx]
+        # Initialize array to store the intersection polygon cartesian points
+        pt_list = Vector{Tuple{Float64, Float64}}(undef, 0)
+        # Add the first point to the array
+        push!(pt_list, (intr_list[current.idx][1], intr_list[current.idx][2]))
+        
+        # Mark first intersection point as processed
+        processed_pts = processed_pts + 1
+        tracker[current.idx] = typemax(Int)
+
+        current_node_not_starting = true
+        while current_node_not_starting # While the current node isn't the starting one
+            status2 = false
+            current_node_not_intersection = true
+            while current_node_not_intersection # The current node isn't an intersection
+                
+                if current.inter
+                    status2 = current.ent_exit
+                end
+
+                # Depending on status of first intersection point, either
+                # traverse polygon forwards or backwards
+                if status2
+                    idx = idx - 1
+                else
+                    idx = idx + 1
+                end
+
+                # Wrap around the point list
+                if idx > length(list)
+                    idx = mod(idx, length(list))
+                elseif idx == 0
+                    idx = length(list)
+                end
+
+                # Get current node
+                current = list[idx]
+
+                # Add current node to the pt_list
+                if current.inter
+                    # Add cartesian coordinates from inter_list
+                    push!(pt_list, (intr_list[current.idx][1], intr_list[current.idx][2]))
+                    
+                    # Keep track of processed intersection points
+                    if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
+                        processed_pts = processed_pts + 1
+                        tracker[current.idx] = typemax(Int)
+                    end
+                    
+                else
+                    # Add cartesian coordinates from "list", which should point to either a_list or b_list
+                    push!(pt_list, (list_edges[current.idx][1][1], list_edges[current.idx][1][2]))
+                end
+
+                current_node_not_intersection = !current.inter
+            end
+            
+            # Break once get back to starting point
+            current_node_not_starting = (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
+
+            # Switch to neighbor list
+            if list == a_list
+                list = b_list
+                list_edges = edges_b
+            else
+                list = a_list
+                list_edges = edges_a
+            end
+            idx = current.neighbor
+            current = list[idx]
+        end
+
+        push!(return_polys, pt_list)
+        # TODO: Make sure can remove this counter
+        # counter = counter + 1
+    end
+
+    # Check if one polygon totally within other
+    # TODO: use point list instead of edges once to_points is fixed
+    if isempty(return_polys)
+        if point_in_polygon(edges_a[1][1], poly_b)[1]
+            list = []
+            for i in eachindex(edges_b)
+                push!(list, edges_b[i][1])
+            end
+            push!(list, edges_b[1][1])
+            push!(return_polys, list)
+        elseif point_in_polygon(edges_b[1][1], poly_a)[1]
+            list = []
+            for i in eachindex(edges_a)
+                push!(list, edges_a[i][1])
+            end
+            push!(list, edges_a[1][1])
+            push!(return_polys, list)
+        end
+    end
+
+    if length(return_polys) > 1
+        outer_idx = 1
+        for j = 2:(length(return_polys)-1)
+            poly1 = GI.Polygon([return_polys[outer_idx]])
+            poly2 = GI.Polygon([return_polys[j]])
+            if !poly_in_poly(poly2, poly1)
+                outer_idx = j
+            end
+        end
+
+        if outer_idx == 1
+            return return_polys
+        elseif outer_idx == length(return_polys)
+            arr = outer_idx
+            splice!(arr, 2:1, 1:(length(return_polys)-1))
+            return return_polys[arr]
+        else
+            arr = 1:(outer_idx-1)
+            splice!(arr, (length(arr)+1):length(arr), (outer_idx+1):length(return_polys))
+            return return_polys[arr]
+        end
+    end
+
+    return return_polys
+end
+
+function union_test(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = build_ab_list(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b)
+    return trace_union(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+end
+
+union_test(geom_a, geom_b) =
+    union_test(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+
+function trace_difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    # Pre-allocate array for return polygons
+    return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
+    # TODO: Make sure can remove this counter
+    # counter = 0
+
+    # Keep track of number of processed intersection points
+    processed_pts = 0
+    tracker = copy(a_idx_list)
+
+    while processed_pts < length(intr_list)
+        # Create variables "list_edges" and "list" so that we can toggle between
+        # a_list and b_list
+        list_edges = edges_a
+        list = a_list
+
+        # Find index of first unprocessed intersecting point in subject polygon
+        starting_pt = minimum(tracker)
+        idx = starting_pt
+
+        # Get current first unprocessed intersection point PolyNode
+        current = a_list[idx]
+        # Initialize array to store the intersection polygon cartesian points
+        pt_list = Vector{Tuple{Float64, Float64}}(undef, 0)
+        # Add the first point to the array
+        push!(pt_list, (intr_list[current.idx][1], intr_list[current.idx][2]))
+        
+        # Mark first intersection point as processed
+        processed_pts = processed_pts + 1
+        tracker[current.idx] = typemax(Int)
+
+        current_node_not_starting = true
+        while current_node_not_starting # While the current node isn't the starting one
+            status2 = false
+            current_node_not_intersection = true
+            while current_node_not_intersection # The current node isn't an intersection
+                
+                if current.inter
+                    status2 = current.ent_exit
+                end
+
+                # Depending on status of first intersection point, either
+                # traverse polygon forwards or backwards
+                if (!status2 && list == a_list) || (status2 && list == b_list)
+                    idx = idx + 1
+                else
+                    idx = idx - 1
+                end
+
+                # Wrap around the point list
+                if idx > length(list)
+                    idx = mod(idx, length(list))
+                elseif idx == 0
+                    idx = length(list)
+                end
+
+                # Get current node
+                current = list[idx]
+
+                # Add current node to the pt_list
+                if current.inter
+                    # Add cartesian coordinates from inter_list
+                    push!(pt_list, (intr_list[current.idx][1], intr_list[current.idx][2]))
+                    
+                    # Keep track of processed intersection points
+                    if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
+                        processed_pts = processed_pts + 1
+                        tracker[current.idx] = typemax(Int)
+                    end
+                    
+                else
+                    # Add cartesian coordinates from "list", which should point to either a_list or b_list
+                    push!(pt_list, (list_edges[current.idx][1][1], list_edges[current.idx][1][2]))
+                end
+
+                current_node_not_intersection = !current.inter
+            end
+            
+            # Break once get back to starting point
+            current_node_not_starting = (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
+
+            # Switch to neighbor list
+            if list == a_list
+                list = b_list
+                list_edges = edges_b
+            else
+                list = a_list
+                list_edges = edges_a
+            end
+            idx = current.neighbor
+            current = list[idx]
+        end
+
+        push!(return_polys, pt_list)
+        # TODO: Make sure can remove this counter
+        # counter = counter + 1
+    end
+
+    # # Check if one polygon totally within other
+    # # TODO: use point list instead of edges once to_points is fixed
+    # if isempty(return_polys)
+    #     list_b = []
+    #     for i in eachindex(edges_b)
+    #         push!(list_b, edges_b[i][1])
+    #     end
+    #     push!(list_b, edges_b[1][1])
+
+    #     list_a = []
+    #     for i in eachindex(edges_a)
+    #         push!(list_a, edges_a[i][1])
+    #     end
+    #     push!(list_a, edges_a[1][1])
+        
+    #     if point_in_polygon(edges_a[1][1], poly_b)[1]
+    #         push!()
+    #     elseif point_in_polygon(edges_b[1][1], poly_a)[1]
+            
+    #         push!(return_polys, list)
+    #     end
+    # end
+    return return_polys
+end
+    
+function difference_test(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = build_ab_list(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b)
+    return trace_difference(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+end
+
+difference_test(geom_a, geom_b) =
+    difference_test(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 
 """
     intersection(
