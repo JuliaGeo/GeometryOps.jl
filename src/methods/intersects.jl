@@ -53,7 +53,7 @@ between two line segments.
 =#
 
 
-# tempory poly_in_poly, only works if entirely contained
+# TODO: tempory poly_in_poly, only works if entirely contained
 # Checks if polya in poly b
 function poly_in_poly(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     p_a = to_edges(poly_a)[1][1]
@@ -62,6 +62,30 @@ end
 
 poly_in_poly(geom_a, geom_b) =
     poly_in_poly(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+
+# TODO: temporary alternative for to_points, repeats first and last point
+function my_get_pts(::GI.PolygonTrait, poly_a)
+    edges = to_edges(poly_a)
+    len =  length(edges) + 1
+    poly_points = Vector{Tuple{Float64, Float64}}(undef, len)
+    for ii in eachindex(edges)
+        poly_points[ii] = edges[ii][1]
+    end
+    poly_points[end] = edges[1][1]
+    return poly_points
+end
+
+my_get_pts(poly_a) = my_get_pts(GI.trait(poly_a), poly_a)
+
+function lin_ring_to_poly(lin_ring)
+    edges = to_edges(lin_ring)
+    points = Vector{Tuple{Float64, Float64}}(undef, length(edges)+1)
+    for ii in eachindex(edges)
+        points[ii] = edges[ii][1]
+    end
+    points[end] = edges[1][1]
+    return GI.Polygon([points])
+end
 
 """
     intersects(geom1, geom2)::Bool
@@ -210,34 +234,8 @@ intersection(
     geom_b,
 ) = intersection_points(trait_a, geom_a, trait_b, geom_b)
 
-
-function build_ab_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
-    # Make a list for nodes of each polygon. Note the definition of PolyNode
-    a_list = Array{PolyNode, 1}(undef, _nedge(poly_a))
-    b_list = Array{PolyNode, 1}(undef, _nedge(poly_b))
-
-    # Initialize arrays to keep track of the important information 
-    # associated with the intersection points of poly_a and poly_b.
-    # I initialize these arrays assumed there will be a maximum of 
-    # 30 intersection points and then I truncate the arrays later.
-    k = 30
-    # intr_list stores the cartesian coordintes of the intersection point
-    intr_list = Array{Tuple{Real, Real}, 1}(undef, k)
-    # At index i, a_idx_list stores the index of the ith intersection point in a_list
-    a_idx_list = Array{Int, 1}(undef, k)
-    # At index i, b_idx_list stores the edge number of poly_b that the ith intersection
-    # point lies on.
-    b_idx_list = Array{Int, 1}(undef, k)
-    # Alpha values are used to determine the order in which to place
-    # intersection points in a polygon list, which is especially
-    # useful when many intersection points lie on the same edge of a polygon.
-    alpha_a_list = Array{Real, 1}(undef, k)
-    alpha_b_list = Array{Real, 1}(undef, k)
-
-    # These lists store the cartesian coordinates of poly_a and poly_b
-    edges_a = to_edges(poly_a)
-    edges_b = to_edges(poly_b)
-
+function build_a_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, edges_a, edges_b,
+                      intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list, a_list, b_list)
     # Find intersection points and adds them to a_list
     # "counter" is used to index all inter-related lists
     counter = 1
@@ -308,7 +306,10 @@ function build_ab_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     b_idx_list = b_idx_list[1:counter-1]
     alpha_a_list = alpha_a_list[1:counter-1]
     alpha_b_list = alpha_b_list[1:counter-1]
+    return intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list, counter
+end
 
+function build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list, counter, k)
     # Iterate through the b_list and add in intersection points
     # Occasionally I need to skip the new points I added to the array
     skip = false
@@ -342,13 +343,11 @@ function build_ab_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     end
 
     b_neighbors = b_neighbors[1:counter-1]
-    # Iterate through a_list and update the neighbor indices
-    for ii in eachindex(a_list)
-        if a_list[ii].inter
-            a_list[ii].neighbor = b_neighbors[a_list[ii].idx]
-        end
-    end
 
+    return b_neighbors, b_list
+end
+
+function flag_ent_exit(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list, edges_a, edges_b)
     # Put in ent exit flags for poly_a
     status = false
     for ii in eachindex(a_list)
@@ -376,6 +375,52 @@ function build_ab_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
             status = !status
         end
     end
+
+    return a_list, b_list
+end
+
+
+function build_ab_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+    # Make a list for nodes of each polygon. Note the definition of PolyNode
+    a_list = Array{PolyNode, 1}(undef, _nedge(poly_a))
+    b_list = Array{PolyNode, 1}(undef, _nedge(poly_b))
+
+    # Initialize arrays to keep track of the important information 
+    # associated with the intersection points of poly_a and poly_b.
+    # I initialize these arrays assumed there will be a maximum of 
+    # 30 intersection points and then I truncate the arrays later.
+    k = 30
+    # intr_list stores the cartesian coordintes of the intersection point
+    intr_list = Array{Tuple{Real, Real}, 1}(undef, k)
+    # At index i, a_idx_list stores the index of the ith intersection point in a_list
+    a_idx_list = Array{Int, 1}(undef, k)
+    # At index i, b_idx_list stores the edge number of poly_b that the ith intersection
+    # point lies on.
+    b_idx_list = Array{Int, 1}(undef, k)
+    # Alpha values are used to determine the order in which to place
+    # intersection points in a polygon list, which is especially
+    # useful when many intersection points lie on the same edge of a polygon.
+    alpha_a_list = Array{Real, 1}(undef, k)
+    alpha_b_list = Array{Real, 1}(undef, k)
+
+    # These lists store the cartesian coordinates of poly_a and poly_b
+    edges_a = to_edges(poly_a)
+    edges_b = to_edges(poly_b)
+
+    intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list, counter = build_a_list(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, edges_a, edges_b,
+                                                                                  intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list, a_list, b_list)
+    b_neighbors, b_list = build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list, counter, k)
+
+    
+    # Iterate through a_list and update the neighbor indices
+    for ii in eachindex(a_list)
+        if a_list[ii].inter
+            a_list[ii].neighbor = b_neighbors[a_list[ii].idx]
+        end
+    end
+
+    # Flag the entry and exists
+    a_list, b_list = flag_ent_exit(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list, edges_a, edges_b)
 
     return a_list, b_list, a_idx_list, intr_list, edges_a, edges_b
 end
@@ -500,6 +545,121 @@ function trace_intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b
     return return_polys
 end
 
+function get_inter_holes(return_polys, poly_a, ext_poly_a, poly_b, ext_poly_b)
+    final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 0)
+
+    for poly in return_polys
+        # Turning poly into a Vec Vec Vec so i can put more polys in it
+        poly = [[poly]]
+        for hole in GI.gethole(poly_a) 
+            replacement_p = Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 0)
+            for p in poly
+                new_ps = difference_test(GI.Polygon(p), lin_ring_to_poly(hole))
+                append!(replacement_p, new_ps)
+            end
+            poly = replacement_p
+        end
+        
+        for hole in GI.gethole(poly_b)
+            replacement_p = Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 0)
+            for p in poly
+                new_ps = difference_test(GI.Polygon(p), lin_ring_to_poly(hole))
+                append!(replacement_p, new_ps)
+            end
+            poly = replacement_p
+        end
+        
+        append!(final_polys, poly)
+    end
+
+    return final_polys
+        
+end
+
+function get_union_holes(return_polys, poly_a, ext_poly_a, poly_b, ext_poly_b)
+    # This will be of length one, but I'm keeping it this type to be consistent: vec of vec of vec of tup
+    final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 1)
+    
+    # don't need for-loop because union means return_polys only represents 1 poly
+    # if my code is correct, the first poly in return_polys represents the exterior
+    poly = return_polys[1]
+    mult_poly = return_polys
+    
+    for hole in GI.gethole(poly_a)
+        new_hole = difference_test(lin_ring_to_poly(hole), ext_poly_b)
+        for h in new_hole
+            if length(h)>0
+                # I claim I can index h at one, because it can't
+                # have a hole because a hole within a hole would
+                # be an invalid polygon
+                append!(mult_poly, [h[1]])
+            end
+        end        
+    end
+    
+    for hole in GI.gethole(poly_b)
+        new_hole = difference_test(lin_ring_to_poly(hole), poly_a)
+        for h in new_hole
+            if length(h)>0
+                # if !([h[1]] in mult_poly)
+                #     append!(mult_poly, [h[1]])
+                # end
+                append!(mult_poly, [h[1]])
+            end
+        end 
+    end
+    final_polys[1] = mult_poly 
+
+    return final_polys
+        
+end
+
+function get_difference_holes(return_polys, poly_a, ext_poly_a, poly_b, ext_poly_b, diff_polygons)
+    
+    final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 0)
+
+    if !diff_polygons
+        poly = [return_polys]
+        
+        for hole in GI.gethole(poly_a)
+            replacement_p = Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 0)
+            for p in poly
+                new_ps = difference_test(GI.Polygon(p), lin_ring_to_poly(hole))
+                append!(replacement_p, new_ps)
+            end
+            poly = replacement_p
+        end
+        
+        append!(final_polys, poly)
+
+        for hole in GI.gethole(poly_b)
+            append!(final_polys, intersection(lin_ring_to_poly(hole), poly_a))
+        end
+
+    else
+        for poly in return_polys
+            poly = [[poly]]
+            for hole in GI.gethole(poly_a)
+                replacement_p = Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 0)
+                for p in poly
+                    new_ps = difference_test(GI.Polygon(p), lin_ring_to_poly(hole))
+                    append!(replacement_p, new_ps)
+                end
+                poly = replacement_p
+            end
+            
+            append!(final_polys, poly)
+        end
+
+        for hole in GI.gethole(poly_b)
+            append!(final_polys, intersection(lin_ring_to_poly(hole), poly_a))
+        end
+    end
+
+    return final_polys
+        
+end
+
 """
     intersection(
         ::GI.PolygonTrait, poly_a,
@@ -526,8 +686,19 @@ GO.intersection(p1, p2)
 ```
 """
 function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
-    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = build_ab_list(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b)
-    return trace_intersection(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    ext_poly_a = GI.getexterior(poly_a)
+    ext_poly_a = lin_ring_to_poly(ext_poly_a)
+    ext_poly_b = GI.getexterior(poly_b)
+    ext_poly_b = lin_ring_to_poly(ext_poly_b)
+    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = build_ab_list(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b)
+    polys = trace_intersection(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+
+    if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
+        return [polys]
+    else
+        return get_inter_holes(polys, poly_a, ext_poly_a, poly_b, ext_poly_b)
+    end    
+
 end
 
 function trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
@@ -638,6 +809,7 @@ function trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_lis
             end
             push!(list, edges_b[1][1])
             push!(return_polys, list)
+            return return_polys
         elseif point_in_polygon(edges_b[1][1], poly_a)[1]
             list = []
             for i in eachindex(edges_a)
@@ -645,6 +817,11 @@ function trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_lis
             end
             push!(list, edges_a[1][1])
             push!(return_polys, list)
+            return return_polys
+        else
+            push!(return_polys, my_get_pts(poly_a))
+            push!(return_polys, my_get_pts(poly_b))
+            return return_polys
         end
     end
 
@@ -675,8 +852,17 @@ function trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_lis
 end
 
 function union_test(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
-    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = build_ab_list(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b)
-    return trace_union(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    ext_poly_a = GI.getexterior(poly_a)
+    ext_poly_a = lin_ring_to_poly(ext_poly_a)
+    ext_poly_b = GI.getexterior(poly_b)
+    ext_poly_b = lin_ring_to_poly(ext_poly_b)
+    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = build_ab_list(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b)
+    polys = trace_union(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
+        return [polys]
+    else
+        return get_union_holes(polys, poly_a, ext_poly_a, poly_b, ext_poly_b)
+    end 
 end
 
 union_test(geom_a, geom_b) =
@@ -780,12 +966,10 @@ function trace_difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, 
         # counter = counter + 1
     end
 
+    diff_polygons = length(return_polys) > 1
     # # Check if one polygon totally within other
     # # TODO: use point list instead of edges once to_points is fixed
     if isempty(return_polys)
-        if point_in_polygon(edges_a[1][1], poly_b)[1]
-            return return_polys
-        end
         list_b = []
         for i in eachindex(edges_b)
             push!(list_b, edges_b[i][1])
@@ -797,20 +981,43 @@ function trace_difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, 
             push!(list_a, edges_a[i][1])
         end
         push!(list_a, edges_a[1][1])
-        
-        if point_in_polygon(edges_b[1][1], poly_a)[1]
+
+        if point_in_polygon(edges_a[1][1], poly_b)[1]
+            return return_polys, diff_polygons
+        elseif point_in_polygon(edges_b[1][1], poly_a)[1]
             push!(return_polys, list_a)
             push!(return_polys, list_b)
-            return return_polys
+            return return_polys, diff_polygons
+
+        else
+            # equivalent of push!(return_polys, list_a) since return_polys empty
+            return [list_a], diff_polygons
         end
     end
-    return return_polys
+    return return_polys, diff_polygons
 end
     
 function difference_test(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
-    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = build_ab_list(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b)
-    return trace_difference(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    ext_poly_a = GI.getexterior(poly_a)
+    ext_poly_a = lin_ring_to_poly(ext_poly_a)
+    ext_poly_b = GI.getexterior(poly_b)
+    ext_poly_b = lin_ring_to_poly(ext_poly_b)
+    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = build_ab_list(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b)
+    test = trace_difference(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    polys = test[1]
+    diff_polygons = test[2]
+    if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
+        final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, length(polys))
+        for i in 1:length(polys)
+            final_polys[i] = [polys[i]]
+        end
+        return final_polys
+    else
+        return get_difference_holes(polys, poly_a, ext_poly_a, poly_b, ext_poly_b, diff_polygons)
+    end 
 end
+
+
 
 difference_test(geom_a, geom_b) =
     difference_test(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
