@@ -224,10 +224,13 @@ function _overlaps(
     (a1, a2)::Edge,
     (b1, b2)::Edge
 )
-    # meets in more than one point
+    # meets in more than one point or at endpoints
     on_top = ExactPredicates.meet(a1, a2, b1, b2) == 0
-    # one end point is outside of other segment
-    a_fully_within = point_on_segment(a1, b1, b2) && point_on_segment(a2, b1, b2)
-    b_fully_within = point_on_segment(b1, a1, a2) && point_on_segment(b2, a1, a2)
-    return on_top && (!a_fully_within && !b_fully_within)
+    on_top || return false
+    # check that one endpoint of each edge is within other edge
+    a1_in = _point_in_on_out_segment(a1, b1, b2) == 1
+    a2_in = _point_in_on_out_segment(a2, b1, b2) == 1
+    b1_in = _point_in_on_out_segment(b1, a1, a2) == 1
+    b2_in = _point_in_on_out_segment(b2, a1, a2) == 1
+    return (a1_in ⊻ a2_in) && (b1_in ⊻ b2_in)
 end

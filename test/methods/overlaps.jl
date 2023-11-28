@@ -45,6 +45,8 @@ end
     l2 = LG.LineString([[0.0, -10.0], [0.0, 20.0]])
     l3 = LG.LineString([[0.0, -10.0], [0.0, 3.0]])
     l4 = LG.LineString([[5.0, -5.0], [5.0, 5.0]])
+    l5 = LG.LineString([[0.0, 0.0], [10.0, 0.0]])
+    l6 = LG.LineString([[0.0, 0.0], [0.0, -10.0]])
     # Line can't overlap with itself
     @test GO.overlaps(l1, l1) == LG.overlaps(l1, l1)
     # Line completely within other line doesn't overlap
@@ -53,6 +55,10 @@ end
     @test GO.overlaps(l1, l3) == GO.overlaps(l3, l1) == LG.overlaps(l1, l3)
     # Lines that don't touch
     @test GO.overlaps(l1, l4) == LG.overlaps(l1, l4)
+    # Lines that form a hinge at the origin
+    @test GO.overlaps(l1, l5) == LG.overlaps(l1, l5)
+    # Lines meet at one point and continue parallel in opposite directions
+    @test GO.overlaps(l1, l6) == LG.overlaps(l1, l6)
     # Linear rings that intersect but don't overlap
     r1 = LG.LinearRing([[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]])
     r2 = LG.LinearRing([[1.0, 1.0], [1.0, 6.0], [6.0, 6.0], [6.0, 1.0], [1.0, 1.0]])

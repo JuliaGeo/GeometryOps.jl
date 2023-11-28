@@ -109,7 +109,8 @@ function line_in_geom(
         ) || return out
         _line_in_closed_curve(
             line1, line2;
-            close = false, in = in, on = on, out = out)
+            close = false,
+        )
     else
         @warn "Linestring isn't closed. Point cannot be 'in' linestring."
         out
@@ -174,7 +175,7 @@ function line_in_geom(
     Extents.intersects(GI.extent(line), GI.extent(ring)) || return out
     return _line_in_closed_curve(
         line, ring;
-        close = false, in = in, on = on, out = out,
+        close = false,
     )
 end
 
@@ -289,7 +290,7 @@ function point_in_geom(
     Extents.intersects(GI.extent(line), GI.extent(ring)) || return out
     ext_val = _line_in_closed_curve(
         line, GI.getexterior(poly);
-        close = false, in = in, on = on, out = out,
+        close = false, 
     )
     
     for ring in GI.gethole(poly)
@@ -441,82 +442,92 @@ is outside of the curve. We take special care of intersections through vertices
 as it isn't clearcut if those neccesitate a segment of the line being outside
 of the curve.
 """
-function _line_in_closed_curve(
+_line_in_closed_curve(line, curve;
+        exclude_boundaries = false,
+        close = false,
+) = _line_in_out_closed_curve(
     line, curve;
-    in::T = 1, on::T = -1, out::T = 0,
-    close = false,
-) where {T}
-    # Determine number of points in curve and line
-    nc = GI.npoint(curve)
-    nc -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc)) ? 1 : 0
-    nl = GI.npoint(line)
-    nl -= (close && equals(GI.getpoint(line, 1), GI.getpoint(line, nl))) ? 1 : 0
-    # Check to see if first point in line is within curve
-    point_val = _point_in_closed_curve(
-        GI.getpoint(line, 1), curve;
-        in = in, on = on, out = out,
-    )
-    # point is outside curve, line can't be within curve
-    point_val == out && return out
-    # Check for any intersections between line and curve
-    line_on_curve = point_val == on  # record if line is "on" part of curve
-    l_start = _tuple_point(GI.getpoint(line, close ? nl : 1))
-    for i in (close ? 1 : 2):nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        c_start = _tuple_point(GI.getpoint(curve, nc))
-        for j in 1:nc
-            c_end = _tuple_point(GI.getpoint(curve, j))
-            # Check if edges intersect --> line is not within curve
-            meet_type = ExactPredicates.meet(l_start, l_end, c_start, c_end)
-            # open line segments meet in a single point
-            meet_type == 1 && return out
-            #=
-            closed line segments meet in one or several points -> meet at a
-            vertex or on the edge itself (parallel)
-            =#
-            if meet_type == 0
-                line_on_curve = true
-                # See if segment is parallel and within curve edge
-                p1_on_seg = point_on_segment(l_start, c_start, c_end)
-                p2_on_seg = point_on_segment(l_end, c_start, c_end)
-                # if segment isn't contained within curve edge
-                if !p1_on_seg || !p2_on_seg 
-                    # Make sure l_start is in or on the segment
-                    p1_in_curve =
-                        p1_on_seg ||
-                        _point_in_closed_curve(
-                            l_start, curve;
-                            in = in, on = on, out = out,
-                        ) != out
-                    !p1_in_curve && return out
-                    # Make sure l_end is in or on the segment
-                    p2_in_curve =
-                        p2_on_seg ||
-                        _point_in_closed_curve(
-                            l_end, curve;
-                            in = in, on = on, out = out,
-                        ) != out
-                    !p2_in_curve && return out
-                    #=
-                    If both endpoints are within or on the curve, but not
-                    parallel to the edge, make sure that midpoints between the
-                    intersections along the segment are within curve
-                    =# 
-                    !_segment_mids_in_curve(
-                        l_start, l_end, curve;
-                        in = in, on = on, out = out,
-                    ) && return out  # point of segment is outside of curve
-                    # line segment is fully within or on curve 
-                    break 
-                end
-            end
-            c_start = c_end
-        end
-        l_start = l_end
-    end
-    # check if line is on any curve edges or vertcies
-    return line_on_curve ? on : in
-end
+    disjoint = false,
+    exclude_boundaries = exclude_boundaries,
+    close = close,
+)
+
+# function _line_in_closed_curve(
+#     line, curve;
+#     in::T = 1, on::T = -1, out::T = 0,
+#     close = false,
+# ) where {T}
+#     # Determine number of points in curve and line
+#     nc = GI.npoint(curve)
+#     nc -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc)) ? 1 : 0
+#     nl = GI.npoint(line)
+#     nl -= (close && equals(GI.getpoint(line, 1), GI.getpoint(line, nl))) ? 1 : 0
+#     # Check to see if first point in line is within curve
+#     point_val = _point_in_closed_curve(
+#         GI.getpoint(line, 1), curve;
+#         in = in, on = on, out = out,
+#     )
+#     # point is outside curve, line can't be within curve
+#     point_val == out && return out
+#     # Check for any intersections between line and curve
+#     line_on_curve = point_val == on  # record if line is "on" part of curve
+#     l_start = _tuple_point(GI.getpoint(line, close ? nl : 1))
+#     for i in (close ? 1 : 2):nl
+#         l_end = _tuple_point(GI.getpoint(line, i))
+#         c_start = _tuple_point(GI.getpoint(curve, nc))
+#         for j in 1:nc
+#             c_end = _tuple_point(GI.getpoint(curve, j))
+#             # Check if edges intersect --> line is not within curve
+#             meet_type = ExactPredicates.meet(l_start, l_end, c_start, c_end)
+#             # open line segments meet in a single point
+#             meet_type == 1 && return out
+#             #=
+#             closed line segments meet in one or several points -> meet at a
+#             vertex or on the edge itself (parallel)
+#             =#
+#             if meet_type == 0
+#                 line_on_curve = true
+#                 # See if segment is parallel and within curve edge
+#                 p1_on_seg = point_on_segment(l_start, c_start, c_end)
+#                 p2_on_seg = point_on_segment(l_end, c_start, c_end)
+#                 # if segment isn't contained within curve edge
+#                 if !p1_on_seg || !p2_on_seg 
+#                     # Make sure l_start is in or on the segment
+#                     p1_in_curve =
+#                         p1_on_seg ||
+#                         _point_in_closed_curve(
+#                             l_start, curve;
+#                             in = in, on = on, out = out,
+#                         ) != out
+#                     !p1_in_curve && return out
+#                     # Make sure l_end is in or on the segment
+#                     p2_in_curve =
+#                         p2_on_seg ||
+#                         _point_in_closed_curve(
+#                             l_end, curve;
+#                             in = in, on = on, out = out,
+#                         ) != out
+#                     !p2_in_curve && return out
+#                     #=
+#                     If both endpoints are within or on the curve, but not
+#                     parallel to the edge, make sure that midpoints between the
+#                     intersections along the segment are within curve
+#                     =# 
+#                     !_segment_mids_in_curve(
+#                         l_start, l_end, curve;
+#                         in = in, on = on, out = out,
+#                     ) && return out  # point of segment is outside of curve
+#                     # line segment is fully within or on curve 
+#                     break 
+#                 end
+#             end
+#             c_start = c_end
+#         end
+#         l_start = l_end
+#     end
+#     # check if line is on any curve edges or vertcies
+#     return line_on_curve ? on : in
+# end
 
 """
     _segment_mids_in_curve(
@@ -580,10 +591,10 @@ function _geom_in_polygon(geom, poly; close = false)
     (in_ext || on_ext) || return (false, false)  # geom isn't in external ring
     # Check if the geom is in any of the holes
     for hole in GI.gethole(poly)
-        out_of_hole, some_on_hole = _line_in_closed_curve(
-            geom, hole;
-            close = close, in = false,
-        )
+        # out_of_hole, some_on_hole = _line_in_closed_curve(
+        #     geom, hole;
+        #     close = close, in = false,
+        # )
         # geom is in a hole -> not in polygon
         !(out_of_hole || some_on_hole) && return (false, false)
     end

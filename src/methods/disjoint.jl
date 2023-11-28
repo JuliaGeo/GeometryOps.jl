@@ -18,12 +18,34 @@ GO.disjoint(poly, point)
 true
 ```
 """
+# Syntactic sugar
 disjoint(g1, g2)::Bool = disjoint(trait(g1), g1, trait(g2), g2)
 disjoint(::FeatureTrait, g1, ::Any, g2)::Bool = disjoint(GI.geometry(g1), g2)
 disjoint(::Any, g1, t2::FeatureTrait, g2)::Bool = disjoint(g1, geometry(g2))
-disjoint(::PointTrait, g1, ::PointTrait, g2)::Bool = !point_equals_point(g1, g2)
-disjoint(::PointTrait, g1, ::LineStringTrait, g2)::Bool = !point_on_line(g1, g2)
-disjoint(::PointTrait, g1, ::PolygonTrait, g2)::Bool = !point_in_polygon(g1, g2)
+# Point disjoint geometries
+# Point disjoint from point
+disjoint(
+    ::GI.PointTrait, g1,
+    ::GI.PointTrait, g2,
+) = !equals(g1, g2)
+# Point disjoint from curve
+disjoint(
+    ::GI.PointTrait, g1,
+    ::Union{GI.LineStringTrait, GI.LinearRingTrait}, g2,
+) = _point_curve_process(
+    g1, g2;
+    process = disjoint_process, exclude_boundaries = false,
+)
+# Point in polygon
+disjoint(
+    ::GI.PointTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _point_polygon_process(
+    g1, g2;
+    process = disjoint_process, exclude_boundaries = false,
+)
+
+
 disjoint(::LineStringTrait, g1, ::PointTrait, g2)::Bool = !point_on_line(g2, g1)
 disjoint(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = !line_on_line(g1, g2)
 disjoint(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = !line_in_polygon(g2, g1)
