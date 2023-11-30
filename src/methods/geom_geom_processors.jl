@@ -179,6 +179,19 @@ function _line_curve_process(
     closed_curve |= explicit_closed_curve
     exclude_boundaries |= explicit_closed_curve
 
+    check_func = 
+        if process == within_process
+            (args...) -> _line_curve_within_checks(
+                args...;
+                nc = nc, closed_curve = closed_curve, exclude_boundaries,
+            )
+        else
+            (args...) -> _line_curve_disjoint_checks(
+                args...;
+                nc = nc, closed_curve = closed_curve, exclude_boundaries,
+            )
+        end
+
     l_start = _tuple_point(GI.getpoint(line, closed_line ? nl : 1))
     i = closed_line ? 1 : 2
     while i ≤ nl
@@ -186,104 +199,110 @@ function _line_curve_process(
         c_start = _tuple_point(GI.getpoint(curve, closed_curve ? nc : 1))
         for j in (closed_curve ? 1 : 2):nc
             c_end = _tuple_point(GI.getpoint(curve, j))
-            # Check if edges intersect -> not disjoint
+            
             meet_type = ExactPredicates.meet(l_start, l_end, c_start, c_end)
-            if process == within_process
-                #=
-                if l_start is in/on curve and curve and line meet either at
-                endpoints or are parallel and meet in multiple points
-                =#
-                if (
-                    meet_type == 0 &&
-                    _point_in_on_out_segment(l_start, c_start, c_end) != 0
-                )
-                    # if l_end is within curve, whole line is contained in curve
-                    if _point_in_on_out_segment(
-                        l_end,
-                        c_start, c_end,
-                    ) != 0
-                        i += 1
-                        l_start = l_end
-                        break
-                    #=
-                    if c_start is in line, then need to find overlap for c_start
-                    to l_end as l_start to c_start is overlapping with curve
-                    =#
-                    elseif _point_in_on_out_segment(
-                        c_start,
-                        l_start, l_end,
-                    ) == 1
-                        l_start = c_start
-                        break
-                    #=
-                    if c_end is in line, then need to find overlap for c_end to
-                    l_end as l_start to c_end is overlapping with curve
-                    =#
-                    elseif _point_in_on_out_segment(
-                        c_end,
-                        l_start, l_end,
-                    ) == 1
-                        l_start = c_end
-                        break
-                    end
-                end
-                j == nc && return false
-            else  # disjoint_process
-                if (
-                    exclude_boundaries && meet_type == 0 &&
-                    !closed_curve && (j == 2 || j == nc)
-                )
-                    if _isparallel(l_start, l_end, c_start, c_end)
-                        (p1, p2) =
-                            if j == 2 && equals(c_start, l_start)
-                                (l_end, c_end)
-                            elseif j == 2 && equals(c_start, l_end)
-                                (l_start, c_end)
-                            elseif j == nc && equals(c_end, l_start)
-                                (l_end, c_start)
-                            elseif j == nc &&equals(c_end, l_end)
-                                (l_start, c_start)
-                            else
-                                return false
-                            end
-                        (
-                            _point_in_on_out_segment(p1, c_start, c_end) ||
-                            _point_in_on_out_segment(p2, l_start, l_end)
-                        ) && return false
-                    else
-                        _, (_, c_frac) = _intersection_point(
-                            (l_start, l_end),
-                            (c_start, c_end),
-                        )
-                        j == 2 && c_frac != 0 && return false
-                        j == nc && c_frac != 1 && return false
-                    end
-                elseif meet_type != -1
-                    return false
-                end
-                if j == nc
-                    i += 1
-                    l_start = l_end
-                end
-            end
+            passes_checks, break_loop, i, l_start = check_func(
+                meet_type,
+                l_start, l_end,
+                c_start, c_end,
+                i, j,
+            )
+            break_loop && break
+            !passes_checks && return false
             c_start = c_end
         end
     end
     return true
 end
 
-function _line_curve_disjoint_checks(
+function _line_curve_within_checks(
     meet_type,
-    l_start, l_end, c_start, c_end,
-    j,
+    l_start, l_end,
+    c_start, c_end,
+    i, j;
     nc,
     closed_curve,
     exclude_boundaries,
 )
+    is_within = true
+    break_loop = false
+    #=
+        if l_start is in/on curve and curve and line meet either at
+        endpoints or are parallel and meet in multiple points
+    =#
+    if (
+        meet_type == 0 &&
+        _point_in_on_out_segment(l_start, c_start, c_end) != 0
+    )
+        #=
+        if excluding first and last point of curve, make sure those points
+        aren't within the line segment
+        =#
+        if exclude_boundaries && !closed_curve && ((
+            j == 2 && _point_in_on_out_segment(c_start, l_start, l_end) != 0
+        ) || (
+            j == nc && _point_in_on_out_segment(c_end, l_start, l_end) != 0
+        ))
+            is_within = false      
+        else  # if end points aren't being excluded 
+            # if l_end is within curve, whole line is contained in curve
+            if _point_in_on_out_segment(l_end, c_start, c_end) != 0
+                i += 1
+                l_start = l_end
+                break_loop = true
+            #=
+            if c_start is in line, then need to find overlap for c_start
+            to l_end as l_start to c_start is overlapping with curve
+            =#
+            elseif _point_in_on_out_segment(
+                c_start,
+                l_start, l_end,
+            ) == 1
+                l_start = c_start
+                break_loop = true
+            #=
+            if c_end is in line, then need to find overlap for c_end to
+            l_end as l_start to c_end is overlapping with curve
+            =#
+            elseif _point_in_on_out_segment(
+                c_end,
+                l_start, l_end,
+            ) == 1
+                l_start = c_end
+                break_loop = true
+            end
+        end
+    end
+    #=
+    if line segment has been checked against all curve segments and it isn't
+    within any of them, line isn't within curve
+    =#
+    if j == nc
+        is_within = false
+    end
+    return is_within, break_loop, i, l_start
+end
+
+function _line_curve_disjoint_checks(
+    meet_type,
+    l_start, l_end,
+    c_start, c_end,
+    i, j;
+    nc,
+    closed_curve,
+    exclude_boundaries,
+)
+    is_disjoint = true
+    break_loop = false
+    #=
+    if excluding first and last point of curve, line can still cross those
+    points and be disjoint
+    =#
     if (
         exclude_boundaries && meet_type == 0 &&
         !closed_curve && (j == 2 || j == nc)
     )
+        # if line and curve are parallel, they cannot overlap and be disjoint
         if _isparallel(l_start, l_end, c_start, c_end)
             (p1, p2) =
                 if j == 2 && equals(c_start, l_start)
@@ -295,71 +314,46 @@ function _line_curve_disjoint_checks(
                 elseif j == nc &&equals(c_end, l_end)
                     (l_start, c_start)
                 else
-                    return false
+                    is_disjoint = false
                 end
-            (
+            if is_disjoint && (
                 _point_in_on_out_segment(p1, c_start, c_end) ||
                 _point_in_on_out_segment(p2, l_start, l_end)
-            ) && return false
+            )
+                is_disjoint = false
+            end
+        #=
+        if line and curve aren't parallel, they intersection must be either the
+        start or end point of the curve to be disjoint
+        =#
         else
             _, (_, c_frac) = _intersection_point(
                 (l_start, l_end),
                 (c_start, c_end),
             )
-            j == 2 && c_frac != 0 && return false
-            j == nc && c_frac != 1 && return false
+            if (
+                j == 2 && c_frac != 0 ||
+                j == nc && c_frac != 1
+            )
+                is_disjoint = false
+            end
         end
+    #=
+    if not excluding first and last point of curve, line cannot intersect with
+    any points of the curve
+    =#
     elseif meet_type != -1
-        return false
+        is_disjoint = false
     end
+    #=
+    if line segment has been checked against all curve segments and is disjoint
+    from all of them, we can now check the next line segment
+    =#
     if j == nc
         i += 1
         l_start = l_end
     end
-end
-
-function _line_curve_within_checks(
-    line, curve,
-    nl, nc,
-    closed_line, closed_curve,
-    exclude_boundaries,
-)
-    seg_idx = 0
-    l_start = _tuple_point(GI.getpoint(line, closed_line ? nl : 1))
-    c_start = _tuple_point(GI.getpoint(curve, closed_curve ? nc : 1))
-    for i in (closed_curve ? 1 : 2):nc
-        c_end = _tuple_point(GI.getpoint(curve, i))
-        c_start_val = _point_in_on_out_segment(l_start, c_start, c_end)
-        if c_start_val == -1 && exclude_boundaries && (i == 2 || i == nc)
-            i == 2 && equals(l_start, c_start) && return false
-            i == nc && equals(l_start, c_end) && return false
-        end
-        if c_start_val != 0  # if point is in or on the segment
-            seg_idx = i
-            break
-        end
-        c_start = c_end
-    end
-    seg_idx == 0 && return false
-
-    for i in (closed_line ? 1 : 2):nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        line_on_next_seg = true
-        while line_on_next_seg
-            seg_idx > nc && return false
-            c_end = _tuple_point(GI.getpoint(curve, seg_idx))
-            meet_type = ExactPredicates.meet(l_start, l_end, c_start, c_end)
-            meet_type != 0 && return false
-            end_point_val = _point_in_on_out_segment(l_end, c_start, c_end)
-            end_point_val == 1 && break
-            end_point_val == -1 && (line_on_next_seg = false)
-            # Switch to next segment
-            seg_idx += 1
-            c_start = c_end
-        end
-        l_start = l_end
-    end
-    return true
+    return is_disjoint, break_loop, i, l_start
 end
 
 function _line_closed_curve_process(
@@ -367,8 +361,14 @@ function _line_closed_curve_process(
     process::ProcessType = within_process,
     exclude_boundaries = false,
     close = false,
+    line_is_poly_ring = false,
 )
-    point_in = false  # see if at least one point is within the closed curve
+    #=
+    if line isn't the external ring of a polygon, see if at least one point is
+    within the closed curve - else, ring is "filled in" and has points within
+    closed curve
+    =# 
+    point_in = line_is_poly_ring
     in_val, out_val, on_val = get_process_type_vals(process, exclude_boundaries)
     # Determine number of points in curve and line
     nc = GI.npoint(curve)
@@ -401,9 +401,15 @@ function _line_closed_curve_process(
             =#
             if meet_type == 0
                 # See if segment is parallel and within curve edge
-                p1_on_seg = point_on_segment(l_start, c_start, c_end)
+                p1_on_seg = _point_in_on_out_segment(
+                    l_start,
+                    c_start, c_end,
+                ) != 0
                 exclude_boundaries && p1_on_seg && return false
-                p2_on_seg = point_on_segment(l_end, c_start, c_end)
+                p2_on_seg = _point_in_on_out_segment(
+                    l_end,
+                    c_start, c_end,
+                ) != 0
                 exclude_boundaries && p2_on_seg && return false
                 # if segment isn't contained within curve edge
                 if !p1_on_seg || !p2_on_seg 
@@ -492,17 +498,21 @@ _line_polygon_process(
     process::ProcessType = within_process,
     exclude_boundaries = true,
     close = false,
+    line_is_poly_ring = false,
 ) = _geom_polygon_process(
     line, polygon,
     (args...; kwargs...) -> _line_closed_curve_process(
         args...;
         kwargs...,
         close = close,
+        line_is_poly_ring = line_is_poly_ring,
     );
     process = process,
     ext_exclude_boundaries = exclude_boundaries,
     hole_exclude_boundaries = exclude_boundaries,
 )
+
+
 
 function _geom_polygon_process(
     geom, polygon, geom_closed_curve_func;

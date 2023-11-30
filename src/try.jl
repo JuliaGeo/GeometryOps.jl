@@ -2,9 +2,7 @@ import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG
 
+p1 = LG.Polygon([[[0.0, 0.0], [0.5, 1.5], [2.5, -0.5], [0.0, 0.0]]])
 
-r3 = LG.LinearRing([[0.0, 0.0], [1.0, 0.0], [0.0, 0.2], [0.0, 0.0]])
-l2 = LG.LineString([[0.0, 0.0], [1.0, 0.0], [0.0, 0.1]])
-
-GO.within(l2, r3)
+GO.within(p1, p1)
     

@@ -64,7 +64,9 @@ within(
     process = within_process, exclude_boundaries = true,
 )
 
-# Lines in geometries
+# Lines in/on geometries
+
+# Lines in/on lines
 within(
     ::GI.LineStringTrait, line,
     ::GI.LineStringTrait, curve,
@@ -76,6 +78,7 @@ within(
     closed_curve = false,
 )
 
+# Lines in/on rings
 within(
     ::GI.LineStringTrait, line,
     ::GI.LinearRingTrait, ring,
@@ -87,6 +90,7 @@ within(
     closed_curve = true,
 )
 
+# Lines in/on polygons
 within(
     ::GI.LineStringTrait, line,
     ::GI.PolygonTrait, polygon,
@@ -97,7 +101,9 @@ within(
     close = false,
 )
 
-# Rings in geometries
+# Rings in/on geometries
+
+# Rings in/on lines
 within(
     ::GI.LinearRingTrait, line,
     ::GI.LineStringTrait, curve,
@@ -109,6 +115,7 @@ within(
     closed_curve = false,
 )
 
+# Rings in/on rings
 within(
     ::GI.LinearRingTrait, line,
     ::GI.LinearRingTrait, ring,
@@ -120,18 +127,45 @@ within(
     closed_curve = true,
 )
 
+# Rings in/on polygons
 within(
     ::GI.LinearRingTrait, line,
     ::GI.PolygonTrait, polygon,
 ) = _line_polygon_process(
     line, polygon;
     process = within_process,
-    exclude_boundaries = true,
+    exclude_boundaries = false,
     close = true,
 )
 
-# Polygons within geometries
-within(::GI.PolygonTrait, g1, ::GI.PolygonTrait, g2)::Bool = polygon_in_polygon(g1, g2)
+# Polygons within polygons
+function within(
+    ::GI.PolygonTrait, poly1,
+    ::GI.PolygonTrait, poly2;
+)
+    if _line_polygon_process(
+        GI.getexterior(poly1), poly2;
+        process = within_process,
+        exclude_boundaries = false,
+        close = true,
+        line_is_poly_ring = true
+    )
+        for hole in GI.gethole(poly2)
+            if _line_polygon_process(
+                hole, poly1;
+                process = within_process,
+                exclude_boundaries = false,
+                close = true,
+                line_is_poly_ring = true
+            )
+                return false
+            end
+        end
+        return true
+    end
+    return false
+end
+
 
 # Everything not specified
 # TODO: Add multipolygons

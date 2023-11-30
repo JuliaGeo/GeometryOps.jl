@@ -22,12 +22,41 @@ l12 = LG.LineString([[0.0, 0.0], [0.5, 1.5], [2.5, -0.5], [0.0, 0.0], [-1.0, 0.0
 r1 = LG.LinearRing([[0.0, 0.0], [0.5, 1.5], [2.5, -0.5], [0.0, 0.0]])
 r2 = LG.LinearRing([[0.0, 0.0], [1.0, 0.0], [0.0, 0.1], [0.0, 0.0]])
 r3 = LG.LinearRing([[0.0, 0.0], [1.0, 0.0], [0.0, 0.2], [0.0, 0.0]])
+r4 = LG.LinearRing([[0.2, 0.5], [0.3, 0.7], [0.4, 0.5], [0.2, 0.5]])
+r5 = LG.LinearRing([[0.6, 0.9], [0.7, 0.8], [0.6, 0.8], [0.6, 0.9]])
+r6 = LG.LinearRing([[0.25, 0.55], [0.3, 0.65], [0.35, 0.55], [0.25, 0.55]])
 
 p1 = LG.Polygon([[[0.0, 0.0], [0.5, 1.5], [2.5, -0.5], [0.0, 0.0]]])
 p2 = LG.Polygon([
     [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
     [[0.2, 0.5], [0.3, 0.7], [0.4, 0.5], [0.2, 0.5]],
     [[0.5, 0.5], [0.8, 0.4], [0.7, 0.2], [0.5, 0.5]]
+])
+p3 = LG.Polygon([[[0.0, 0.0], [1.0, 0.0], [0.0, 0.2], [0.0, 0.0]]])
+p4 = LG.Polygon([[[0.6, 0.9], [0.7, 0.8], [0.6, 0.8], [0.6, 0.9]]])
+p5 = LG.Polygon([[[0.25, 0.55], [0.3, 0.65], [0.35, 0.55], [0.25, 0.55]]])
+p6 = LG.Polygon([[[0.1, 0.4], [0.1, 0.8], [0.3, 0.8], [0.3, 0.4], [0.1, 0.4]]])
+p7 = LG.Polygon([
+    [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]],
+    [[0.4, 0.4], [0.4, 0.6], [0.6, 0.6], [0.6, 0.4], [0.4, 0.4]],
+])
+p8 = LG.Polygon([
+    [[0.1, 0.1], [0.1, 0.9], [0.9, 0.9], [0.9, 0.1], [0.1, 0.1]],
+    [[0.3, 0.3], [0.3, 0.7], [0.7, 0.7], [0.7, 0.3], [0.3, 0.3]]
+])
+p9 = LG.Polygon([
+    [[0.1, 0.1], [0.1, 0.9], [0.9, 0.9], [0.9, 0.1], [0.1, 0.1]],
+    [[0.45, 0.45], [0.45, 0.55], [0.55, 0.55], [0.55, 0.45], [0.45, 0.45]]
+])
+p10 = LG.Polygon([
+    [[0.1, 0.1], [0.1, 0.9], [0.9, 0.9], [0.9, 0.1], [0.1, 0.1]],
+    [[0.4, 0.4], [0.4, 0.6], [0.6, 0.6], [0.6, 0.4], [0.4, 0.4]]
+])
+p11 = LG.Polygon([
+    [[0.45, 0.5], [0.45, 0.75], [0.55, 0.75], [0.55, 0.5], [0.45, 0.5]]
+])
+p12 = LG.Polygon([
+    [[0.4, 0.4], [0.4, 0.6], [0.6, 0.6], [0.6, 0.4], [0.4, 0.4]]
 ])
 
 # Point and point
@@ -101,5 +130,46 @@ p2 = LG.Polygon([
 @test GO.within(r1, r3) == LG.within(r1, r3)
 
 # Ring and polygon
+# Ring is equal to polygon's external ring, no holes
+@test GO.within(r1, p1) == LG.within(r1, p1)
+# Ring goes outside of polygon's external ring
+@test GO.within(r1, p2) == LG.within(r1, p1)
+# Ring is within polygon, but also on edges
+@test GO.within(r2, p2) == LG.within(r2, p2)
+# Ring is within polygon, but also on edges
+@test GO.within(r3, p2) == LG.within(r3, p2)
+# Ring is one of polygon's holes
+@test GO.within(r4, p2) == LG.within(r4, p2)
+# Ring is fully within polygon that has holes
+@test GO.within(r5, p2) == LG.within(r5, p2)
+# Ring is fully within polygon's hole
+@test GO.within(r6, p2) == LG.within(r6, p2)
 
 # Polygon in polygon
+
+# Same polygon
+@test GO.within(p1, p1) == LG.within(p1, p1)
+@test GO.within(p2, p2) == LG.within(p2, p2)
+# Polygon not in polygon
+@test GO.within(p1, p2) == LG.within(p1, p2)
+@test GO.within(p2, p1) == LG.within(p2, p1)
+# Ring is within polygon, but also on edges
+@test GO.within(p3, p2) == LG.within(p3, p2)
+# Polygon within polygon with holes
+@test GO.within(p4, p2) == LG.within(p4, p2)
+# Polygon within polygon hole --> not within
+@test GO.within(p5, p2) == LG.within(p5, p2)
+# Polygon overlapping with other polygon's hole
+@test GO.within(p6, p2) == LG.within(p6, p2)
+# Polygon with hole nested with other polygon's hole --> within
+@test GO.within(p8, p7) == LG.within(p8, p7)
+# Nested holes but not within
+@test GO.within(p9, p7) == LG.within(p9, p7)
+# Nested with same hole
+@test GO.within(p10, p7) == LG.within(p10, p7)
+# within external ring but intersects with hole
+@test GO.within(p11, p7) == LG.within(p11, p7)
+
+@test GO.within(p12, p7) == LG.within(p12, p7)
+
+

@@ -62,7 +62,7 @@ function line_crosses_line(line1, line2)
                 pa = GI.getpoint(line1, i)
                 pb = GI.getpoint(line1, i + 1)
                 p = GI.getpoint(line2, j)
-                point_on_segment(p, (pa, pb); exclude_boundary) && return true
+                te(p, (pa, pb); exclude_boundary) && return true
             end
         end
     end

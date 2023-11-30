@@ -33,7 +33,6 @@ include("methods/polygonize.jl")
 include("methods/barycentric.jl")
 include("methods/equals.jl")
 include("methods/geom_geom_processors.jl")
-include("methods/geom_on_geom.jl")
 include("methods/orientation.jl")
 
 include("transformations/flip.jl")
