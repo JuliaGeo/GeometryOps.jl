@@ -166,9 +166,30 @@ function within(
     return false
 end
 
+function within(::GI.AbstractTrait, g1, ::GI.MultiPolygonTrait, g2)
+    for poly in GI.getpolygon(g2)
+        if within(g1, poly)
+            return true
+        end
+    end
+    return false
+end
+
+function within(::GI.MultiPolygonTrait, g1, ::GI.MultiPolygonTrait, g2)
+    for poly1 in GI.getpolygon(g1)
+        poly1_within = false
+        for poly2 in GI.getpolygon(g2)
+            if within(poly1, poly2)
+                poly1_within = true
+                break
+            end
+        end
+        !poly1_within && return false
+    end
+    return true
+end
 
 # Everything not specified
-# TODO: Add multipolygons
-within(::GI.AbstractTrait, g1, ::GI.AbstractCurveTrait, g2)::Bool = false
+within(::GI.AbstractTrait, g1, ::GI.AbstractTrait, g2)::Bool = false
 
 
