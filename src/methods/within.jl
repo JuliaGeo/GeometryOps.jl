@@ -7,7 +7,7 @@ export within
 
 The within function checks if one geometry is inside another geometry.
 
-To provide an example, consider these two polygons:
+To provide an example, consider these two lines:
 ```@example cshape
 using GeometryOps
 using GeometryOps.GeometryBasics
@@ -74,22 +74,22 @@ GO.within(point, line)
 true
 ```
 """
-within(g1, g2)::Bool = within(trait(g1), g1, trait(g2), g2)::Bool
-within(::GI.FeatureTrait, g1, ::Any, g2)::Bool = within(GI.geometry(g1), g2)
-within(::Any, g1, t2::GI.FeatureTrait, g2)::Bool = within(g1, GI.geometry(g2))
+within(g1, g2) = within(trait(g1), g1, trait(g2), g2)
+within(::GI.FeatureTrait, g1, ::Any, g2) = within(GI.geometry(g1), g2)
+within(::Any, g1, t2::GI.FeatureTrait, g2) = within(g1, GI.geometry(g2))
 
 """
 For any non-specified pair, g1 cannot be within g2 as g2 is of a higher
 dimension than g1. Return false.
 """
-within(::GI.AbstractTrait, g1, ::GI.AbstractTrait, g2)::Bool = false
+within(::GI.AbstractTrait, g1, ::GI.AbstractTrait, g2) = false
 
 # Points within geometries
 """
     within(::GI.PointTrait, g1, ::GI.PointTrait, g2)::Bool
 
 If a point is within another point, then those points must be equal. If they are
-not equal then they are not within and return false.
+not equal, then they are not within and return false.
 """
 within(
     ::GI.PointTrait, g1,
@@ -269,6 +269,13 @@ function within(
     ::GI.PolygonTrait, g1,
     ::GI.PolygonTrait, g2;
 )
+    #=
+    For g1 to be within g2, the exterior of g1 must be within g2, including not
+    being in any of g2's holes.
+    Note: line_is_poly_ring is needed as ring can be exclusivly on g2 edge's and
+    still be "within" due to the interior being filled in in contrast to a
+    linestring or linear ring
+    =#
     if _line_polygon_process(
         GI.getexterior(g1), g2;
         process = within_process,
@@ -276,6 +283,10 @@ function within(
         close = true,
         line_is_poly_ring = true
     )
+        #=
+        now need to check that none of g2's holes are within g1 as this would
+        make the part of g1 within the hole outside of g2
+        =#
         for hole in GI.gethole(g2)
             if _line_polygon_process(
                 hole, g1;
