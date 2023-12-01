@@ -203,7 +203,7 @@ m2 = LG.MultiPolygon([p3, p4])
 # Polygon not in polygon
 @test GO.within(p1, p2) == LG.within(p1, p2)
 @test GO.within(p2, p1) == LG.within(p2, p1)
-# Ring is within polygon, but also on edges
+# Polygon is within polygon, but also on edges
 @test GO.within(p3, p2) == LG.within(p3, p2)
 # Polygon within polygon with holes
 @test GO.within(p4, p2) == LG.within(p4, p2)
