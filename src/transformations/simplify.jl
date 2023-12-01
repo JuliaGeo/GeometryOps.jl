@@ -99,7 +99,8 @@ GI.npoint(simple)
 6
 ```
 """
-simplify(data; calc_extent=false, kw...) = _simplify(DouglasPeucker(; kw...), data; calc_extent)
+simplify(data; calc_extent=false, threaded=false, kw...) =
+    _simplify(DouglasPeucker(; kw...), data; calc_extent, threaded)
 simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
 
 function _simplify(alg::SimplifyAlg, data; kw...)
