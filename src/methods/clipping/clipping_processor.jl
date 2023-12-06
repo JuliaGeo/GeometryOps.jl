@@ -2,37 +2,6 @@
 # # functionalities.
 
 """
-    _poly_in_poly(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b):: Bool 
-
-    This function is only called when we know the two polygons do not intersect. This
-    returns true if poly_a is completely contained in poly_b and false otherwise.
-"""
-# TODO: tempory _poly_in_poly, only works if entirely contained
-# Checks if polya in poly b
-function _poly_in_poly(poly_a, poly_b)
-    p_a = to_edges(poly_a)[1][1]
-    return point_in_polygon(p_a, poly_b)
-end
-
-"""
-    _my_get_pts(::GI.PolygonTrait, poly_a)::Vector{Tuple{Float64}}
-
-    The GeometryOps to_points was not working so I wrote this one. It just
-    used the 'to_edges' function from GeometryOps to derive to_points. 
-"""
-# TODO: temporary alternative for to_points, repeats first and last point
-function _my_get_pts(poly_a)
-    edges = to_edges(poly_a)
-    len =  length(edges) + 1
-    poly_points = Vector{Tuple{Float64, Float64}}(undef, len)
-    for ii in eachindex(edges)
-        poly_points[ii] = edges[ii][1]
-    end
-    poly_points[end] = edges[1][1]
-    return poly_points
-end
-
-"""
     _lin_ring_to_poly(lin_ring)::GI.Polygon
 
     This function turns a linear ring into a GeometryInterface polygon.

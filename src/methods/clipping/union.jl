@@ -135,8 +135,8 @@ function _trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_li
         else
             # In the case that the polygons don't intersect and aren't contained in
             # one another, return both polygons.
-            push!(return_polys, _my_get_pts(poly_a))
-            push!(return_polys, _my_get_pts(poly_b))
+            push!(return_polys, to_points(poly_a))
+            push!(return_polys, to_points(poly_b))
             return return_polys, true
         end
     end
@@ -152,7 +152,7 @@ function _trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_li
         for j = 2:(length(return_polys)-1)
             poly1 = GI.Polygon([return_polys[outer_idx]])
             poly2 = GI.Polygon([return_polys[j]])
-            if !_poly_in_poly(poly2, poly1)
+            if !point_in_polygon(to_edges(poly2)[1][1], poly1)
                 outer_idx = j
             end
         end

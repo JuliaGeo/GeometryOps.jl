@@ -94,34 +94,44 @@ function to_extent(edges::Vector{Edge})
     Extents.Extent(X=x, Y=y)
 end
 
-# is this a typo? I tried changing xs to x but then it still doesn't work
-function to_points(xs)
-    points = Vector{TuplePoint}(undef, _npoint(x))
-    _to_points!(points, x, 1)
+function to_points(x, repeat_last=true)
+    if repeat_last
+        points = Vector{TuplePoint}(undef, _npoint(x))
+    else
+        points = Vector{TuplePoint}(undef, _npoint(x)-1)
+    end
+    _to_points!(points, x, 1, repeat_last)
     return points
 end
 
-_to_points!(points::Vector, x, n) = _to_points!(points, trait(x), x, n)
-function _to_points!(points::Vector, ::FeatureCollectionTrait, fc, n)
+_to_points!(points::Vector, x, n, repeat_last) = _to_points!(points, trait(x), x, n, repeat_last)
+function _to_points!(points::Vector, ::FeatureCollectionTrait, fc, n, repeat_last)
     for f in GI.getfeature(fc)
-        n = _to_points!(points, f, n)
+        n = _to_points!(points, f, n, repeat_last)
     end
 end
-_to_points!(points::Vector, ::FeatureTrait, f, n) = _to_points!(points, GI.geometry(f), n)
-function _to_points!(points::Vector, ::AbstractGeometryTrait, fc, n)
+_to_points!(points::Vector, ::FeatureTrait, f, n, repeat_last) = _to_points!(points, GI.geometry(f), n, repeat_last)
+function _to_points!(points::Vector, ::AbstractGeometryTrait, fc, n, repeat_last)
     for f in GI.getgeom(fc)
-        n = _to_points!(points, f, n)
+        n = _to_points!(points, f, n, repeat_last)
     end
 end
-function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}, geom, n)
+function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}, geom, n, repeat_last)
     p1 = GI.getpoint(geom, 1) 
     p1x, p1y = GI.x(p1), GI.y(p1)
+    points[1] = (p1x, p1y)
     for i in 2:GI.npoint(geom)
         p2 = GI.getpoint(geom, i)
         p2x, p2y = GI.x(p2), GI.y(p2)
-        points[n] = (p1x, p1y), (p2x, p2y)
+        if repeat_last
+            points[i] = (p2x, p2y)
+        else
+            points[n] = (p2x, p2y)
+        end
+
         p1 = p2
         n += 1
     end
+
     return n
 end
