@@ -218,7 +218,7 @@ function _build_ab_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     # associated with the intersection points of poly_a and poly_b.
     # I initialize these arrays assumed there will be a maximum of 
     # 30 intersection points and then I truncate the arrays later.
-    k = 30
+    k = 4
     # intr_list stores the cartesian coordintes of the intersection point
     intr_list = Array{Tuple{Real, Real}, 1}(undef, k)
     # At index i, a_idx_list stores the index of the ith intersection point in a_list
