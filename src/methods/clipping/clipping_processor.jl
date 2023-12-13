@@ -2,28 +2,13 @@
 # # functionalities.
 
 """
-    _lin_ring_to_poly(lin_ring)::GI.Polygon
-
-    This function turns a linear ring into a GeometryInterface polygon.
-"""
-function _lin_ring_to_poly(lin_ring)
-    edges = to_edges(lin_ring)
-    points = Vector{Tuple{Float64, Float64}}(undef, length(edges)+1)
-    for ii in eachindex(edges)
-        points[ii] = edges[ii][1]
-    end
-    points[end] = edges[1][1]
-    return GI.Polygon([points])
-end
-
-"""
     _build_a_list(
-        ::GI.PolygonTrait, 
-        poly_a, ::GI.PolygonTrait, poly_b,
-         edges_a, edges_b, intr_list, a_idx_list, 
-         b_idx_list, alpha_a_list, alpha_b_list, 
-         a_list, b_list
-    )::intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list, counter
+        poly_a, poly_b,
+        edges_a, edges_b, 
+        intr_list, a_idx_list, b_idx_list, 
+        alpha_a_list, alpha_b_list, 
+        a_list, b_list
+    )::intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list
 
     This function take in two polygons, the lists of their edges, and some lists containing
     information about the nature of their intersection points. From that, it creates an 
@@ -31,9 +16,18 @@ end
     calling this function, a_list is not fully formed because the neighboring indicies of the
     intersection points in b_list still need to be updated. We will have fully formed a_list
     after calling _build_ab_list. Also at this point we still have not update the entry and
-    exit flags for a_list.
+    exit flags for a_list. The variables poly_a and poly_b are the original polygons that the
+    user passed in. The variables edges_a and edges_b are lists of the edges of each polygon, 
+    in the form of their cartesian points. Then intr_list is a list of the intersection points
+    in their cartesion point form. Then a_idx_list is a list of the indicies of where in a_list
+    an intersection point lies. The value at index i of a_idx_list is the location in a_list where
+    the ith point of intr_list lies. Then b_idx_list indicates which EDGE of poylgon b an intersection
+    point lies. Then alpha_a_list and alpha_b_list are vectors of scalar values which help order
+    the intersection points in the case that they lie on the same edge of a polygon. Finally,
+    a_list is an empty array of PolyNode objects that gets filled out when this function is run.
+    So is b_list. 
 """
-function _build_a_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, edges_a, edges_b,
+function _build_a_list(edges_a, edges_b,
                       intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list, a_list, b_list)
     # Find intersection points and adds them to a_list
     # "counter" is used to index all inter-related lists
@@ -69,13 +63,20 @@ function _build_a_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, edg
                 if isnothing(int_pt)
                     continue
                 end
-                # Store the cartesion coordinates of intersection point
-                intr_list[counter] = int_pt
-                # Store which edge of poly_b the intersection point lies on
-                b_idx_list[counter] = jj
-                # Store the alpha values
-                alpha_a_list[counter] = alphas[1]
-                alpha_b_list[counter] = alphas[2]
+                if counter <= length(intr_list)
+                    # Store the cartesion coordinates of intersection point
+                    intr_list[counter] = int_pt
+                    # Store which edge of poly_b the intersection point lies on
+                    b_idx_list[counter] = jj
+                    # Store the alpha values
+                    alpha_a_list[counter] = alphas[1]
+                    alpha_b_list[counter] = alphas[2]
+                else
+                    push!(intr_list, int_pt)
+                    push!(b_idx_list, jj)
+                    push!(alpha_a_list, alphas[1])
+                    push!(alpha_b_list, alphas[2])
+                end
 
                 counter = counter + 1
             else
@@ -93,7 +94,13 @@ function _build_a_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, edg
                 # Create PolyNodes of the new intersection points in the correct order
                 # and store the correct index in a_idx_list
                 pts_to_add[new_order[kk]] = PolyNode(prev_counter+kk-1, true, 0, false, alpha_a_list[prev_counter+kk-1])
-                a_idx_list[prev_counter+kk-1] = acount + new_order[kk] - 1;
+                if prev_counter+kk-1 <= length(a_idx_list)
+                    a_idx_list[prev_counter+kk-1] = acount + new_order[kk] - 1
+                else
+                    length_diff = prev_counter+kk-1-length(a_idx_list)
+                    append!(a_idx_list, zeros(length_diff))
+                    a_idx_list[prev_counter+kk-1] = acount + new_order[kk] - 1
+                end
             end
 
             # Add the PolyNodes to a_list and update acount
@@ -105,32 +112,43 @@ function _build_a_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, edg
     end
 
     # Truncate the inter_related lists
+
     intr_list = intr_list[1:counter-1] 
     a_idx_list = a_idx_list[1:counter-1]
     b_idx_list = b_idx_list[1:counter-1]
     alpha_a_list = alpha_a_list[1:counter-1]
     alpha_b_list = alpha_b_list[1:counter-1]
-    return intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list, counter
+
+    return intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list
 end
 
 """
     _build_b_list(
-        b_list, intr_list, a_idx_list, 
-        b_idx_list, alpha_b_list, counter, k
-    )::a_list, b_list
+        b_list, intr_list, 
+        a_idx_list, b_idx_list, 
+        alpha_b_list
+    )::b_neighbors, b_list
 
     This function builds b_list. Note that after calling this function, b_list
-    is not fully updated. The entry/exit flags still need to be updated.
+    is not fully updated. The entry/exit flags still need to be updated. The variables poly_a and poly_b are the original polygons that the
+    user passed in. The variables edges_a and edges_b are lists of the edges of each polygon, 
+    in the form of their cartesian points. Then intr_list is a list of the intersection points
+    in their cartesion point form. Then a_idx_list is a list of the indicies of where in a_list
+    an intersection point lies. The value at index i of a_idx_list is the location in a_list where
+    the ith point of intr_list lies. Then b_idx_list indicates which EDGE of poylgon b an intersection
+    point lies. Then alpha_b_list is a veector of scalar values which help order
+    the intersection points in the case that they lie on the same edge of a polygon. Finally,
+    b_list starts out as an array of PolyNodes only containing the original points of poly_b
+    but after this function is run it include intersection points to.
 """
 
-function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list, counter, k)
+function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list)
     # Iterate through the b_list and add in intersection points
     # Occasionally I need to skip the new points I added to the array
     skip = false
     num_skips = 0
-    b_neighbors = Array{Int, 1}(undef, k)
+    b_neighbors = Array{Int, 1}(undef, length(intr_list))
     for ii in 1:(length(b_list)+length(intr_list))
-        # TODO: this skipping scheme could be made nicer
         if skip
             num_skips = num_skips - 1
             if num_skips == 0
@@ -138,8 +156,6 @@ function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list, 
             end
             continue
         end
-        # Find the index in the intr_list (same as b_idx_list) where the inter point is
-        # TODO:find all is inefficient though, so it might be better to make dictionary of indices
         i = findall(x->x==b_list[ii].idx, b_idx_list)
         if !isempty(i)     
             # Order intersection points based on alpha values
@@ -155,8 +171,6 @@ function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list, 
             num_skips = length(i)
         end
     end
-
-    b_neighbors = b_neighbors[1:counter-1]
 
     return b_neighbors, b_list
 end
@@ -203,13 +217,21 @@ end
 
 """
     _build_ab_list(
-        ::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b
+        poly_a, poly_b
     )::a_list, b_list, a_idx_list, intr_list, edges_a, edges_b
 
     This function calls '_build_a_list', '_build_b_list', and '_flag_ent_exit'
-    in order to fully form a_list and b_list.
+    in order to fully form a_list and b_list. The 'a_list' and 'b_list'
+    that it returns are the fully updated vectors of PolyNodes that represent
+    'poly_a' and 'poly_b', respectively. This function also returns
+    'a_idx_list', which at its "ith" index stores the index in 'a_list' at
+    which the "ith" intersection point lies. This function also returns
+    'intr_list', which at the "ith" index contains the cartesian coordinates
+    for the "ith" intersection point. Finally, this function returns 'edges_a'
+    and 'edges_b' which are vectors of the cartesian points of the original
+    polygons, 'poly_a' and 'poly_b'.
 """
-function _build_ab_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+function _build_ab_list(poly_a, poly_b)
     # Make a list for nodes of each polygon. Note the definition of PolyNode
     a_list = Array{PolyNode, 1}(undef, _nedge(poly_a))
     b_list = Array{PolyNode, 1}(undef, _nedge(poly_b))
@@ -236,11 +258,11 @@ function _build_ab_list(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     edges_a = to_edges(poly_a)
     edges_b = to_edges(poly_b)
 
-    intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list, counter = _build_a_list(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, edges_a, edges_b,
-                                                                                  intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list, a_list, b_list)
-    b_neighbors, b_list = _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list, counter, k)
+    intr_list, a_idx_list, b_idx_list, 
+    alpha_a_list, alpha_b_list = _build_a_list(edges_a, edges_b, intr_list, a_idx_list, b_idx_list, 
+                                                        alpha_a_list, alpha_b_list, a_list, b_list)
+    b_neighbors, b_list = _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list)
 
-    
     # Iterate through a_list and update the neighbor indices
     for ii in eachindex(a_list)
         if a_list[ii].inter

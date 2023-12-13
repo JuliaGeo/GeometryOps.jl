@@ -93,8 +93,8 @@ function to_extent(edges::Vector{Edge})
     x, y = extrema(first, edges)
     Extents.Extent(X=x, Y=y)
 end
-
-function to_points(x, repeat_last=true)
+# by default, build a list of points in x, and then add if repeat_last = true && first and last point not only equal
+function to_points(x, repeat_last=false)
     if repeat_last
         points = Vector{TuplePoint}(undef, _npoint(x))
     else

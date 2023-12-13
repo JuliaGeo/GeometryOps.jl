@@ -1,6 +1,6 @@
 # # Intersection checks
 
-export intersects, intersection, intersection_points, union, difference
+export intersects, intersection_points
 
 #=
 ## What is `intersects` vs `intersection` vs `intersection_points`?
@@ -139,86 +139,6 @@ Returns true if there is at least one intersection between two edges.
 function _line_intersects(edge_a::Edge, edge_b::Edge)
     meet_type = ExactPredicates.meet(edge_a..., edge_b...)
     return meet_type == 0 || meet_type == 1
-end
-
-"""
-    intersection(geom_a, geom_b)::Union{Tuple{::Real, ::Real}, ::Nothing}
-
-Return an intersection point between two geometries. Return nothing if none are
-found. Else, the return type depends on the input. It will be a union between:
-a point, a line, a linear ring, a polygon, or a multipolygon
-
-## Example
-
-```jldoctest
-import GeoInterface as GI, GeometryOps as GO
-
-line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
-line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
-GO.intersection(line1, line2)
-
-# output
-(125.58375366067547, -14.83572303404496)
-```
-"""
-intersection(geom_a, geom_b) =
-    intersection(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
-
-"""
-    intersection(
-        ::GI.LineTrait, line_a,
-        ::GI.LineTrait, line_b,
-    )::Union{
-        ::Tuple{::Real, ::Real},
-        ::Nothing
-    }
-
-Calculates the intersection between two line segments. Return nothing if
-there isn't one.
-"""
-function intersection(::GI.LineTrait, line_a, ::GI.LineTrait, line_b)
-    # Get start and end points for both lines
-    a1 = GI.getpoint(line_a, 1)
-    a2 = GI.getpoint(line_a, 2)
-    b1 = GI.getpoint(line_b, 1)
-    b2 = GI.getpoint(line_b, 2)
-    # Determine the intersection point
-    point, fracs = _intersection_point((a1, a2), (b1, b2))
-    # Determine if intersection point is on line segments
-    if !isnothing(point) && 0 <= fracs[1] <= 1 && 0 <= fracs[2] <= 1
-        return point
-    end
-    return nothing
-end
-
-intersection(
-    trait_a::Union{GI.LineStringTrait, GI.LinearRingTrait},
-    geom_a,
-    trait_b::Union{GI.LineStringTrait, GI.LinearRingTrait},
-    geom_b,
-) = intersection_points(trait_a, geom_a, trait_b, geom_b)
-
-"""
-    intersection(
-        ::GI.AbstractTrait, geom_a,
-        ::GI.AbstractTrait, geom_b,
-    )::Union{
-        ::Vector{Vector{Tuple{::Real, ::Real}}}, # is this a good return type?
-        ::Nothing
-    }
-
-Calculates the intersection between two line segments. Return nothing if
-there isn't one.
-"""
-function intersection(
-    trait_a::GI.AbstractTrait, geom_a,
-    trait_b::GI.AbstractTrait, geom_b,
-)
-    @assert(
-        false,
-        "Intersection between $trait_a and $trait_b isn't implemented yet.",
-    )
-    return nothing
 end
 
 """

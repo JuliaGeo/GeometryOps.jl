@@ -24,6 +24,10 @@ const GO = GeometryOps
     @testset "Intersect" begin include("methods/intersects.jl") end
     @testset "Signed Area" begin include("methods/signed_area.jl") end
     @testset "Overlaps" begin include("methods/overlaps.jl") end
+    include("methods/clipping/clipping_test_utils.jl")
+    @testset "Intersection" begin include("methods/clipping/intersection.jl") end
+    @testset "Union" begin include("methods/clipping/union.jl") end
+    @testset "Difference" begin include("methods/clipping/difference.jl") end
     # Transformations
     @testset "Reproject" begin include("transformations/reproject.jl") end
     @testset "Flip" begin include("transformations/flip.jl") end

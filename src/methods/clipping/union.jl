@@ -3,24 +3,77 @@ export union
 
 # This 'union' implementation returns the union of two polygons.
 # It returns a Vector{Vector{Vector{Tuple{Float}}}. Note that this file only contains
-# the functionality of a union of two polygons, and not other geometries.
+# the functionality of a union of two polygons, and not other geometries. 
+# The algorithm to determine the union was adapted from "Efficient 
+# clipping of efficient polygons," by Greiner and Hormann (1998).
+# DOI: https://doi.org/10.1145/274363.274364
 
 """
-    _trace_union(::GI.PolygonTrait, poly_a,
-     ::GI.PolygonTrait, poly_b, a_list, b_list, a_idx_list,
-      intr_list, edges_a, edges_b)::Vector{Vector{Tuple{Float64}}}
+    union(
+        ::GI.PolygonTrait, poly_a,
+        ::GI.PolygonTrait, poly_b,
+    )::Vector{Vector{Vector{Tuple{Float64}}}}    
+
+Calculates the union between two polygons.
+## Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
+p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
+GO.union(p1, p2)
+
+# output
+1-element Vector{Vector{Vector{Tuple{Float64, Float64}}}}:
+[[[(6.5, 3.5), (5.0, 5.0), (0.0, 0.0), (5.0, -5.0), (6.5, -3.5), (8.0, -5.0), (13.0, 0.0), (8.0, 5.0), (6.5, 3.5)]]]
+```
+"""
+union(geom_a, geom_b) =
+    union(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+function union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+    # First, I get the exteriors of the two polygons
+    ext_poly_a = GI.getexterior(poly_a)
+    ext_poly_a = GI.Polygon([ext_poly_a])
+    ext_poly_b = GI.getexterior(poly_b)
+    ext_poly_b = GI.Polygon([ext_poly_b])
+    # Then, I get the union of the exteriors
+    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = _build_ab_list(ext_poly_a, ext_poly_b)
+    temp = _trace_union(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    polys = temp[1]
+    diff_polys = temp[2]
+    # If the original polygons had holes, we call '_get_union_holes' to take that
+    # into account.
+    if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
+        if !diff_polys
+            return [polys]
+        else
+            final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, length(polys))
+            for i in 1:length(polys)
+                final_polys[i] = [polys[i]]
+            end
+            return final_polys
+        end
+    else
+        return _get_union_holes(polys, poly_a, poly_b, ext_poly_b, diff_polys)
+    end 
+end
+
+
+
+"""
+    _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list,
+      intr_list, edges_a, edges_b)::Vector{Vector{Tuple{Float64}}}::return_polys, disjoint
 
 Traces the outlines of two polygons in order to find their union.
 It returns the outlines of all polygons formed in the union. If
 one polygon is completely contained in the other, it returns
-the larger one.
+the larger one. It returns a boolen which indicates whether the polygons
+are disjoint or not
 
-## Example
-
-TODO
 """
 
-function _trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
     # Keep track of number of processed intersection points
@@ -114,7 +167,6 @@ function _trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_li
     end
 
     # Check if one polygon totally within other and if so, return the larger polygon.
-    # TODO: use point list instead of edges once to_points is fixed
     if isempty(return_polys)
         if point_in_polygon(edges_a[1][1], poly_b)[1]
             list = []
@@ -135,8 +187,19 @@ function _trace_union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_li
         else
             # In the case that the polygons don't intersect and aren't contained in
             # one another, return both polygons.
-            push!(return_polys, to_points(poly_a))
-            push!(return_polys, to_points(poly_b))
+            list_a = []
+            for i in eachindex(edges_b)
+                push!(list_a, edges_a[i][1])
+            end
+            push!(list_a, edges_a[1][1])
+            list_b = []
+            for i in eachindex(edges_b)
+                push!(list_b, edges_b[i][1])
+            end
+            push!(list_b, edges_b[1][1])
+
+            push!(return_polys, list_a)
+            push!(return_polys, list_b)
             return return_polys, true
         end
     end
@@ -182,10 +245,6 @@ exteriors of the two polygons when computing the union. The function
 '_get_union_holes' takes into account the holes of the original polygons
 and adjusts the output of _union_difference (return_polys) accordingly.
 
-## Example
-
-TODO
-```
 """
 
 function _get_union_holes(return_polys, poly_a, poly_b, ext_poly_b, diff_polys)
@@ -202,7 +261,7 @@ function _get_union_holes(return_polys, poly_a, poly_b, ext_poly_b, diff_polys)
         for hole in GI.gethole(poly_a)
             # I use ext_poly_b here instead of poly_b in order to not overcount
             # area that is a hole of poly_a and in a hole of poly_b
-            new_hole = difference(_lin_ring_to_poly(hole), ext_poly_b)
+            new_hole = difference(GI.Polygon([hole]), ext_poly_b)
             for h in new_hole
                 if length(h)>0
                     # I claim I can index h at one, because it can't
@@ -214,7 +273,7 @@ function _get_union_holes(return_polys, poly_a, poly_b, ext_poly_b, diff_polys)
         end
         
         for hole in GI.gethole(poly_b)
-            new_hole = difference(_lin_ring_to_poly(hole), poly_a)
+            new_hole = difference(GI.Polygon([hole]), poly_a)
             for h in new_hole
                 if length(h)>0
                     append!(mult_poly, [h[1]])
@@ -229,88 +288,36 @@ function _get_union_holes(return_polys, poly_a, poly_b, ext_poly_b, diff_polys)
         # poly_a and poly_b are completely disjoint. So we need to subtract holes
         # from them separately.
         @assert (length(return_polys)==2) "Since 'diff_polys is true, 'return_polys' should have a length of 2. Instead it has length of $(length(return_polys))."
-        for poly in return_polys
-            mult_poly = [poly]
-            for hole in GI.gethole(poly_a)
-                # I use ext_poly_b here instead of poly_b in order to not overcount
-                # area that is a hole of poly_a and in a hole of poly_b
-                new_hole = difference(_lin_ring_to_poly(hole), ext_poly_b)
-                for h in new_hole
-                    if length(h)>0
-                        # I claim I can index h at one, because it can't
-                        # have a hole because a hole within a hole would
-                        # be an invalid polygon
-                        append!(mult_poly, [h[1]])
-                    end
-                end        
+        polya = return_polys[1]
+        polya = [polya]
+        polyb = return_polys[2]
+        polyb = [polyb]
+        
+        for hole in GI.gethole(poly_a)
+            edges_h = to_edges(hole)
+            list_h = []
+            for i in eachindex(edges_h)
+                push!(list_h, edges_h[i][1])
             end
-            
-            for hole in GI.gethole(poly_b)
-                new_hole = difference(_lin_ring_to_poly(hole), poly_a)
-                for h in new_hole
-                    if length(h)>0
-                        append!(mult_poly, [h[1]])
-                    end
-                end 
-            end
-
-            push!(final_polys, mult_poly)
+            push!(list_h, edges_h[1][1])
+            push!(polya, list_h)
+            push!(final_polys, polya)
         end
 
+        for hole in GI.gethole(poly_b)
+            edges_h = to_edges(hole)
+            list_h = []
+            for i in eachindex(edges_h)
+                push!(list_h, edges_h[i][1])
+            end
+            push!(list_h, edges_h[1][1])
+            push!(polyb, list_h)
+            push!(final_polys, polyb)
+        end
+        
         return final_polys
     end
         
 end
 
 
-"""
-    union(
-        ::GI.PolygonTrait, poly_a,
-        ::GI.PolygonTrait, poly_b,
-    )::Vector{Vector{Vector{Tuple{Float64}}}}    
-
-Calculates the union between two polygons.
-## Example
-
-```jldoctest
-import GeoInterface as GI, GeometryOps as GO
-
-p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
-p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
-GO.union(p1, p2)
-
-# output
-1-element Vector{Vector{Vector{Tuple{Float64, Float64}}}}:
-[[[(6.5, 3.5), (5.0, 5.0), (0.0, 0.0), (5.0, -5.0), (6.5, -3.5), (8.0, -5.0), (13.0, 0.0), (8.0, 5.0), (6.5, 3.5)]]]
-```
-"""
-function union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
-    # First, I get the exteriors of the two polygons
-    ext_poly_a = GI.getexterior(poly_a)
-    ext_poly_a = _lin_ring_to_poly(ext_poly_a)
-    ext_poly_b = GI.getexterior(poly_b)
-    ext_poly_b = _lin_ring_to_poly(ext_poly_b)
-    # Then, I get the union of the exteriors
-    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = _build_ab_list(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b)
-    temp = _trace_union(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
-    polys = temp[1]
-    diff_polys = temp[2]
-    # If the original polygons had holes, we call '_get_union_holes' to take that
-    # into account.
-    if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
-        if !diff_polys
-            return [polys]
-        else
-            final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, length(polys))
-            for i in 1:length(polys)
-                final_polys[i] = [polys[i]]
-            end
-            return final_polys
-        end
-    else
-        return _get_union_holes(polys, poly_a, poly_b, ext_poly_b, diff_polys)
-    end 
-end
-
-union(geom_a, geom_b) =
-    union(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)

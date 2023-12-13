@@ -4,10 +4,71 @@ export difference
 # The 'difference' function returns the difference of two polygons. Note that this file
 # currently only contains the difference of two polygons, which will always return
 # a vector of a vector of a vector of tuples of floats.
+# The algorithm to determine the difference was adapted from "Efficient 
+# clipping of efficient polygons," by Greiner and Hormann (1998).
+# DOI: https://doi.org/10.1145/274363.274364
 
 """
-    _trace_difference(::GI.PolygonTrait, poly_a,
-     ::GI.PolygonTrait, poly_b, a_list, b_list, a_idx_list,
+    difference(geom1, geom2)::Vector{Vector{Vector{Tuple{Float64}}}}
+
+Returns the difference of geom1 minus geom2. The vector of a vector inside
+the outermost vector is empty if the difference is empty. If the polygons
+don't intersect, it just returns geom1.
+
+## Example 
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+poly1 = GI.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
+poly2 = GI.Polygon([[[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]])
+GO.difference(poly1, poly2)
+
+# output
+1-element Vector{Vector{Vector{Tuple{Float64, Float64}}}}:
+[[[(6.5, 3.5), (5.0, 5.0), (0.0, 0.0), (5.0, -5.0), (6.5, -3.5), (3.0, 0.0), (6.5, 3.5)]]]
+```
+"""
+difference(geom_a, geom_b) =
+    difference(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    
+function difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+    # Get the exterior of the polygons
+    ext_poly_a = GI.getexterior(poly_a)
+    ext_poly_a = GI.Polygon([ext_poly_a])
+    ext_poly_b = GI.getexterior(poly_b)
+    ext_poly_b = GI.Polygon([ext_poly_b])
+    # Find the difference of the exterior of the polygons
+    a_list, b_list,
+    a_idx_list, intr_list,
+    edges_a, edges_b = _build_ab_list(ext_poly_a, ext_poly_b)
+    test = _trace_difference(ext_poly_a, ext_poly_b, 
+                            a_list, b_list, a_idx_list,
+                             intr_list, edges_a, edges_b)
+    polys = test[1]
+    diff_polygons = test[2]
+    # If the original polygons had holes, take that into account.
+    if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
+        if diff_polygons
+            final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, length(polys))
+            for i in 1:length(polys)
+                final_polys[i] = [polys[i]]
+            end
+            return final_polys
+        else
+            final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 1)
+            final_polys[1] = polys
+            return final_polys
+        end
+    else
+        # If the original polygons had holes, we call _get_difference_holes to take that
+        # into account.
+        return _get_difference_holes(polys, poly_a, poly_b, diff_polygons)
+    end 
+end
+
+"""
+    _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list,
       intr_list, edges_a, edges_b)::Vector{Vector{Tuple{Float64}}}, Bool
 
 Traces the outlines of two polygons in order to find their difference.
@@ -15,17 +76,11 @@ It returns the outlines of all the components of the difference. The Bool
 indicates whether or not these components (each Vector{Tuple{Float64} inside
 the larger Vector) are part of the same polygon (true) or each different
 polygons (true).
-
-## Example
-
-FILL IT IN
 """
 
-function _trace_difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
-    # TODO: Make sure can remove this counter
-    # counter = 0
 
     # Keep track of number of processed intersection points
     processed_pts = 0
@@ -160,62 +215,6 @@ function _trace_difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b,
     return return_polys, diff_polygons
 end
 
-"""
-    difference(geom1, geom2)::Vector{Vector{Vector{Tuple{Float64}}}}
-
-Returns the difference of geom1 minus geom2. The vector of a vector inside
-the outermost vector is empty if the difference is empty. If the polygons
-don't intersect, it just returns geom1.
-
-## Example 
-
-```jldoctest
-import GeoInterface as GI, GeometryOps as GO
-
-poly1 = GI.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
-poly2 = GI.Polygon([[[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]])
-GO.difference(poly1, poly2)
-
-# output
-1-element Vector{Vector{Vector{Tuple{Float64, Float64}}}}:
-[[[(6.5, 3.5), (5.0, 5.0), (0.0, 0.0), (5.0, -5.0), (6.5, -3.5), (3.0, 0.0), (6.5, 3.5)]]]
-```
-"""
-
-function difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
-    # Get the exterior of the polygons
-    ext_poly_a = GI.getexterior(poly_a)
-    ext_poly_a = _lin_ring_to_poly(ext_poly_a)
-    ext_poly_b = GI.getexterior(poly_b)
-    ext_poly_b = _lin_ring_to_poly(ext_poly_b)
-    # Find the difference of the exterior of the polygons
-    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = _build_ab_list(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b)
-    test = _trace_difference(GI.trait(ext_poly_a), ext_poly_a, GI.trait(ext_poly_b), ext_poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
-    polys = test[1]
-    diff_polygons = test[2]
-    # If the original polygons had holes, take that into account.
-    if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
-        if diff_polygons
-            final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, length(polys))
-            for i in 1:length(polys)
-                final_polys[i] = [polys[i]]
-            end
-            return final_polys
-        else
-            final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 1)
-            final_polys[1] = polys
-            return final_polys
-        end
-    else
-        # If the original polygons had holes, we call _get_difference_holes to take that
-        # into account.
-        return _get_difference_holes(polys, poly_a, poly_b, diff_polygons)
-    end 
-end
-
-difference(geom_a, geom_b) =
-    difference(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
-
     """
     _get_difference_holes(return_polys, poly_a, poly_b, diff_polygons)::Vector{Vector{Vector{Tuple{Float64, Float64}}}}
 
@@ -224,10 +223,6 @@ exteriors of the two polygons when computing the difference. The function
 '_get_difference_holes' takes into account the holes of the original polygons
 and adjust the output of _trace_difference (return_polys) accordingly.
 
-## Example
-
-TODO
-```
 """
 
 function _get_difference_holes(return_polys, poly_a, poly_b, diff_polygons)
@@ -245,7 +240,7 @@ function _get_difference_holes(return_polys, poly_a, poly_b, diff_polygons)
             for p in poly
                 # We need to make 'new_ps' to replace p because 'difference'
                 # might return more than one polygon
-                new_ps = difference(GI.Polygon(p), _lin_ring_to_poly(hole))
+                new_ps = difference(GI.Polygon(p), GI.Polygon([hole]))
                 append!(replacement_p, new_ps)
             end
             poly = replacement_p
@@ -256,7 +251,7 @@ function _get_difference_holes(return_polys, poly_a, poly_b, diff_polygons)
         for hole in GI.gethole(poly_b)
             # We add back the polygons formed at the intersection of the holes
             # of poly_b and poly_a
-            append!(final_polys, intersection(_lin_ring_to_poly(hole), poly_a))
+            append!(final_polys, intersection(GI.Polygon([hole]), poly_a))
         end
 
     else
@@ -271,7 +266,7 @@ function _get_difference_holes(return_polys, poly_a, poly_b, diff_polygons)
                 # by one 'polygon array' each, after taking into account the holes, each poly
                 # might contain multiple 'polygon arrays' which I called 'p' to describe it.
                 for p in poly
-                    new_ps = difference(GI.Polygon(p), _lin_ring_to_poly(hole))
+                    new_ps = difference(GI.Polygon(p), GI.Polygon([hole]))
                     append!(replacement_p, new_ps)
                 end
                 poly = replacement_p
@@ -283,7 +278,7 @@ function _get_difference_holes(return_polys, poly_a, poly_b, diff_polygons)
         for hole in GI.gethole(poly_b)
             # We add back the polygons formed at the intersection of the holes
             # of poly_b and poly_a
-            append!(final_polys, intersection(_lin_ring_to_poly(hole), poly_a))
+            append!(final_polys, intersection(GI.Polygon([hole]), poly_a))
         end
     end
 
