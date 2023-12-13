@@ -1,15 +1,64 @@
-@enum ProcessType within_process=1 disjoint_process=2
+@enum ProcessType within_process=1 disjoint_process=2 touch_process=3 coverby_process=4
 
+@enum PointOrientation point_in=1 point_on=2 point_off=3
 
-get_process_type_vals(process::ProcessType, exclude_boundaries = false) =
+"""
+    get_process_return_vals(
+        process::ProcessType,
+        exclude_boundaries = false,
+    )::(Bool, Bool, Bool)
+
+Returns a tuple of booleans which represent the boolean return value for it a
+point is in, out, or on a given geometry. This is determined by the process
+type as well as by the exclude_boundaries.
+
+For within_process:
+    if a point is in a geometry, we should return true
+    if a point is out of a geomertry, we should return false
+    if a point is on the boundary of a geometry, we should return false if we
+        want to exclude boundaries, else we should return true
+For disjoint_process:
+    if a point is in a geometry, we should return false
+    if a point is out of a geometry, we should return true
+    if a point is on the boundary of a geometry, we should return true if we
+        want to exclude boundaries, else we should return false
+For touch_process:
+    ???
+"""
+get_process_return_vals(process::ProcessType, exclude_boundaries = false) =
     (
-        process == within_process,
-        process == disjoint_process,
-        process == within_process ?
-            !exclude_boundaries : exclude_boundaries,
+        process == within_process,         # in value
+        process == disjoint_process,       # out value
+        (                                  # on value
+            (process == touch_process) ||
+            (process == within_process ?
+                !exclude_boundaries : exclude_boundaries
+            )
+        )
     )
 
+"""
+    _point_curve_process(
+        point, curve;
+        process::ProcessType = within_process,
+        exclude_boundaries = false,
+        repeated_last_coord = false,
+    )::Bool
 
+Determines if a point meets the given process checks with respect to a curve.
+This curve includes just the line segments that make up the curve. Even if the
+curve has a repeated last point that "closes" the curve, this function does not
+include the space within the closed curve as a part of the geometry. Point
+should be an object of Point trait and curve should be an object with a line
+string or a linear ring trait.
+
+If checking within, then the point must be on a segment of the line and if
+checking disjoint the point must not be on any segment of the line.
+
+Beyond specifying the process type, user can also specify if the geometry
+boundaries should be included in the checks and if the curve should be closed
+with repeated a repeated last coordinate matching the first coordinate.
+"""
 function _point_curve_process(
     point, curve;
     process::ProcessType = within_process,
@@ -21,8 +70,11 @@ function _point_curve_process(
     repeated_last_coord |= first_last_equal
     exclude_boundaries |= first_last_equal
     n -= first_last_equal ? 1 : 0
-    in_val, out_val, on_val = get_process_type_vals(process, exclude_boundaries)
-
+    in_val, out_val, on_val = get_process_return_vals(
+        process,
+        exclude_boundaries,
+    )
+    # Loop through all curve segments
     p_start = GI.getpoint(curve, repeated_last_coord ? n : 1)
     @inbounds for i in (repeated_last_coord ? 1 : 2):n
         p_end = GI.getpoint(curve, i)
@@ -38,6 +90,17 @@ function _point_curve_process(
     return out_val
 end
 
+"""
+    _point_in_on_out_segment(
+        point::Point, start::Point, stop::Point;
+        in::T = 1, on::T = -1, out::T = 0,
+    )::T where {T}
+
+Determines if a point is in, on, or out of a segment. If the point is 'on' the
+segment it is on one of the segments endpoints. If it is 'in', it is on any
+other point of the segment. If the point is not on any part of the segment, it
+is 'out' of the segment.
+"""
 function _point_in_on_out_segment(
     point, start, stop;
     in::T = 1, on::T = -1, out::T = 0,
@@ -69,6 +132,7 @@ function _point_in_on_out_segment(
     return in
 end
 
+
 point_return_val(point_val, in_val, out_val, on_val) =
     point_val == 1 ?
         in_val :            # point is inside of polygon
@@ -82,10 +146,44 @@ point_return_val(point_val, in_val, out_val, on_val) =
         point, curve;
         process::ProcessType = within_process,
         exclude_boundary = false,
-    )
+    )::Bool
 
-Determine if point is in, on, or out of a closed curve. Point should be an
-object of Point trait and curve should be a linearstring or ring, that is
+Determines if a point meets the given process checks with respect to a closed
+curve, which includes the space enclosed by the closed curve. Point should be an
+object of Point trait and curve should be an object with a line string or linear
+ring trait, that is assumed to be closed, regardless of repeated last point.
+
+If checking within, then the point must be within the space enclosed by the
+curve and if checking disjoint the point must not be outside of the curve.
+
+Beyond specifying the process type, user can also specify if the geometry
+boundaries should be included in the checks and if the curve should be closed
+with repeated a repeated last coordinate matching the first coordinate.
+"""
+function _point_closed_curve_process(
+    point, curve;
+    process::ProcessType = within_process,
+    exclude_boundaries = false,
+)
+    in_val, out_val, on_val = get_process_return_vals(
+        process,
+        exclude_boundaries,
+    )
+    return _point_in_on_out_closed_curve(
+        point, curve;
+        in = in_val, out = out_val, on = on_val
+    )
+end
+
+"""
+    _point_in_on_out_closed_curve(
+        point, curve;
+        in::T = 1, on::T = -1, out::T = 0,
+    )::T where {T}
+
+Determine if point is in, on, or out of a closed curve, which includes the space
+enclosed by the closed curve. Point should be an object of Point trait and
+curve should be an object with a line string or linear ring trait, that is
 assumed to be closed, regardless of repeated last point.
 
 Returns a given in, on, or out value (defaults are 1, -1, and 0) of type T.
@@ -103,16 +201,6 @@ passes through an odd number of edges, it is within the curve, else outside of
 of the curve if it didn't return 'on'.
 See paper for more information on cases denoted in comments.
 """
-function _point_closed_curve_process(
-    point, curve;
-    process::ProcessType = within_process,
-    exclude_boundaries = false,
-)
-    in_val, out_val, on_val = get_process_type_vals(process, exclude_boundaries)
-    point_val = _point_in_on_out_closed_curve(point, curve)
-    return point_return_val(point_val, in_val, out_val, on_val)
-end
-
 function _point_in_on_out_closed_curve(
     point, curve;
     in::T = 1, on::T = -1, out::T = 0,
@@ -150,6 +238,18 @@ function _point_in_on_out_closed_curve(
     return iseven(k) ? out : in
 end
 
+"""
+    _point_polygon_process(
+        point, polygon;
+        process::ProcessType = within_process,
+        exclude_boundaries = false,
+    )::Bool
+
+Determines if a point meets the given process checks with respect to a polygon,
+which excludes any holes specified by the polygon. Point should be an
+object of Point trait and polygon should an object with a Polygon trait.
+
+"""
 _point_polygon_process(
     point, polygon;
     process::ProcessType = within_process,
@@ -161,6 +261,7 @@ _point_polygon_process(
     ext_exclude_boundaries = exclude_boundaries,
     hole_exclude_boundaries = !exclude_boundaries
 )
+
 
 function _line_curve_process(
     line, curve;
@@ -369,7 +470,7 @@ function _line_closed_curve_process(
     closed curve
     =# 
     point_in = line_is_poly_ring
-    in_val, out_val, on_val = get_process_type_vals(process, exclude_boundaries)
+    in_val, out_val, on_val = get_process_return_vals(process, exclude_boundaries)
     # Determine number of points in curve and line
     nc = GI.npoint(curve)
     nc -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc)) ? 1 : 0
@@ -461,7 +562,7 @@ function _segment_mids_closed_curve_process(
     exclude_boundaries = false,
 )
     point_in = false
-    in_val, out_val, on_val = get_process_type_vals(process, exclude_boundaries)
+    in_val, out_val, on_val = get_process_return_vals(process, exclude_boundaries)
     # Find intersection points
     ipoints = intersection_points(
         GI.Line([l_start, l_end]),
@@ -472,7 +573,7 @@ function _segment_mids_closed_curve_process(
         mid_val = _point_in_on_out_closed_curve((l_start .+ l_end) ./ 2, curve)
         point_in |= mid_val == 1
         mid_return = point_return_val(mid_val, in_val, out_val, on_val)
-        !mid_return && return mid_return
+        !mid_return && return (false, point_in)
     else  # more intersection points than the endpoints
         # sort intersection points along the line
         sort!(ipoints, by = p -> euclid_distance(p, l_start))
@@ -486,7 +587,7 @@ function _segment_mids_closed_curve_process(
             )
             point_in |= mid_val == 1
             mid_return = point_return_val(mid_val, in_val, out_val, on_val)
-            !mid_return && return mid_val
+            !mid_return && return (false, point_in)
         end
     end
     # all intersection point midpoints were in or on the curve
@@ -509,9 +610,11 @@ _line_polygon_process(
     );
     process = process,
     ext_exclude_boundaries = exclude_boundaries,
-    hole_exclude_boundaries = exclude_boundaries,
+    hole_exclude_boundaries =
+        process == within_process ?
+            exclude_boundaries :
+            !exclude_boundaries,
 )
-
 
 
 function _geom_polygon_process(

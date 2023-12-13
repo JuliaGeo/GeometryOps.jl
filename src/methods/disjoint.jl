@@ -64,25 +64,6 @@ GO.disjoint(point, line)
 true
 ```
 """
-"""
-    disjoint(geom1, geom2)::Bool
-
-Return `true` if the intersection of the two geometries is an empty set.
-
-# Examples
-
-```jldoctest
-import GeometryOps as GO, GeoInterface as GI
-
-poly = GI.Polygon([[(-1, 2), (3, 2), (3, 3), (-1, 3), (-1, 2)]])
-point = (1, 1)
-GO.disjoint(poly, point)
-
-# output
-true
-```
-"""
-# Syntactic sugar
 disjoint(g1, g2)::Bool = disjoint(trait(g1), g1, trait(g2), g2)
 disjoint(::FeatureTrait, g1, ::Any, g2)::Bool = disjoint(GI.geometry(g1), g2)
 disjoint(::Any, g1, t2::FeatureTrait, g2)::Bool = disjoint(g1, geometry(g2))
@@ -213,8 +194,18 @@ disjoint(
     close = false,
 )
 
-# Rings disjoint from geometries
+"""
+    disjoint(trait1::GI.AbstractTrait, g1, trait2::GI.LineStringTrait, g2)::Bool
 
+To check if a geometry is disjoint from a linestring, switch the order of the
+arguments to take advantage of linestring-geometry disjoint methods.
+"""
+disjoint(
+    trait1::GI.AbstractTrait, g1,
+    trait2::GI.LineStringTrait, g2,
+) = disjoint(trait2, g2, trait1, g1)
+
+# Rings disjoint from geometries
 """
     disjoint(::GI.LinearRingTrait, g1, ::GI.LineStringTrait, g2)::Bool
 
@@ -225,7 +216,7 @@ else false.
 disjoint(
     trait1::GI.LinearRingTrait, g1,
     trait2::GI.LineStringTrait, g2,
-) = within(trait2, g2, trait1, g1)
+) = disjoint(trait2, g2, trait1, g1)
 
 """
     disjoint(::GI.LinearRingTrait, g1, ::GI.LinearRingTrait, g2)::Bool
@@ -262,6 +253,18 @@ disjoint(
     close = true,
 )
 
+"""
+    disjoint(trait1::GI.AbstractTrait, g1, trait2::GI.LinearRingTrait, g2)::Bool
+
+To check if a geometry is disjoint from a linear ring, switch the order of the
+arguments to take advantage of linear ring-geometry disjoint methods.
+"""
+disjoint(
+    trait1::GI.AbstractTrait, g1,
+    trait2::GI.LinearRingTrait, g2,
+) = disjoint(trait2, g2, trait1, g1)
+
+# Polygon disjoint from geometries
 """
     disjoint(::GI.PolygonTrait, g1, ::GI.PolygonTrait, g2)::Bool
 
