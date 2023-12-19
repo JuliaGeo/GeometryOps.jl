@@ -39,7 +39,8 @@ Note that area (and signed area) are zero for all points and curves, even
 if the curves are closed like with a linear ring. Also note that signed area
 really only makes sense for polygons, given with a multipolygon can have several
 polygons each with a different orientation and thus the absolute value of the
-signed area might not be the area. Caution when using this function!
+signed area might not be the area. This is why signed area is only implemented
+for polygons.
 =#
 
 """
@@ -71,7 +72,7 @@ end
 
 The signed area of a point is always zero. 
 """
-signed_area(trait::GI.PointTrait, point) = signed_area(trait, point)
+signed_area(trait::GI.PointTrait, point) = area(trait, point)
 
 """
     area(::GI.AbstractCurveTrait, curve)::Real
@@ -122,32 +123,29 @@ sub-polygons.
 area(::GI.MultiPolygonTrait, geom) =
     sum((area(poly) for poly in GI.getpolygon(geom)))
 
-"""
-    signed_area(::GI.MultiPolygonTrait, curve)::Real
-
-Finds the signed area of a multi-polygon. This value doesn't really have an
-inuitive meaning given each sub-polygon can be clockwise or couterclockwise.
-"""
-signed_area(::GI.MultiPolygonTrait, geom) =
-    sum((signed_area(poly) for poly in GI.getpolygon(geom)))
 
 """
     _signed_area(geom)::Real
 
 Calculates the signed area of a given curve. This is equivalent to integrating
-to find the area under the curve.
+to find the area under the curve. Even if curve isn't explicitly closed by
+repeating the first point at the end of the coordinates, curve is still assumed
+to be closed.
 """
 function _signed_area(geom)
+    # Close curve, even if last point isn't explicitly repeated 
+    np = GI.npoint(geom)
+    first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, np))
+    np -= first_last_equal ? 1 : 0 
     # Integrate the area under the curve
-    point₁ = GI.getpoint(geom, 1)
-    point₂ = GI.getpoint(geom, 2)
-    area = GI.x(point₁) * GI.y(point₂) - GI.y(point₁) * GI.x(point₂)
-    for point in GI.getpoint(geom)
-        # Advance the point buffers by 1 point
-        point₁ = point₂
-        point₂ = point
+    p1 = GI.getpoint(geom, np)
+    T = typeof(GI.x(p1))
+    area = T(0)
+    for i in 1:np
+        p2 = GI.getpoint(geom, i)
         # Accumulate the area into `area`
-        area += GI.x(point₁) * GI.y(point₂) - GI.y(point₁) * GI.x(point₂)
+        area += GI.x(p1) * GI.y(p2) - GI.y(p1) * GI.x(p2)
+        p1 = p2
     end
     area /= 2
     return area
