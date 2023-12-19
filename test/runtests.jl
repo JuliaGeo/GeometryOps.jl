@@ -24,6 +24,7 @@ const GO = GeometryOps
     # @testset "Geom on geom" begin include("methods/geom_on_geom.jl") end
     @testset "Intersect" begin include("methods/intersects.jl") end
     @testset "Signed Area" begin include("methods/signed_area.jl") end
+    @testset "Touches" begin include("methods/touches.jl") end
     @testset "Overlaps" begin include("methods/overlaps.jl") end
     @testset "Within" begin include("methods/within.jl") end
 

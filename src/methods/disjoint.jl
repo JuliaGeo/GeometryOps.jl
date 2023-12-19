@@ -92,8 +92,7 @@ disjoint(
     ::GI.LineStringTrait, g2,
 ) = _point_curve_process(
     g1, g2;
-    process = disjoint_process,
-    exclude_boundaries = false,
+    in_allow = false, on_allow = false, out_allow = true,
     repeated_last_coord = false,
 )
 
@@ -108,8 +107,7 @@ disjoint(
     ::GI.LinearRingTrait, g2,
 ) = _point_curve_process(
     g1, g2;
-    process = disjoint_process,
-    exclude_boundaries = false,
+    in_allow = false, on_allow = false, out_allow = true,
     repeated_last_coord = true,
 )
 
@@ -125,8 +123,7 @@ disjoint(
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
     g1, g2;
-    process = disjoint_process,
-    exclude_boundaries = false,
+    in_allow = false, on_allow = false, out_allow = true,
 )
 
 """
@@ -152,8 +149,8 @@ disjoint(
     ::GI.LineStringTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    process = disjoint_process,
-    exclude_boundaries = false,
+    in_allow = false, on_allow = false, out_allow = true,
+    in_require = false, on_require = false, out_require = false,
     closed_line = false,
     closed_curve = false,
 )
@@ -170,8 +167,8 @@ disjoint(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    process = disjoint_process,
-    exclude_boundaries = false,
+    in_allow = false, on_allow = false, out_allow = true,
+    in_require = false, on_require = false, out_require = false,
     closed_line = false,
     closed_curve = true,
 )
@@ -189,9 +186,9 @@ disjoint(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    process = disjoint_process,
-    exclude_boundaries = false,
-    close = false,
+    in_allow =  false, on_allow = false, out_allow = true,
+    in_require = false, on_require = false, out_require = true,
+    closed_line = false,
 )
 
 """
@@ -229,8 +226,8 @@ disjoint(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    process = disjoint_process,
-    exclude_boundaries = false,
+    in_allow = false, on_allow = false, out_allow = true,
+    in_require = false, on_require = false, out_require = false,
     closed_line = true,
     closed_curve = true,
 )
@@ -248,9 +245,9 @@ disjoint(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    process = disjoint_process,
-    exclude_boundaries = false,
-    close = true,
+    in_allow =  false, on_allow = false, out_allow = true,
+    in_require = false, on_require = false, out_require = true,
+    closed_line = true,
 )
 
 """
@@ -276,20 +273,25 @@ function disjoint(
     ::GI.PolygonTrait, g1,
     ::GI.PolygonTrait, g2;
 )
-    #=
-    if the exterior of g1 is disjoint from g2 (could be in a g2 hole), the
-    polygons are disjoint
-    =#
-    if disjoint(GI.getexterior(g1), g2)
-        return true
-    else
-        #=
-        if the exterior of g1 is not disjoint, the only way for the polygons to
-        be disjoint is if g2 is in a hole of g1
-        =#
-        for hole in GI.gethole(g1)
-            if within(g2, hole)
-                return true
+    ext1 = GI.getexterior(g1)
+    e1_in_e2, e1_on_e2, e1_out_e2 = _line_filled_curve_interactions(
+        ext1, GI.getexterior(g2);
+        closed_line = true,
+    )
+    e1_on_e2 && return false
+    !e1_in_e2 && return true
+
+    for h2 in GI.gethole(g2)
+        if e1_in_e2  # h2 could be outside of e1, but inside of e2
+            h2_in_e1, h2_on_e1, h2_out_e1 = _line_filled_curve_interactions(
+                h2, ext1;
+                closed_line = true,
+            )
+            (h2_in_e1 || h2_on_e1) && return false
+
+            if h2_out_e1 
+                c1_val = point_filled_curve_orientation(centroid(ext1), h2)
+                c1_val == point_in && return true  # e1 is within h2
             end
         end
     end

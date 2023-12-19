@@ -109,8 +109,7 @@ within(
     ::GI.LineStringTrait, g2,
 ) = _point_curve_process(
     g1, g2;
-    process = within_process,
-    exclude_boundaries = true,
+    in_allow = true, on_allow = false, out_allow = false,
     repeated_last_coord = false,
 )
 
@@ -125,8 +124,7 @@ within(
     ::GI.LinearRingTrait, g2,
 ) = _point_curve_process(
     g1, g2;
-    process = within_process,
-    exclude_boundaries = false,
+    in_allow = true, on_allow = false, out_allow = false,
     repeated_last_coord = true,
 )
 
@@ -141,8 +139,7 @@ within(
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
     g1, g2;
-    process = within_process,
-    exclude_boundaries = true,
+    in_allow = true, on_allow = false, out_allow = false,
 )
 
 # Lines within geometries
@@ -158,8 +155,8 @@ within(
     ::GI.LineStringTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    process = within_process,
-    exclude_boundaries = false,
+    in_allow = true, on_allow = true, out_allow = false,
+    in_require = true, on_require = false, out_require = false,
     closed_line = false,
     closed_curve = false,
 )
@@ -176,8 +173,8 @@ within(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    process = within_process,
-    exclude_boundaries = false,
+    in_allow = true, on_allow = true, out_allow = false,
+    in_require = true, on_require = false, out_require = false,
     closed_line = false,
     closed_curve = true,
 )
@@ -196,9 +193,9 @@ within(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    process = within_process,
-    exclude_boundaries = false,
-    close = false,
+    in_allow =  true, on_allow = true, out_allow = false,
+    in_require = true, on_require = false, out_require = false,
+    closed_line = false,
 )
 
 # Rings within geometries
@@ -214,8 +211,8 @@ within(
     ::GI.LineStringTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    process = within_process,
-    exclude_boundaries = false,
+    in_allow = true, on_allow = true, out_allow = false,
+    in_require = true, on_require = false, out_require = false,
     closed_line = true,
     closed_curve = false,
 )
@@ -232,8 +229,8 @@ within(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    process = within_process,
-    exclude_boundaries = false,
+    in_allow = true, on_allow = true, out_allow = false,
+    in_require = true, on_require = false, out_require = false,
     closed_line = true,
     closed_curve = true,
 )
@@ -252,9 +249,9 @@ within(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    process = within_process,
-    exclude_boundaries = false,
-    close = true,
+    in_allow =  true, on_allow = true, out_allow = false,
+    in_require = true, on_require = false, out_require = false,
+    closed_line = true,
 )
 
 # Polygons within polygons
@@ -269,38 +266,44 @@ function within(
     ::GI.PolygonTrait, g1,
     ::GI.PolygonTrait, g2;
 )
-    #=
-    For g1 to be within g2, the exterior of g1 must be within g2, including not
-    being in any of g2's holes.
-    Note: line_is_poly_ring is needed as ring can be exclusivly on g2 edge's and
-    still be "within" due to the interior being filled in in contrast to a
-    linestring or linear ring
-    =#
-    if _line_polygon_process(
-        GI.getexterior(g1), g2;
-        process = within_process,
-        exclude_boundaries = false,
-        close = true,
-        line_is_poly_ring = true
+    ext1 = GI.getexterior(g1)
+    e1_in_e2, _, e1_out_e2 = _line_filled_curve_interactions(
+        ext1, GI.getexterior(g2);
+        closed_line = true,
     )
-        #=
-        now need to check that none of g2's holes are within g1 as this would
-        make the part of g1 within the hole outside of g2
-        =#
-        for hole in GI.gethole(g2)
-            if _line_polygon_process(
-                hole, g1;
-                process = within_process,
-                exclude_boundaries = false,
-                close = true,
-                line_is_poly_ring = true
+    e1_out_e2 && return false
+
+    for h2 in GI.gethole(g2)
+        if e1_in_e2  # h2 could be outside of e1, but inside of e2
+            h2_in_e1, h2_on_e1, _ = _line_filled_curve_interactions(
+                h2, ext1;
+                closed_line = true,
             )
-                return false
+            # h2 is inside of e1 and cannot be excluded by a hole since it touches the boundary
+            h2_on_e1 && h2_in_e1 && return false
+            if !h2_in_e1  # is h2 disjoint from e1, or is e1 within h2?
+                c1_val = point_filled_curve_orientation(centroid(ext1), h2)
+                c1_val == point_in && return false  # e1 is within h2
+                break  # e1 is disjoint from h2
             end
         end
-        return true
+        # h2 is within e1, but is it within a hole of g1?
+        h2_in_e1 = true
+        for h1 in GI.gethole(g1)
+            _, h2_on_h1, h2_out_h1 = _line_filled_curve_interactions(
+                h2, h1;
+                closed_line = true,
+            )
+            # h2 is outside of h1 and cannot be excluded by another hole since it touches the boundary
+            h2_on_h1 && h2_out_h1 && return false
+            if !h2_out_h1  #h2 is within bounds of h1, so not in e1
+                h2_in_e1 = false
+                break
+            end
+        end
+        h2_in_e1 && return false
     end
-    return false
+    return true
 end
 
 # Geometries within multipolygons

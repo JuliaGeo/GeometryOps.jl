@@ -1,41 +1,6 @@
-@enum ProcessType within_process=1 disjoint_process=2 touch_process=3 coverby_process=4
+@enum PointOrientation point_in=1 point_on=2 point_out=3
 
-@enum PointOrientation point_in=1 point_on=2 point_off=3
-
-"""
-    get_process_return_vals(
-        process::ProcessType,
-        exclude_boundaries = false,
-    )::(Bool, Bool, Bool)
-
-Returns a tuple of booleans which represent the boolean return value for it a
-point is in, out, or on a given geometry. This is determined by the process
-type as well as by the exclude_boundaries.
-
-For within_process:
-    if a point is in a geometry, we should return true
-    if a point is out of a geomertry, we should return false
-    if a point is on the boundary of a geometry, we should return false if we
-        want to exclude boundaries, else we should return true
-For disjoint_process:
-    if a point is in a geometry, we should return false
-    if a point is out of a geometry, we should return true
-    if a point is on the boundary of a geometry, we should return true if we
-        want to exclude boundaries, else we should return false
-For touch_process:
-    ???
-"""
-get_process_return_vals(process::ProcessType, exclude_boundaries = false) =
-    (
-        process == within_process,         # in value
-        process == disjoint_process,       # out value
-        (                                  # on value
-            (process == touch_process) ||
-            (process == within_process ?
-                !exclude_boundaries : exclude_boundaries
-            )
-        )
-    )
+@enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
 """
     _point_curve_process(
@@ -61,37 +26,33 @@ with repeated a repeated last coordinate matching the first coordinate.
 """
 function _point_curve_process(
     point, curve;
-    process::ProcessType = within_process,
-    exclude_boundaries = false,
+    in_allow, on_allow, out_allow,
     repeated_last_coord = false,
 )
     n = GI.npoint(curve)
     first_last_equal = equals(GI.getpoint(curve, 1), GI.getpoint(curve, n))
     repeated_last_coord |= first_last_equal
-    exclude_boundaries |= first_last_equal
     n -= first_last_equal ? 1 : 0
-    in_val, out_val, on_val = get_process_return_vals(
-        process,
-        exclude_boundaries,
-    )
     # Loop through all curve segments
     p_start = GI.getpoint(curve, repeated_last_coord ? n : 1)
     @inbounds for i in (repeated_last_coord ? 1 : 2):n
         p_end = GI.getpoint(curve, i)
-        seg_val = _point_in_on_out_segment(point, p_start, p_end)
-        seg_val == 1 && return in_val
-        if seg_val == -1
-            i == 2 && equals(point, p_start) && return on_val
-            i == n && equals(point, p_end) && return on_val
-            return in_val
+        seg_val = point_segment_orientation(point, p_start, p_end)
+        seg_val == point_in && return in_allow
+        if seg_val == point_on
+            if !repeated_last_coord
+                i == 2 && equals(point, p_start) && return on_allow
+                i == n && equals(point, p_end) && return on_allow
+            end
+            return in_allow
         end
         p_start = p_end
     end
-    return out_val
+    return out_allow
 end
 
 """
-    _point_in_on_out_segment(
+    point_segment_orientation(
         point::Point, start::Point, stop::Point;
         in::T = 1, on::T = -1, out::T = 0,
     )::T where {T}
@@ -101,9 +62,9 @@ segment it is on one of the segments endpoints. If it is 'in', it is on any
 other point of the segment. If the point is not on any part of the segment, it
 is 'out' of the segment.
 """
-function _point_in_on_out_segment(
+function point_segment_orientation(
     point, start, stop;
-    in::T = 1, on::T = -1, out::T = 0,
+    in::T = point_in, on::T = point_on, out::T = point_out,
 ) where {T}
     # Parse out points
     x, y = GI.x(point), GI.y(point)
@@ -132,51 +93,8 @@ function _point_in_on_out_segment(
     return in
 end
 
-
-point_return_val(point_val, in_val, out_val, on_val) =
-    point_val == 1 ?
-        in_val :            # point is inside of polygon
-        (point_val == 0 ?
-            out_val :       # point is outside of polygon
-            on_val          # point is on the edge of polygon
-        )
-
 """
-    _point_closed_curve_process(
-        point, curve;
-        process::ProcessType = within_process,
-        exclude_boundary = false,
-    )::Bool
-
-Determines if a point meets the given process checks with respect to a closed
-curve, which includes the space enclosed by the closed curve. Point should be an
-object of Point trait and curve should be an object with a line string or linear
-ring trait, that is assumed to be closed, regardless of repeated last point.
-
-If checking within, then the point must be within the space enclosed by the
-curve and if checking disjoint the point must not be outside of the curve.
-
-Beyond specifying the process type, user can also specify if the geometry
-boundaries should be included in the checks and if the curve should be closed
-with repeated a repeated last coordinate matching the first coordinate.
-"""
-function _point_closed_curve_process(
-    point, curve;
-    process::ProcessType = within_process,
-    exclude_boundaries = false,
-)
-    in_val, out_val, on_val = get_process_return_vals(
-        process,
-        exclude_boundaries,
-    )
-    return _point_in_on_out_closed_curve(
-        point, curve;
-        in = in_val, out = out_val, on = on_val
-    )
-end
-
-"""
-    _point_in_on_out_closed_curve(
+    point_filled_curve_orientation(
         point, curve;
         in::T = 1, on::T = -1, out::T = 0,
     )::T where {T}
@@ -201,9 +119,9 @@ passes through an odd number of edges, it is within the curve, else outside of
 of the curve if it didn't return 'on'.
 See paper for more information on cases denoted in comments.
 """
-function _point_in_on_out_closed_curve(
+function point_filled_curve_orientation(
     point, curve;
-    in::T = 1, on::T = -1, out::T = 0,
+    in::T = point_in, on::T = point_on, out::T = point_out,
 ) where {T}
     x, y = GI.x(point), GI.y(point)
     n = GI.npoint(curve)
@@ -217,17 +135,19 @@ function _point_in_on_out_closed_curve(
         if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
             u1 = GI.x(p_start) - x
             u2 = GI.x(p_end) - x
-            f = u1 * v2 - u2 * v1
+            c1 = u1 * v2  # first element of cross product summation
+            c2 = u2 * v1  # second element of cross product summation
+            f = c1 - c2
             if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
-                f == 0 && return on            # Case 16 or 21
+                (c1 ≈ c2) && return on         # Case 16 or 21
                 f > 0 && (k += 1)              # Case 3 or 9
             elseif v1 > 0 && v2 ≤ 0            # Case 4, 10, 19, 20, 12, or 25
-                f == 0 && return on            # Case 19 or 20
+                (c1 ≈ c2) && return on         # Case 19 or 20
                 f < 0 && (k += 1)              # Case 4 or 10
             elseif v2 == 0 && v1 < 0           # Case 7, 14, or 17
-                f == 0 && return on            # Case 17
+                (c1 ≈ c2) && return on         # Case 17
             elseif v1 == 0 && v2 < 0           # Case 8, 15, or 18
-                f == 0 && return on            # Case 18
+                (c1 ≈ c2) && return on         # Case 18
             elseif v1 == 0 && v2 == 0          # Case 1, 2, 5, 6, 22, or 23
                 u2 ≤ 0 && u1 ≥ 0 && return on  # Case 1
                 u1 ≤ 0 && u2 ≥ 0 && return on  # Case 2
@@ -248,414 +168,305 @@ end
 Determines if a point meets the given process checks with respect to a polygon,
 which excludes any holes specified by the polygon. Point should be an
 object of Point trait and polygon should an object with a Polygon trait.
-
 """
-_point_polygon_process(
+function _point_polygon_process(
     point, polygon;
-    process::ProcessType = within_process,
-    exclude_boundaries = false,
-) = _geom_polygon_process(
-    point, polygon,
-    _point_closed_curve_process;
-    process = process,
-    ext_exclude_boundaries = exclude_boundaries,
-    hole_exclude_boundaries = !exclude_boundaries
-)
-
-
-function _line_curve_process(
-    line, curve;
-    process::ProcessType = within_process,
-    exclude_boundaries = false,
-    closed_line = false,
-    closed_curve = false,
-)
-    nl = GI.npoint(line)
-    nc = GI.npoint(curve)
-    explicit_closed_line = equals(GI.getpoint(line, 1), GI.getpoint(line, nl))
-    explicit_closed_curve = equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc))
-    nl -= explicit_closed_line ? 1 : 0
-    nc -= explicit_closed_curve ? 1 : 0
-    closed_line |= explicit_closed_line
-    closed_curve |= explicit_closed_curve
-    exclude_boundaries |= explicit_closed_curve
-
-    check_func = 
-        if process == within_process
-            (args...) -> _line_curve_within_checks(
-                args...;
-                nc = nc, closed_curve = closed_curve, exclude_boundaries,
-            )
-        else
-            (args...) -> _line_curve_disjoint_checks(
-                args...;
-                nc = nc, closed_curve = closed_curve, exclude_boundaries,
-            )
-        end
-
-    l_start = _tuple_point(GI.getpoint(line, closed_line ? nl : 1))
-    i = closed_line ? 1 : 2
-    while i ≤ nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        c_start = _tuple_point(GI.getpoint(curve, closed_curve ? nc : 1))
-        for j in (closed_curve ? 1 : 2):nc
-            c_end = _tuple_point(GI.getpoint(curve, j))
-            
-            meet_type = ExactPredicates.meet(l_start, l_end, c_start, c_end)
-            passes_checks, break_loop, i, l_start = check_func(
-                meet_type,
-                l_start, l_end,
-                c_start, c_end,
-                i, j,
-            )
-            break_loop && break
-            !passes_checks && return false
-            c_start = c_end
-        end
-    end
-    return true
-end
-
-function _line_curve_within_checks(
-    meet_type,
-    l_start, l_end,
-    c_start, c_end,
-    i, j;
-    nc,
-    closed_curve,
-    exclude_boundaries,
-)
-    is_within = true
-    break_loop = false
-    #=
-        if l_start is in/on curve and curve and line meet either at
-        endpoints or are parallel and meet in multiple points
-    =#
-    if (
-        meet_type == 0 &&
-        _point_in_on_out_segment(l_start, c_start, c_end) != 0
-    )
-        #=
-        if excluding first and last point of curve, make sure those points
-        aren't within the line segment
-        =#
-        if exclude_boundaries && !closed_curve && ((
-            j == 2 && _point_in_on_out_segment(c_start, l_start, l_end) != 0
-        ) || (
-            j == nc && _point_in_on_out_segment(c_end, l_start, l_end) != 0
-        ))
-            is_within = false      
-        else  # if end points aren't being excluded 
-            # if l_end is within curve, whole line is contained in curve
-            if _point_in_on_out_segment(l_end, c_start, c_end) != 0
-                i += 1
-                l_start = l_end
-                break_loop = true
-            #=
-            if c_start is in line, then need to find overlap for c_start
-            to l_end as l_start to c_start is overlapping with curve
-            =#
-            elseif _point_in_on_out_segment(
-                c_start,
-                l_start, l_end,
-            ) == 1
-                l_start = c_start
-                break_loop = true
-            #=
-            if c_end is in line, then need to find overlap for c_end to
-            l_end as l_start to c_end is overlapping with curve
-            =#
-            elseif _point_in_on_out_segment(
-                c_end,
-                l_start, l_end,
-            ) == 1
-                l_start = c_end
-                break_loop = true
-            end
-        end
-    end
-    #=
-    if line segment has been checked against all curve segments and it isn't
-    within any of them, line isn't within curve
-    =#
-    if j == nc
-        is_within = false
-    end
-    return is_within, break_loop, i, l_start
-end
-
-function _line_curve_disjoint_checks(
-    meet_type,
-    l_start, l_end,
-    c_start, c_end,
-    i, j;
-    nc,
-    closed_curve,
-    exclude_boundaries,
-)
-    is_disjoint = true
-    break_loop = false
-    #=
-    if excluding first and last point of curve, line can still cross those
-    points and be disjoint
-    =#
-    if (
-        exclude_boundaries && meet_type == 0 &&
-        !closed_curve && (j == 2 || j == nc)
-    )
-        # if line and curve are parallel, they cannot overlap and be disjoint
-        if _isparallel(l_start, l_end, c_start, c_end)
-            (p1, p2) =
-                if j == 2 && equals(c_start, l_start)
-                    (l_end, c_end)
-                elseif j == 2 && equals(c_start, l_end)
-                    (l_start, c_end)
-                elseif j == nc && equals(c_end, l_start)
-                    (l_end, c_start)
-                elseif j == nc &&equals(c_end, l_end)
-                    (l_start, c_start)
-                else
-                    is_disjoint = false
-                end
-            if is_disjoint && (
-                _point_in_on_out_segment(p1, c_start, c_end) ||
-                _point_in_on_out_segment(p2, l_start, l_end)
-            )
-                is_disjoint = false
-            end
-        #=
-        if line and curve aren't parallel, they intersection must be either the
-        start or end point of the curve to be disjoint
-        =#
-        else
-            _, (_, c_frac) = _intersection_point(
-                (l_start, l_end),
-                (c_start, c_end),
-            )
-            if (
-                j == 2 && c_frac != 0 ||
-                j == nc && c_frac != 1
-            )
-                is_disjoint = false
-            end
-        end
-    #=
-    if not excluding first and last point of curve, line cannot intersect with
-    any points of the curve
-    =#
-    elseif meet_type != -1
-        is_disjoint = false
-    end
-    #=
-    if line segment has been checked against all curve segments and is disjoint
-    from all of them, we can now check the next line segment
-    =#
-    if j == nc
-        i += 1
-        l_start = l_end
-    end
-    return is_disjoint, break_loop, i, l_start
-end
-
-function _line_closed_curve_process(
-    line, curve;
-    process::ProcessType = within_process,
-    exclude_boundaries = false,
-    close = false,
-    line_is_poly_ring = false,
-)
-    #=
-    if line isn't the external ring of a polygon, see if at least one point is
-    within the closed curve - else, ring is "filled in" and has points within
-    closed curve
-    =# 
-    point_in = line_is_poly_ring
-    in_val, out_val, on_val = get_process_return_vals(process, exclude_boundaries)
-    # Determine number of points in curve and line
-    nc = GI.npoint(curve)
-    nc -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc)) ? 1 : 0
-    nl = GI.npoint(line)
-    nl -= equals(GI.getpoint(line, 1), GI.getpoint(line, nl)) ? 1 : 0
-
-    # Check to see if first point in line is within curve
-    l_start = _tuple_point(GI.getpoint(line, close ? nl : 1))
-    point_val = _point_in_on_out_closed_curve(l_start, curve)
-    point_in |= point_val == 1  # check if point is within closed curve
-    point_return = point_return_val(point_val, in_val, out_val, on_val)
-
-    # point is not in correct orientation to curve given process and boundary
-    !point_return && return point_return
-
-    # Check for any intersections between line and curve
-    for i in (close ? 1 : 2):nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        c_start = _tuple_point(GI.getpoint(curve, nc))
-        for j in 1:nc
-            c_end = _tuple_point(GI.getpoint(curve, j))
-            # Check if edges intersect --> line crosses --> wrong orientation
-            meet_type = ExactPredicates.meet(l_start, l_end, c_start, c_end)
-            # open line segments meet in a single point
-            meet_type == 1 && return false
-            #=
-            closed line segments meet in one or several points -> meet at a
-            vertex or on the edge itself (parallel)
-            =#
-            if meet_type == 0
-                # See if segment is parallel and within curve edge
-                p1_on_seg = _point_in_on_out_segment(
-                    l_start,
-                    c_start, c_end,
-                ) != 0
-                exclude_boundaries && p1_on_seg && return false
-                p2_on_seg = _point_in_on_out_segment(
-                    l_end,
-                    c_start, c_end,
-                ) != 0
-                exclude_boundaries && p2_on_seg && return false
-                # if segment isn't contained within curve edge
-                if !p1_on_seg || !p2_on_seg 
-                    # Make sure l_start is in corrent orientation
-                    if !p1_on_seg
-                        p1_val = _point_in_on_out_closed_curve(l_start, curve)
-                        # check if point is within closed curve
-                        point_in |= p1_on_seg == 1
-                        !point_return_val(p1_val, in_val, out_val, on_val) &&
-                            return false
-                    end
-                    # Make sure l_end is in is in corrent orientation
-                    if !p2_on_seg
-                        p2_val = _point_in_on_out_closed_curve(l_end, curve)
-                        # check if point is within closed curve
-                        point_in |= p2_val == 1
-                        !point_return_val(p2_val, in_val, out_val, on_val) &&
-                            return false
-                    end
-                    #=
-                    If both endpoints are in the correct orientation, but not
-                    parallel to the edge, make sure that midpoints between the
-                    intersections along the segment are also in the correct
-                    orientation
-                    =# 
-                    mid_vals, mid_in = _segment_mids_closed_curve_process(
-                        l_start, l_end, curve;
-                        process = process,
-                        exclude_boundaries = exclude_boundaries,
-                    )
-                    point_in |= mid_in
-                    # midpoint on the wrong side of the curve
-                    !mid_vals && return false
-                    # line segment is fully within or on curve 
-                    break 
-                end
-            end
-            c_start = c_end
-        end
-        l_start = l_end
-    end
-    # check if line is on any curve edges or vertcies
-    return process == within_process ? point_in : true
-end
-
-function _segment_mids_closed_curve_process(
-    l_start, l_end, curve;
-    process::ProcessType = within_process,
-    exclude_boundaries = false,
-)
-    point_in = false
-    in_val, out_val, on_val = get_process_return_vals(process, exclude_boundaries)
-    # Find intersection points
-    ipoints = intersection_points(
-        GI.Line([l_start, l_end]),
-        curve
-    )
-    npoints = length(ipoints)
-    if npoints < 3  # only intersection points are the endpoints
-        mid_val = _point_in_on_out_closed_curve((l_start .+ l_end) ./ 2, curve)
-        point_in |= mid_val == 1
-        mid_return = point_return_val(mid_val, in_val, out_val, on_val)
-        !mid_return && return (false, point_in)
-    else  # more intersection points than the endpoints
-        # sort intersection points along the line
-        sort!(ipoints, by = p -> euclid_distance(p, l_start))
-        p_start = ipoints[1]
-        for i in 2:npoints
-            p_end = ipoints[i]
-            # check if midpoint of intersection points is within the curve
-            mid_val = _point_in_on_out_closed_curve(
-                (p_start .+ p_end) ./ 2,
-                curve,
-            )
-            point_in |= mid_val == 1
-            mid_return = point_return_val(mid_val, in_val, out_val, on_val)
-            !mid_return && return (false, point_in)
-        end
-    end
-    # all intersection point midpoints were in or on the curve
-    return true, point_in
-end
-
-_line_polygon_process(
-    line, polygon;
-    process::ProcessType = within_process,
-    exclude_boundaries = true,
-    close = false,
-    line_is_poly_ring = false,
-) = _geom_polygon_process(
-    line, polygon,
-    (args...; kwargs...) -> _line_closed_curve_process(
-        args...;
-        kwargs...,
-        close = close,
-        line_is_poly_ring = line_is_poly_ring,
-    );
-    process = process,
-    ext_exclude_boundaries = exclude_boundaries,
-    hole_exclude_boundaries =
-        process == within_process ?
-            exclude_boundaries :
-            !exclude_boundaries,
-)
-
-
-function _geom_polygon_process(
-    geom, polygon, geom_closed_curve_func;
-    process::ProcessType = within_process,
-    ext_exclude_boundaries = true,
-    hole_exclude_boundaries = false
+    in_allow, on_allow, out_allow,
 )
     # Check interaction of geom with polygon's exterior boundary
-    ext_val = geom_closed_curve_func(
-        geom, GI.getexterior(polygon);
-        process = process, exclude_boundaries = ext_exclude_boundaries,
-    )
-    
-    #=
-    If checking within and geom is outside of exterior ring, return false or
-    if checking disjoint and geom is outside of exterior ring, return true.
-    =#
-    ((process == within_process && !ext_val) ||
-        (process == disjoint_process && ext_val)
-    ) && return ext_val
+    ext_val = point_filled_curve_orientation(point, GI.getexterior(polygon))
+
+    # If a point is outside, it isn't interacting with any holes
+    ext_val == point_out && return out_allow
+    # if a point is on an external boundary, it isn't interacting with any holes
+    ext_val == point_on && return on_allow
     
     # If geom is within the polygon, need to check interactions with holes
     for hole in GI.gethole(polygon)
-        hole_val = geom_closed_curve_func(
-            geom, hole,
-            process = (
-                process == within_process ?
-                    disjoint_process :
-                    within_process
-            ),
-            exclude_boundaries = hole_exclude_boundaries
-        )
-        #=
-        If checking within and geom is not disjoint from hole, return false or
-        if checking disjoint and geom is within hole, return true.
-        =#
-        process == within_process && !hole_val && return false
-        process == disjoint_process && hole_val && return true
+        hole_val = point_filled_curve_orientation(point, hole)
+        # If a point in in a hole, it is outside of the polygon
+        hole_val == point_in && return out_allow
+        # If a point in on a hole edge, it is on the edge of the polygon
+        hole_val == point_on && return on_allow
     end
-    return ext_val
+    
+    # Point is within external boundary and on in/on any holes
+    return in_allow
+end
+
+function _segment_segment_orientation(
+    (a_point, b_point), (c_point, d_point);
+    cross::T = line_cross, hinge::T = line_hinge,
+    over::T = line_over, out::T = line_out,
+) where T
+    (ax, ay) = _tuple_point(a_point)
+    (bx, by) = _tuple_point(b_point)
+    (cx, cy) = _tuple_point(c_point)
+    (dx, dy) = _tuple_point(d_point)
+    meet_type = ExactPredicates.meet((ax, ay), (bx, by), (cx, cy), (dx, dy))
+    # Lines meet at one point within open segments 
+    meet_type == 1 && return cross
+    # Lines don't meet at any points
+    meet_type == -1 && return out
+    # Lines meet at one or more points within closed segments
+    if _isparallel(((ax, ay), (bx, by)), ((cx, cy), (dx, dy)))
+        min_x, max_x = cx < dx ? (cx, dx) : (dx, cx)
+        min_y, max_y = cy < dy ? (cy, dy) : (dy, cy)
+        if (
+            ((ax ≤ min_x && bx ≤ min_x) || (ax ≥ max_x && bx ≥ max_x)) &&
+            ((ay ≤ min_y && by ≤ min_y) || (ay ≥ max_y && by ≥ max_y))
+        )
+            # a_point and b_point are on the same side of segment, don't overlap
+            return hinge
+        else
+            return over
+        end
+    end
+    # if lines aren't parallel then they must hinge
+    return hinge
+end
+
+function _line_curve_process(
+    line, curve;
+    in_allow, on_allow, out_allow,
+    in_require, on_require, out_require,
+    closed_line = false,
+    closed_curve = false,
+)
+    in_req_met = !in_require
+    on_req_met = !on_require
+    out_req_met = !out_require
+    # Determine curve endpoints
+    nl = GI.npoint(line)
+    nc = GI.npoint(curve)
+    first_last_equal_line = equals(GI.getpoint(line, 1), GI.getpoint(line, nl))
+    first_last_equal_curve = equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc))
+    nl -= first_last_equal_line ? 1 : 0
+    nc -= first_last_equal_curve ? 1 : 0
+    closed_line |= first_last_equal_line
+    closed_curve |= first_last_equal_curve
+    
+    # Loop over each line segment
+    l_start = GI.getpoint(line, closed_line ? nl : 1)
+    i = closed_line ? 1 : 2
+    while i ≤ nl
+        l_end = GI.getpoint(line, i)
+        c_start = GI.getpoint(curve, closed_curve ? nc : 1)
+        # Loop over each curve segment
+        for j in (closed_curve ? 1 : 2):nc
+            c_end = GI.getpoint(curve, j)
+            # Check if line and curve segments meet
+            seg_val = _segment_segment_orientation(
+                (l_start, l_end),
+                (c_start, c_end),
+            )
+            # if segments are touching
+            if seg_val == line_over
+                !in_allow && return false
+                # at least one point in, meets requirments
+                in_req_met = true
+                if seg_val == line_over
+                    point_val = point_segment_orientation(
+                        l_start,
+                        c_start, c_end,
+                    )
+                    if point_val != point_out
+                        if point_segment_orientation(
+                            l_end,
+                            c_start, c_end,
+                        ) != point_out
+                            l_start = l_end
+                            i += 1
+                            break
+                        elseif point_segment_orientation(
+                            c_start,
+                            l_start, l_end,
+                        ) != point_out
+                            l_start = c_start
+                            break
+                        elseif point_segment_orientation(
+                            c_end,
+                            l_start, l_end,
+                        ) != point_out
+                            l_start = c_end
+                            break
+                        end
+                    end
+                end
+            else
+                if seg_val == line_hinge
+                    !on_allow && return false
+                    # at least one point on, meets requirments
+                    on_req_met = true
+                elseif seg_val == line_cross
+                    !in_allow && return false
+                     # at least one point in, meets requirments
+                     in_req_met = true
+                end
+                # no overlap for a give segment
+                if j == nc
+                    !out_allow && return false
+                    out_req_met = true
+                end
+            end
+            c_start = c_end
+            j == nc && (i += 1)
+        end
+    end
+    return in_req_met && on_req_met && out_req_met
+end
+
+function _line_filled_curve_interactions(
+    line, curve;
+    closed_line = false,
+)
+    in_curve = false
+    on_curve = false
+    out_curve = false
+
+    # Determine number of points in curve and line
+    nl = GI.npoint(line)
+    nc = GI.npoint(curve)
+    first_last_equal_line = equals(GI.getpoint(line, 1), GI.getpoint(line, nl))
+    first_last_equal_curve = equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc))
+    nl -= first_last_equal_line ? 1 : 0
+    nc -= first_last_equal_curve ? 1 : 0
+    closed_line |= first_last_equal_line
+
+    # See if first point is in an acceptable orientation
+    l_start = GI.getpoint(line, closed_line ? nl : 1)
+    point_val = point_filled_curve_orientation(l_start, curve)
+    if point_val == point_in
+        in_curve = true
+    elseif point_val == point_on
+        on_curve = true
+    else  # point_val == point_out
+        out_curve = true
+    end
+
+    # Check for any intersections between line and curve
+    for i in (closed_line ? 1 : 2):nl
+        l_end = GI.getpoint(line, i)
+        c_start = GI.getpoint(curve, nc)
+
+        # If already interacted with all regions of curve, can stop
+        in_curve && on_curve && out_curve && break
+
+        for j in 1:nc
+            c_end = GI.getpoint(curve, j)
+            # Check if two line and curve segments meet
+            seg_val = _segment_segment_orientation(
+                (l_start, l_end),
+                (c_start, c_end),
+            )
+            if seg_val != line_out
+                # If line and curve meet, then at least one point is on boundary
+                on_curve = true
+                if seg_val == line_cross
+                    # When crossing boundary, line is both in and out of curve
+                    in_curve = true
+                    out_curve = true
+                else
+                    if seg_val == line_over
+                        sp = point_segment_orientation(l_start, c_start, c_end)
+                        lp = point_segment_orientation(l_end, c_start, c_end)
+                        if sp != point_in || lp != point_in
+                            #=
+                            Line crosses over segment endpoint, creating a hinge
+                            with another segment.
+                            =#
+                            seg_val = line_hinge
+                        end
+                    end
+                    if seg_val == line_hinge
+                        #=
+                        Can't determine all types of interactions (in, out) with
+                        hinge as it could pass through multiple other segments
+                        so calculate if segment endpoints and intersections are
+                        in/out of filled curve
+                        =#
+                        ipoints = intersection_points(
+                            GI.Line([l_start, l_end]),
+                            curve
+                        )
+                        npoints = length(ipoints)  # since hinge, at least one
+                        sort!(ipoints, by = p -> euclid_distance(p, l_start))
+                        p_start = _tuple_point(l_start)
+                        for i in 1:(npoints + 1)
+                            p_end = i ≤ npoints ?
+                                ipoints[i] :
+                                _tuple_point(l_end)
+                            mid_val = point_filled_curve_orientation(
+                                (p_start .+ p_end) ./ 2,
+                                curve,
+                            )
+                            if mid_val == point_in
+                                in_curve = true
+                            elseif mid_val == point_out
+                                out_curve = true
+                            end
+                        end
+                        # already checked segment against whole filled curve
+                        l_start = l_end
+                        break
+                    end
+                end
+            end
+            c_start = c_end
+        end
+        l_start = l_end
+    end
+    return in_curve, on_curve, out_curve
+end
+
+function _line_polygon_process(
+    line, polygon;
+    in_allow, on_allow, out_allow,
+    in_require, on_require, out_require,
+    closed_line = false,
+)
+    in_req_met = !in_require
+    on_req_met = !on_require
+    out_req_met = !out_require
+    # Check interaction of line with polygon's exterior boundary
+    in_curve, on_curve, out_curve = _line_filled_curve_interactions(
+        line, GI.getexterior(polygon);
+        closed_line = closed_line,
+    )
+    if on_curve
+        !on_allow && return false
+        on_req_met = true
+    end
+    if out_curve
+        !out_allow && return false
+        out_req_met = true
+    end
+    !in_curve && return in_req_met && on_req_met && out_req_met
+
+    # Loop over polygon holes
+    for hole in GI.gethole(polygon)
+        in_hole, on_hole, out_hole =_line_filled_curve_interactions(
+            line, hole;
+            closed_line = closed_line,
+        )
+        if in_hole
+            !out_allow && return false
+            out_req_met = true
+        end
+        if on_hole
+            !on_allow && return false
+            on_req_met = true
+        end
+        if !out_hole  # entire line is in/on hole, can't be in/on other holes
+            in_curve = false
+            break
+        end
+    end
+    if in_curve
+        !in_allow && return false
+        in_req_met = true
+    end
+    return in_req_met && on_req_met && out_req_met
 end
 
 function _point_in_extent(p, extent::Extents.Extent)

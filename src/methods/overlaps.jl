@@ -228,9 +228,9 @@ function _overlaps(
     on_top = ExactPredicates.meet(a1, a2, b1, b2) == 0
     on_top || return false
     # check that one endpoint of each edge is within other edge
-    a1_in = _point_in_on_out_segment(a1, b1, b2) == 1
-    a2_in = _point_in_on_out_segment(a2, b1, b2) == 1
-    b1_in = _point_in_on_out_segment(b1, a1, a2) == 1
-    b2_in = _point_in_on_out_segment(b2, a1, a2) == 1
+    a1_in = point_segment_orientation(a1, b1, b2) == point_in
+    a2_in = point_segment_orientation(a2, b1, b2) == point_in
+    b1_in = point_segment_orientation(b1, a1, a2) == point_in
+    b2_in = point_segment_orientation(b2, a1, a2) == point_in
     return (a1_in ⊻ a2_in) && (b1_in ⊻ b2_in)
 end

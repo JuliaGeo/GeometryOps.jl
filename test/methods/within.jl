@@ -115,8 +115,6 @@ m2 = LG.MultiPolygon([p3, p4])
 # Inside of polygon (with holes) -> within
 @test GO.within(pt7, p2) == LG.within(pt7, p2)
 
-# # Geometry and point
-
 # # Line and line
 # Equal lines -> within
 @test GO.within(l1, l1) == LG.within(l1, l1)

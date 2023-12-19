@@ -34,7 +34,7 @@ include("methods/barycentric.jl")
 include("methods/equals.jl")
 include("methods/geom_geom_processors.jl")
 include("methods/orientation.jl")
-
+include("methods/touches.jl")
 include("transformations/flip.jl")
 include("transformations/simplify.jl")
 include("transformations/reproject.jl")

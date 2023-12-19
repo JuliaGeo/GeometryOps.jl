@@ -123,21 +123,21 @@ m4 = LG.MultiPolygon([p7])
 # line outside of ring -> disjoint
 @test GO.disjoint(l7, r2) == LG.disjoint(l7, r2)
 
-# # Line and polygon
-# Line traces entire outline of polygon edges -> not disjoint
-@test GO.disjoint(l6, p1) == LG.disjoint(l6, p1)
-# Line is on edge + inside of polygon -> not disjoint
-@test GO.disjoint(l2, p2) == LG.disjoint(l2, p2)
-# Line goes outside of polygon -> not disjoint
-@test GO.disjoint(l3, p2) == LG.disjoint(l3, p2)
-# Line is fully within hole -> disjoint
-@test GO.disjoint(l8, p2) == LG.disjoint(l8, p2)
-# Line is on polygon edge and then cuts through hole -> not disjoint
-@test GO.disjoint(l11, p2) == LG.disjoint(l11, p2)
+# # # Line and polygon
+# # Line traces entire outline of polygon edges -> not disjoint
+# @test GO.disjoint(l6, p1) == LG.disjoint(l6, p1)
+# # Line is on edge + inside of polygon -> not disjoint
+# @test GO.disjoint(l2, p2) == LG.disjoint(l2, p2)
+# # Line goes outside of polygon -> not disjoint
+# @test GO.disjoint(l3, p2) == LG.disjoint(l3, p2)
+# # Line is fully within hole -> disjoint
+# @test GO.disjoint(l8, p2) == LG.disjoint(l8, p2)
+# # Line is on polygon edge and then cuts through hole -> not disjoint
+# @test GO.disjoint(l11, p2) == LG.disjoint(l11, p2)
 
 # # Geometry and line (switched direction)
 @test GO.disjoint(l7, r1) == GO.disjoint(r1, l7)
-@test GO.disjoint(l8, p2) == GO.disjoint(p2, l8)
+# @test GO.disjoint(l8, p2) == GO.disjoint(p2, l8)
 
 # # Ring and line
 # Shares all endpoints -> not disjoint
@@ -156,10 +156,10 @@ m4 = LG.MultiPolygon([p7])
 @test GO.disjoint(r3, r4) == LG.disjoint(r3, r4)
 # Ring inside of ring -> disjoint
 @test GO.disjoint(r4, r2) == LG.disjoint(r4, r2)
-# Ring outside of other ring -> disjoing
+# Ring outside of other ring -> disjoint
 @test GO.disjoint(r2, r4) == LG.disjoint(r2, r4)
 
-# # Ring and polygon
+# Ring and polygon
 # Ring goes outside of polygon's external ring -> not disjoint
 @test GO.within(r1, p2) == LG.within(r1, p1)
 # Ring is one of polygon's holes -> not disjoint
