@@ -20,8 +20,8 @@ const GO = GeometryOps
     @testset "Centroid" begin include("methods/centroid.jl") end
     @testset "Equals" begin include("methods/equals.jl") end
     @testset "Intersect" begin include("methods/intersects.jl") end
-    @testset "Signed Area" begin include("methods/area.jl") end
-    @testset "Signed Area" begin include("methods/distance.jl") end
+    @testset "Area" begin include("methods/area.jl") end
+    @testset "Distance" begin include("methods/distance.jl") end
     @testset "Overlaps" begin include("methods/overlaps.jl") end
     # Transformations
     @testset "Reproject" begin include("transformations/reproject.jl") end
