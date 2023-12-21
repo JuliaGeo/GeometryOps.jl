@@ -118,8 +118,8 @@ end
 If the lines overlap, meaning that they are colinear but each have one endpoint
 outside of the other line, return true. Else false.
 """
-overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line) =
-    _overlaps((a1, a2), (b1, b2))
+# overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line) =
+#     _overlaps((a1, a2), (b1, b2))
 
 """
     overlaps(
@@ -130,18 +130,39 @@ overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line) =
 If the curves overlap, meaning that at least one edge of each curve overlaps,
 return true. Else false.
 """
-function overlaps(
-    ::Union{GI.LineStringTrait, GI.LinearRing}, line1,
-    ::Union{GI.LineStringTrait, GI.LinearRing}, line2,
+# function overlaps(
+#     ::Union{GI.LineStringTrait, GI.LinearRing}, line1,
+#     ::Union{GI.LineStringTrait, GI.LinearRing}, line2,
+# )
+#     edges_a, edges_b = map(sort! ∘ to_edges, (line1, line2))
+#     for edge_a in edges_a
+#         for edge_b in edges_b
+#             _overlaps(edge_a, edge_b) && return true
+#         end
+#     end
+#     return false
+# end
+overlaps(
+    ::GI.LineStringTrait, g1,
+    ::GI.LineStringTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    in_allow = true, on_allow = true, out_allow = true,
+    in_require = true, on_require = false, out_require = true,
+    closed_line = false,
+    closed_curve = false,
 )
-    edges_a, edges_b = map(sort! ∘ to_edges, (line1, line2))
-    for edge_a in edges_a
-        for edge_b in edges_b
-            _overlaps(edge_a, edge_b) && return true
-        end
-    end
-    return false
-end
+
+overlaps(
+    ::GI.LineStringTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    in_allow = true, on_allow = true, out_allow = true,
+    in_require = true, on_require = false, out_require = true,
+    closed_line = false,
+    closed_curve = true,
+)
 
 """
     overlaps(
@@ -152,14 +173,14 @@ end
 If the two polygons intersect with one another, but are not equal, return true.
 Else false.
 """
-function overlaps(
-    trait_a::GI.PolygonTrait, poly_a,
-    trait_b::GI.PolygonTrait, poly_b,
-)
-    edges_a, edges_b = map(sort! ∘ to_edges, (poly_a, poly_b))
-    return _line_intersects(edges_a, edges_b) &&
-        !equals(trait_a, poly_a, trait_b, poly_b)
-end
+# function overlaps(
+#     trait_a::GI.PolygonTrait, poly_a,
+#     trait_b::GI.PolygonTrait, poly_b,
+# )
+#     edges_a, edges_b = map(sort! ∘ to_edges, (poly_a, poly_b))
+#     return _line_intersects(edges_a, edges_b) &&
+#         !equals(trait_a, poly_a, trait_b, poly_b)
+# end
 
 """
     overlaps(

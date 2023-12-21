@@ -57,6 +57,17 @@ touches(
     in_allow = false, on_allow = true, out_allow = false,
 )
 
+"""
+    touches(trait1::GI.AbstractTrait, g1, trait2::GI.PointTrait, g2)::Bool
+
+To check if a geometry is touches by a point, switch the order of the
+arguments to take advantage of point-geometry touches methods.
+"""
+touches(
+    trait1::GI.AbstractTrait, g1,
+    trait2::GI.PointTrait, g2,
+) = touches(trait2, g2, trait1, g1)
+
 # Lines touching geometries
 """
     touches(::GI.LineStringTrait, g1, ::GI.LineStringTrait, g2)::Bool

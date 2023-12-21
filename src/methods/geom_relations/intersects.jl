@@ -70,26 +70,83 @@ GO.intersects(line1, line2)
 true
 ```
 """
-intersects(geom1, geom2) = intersects(
-    GI.trait(geom1),
-    geom1,
-    GI.trait(geom2),
-    geom2
-)
+# intersects(geom1, geom2) = intersects(
+#     GI.trait(geom1),
+#     geom1,
+#     GI.trait(geom2),
+#     geom2
+# )
+intersects(geom1, geom2) = !disjoint(geom1, geom2)
+
+
+# Points intersects geometries
+"""
+    intersects(::GI.PointTrait, g1, ::GI.PointTrait, g2)::Bool
+
+If a point is intersects another point, then those points must be equal. If they are
+not equal, then they are not intersects and return false.
+"""
+# intersects(
+#     ::GI.PointTrait, g1,
+#     ::GI.PointTrait, g2,
+# ) = equals(g1, g2)
+
+
+"""
+    intersects(::GI.PointTrait, g1, ::GI.LineStringTrait, g2)::Bool
+
+A point is intersects a line string if it is on a vertex or an edge of that
+linestring, excluding the start and end vertex if the linestring is not closed.
+Return true if those conditions are met, else false.
+"""
+# intersects(
+#     ::GI.PointTrait, g1,
+#     ::GI.LineStringTrait, g2,
+# ) = _point_curve_process(
+#     g1, g2;
+#     in_allow = true, on_allow = true, out_allow = false,
+#     repeated_last_coord = false,
+# )
+
+"""
+    intersects(::GI.PointTrait, g1, ::GI.LinearRingTrait, g2)::Bool
+
+A point is intersects a linear ring if it is on a vertex or an edge of that
+linear ring. Return true if those conditions are met, else false.
+"""
+# intersects(
+#     ::GI.PointTrait, g1,
+#     ::GI.LinearRingTrait, g2,
+# ) = _point_curve_process(
+#     g1, g2;
+#     in_allow = true, on_allow = true, out_allow = false,
+#     repeated_last_coord = true,
+# )
+
+"""
+    intersects(trait1::GI.AbstractTrait, g1, trait2::GI.PointTrait, g2)::Bool
+
+To check if a geometry intersects with a point, switch the order of the
+arguments to take advantage of point-geometry intersects methods.
+"""
+# intersects(
+#     trait1::GI.AbstractTrait, g1,
+#     trait2::GI.PointTrait, g2,
+# ) = intersects(trait2, g2, trait1, g1)
 
 """
     intersects(::GI.LineTrait, a, ::GI.LineTrait, b)::Bool
 
 Returns true if two line segments intersect and false otherwise.
 """
-function intersects(::GI.LineTrait, a, ::GI.LineTrait, b)
-    a1 = _tuple_point(GI.getpoint(a, 1))
-    a2 = _tuple_point(GI.getpoint(a, 2))
-    b1 = _tuple_point(GI.getpoint(b, 1))
-    b2 = _tuple_point(GI.getpoint(b, 2))
-    meet_type = ExactPredicates.meet(a1, a2, b1, b2)
-    return meet_type == 0 || meet_type == 1
-end
+# function intersects(::GI.LineTrait, a, ::GI.LineTrait, b)
+#     a1 = _tuple_point(GI.getpoint(a, 1))
+#     a2 = _tuple_point(GI.getpoint(a, 2))
+#     b1 = _tuple_point(GI.getpoint(b, 1))
+#     b2 = _tuple_point(GI.getpoint(b, 2))
+#     meet_type = ExactPredicates.meet(a1, a2, b1, b2)
+#     return meet_type == 0 || meet_type == 1
+# end
 
 """
     intersects(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)::Bool
@@ -98,14 +155,14 @@ Returns true if two geometries intersect with one another and false
 otherwise. For all geometries but lines, convert the geometry to a list of edges
 and cross compare the edges for intersections.
 """
-function intersects(
-    trait_a::GI.AbstractTrait, a_geom,
-    trait_b::GI.AbstractTrait, b_geom,
-)   edges_a, edges_b = map(sort! ∘ to_edges, (a_geom, b_geom))
-    return _line_intersects(edges_a, edges_b) ||
-        within(trait_a, a_geom, trait_b, b_geom) ||
-        within(trait_b, b_geom, trait_a, a_geom) 
-end
+# function intersects(
+#     trait_a::GI.AbstractTrait, a_geom,
+#     trait_b::GI.AbstractTrait, b_geom,
+# )   edges_a, edges_b = map(sort! ∘ to_edges, (a_geom, b_geom))
+#     return _line_intersects(edges_a, edges_b) ||
+#         within(trait_a, a_geom, trait_b, b_geom) ||
+#         within(trait_b, b_geom, trait_a, a_geom) 
+# end
 
 """
     _line_intersects(

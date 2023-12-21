@@ -5,11 +5,13 @@ export contains
 #=
 ## What is contains?
 
-The contains function checks if completly contains another geometry, or in other
-words, that the second geometry is completly within the first.
+The contains function checks if a given geometry completly contains another
+geometry, or in other words, that the second geometry is completly within the
+first. This requires that the two interiors intersect and that the interior and
+boundary of the second geometry is not in the exterior of the first geometry.
 
 To provide an example, consider these two lines:
-```@example cshape
+```@example contains
 using GeometryOps
 using GeometryOps.GeometryBasics
 using Makie
@@ -23,9 +25,10 @@ lines!(GI.getpoint(l2), color = :orange)
 scatter!(GI.getpoint(l2), color = :orange)
 ```
 We can see that all of the points and edges of l2 are within l1, so l1 contains
-l2.
-```@example cshape
+l2. However, l2 does not contain l1.
+```@example contains
 contains(l1, l2)  # returns true
+contains(l2, l1)  # returns false
 ```
 
 ## Implementation
@@ -40,8 +43,8 @@ inputs variables, swapped in order, to within.
     contains(g1::AbstractGeometry, g2::AbstractGeometry)::Bool
 
 Return true if the second geometry is completely contained by the first
-geometry. The interiors of both geometries must intersect and, the interior and
-boundary of the secondary (g2) must not intersect the exterior of the primary
+geometry. The interiors of both geometries must intersect and the interior and
+boundary of the secondary (g2) must not intersect the exterior of the first
 (g1).
 
 `contains` returns the exact opposite result of `within`.
