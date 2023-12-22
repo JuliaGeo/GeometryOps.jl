@@ -318,7 +318,6 @@ end
 function _line_filled_curve_interactions(
     line, curve;
     closed_line = false,
-    filled_line = false,
 )
     in_curve = false
     on_curve = false
@@ -332,7 +331,6 @@ function _line_filled_curve_interactions(
     nl -= first_last_equal_line ? 1 : 0
     nc -= first_last_equal_curve ? 1 : 0
     closed_line |= first_last_equal_line
-    filled_line &= closed_line
 
     # See if first point is in an acceptable orientation
     l_start = GI.getpoint(line, closed_line ? nl : 1)
@@ -416,19 +414,36 @@ function _line_filled_curve_interactions(
         end
         l_start = l_end
     end
-    if filled_line && !in_curve
-        if !out_curve  # line overlaps entire curve boundary
-            in_curve = true  # line interior overlaps boundary filled interior
-        else
-            cent = centroid(line)
-            if within(cent, curve)
-                in_curve = true
-                on_curve = true
-            end
+    return in_curve, on_curve, out_curve
+end
+
+function _line_polygon_interactions(
+    line, polygon;
+    closed_line = false,
+)
+    in_ext, on_ext, out_ext = _line_filled_curve_interactions(
+        line, GI.getexterior(polygon);
+        closed_line = closed_line,
+    )
+    !in_ext && return (in_ext, on_ext, out_ext)
+    # Loop over polygon holes
+    for hole in GI.gethole(polygon)
+        in_hole, on_hole, out_hole =_line_filled_curve_interactions(
+            line, hole;
+            closed_line = closed_line,
+        )
+        if in_hole
+            out_ext = true
+        end
+        if on_hole
+            on_ext = true
+        end
+        if !out_hole  # entire line is in/on hole, can't be in/on other holes
+            in_ext = false
+            return (in_ext, on_ext, out_ext)
         end
     end
-
-    return in_curve, on_curve, out_curve
+    return in_ext, on_ext, out_ext
 end
 
 function _line_polygon_process(
@@ -436,7 +451,6 @@ function _line_polygon_process(
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
     closed_line = false,
-    filled_line = false,
 )
     in_req_met = !in_require
     on_req_met = !on_require
@@ -445,7 +459,6 @@ function _line_polygon_process(
     in_curve, on_curve, out_curve = _line_filled_curve_interactions(
         line, GI.getexterior(polygon);
         closed_line = closed_line,
-        filled_line = filled_line,
     )
     if on_curve
         !on_allow && return false
@@ -491,15 +504,12 @@ function _polygon_polygon_process(
     in_req_met = !in_require
     on_req_met = !on_require
     out_req_met = !out_require
-
+    # Check if exterior of poly1 is within poly2
     ext1 = GI.getexterior(poly1)
-    e1_in_p2, e1_on_p2, e1_out_p2 = _line_polygon_process(
+    ext2 = GI.getexterior(poly2)
+    e1_in_p2, e1_on_p2, e1_out_p2 = _line_polygon_interactions(
         ext1, poly2;
-        in_allow = in_allow, in_require = in_require,
-        on_allow = on_allow, on_require = on_require,
-        out_allow = out_allow, out_require = out_require,
         closed_line = true,
-        filled_line = true,
     )
     if e1_on_p2
         !on_allow && return false
@@ -509,83 +519,66 @@ function _polygon_polygon_process(
         !out_allow && return false
         out_req_met = true
     end
-    !e1_in_p2 && return in_req_met && on_req_met && out_req_met
+    #=
+    If exterior of poly1 isn't in poly2 and poly2 isn't within poly1 (checked
+    with centroid), polygon interiors do not interact and there is nothing left
+    to check.
+    =#
+    c2 = centroid(poly2)
+    if !e1_in_p2
+        _, _, e2_out_e1 = _line_filled_curve_interactions(
+            ext2, ext1;
+            closed_line = true,
+        )
+        e2_out_e1 && return in_req_met && on_req_met && out_req_met
+    end
+    # If interiors interact, check if poly2 interacts with any of poly1's holes
+    for h1 in GI.gethole(poly1)
+        h1_in_p2, h1_on_p2, h1_out_p2 = _line_polygon_interactions(
+            h1, poly2;
+            closed_line = true,
+        )
+        if h1_on_p2
+            !on_allow && return false
+            on_req_met = true
+        end
+        if h1_out_p2
+            !out_allow && return false
+            out_req_met = true
+        end
+        if !h1_in_p2
+            _, _, e2_out_h1 = _line_filled_curve_interactions(
+                ext2, h1;
+                closed_line = true,
+            )
+            # hole encompasses all of poly2
+            !e2_out_h1 && return in_req_met && on_req_met && out_req_met
+            break
+        end
+    end
+    #=
+    Poly2 isn't outside of poly1 and isn't in a hole, poly1 interior must
+    interact with poly2 interior
+    =#
+    !in_allow && return false
+    in_req_met = true
 
-    # is the part if p1 that is in p2 actually in p2?
-
-    # does p1 touch any other edges or exit p2 at any point?
-
-    # for h2 in GI.gethole(g2)
-    #     # check if h2 is inside of e1
-    #     e1_in_h2, e1_on_h2, e1_out_h2 = _line_filled_curve_interactions(
-    #         ext1, h2;
-    #         closed_line = true,
-    #         filled_line = true,
-    #     )
-    #     # skip if poly1 doesn't interact with the hole at all
-    #     !e1_in_h2 && !e1_on_h2 && break
-    #     # if hole interacts with an edge of poly1
-    #     if e1_on_h2
-    #         !on_allow && return false
-    #         on_req_met = true
-    #         #=
-    #         we know that h2 touches edge of p1 so:
-    #         (1) no hole of p1 can touch the edge of p1 and
-    #         (2) no other hole of p2 can line up with current h2
-    #         This means there is at least a small border of p1 that is either
-    #         inside of p2 (e1_out_h2) or outside of p2 (e1_in_h2)
-    #         =#
-    #         if e1_out_h2
-    #             !in_allow && return false
-    #             in_req_met = true
-    #         end
-    #         if e1_in_h2
-    #             !out_allow && return false
-    #             out_req_met = true
-    #             # entirety of poly1 is within/on h2
-    #             !e1_out_h2 && return in_req_met && on_req_met && out_req_met
-    #         end
-    #     else  # if hole is completly within poly1
-    #         !in_allow && return false
-    #         in_req_met = true
-    #         # Check to see if h2 is within a hole of poly1
-    #         for h1 in GI.gethole(poly1)
-    #             h2_in_h1, h2_on_h1, h2_out_h1 = _line_filled_curve_interactions(
-    #                 h2, h1;
-    #                 closed_line = true,
-    #                 filled_line = true,
-    #             )
-    #             if !h2_out_h1
-    #                 !out_allow && return false
-    #                 out_req_met = true
-    #             else
-
-    #             end
-    #             # h2 is outside of h1 and cannot be excluded by another hole since it touches the boundary
-    #             h2_on_h1 && h2_out_h1 && return false
-    #             if !h2_out_h1  #h2 is within bounds of h1, so not in e1
-    #                 h2_in_e1 = false
-    #                 break
-    #             end
-    #         end
-
-    #     end
-
-    #     for h1 in GI.gethole(g1)
-    #         _, h2_on_h1, h2_out_h1 = _line_filled_curve_interactions(
-    #             h2, h1;
-    #             closed_line = true,
-    #         )
-    #         # h2 is outside of h1 and cannot be excluded by another hole since it touches the boundary
-    #         h2_on_h1 && h2_out_h1 && return false
-    #         if !h2_out_h1  #h2 is within bounds of h1, so not in e1
-    #             h2_in_e1 = false
-    #             break
-    #         end
-    #     end
-    #     h2_in_e1 && return false
-    # end
-    # return true
+    # If any of poly2 holes are within poly1, if so, poly1 is exterior to poly2
+    for h2 in GI.gethole(poly2)
+        h2_in_p1, h2_on_p1, _ = _line_polygon_interactions(
+            h2, poly1;
+            closed_line = true,
+        )
+        if h2_on_p1
+            !on_allow && return false
+            on_req_met = true
+        end
+        if h2_in_p1
+            !out_allow && return false
+            out_req_met = true
+        end
+    end
+    return in_req_met && on_req_met && out_req_met 
 end
 
 

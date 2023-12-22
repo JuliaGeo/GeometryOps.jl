@@ -59,3 +59,38 @@
 @test GO.coveredby(l8, l1) == LG.coveredby(l8, l1) == false
 # Line segments cross and overlap on endpoint -> isn't covered by
 @test GO.coveredby(l9, l1) == LG.coveredby(l9, l1) == false
+# Line is within linear ring -> covered by
+@test GO.coveredby(l1, r1) == LG.coveredby(l1, r1) == true
+# Line covers one edge of linera ring and has segment outside -> isn't covered by
+@test GO.coveredby(l3, r1) == LG.coveredby(l3, r1) == false
+# Line and linear ring are only connected at vertex -> isn't covered by
+@test GO.coveredby(l5, r1) == LG.coveredby(l5, r1) == false
+# Line and linear ring are disjoint -> isn't covered by
+@test GO.coveredby(l6, r1) == LG.coveredby(l6, r1) == false
+# Line crosses through two ring edges -> isn't covered by
+@test GO.coveredby(l7, r1) == LG.coveredby(l7, r1) == false
+# Line crosses through two ring edges and touches third edge -> isn't covered by
+@test GO.coveredby(l8, r1) == LG.coveredby(l8, r1) == false
+# Line is equal to linear ring -> covered by
+@test GO.coveredby(l10, r1) == LG.coveredby(l10, r1) == true
+# Line covers linear ring and then has extra segment -> isn't covered by
+@test GO.coveredby(l11, r1) == LG.coveredby(l11, r1) == false
+
+# # Ring and Geometry
+
+# Line is within linear ring -> isn't covered by
+@test GO.coveredby(r1, l1) == LG.coveredby(r1, l1) == false
+# Line covers one edge of linera ring and has segment outside -> isn't covered by
+@test GO.coveredby(r1, l3) == LG.coveredby(r1, l3) == false
+# Line and linear ring are only connected at vertex -> isn't covered by
+@test GO.coveredby(r1, l5) == LG.coveredby(r1, l5) == false
+# Line and linear ring are disjoint -> isn't covered by
+@test GO.coveredby(r1, l6) == LG.coveredby(r1, l6) == false
+# Line crosses through two ring edges -> isn't covered by
+@test GO.coveredby(r1, l7) == LG.coveredby(r1, l7) == false
+# Line crosses through two ring edges and touches third edge -> isn't covered by
+@test GO.coveredby(r1, l8) == LG.coveredby(r1, l8) == false
+# Line is equal to linear ring -> covered by
+@test GO.coveredby(r1, l10) == LG.coveredby(r1, l10) == true
+# Line covers linear ring and then has extra segment -> covered by
+@test GO.coveredby(r1, l11) == LG.coveredby(r1, l11) == true

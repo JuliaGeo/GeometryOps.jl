@@ -77,16 +77,25 @@ A line string is crosses another linestring if the vertices and edges of the
 first linestring are crosses the second linestring, including the first and last
 vertex. Return true if those conditions are met, else false.
 """
-crosses(
-    ::GI.LineStringTrait, g1,
-    ::GI.LineStringTrait, g2,
-) = _line_curve_process(
-    g1, g2;
-    in_allow = true, on_allow = false, out_allow = true,
-    in_require = true, on_require = false, out_require = true,
-    closed_line = false,
-    closed_curve = false,
+# crosses(
+#     ::GI.LineStringTrait, g1,
+#     ::GI.LineStringTrait, g2,
+# ) = _line_curve_process(
+#     g1, g2;
+#     in_allow = true, on_allow = false, out_allow = true,
+#     in_require = true, on_require = false, out_require = true,
+#     closed_line = false,
+#     closed_curve = false,
+# )
+
+function crosses(
+    ::LineStringTrait, g1,
+    ::LineStringTrait, g2
 )
+
+
+
+end
 
 """
     crosses(::GI.LineStringTrait, g1, ::GI.LinearRingTrait, g2)::Bool
@@ -95,16 +104,16 @@ A line string is crosses a linear ring if the vertices and edges of the
 linestring are crosses the linear ring. Return true if those conditions are met,
 else false.
 """
-crosses(
-    ::GI.LineStringTrait, g1,
-    ::GI.LinearRingTrait, g2,
-) = _line_curve_process(
-    g1, g2;
-    in_allow = false, on_allow = true, out_allow = true,
-    in_require = false, on_require = true, out_require = true,
-    closed_line = false,
-    closed_curve = true,
-)
+# crosses(
+#     ::GI.LineStringTrait, g1,
+#     ::GI.LinearRingTrait, g2,
+# ) = _line_curve_process(
+#     g1, g2;
+#     in_allow = false, on_allow = true, out_allow = true,
+#     in_require = false, on_require = true, out_require = true,
+#     closed_line = false,
+#     closed_curve = true,
+# )
 
 """
     crosses(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool

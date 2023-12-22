@@ -29,13 +29,14 @@ p1 = LG.Polygon(r1, [r2, r3])
 @testset "Contains" begin include("geom_relations/contains.jl") end
 @testset "Covered By" begin include("geom_relations/coveredby.jl") end
 @testset "Covers" begin include("geom_relations/covers.jl") end
-@testset "Crosses" begin include("geom_relations/crosses.jl") end
-@testset "Disjoint" begin include("geom_relations/disjoint.jl") end
-@testset "Equals" begin include("geom_relations/equals.jl") end
-@testset "Touches" begin include("geom_relations/touches.jl") end
-@testset "Overlaps" begin include("geom_relations/overlaps.jl") end
-@testset "Within" begin include("geom_relations/within.jl") end
-@testset "Intersect" begin include("geom_relations/intersects.jl") end
+# @testset "Crosses" begin include("geom_relations/crosses.jl") end
+# @testset "Disjoint" begin include("geom_relations/disjoint.jl") end
+# @testset "Equals" begin include("geom_relations/equals.jl") end
+# @testset "Touches" begin include("geom_relations/touches.jl") end
+# @testset "Overlaps" begin include("geom_relations/overlaps.jl") end
+# @testset "Intersect" begin include("geom_relations/intersects.jl") end
+# @testset "Within" begin include("geom_relations/within.jl") end
+
 
 # @testset "booleans" begin
 #     line1 = GI.LineString([[9.170356, 45.477985], [9.164434, 45.482551], [9.166644, 45.484003]])

@@ -59,6 +59,42 @@
 @test GO.covers(l1, l8) == LG.covers(l1, l8) == false
 # Line segments cross and overlap on endpoint -> doesn't cover
 @test GO.covers(l1, l9) == LG.covers(l1, l9) == false
+# Line is within linear ring -> doesn't cover
+@test GO.covers(l1, r1) == LG.covers(l1, r1) == false
+# Line covers one edge of linera ring and has segment outside -> doesn't cover
+@test GO.covers(l3, r1) == LG.covers(l3, r1) == false
+# Line and linear ring are only connected at vertex -> doesn't cover
+@test GO.covers(l5, r1) == LG.covers(l5, r1) == false
+# Line and linear ring are disjoint -> doesn't cover
+@test GO.covers(l6, r1) == LG.covers(l6, r1) == false
+# Line crosses through two ring edges -> doesn't cover
+@test GO.covers(l7, r1) == LG.covers(l7, r1) == false
+# Line crosses through two ring edges and touches third edge -> doesn't cover
+@test GO.covers(l8, r1) == LG.covers(l8, r1) == false
+# Line is equal to linear ring -> covers
+@test GO.covers(l10, r1) == LG.covers(l10, r1) == true
+# Line covers linear ring and then has extra segment -> covers
+@test GO.covers(l11, r1) == LG.covers(l11, r1) == true
+
+# # Ring and Geometry
+
+# Line is within linear ring -> covers
+@test GO.covers(r1, l1) == LG.covers(r1, l1) == true
+# Line covers one edge of linear ring and has segment outside -> doesn't cover
+@test GO.covers(r1, l3) == LG.covers(r1, l3) == false
+# Line and linear ring are only connected at vertex -> doesn't cover
+@test GO.covers(r1, l5) == LG.covers(r1, l5) == false
+# Line and linear ring are disjoint -> doesn't cover
+@test GO.covers(r1, l6) == LG.covers(r1, l6) == false
+# Line crosses through two ring edges -> doesn't cover
+@test GO.covers(r1, l7) == LG.covers(r1, l7) == false
+# Line crosses through two ring edges and touches third edge -> doesn't cover
+@test GO.covers(r1, l8) == LG.covers(r1, l8) == false
+# Line is equal to linear ring -> cover
+@test GO.covers(r1, l10) == LG.covers(r1, l10) == true
+# Line covers linear ring and then has extra segment -> doesn't cover
+@test GO.covers(r1, l11) == LG.covers(r1, l11) == false
+
 
 
 

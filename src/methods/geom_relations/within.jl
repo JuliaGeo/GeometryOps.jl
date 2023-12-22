@@ -262,49 +262,58 @@ A polygon is within another polygon if the interior of the first polygon is
 inside of the second, including edges, and does not intersect with any holes of
 the second polygon. If these conditions are met, return true, else false.
 """
-function within(
+within(
     ::GI.PolygonTrait, g1,
-    ::GI.PolygonTrait, g2;
+    ::GI.PolygonTrait, g2,
+) = _polygon_polygon_process(
+    g1, g2;
+    in_allow =  true, on_allow = true, out_allow = false,
+    in_require = true, on_require = false, out_require = false,
 )
-    ext1 = GI.getexterior(g1)
-    e1_in_e2, _, e1_out_e2 = _line_filled_curve_interactions(
-        ext1, GI.getexterior(g2);
-        closed_line = true,
-    )
-    e1_out_e2 && return false
 
-    for h2 in GI.gethole(g2)
-        if e1_in_e2  # h2 could be outside of e1, but inside of e2
-            h2_in_e1, h2_on_e1, _ = _line_filled_curve_interactions(
-                h2, ext1;
-                closed_line = true,
-            )
-            # h2 is inside of e1 and cannot be excluded by a hole since it touches the boundary
-            h2_on_e1 && h2_in_e1 && return false
-            if !h2_in_e1  # is h2 disjoint from e1, or is e1 within h2?
-                c1_val = point_filled_curve_orientation(centroid(ext1), h2)
-                c1_val == point_in && return false  # e1 is within h2
-                break  # e1 is disjoint from h2
-            end
-        end
-        # h2 is within e1, but is it within a hole of g1?
-        h2_in_e1 = true
-        for h1 in GI.gethole(g1)
-            _, h2_on_h1, h2_out_h1 = _line_filled_curve_interactions(
-                h2, h1;
-                closed_line = true,
-            )
-            # h2 is outside of h1 and cannot be excluded by another hole since it touches the boundary
-            h2_on_h1 && h2_out_h1 && return false
-            if !h2_out_h1  #h2 is within bounds of h1, so not in e1
-                h2_in_e1 = false
-                break
-            end
-        end
-        h2_in_e1 && return false
-    end
-    return true
-end
+# function within(
+#     ::GI.PolygonTrait, g1,
+#     ::GI.PolygonTrait, g2;
+# )
+#     ext1 = GI.getexterior(g1)
+#     e1_in_e2, _, e1_out_e2 = _line_filled_curve_interactions(
+#         ext1, GI.getexterior(g2);
+#         closed_line = true,
+#     )
+#     e1_out_e2 && return false
+
+#     for h2 in GI.gethole(g2)
+#         if e1_in_e2  # h2 could be outside of e1, but inside of e2
+#             h2_in_e1, h2_on_e1, _ = _line_filled_curve_interactions(
+#                 h2, ext1;
+#                 closed_line = true,
+#             )
+#             # h2 is inside of e1 and cannot be excluded by a hole since it touches the boundary
+#             h2_on_e1 && h2_in_e1 && return false
+#             if !h2_in_e1  # is h2 disjoint from e1, or is e1 within h2?
+#                 c1_val = point_filled_curve_orientation(centroid(ext1), h2)
+#                 c1_val == point_in && return false  # e1 is within h2
+#                 break  # e1 is disjoint from h2
+#             end
+#         end
+#         # h2 is within e1, but is it within a hole of g1?
+#         h2_in_e1 = true
+#         for h1 in GI.gethole(g1)
+#             _, h2_on_h1, h2_out_h1 = _line_filled_curve_interactions(
+#                 h2, h1;
+#                 closed_line = true,
+#             )
+#             # h2 is outside of h1 and cannot be excluded by another hole since it touches the boundary
+#             h2_on_h1 && h2_out_h1 && return false
+#             if !h2_out_h1  #h2 is within bounds of h1, so not in e1
+#                 h2_in_e1 = false
+#                 break
+#             end
+#         end
+#         h2_in_e1 && return false
+#     end
+#     return true
+# end
 
 # Geometries within multipolygons
 """

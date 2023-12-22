@@ -264,3 +264,17 @@ coveredby(
     closed_line = true,
 )
 
+"""
+    coveredby(
+        ::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, g1,
+        ::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, g2,
+    )::Bool
+
+Polygons and multipolygons cannot be covered by curves as they are not filled.
+Return false
+"""
+coveredby(
+    ::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, g2,
+) = false
+
