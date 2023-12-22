@@ -3,7 +3,7 @@
 # This file holds implementations for the Douglas-Peucker and Visvalingam-Whyatt
 # algorithms for simplifying geometries (specifically polygons and lines).
 
-export simplify, VisvalingamWhyatt, DouglasPeucker
+export simplify, VisvalingamWhyatt, DouglasPeucker, RadialDistance
 
 
 """
