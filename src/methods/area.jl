@@ -46,92 +46,68 @@ for polygons.
 """
     area(geom)::Real
 
-Returns the area of the geometry.
+Returns the area of the geometry. This is computed slighly differently for
+different geometries:
+    - The area of a point is always zero.
+    - The area of a curve is always zero.
+    - The area of a polygon is the absolute value of the signed area.
+    - The area multi-polygon is the sum of the areas of all of the sub-polygons.
 """
 area(geom) = area(GI.trait(geom), geom)
 
 """
     signed_area(geom)::Real
 
-Returns the signed area of the geometry, based on winding order.
+Returns the signed area of the geometry, based on winding order. This is
+computed slighly differently for different geometries:
+    - The signed area of a point is always zero.
+    - The signed area of a curve is always zero.
+    - The signed area of a polygon is computed with the shoelace formula and is
+    positive if the polygon coordinates wind clockwise and negative if
+    counterclockwise.
+    - You cannot compute the signed area of a multipolygon as it doesn't have a
+    meaning as each sub-polygon could have a different winding order.
 """
 signed_area(geom) = signed_area(GI.trait(geom), geom)
 
-"""
-    area(::GI.PointTrait, point)::Real
+# Points
+area(::GI.PointTrait, point) = zero(typeof(GI.x(point)))
 
-The area of a point is always zero. 
-"""
-function area(::GI.PointTrait, point)
-    T = typeof(GI.x(point))
-    return T(0)
-end
-
-"""
-    signed_area(::GI.PointTrait, point)::Real
-
-The signed area of a point is always zero. 
-"""
 signed_area(trait::GI.PointTrait, point) = area(trait, point)
 
-"""
-    area(::GI.AbstractCurveTrait, curve)::Real
+# Curves
+area(::CT, curve) where CT <: GI.AbstractCurveTrait =
+    zero(typeof(GI.x(GI.getpoint(curve, 1))))
 
-The area of a curve is always zero. 
-"""
-function area(::CT, curve) where CT <: GI.AbstractCurveTrait
-    T = typeof(GI.x(GI.getpoint(curve, 1)))
-    return T(0)
-end
-
-"""
-    signed_area(::GI.AbstractCurveTrait, curve)::Real
-
-The signed area of a curve is always zero. 
-"""
 signed_area(trait::CT, curve) where CT <: GI.AbstractCurveTrait =
     area(trait, curve)
 
-"""
-    area(::GI.PolygonTrait, curve)::Real
-
-Finds the area of a polygon, which is the absolute value of the signed area.
-"""
+# Polygons
 area(trait::GI.PolygonTrait, geom) = abs(signed_area(trait, geom))
 
-"""
-    signed_area(::GI.PolygonTrait, curve)::Real
-
-Finds the signed area of a polygon. This is positive if the polygon is clockwise
-and negative if it is a counterclockwise path.
-"""
 function signed_area(::GI.PolygonTrait, poly)
     s_area = _signed_area(GI.getexterior(poly))
     area = abs(s_area)
+    # Remove hole areas from total
     for hole in GI.gethole(poly)
         area -= abs(_signed_area(hole))
     end
+    # Winding of exterior ring determines sign
     return area * sign(s_area)
 end
 
-"""
-    area(::GI.MultiPolygonTrait, curve)::Real
-
-Finds the area of a multi-polygon, which is the sum of the areas of all of the
-sub-polygons.
-"""
+# MultiPolygons
 area(::GI.MultiPolygonTrait, geom) =
     sum((area(poly) for poly in GI.getpolygon(geom)))
 
-
-"""
-    _signed_area(geom)::Real
+#=
+Helper function:
 
 Calculates the signed area of a given curve. This is equivalent to integrating
 to find the area under the curve. Even if curve isn't explicitly closed by
 repeating the first point at the end of the coordinates, curve is still assumed
 to be closed.
-"""
+=#
 function _signed_area(geom)
     # Close curve, even if last point isn't explicitly repeated 
     np = GI.npoint(geom)
@@ -140,13 +116,12 @@ function _signed_area(geom)
     # Integrate the area under the curve
     p1 = GI.getpoint(geom, np)
     T = typeof(GI.x(p1))
-    area = T(0)
+    area = zero(T)
     for i in 1:np
         p2 = GI.getpoint(geom, i)
         # Accumulate the area into `area`
         area += GI.x(p1) * GI.y(p2) - GI.y(p1) * GI.x(p2)
         p1 = p2
     end
-    area /= 2
-    return area
+    return area / 2
 end

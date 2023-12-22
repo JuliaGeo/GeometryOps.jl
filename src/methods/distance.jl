@@ -54,10 +54,29 @@ polygons, so it isn't implemented for curves.
 =#
 
 """
-    distance(g1, g2)::Real
+    distance(point, geom)::Real
 
 Calculates the  ditance from the geometry `g1` to the `point`. The distance
 will always be positive or zero.
+
+The method will differ based on the type of the geometry provided:
+    - The distance from a point to a point is just the Euclidean distance
+    between the points.
+    - The distance from a point to a multipolygon is the shortest distance from
+    a the given point to any point within the multipoint object.
+    - The distance from a point to a line is the minimum distance from the point
+    to the closest point on the given line.
+    - The distance from a point to a linestring is the minimum distance from the
+    point to the closest segment of the linestring.
+    - The distance from a point to a linear ring is the minimum distance from
+    the point to the closest segment of the linear ring.
+    - The distance from a point to a polygon is zero if the point is within the
+    polygon and otherwise is the minimum distance from the point to an edge of
+    the polygon. This includes edges created by holes.
+    - The distance from a point to a multipolygon is zero if the point is within
+    the multipolygon and otherwise is the minimum distance from the point to the
+    closest edge of any of the polygons within the multipolygon. This includes
+    edges created by holes of the polygons as well.
 """
 distance(point, geom) = distance(
     GI.trait(point), point,
@@ -65,64 +84,39 @@ distance(point, geom) = distance(
 )
 
 """
-    distance(::GI.AbstractTrait, geom, ::GI.PointTrait, point)::Real
-
-All distance functions below are defined with the point trait and point as the
-first two arguments. If the geometry trait and geometry are first, swap the
-argument order.
-"""
-distance(gtrait::GI.AbstractTrait, geom, ptrait::GI.PointTrait, point) = 
-    distance(ptrait, point, gtrait, geom)
-
-"""
     signed_distance(point, geom)::Real
 
-Calculates the signed distance from the geometry `geom` to the point
-defined by `(x, y)`.  Points within `geom` have a negative distance,
-and points outside of `geom` have a positive distance.
-
-If `geom` is a MultiPolygon, then this function returns the maximum distance 
-to any of the polygons in `geom`.
+Calculates the signed distance from the geometry `geom` to the given point.
+Points within `geom` have a negative signed distance, and points outside of
+`geom` have a positive signed distance.
+    - The signed distance from a point to a point, line, linestring, or linear
+    ring is equal to the distance between the two.
+    - The signed distance from a point to a polygon is negative if the point is
+    within the polygon and is positive otherwise. The value of the distance is
+    the minimum distance from the point to an edge of the polygon. This includes
+    edges created by holes.
+    - The signed distance from a point to a mulitpolygon is negative if the
+    point is within one of the polygons that make up the multipolygon and is
+    positive otherwise. The value of the distance is the minimum distance from
+    the point to an edge of the multipolygon. This includes edges created by
+    holes of the polygons as well.
 """
 signed_distance(point, geom) = signed_distance(
     GI.trait(point), point,
     GI.trait(geom), geom,
 )
 
-"""
-    signed_distance(::GI.AbstractTrait, geom, ::GI.PointTrait, point)::Real
+# # Distance
 
-All signed distance functions below are defined with the point trait and point
-as the first two arguments. If the geometry trait and geometry are first, swap
-the argument order.
-"""
-signed_distance(gtrait::GI.AbstractTrait, geom, ptrait::GI.PointTrait, point) = 
-    signed_distance(ptrait, point, gtrait, geom)
-
-"""
-    signed_distance(::GI.PointTrait, point, ::GI.AbstractTrait, geom)::Real
-
-The signed distance from a point to a geometry that isn't defined below (polygon
-and multipolygon) is simply equal to the distance between those two points
-"""
-signed_distance(ptrait::GI.PointTrait, point, gtrait::GI.AbstractTrait, geom) =
+# Swap argument order to point as first argument
+distance(gtrait::GI.AbstractTrait, geom, ptrait::GI.PointTrait, point) = 
     distance(ptrait, point, gtrait, geom)
 
-"""
-    distance(::GI.PointTrait, point, ::GI.PointTrait, geom)::Real
-
-The distance from a point to a point is just the Euclidean distance between the
-points.
-"""
+# Point-Point
 distance(::GI.PointTrait, point, ::GI.PointTrait, geom) =
     euclid_distance(point, geom)
 
-"""
-    distance(::GI.PointTrait, point, ::GI.MultiPointTrait, geom)::Real
-
-The distance from a point to a multipolygon is the shortest distance from a the
-given point to any point within the multipoint object.
-"""
+# Point-MultiPoint
 function distance(::GI.PointTrait, point, ::GI.MultiPointTrait, geom)
     T = typeof(GI.x(point))
     min_dist = typemax(T)
@@ -133,70 +127,26 @@ function distance(::GI.PointTrait, point, ::GI.MultiPointTrait, geom)
     return min_dist
 end
 
-"""
-    distance(::GI.PointTrait, point, ::GI.LineTrait, geom)::Real
-
-The distance from a point to a line is the minimum distance from the point to
-the closest point on the given line.
-"""
+# Point-Line
 distance(::GI.PointTrait, point, ::GI.LineTrait, geom) = 
     _distance_line(point, GI.getpoint(geom, 1), GI.getpoint(geom, 2))
 
-"""
-    distance(::GI.PointTrait, point, ::GI.LineStringTrait, geom)::Real
-
-The distance from a point to a linestring is the minimum distance from the point
-to the closest segment of the linestring.
-"""
+# Point-LineString
 distance(::GI.PointTrait, point, ::GI.LineStringTrait, geom) =
     _distance_curve(point, geom, close_curve = false)
 
-"""
-    distance(::GI.PointTrait, point, ::GI.LinearRingTrait, geom)::Real
-
-The distance from a point to a linear ring is the minimum distance from the
-point to the closest segment of the linear ring. Note that the linear ring is
-closed by definition, but is not filled in, so the signed distance will always
-be positive or zero.
-"""
+# Point-LinearRing
 distance(::GI.PointTrait, point, ::GI.LinearRingTrait, geom) =
     _distance_curve(point, geom, close_curve = true)
 
-"""
-    distance(::GI.PointTrait, point, ::GI.PolygonTrait, geom)::Real
-
-The distance from a point to a polygon is zero if the point is within the
-polygon and otherwise is the minimum distance from the point to an edge of the
-polygon. This includes edges created by holes.
-"""
+# Point-Polygon
 function distance(::GI.PointTrait, point, ::GI.PolygonTrait, geom)
     T = typeof(GI.x(point))
-    GI.within(point, geom) && return T(0)
+    GI.within(point, geom) && return zero(T)
     return _distance_polygon(point, geom)
 end
 
-"""
-    signed_distance(::GI.PointTrait, point, ::GI.PolygonTrait, geom)::Real
-
-The signed distance from a point to a polygon is negative if the point is within
-the polygon and is positive otherwise. The value of the distance is the minimum
-distance from the point to an edge of the polygon. This includes edges created
-by holes.
-"""
-function signed_distance(::GI.PointTrait, point, ::GI.PolygonTrait, geom)
-    min_dist = _distance_polygon(point, geom)
-    # should be negative if point is inside polygon
-    return GI.within(point, geom) ? -min_dist : min_dist
-end
-
-"""
-    distance(::GI.PointTrait, point, ::GI.MultiPolygonTrait, geom)
-
-The distance from a point to a multipolygon is zero if the point is within the
-multipolygon and otherwise is the minimum distance from the point to the closest
-edge of any of the polygons within the multipolygon. This includes edges created
-by holes of the polygons as well.
-"""
+# Point-MultiPolygon
 function distance(::GI.PointTrait, point, ::GI.MultiPolygonTrait, geom)
     min_dist = distance(point, GI.getpolygon(geom, 1))
     for i in 2:GI.npolygon(geom)
@@ -207,15 +157,24 @@ function distance(::GI.PointTrait, point, ::GI.MultiPolygonTrait, geom)
     return min_dist
 end
 
-"""
-    signed_distance(::GI.PointTrait, point, ::GI.MultiPolygonTrait, geom)
+# # Signed Distance
 
-The signed distance from a point to a mulitpolygon is negative if the point is
-within one of the polygons that make up the multipolygon and is positive
-otherwise. The value of the distance is the minimum distance from the point to
-an edge of the multipolygon. This includes edges created by holes of the
-polygons as well.
-"""
+# Swap argument order to point as first argument
+signed_distance(gtrait::GI.AbstractTrait, geom, ptrait::GI.PointTrait, point) = 
+    signed_distance(ptrait, point, gtrait, geom)
+
+# Point-Point, Point-Line, Point-LineString, Point-LinearRing
+signed_distance(ptrait::GI.PointTrait, point, gtrait::GI.AbstractTrait, geom) =
+    distance(ptrait, point, gtrait, geom)
+
+# Point-Polygon
+function signed_distance(::GI.PointTrait, point, ::GI.PolygonTrait, geom)
+    min_dist = _distance_polygon(point, geom)
+    # should be negative if point is inside polygon
+    return GI.within(point, geom) ? -min_dist : min_dist
+end
+
+# Point-Multipolygon
 function signed_distance(::GI.PointTrait, point, ::GI.MultiPolygonTrait, geom)
     min_dist = signed_distance(point, GI.getpolygon(geom, 1))
     for i in 2:GI.npolygon(geom)
@@ -225,13 +184,6 @@ function signed_distance(::GI.PointTrait, point, ::GI.MultiPolygonTrait, geom)
     return min_dist
 end
 
-"""
-    euclid_distance(x1::Real, y1::Real, x2::Real, y2::Real)::Real
-
-Returns the Euclidean distance between two points given their x and y values.
-"""
-Base.@propagate_inbounds _euclid_distance(x1, y1, x2, y2) =
-    sqrt((x2 - x1)^2 + (y2 - y1)^2)
 
 """
     euclid_distance(p1::Point, p2::Point)::Real
@@ -243,12 +195,15 @@ Base.@propagate_inbounds euclid_distance(p1, p2) = _euclid_distance(
     GeoInterface.x(p2), GeoInterface.y(p2),
 )
 
-"""
-    _distance_line(p0, p1, p2)::Real
+# Returns the Euclidean distance between two points given their x and y values.
+Base.@propagate_inbounds _euclid_distance(x1, y1, x2, y2) =
+    sqrt((x2 - x1)^2 + (y2 - y1)^2)
 
+
+#=
 Returns the minimum distance from point p0 to the line defined by endpoints p1
 and p2.
-"""
+=#
 function _distance_line(p0, p1, p2)
     x0, y0 = GeoInterface.x(p0), GeoInterface.y(p0)
     x1, y1 = GeoInterface.x(p1), GeoInterface.y(p1)
@@ -278,13 +233,12 @@ function _distance_line(p0, p1, p2)
     return _euclid_distance(x0, y0, xfirst + (b2 * v[1]), yfirst + (b2 * v[2]))
 end
 
-"""
-    _distance_curve(point, curve; close_curve = false)
 
+#=
 Returns the minimum distance from the given point to the given curve. If
 close_curve is true, make sure to include the edge from the first to last point
 of the curve, even if it isn't explicitly repeated.
-"""
+=#
 function _distance_curve(point, curve; close_curve = false)
     # See if linear ring has explicitly repeated last point in coordinates
     np = GI.npoint(curve)
@@ -304,13 +258,11 @@ function _distance_curve(point, curve; close_curve = false)
     return min_dist
 end
 
-"""
-    _distance_polygon(point, poly)
-
+#=
 Returns the minimum distance from the given point to an edge of the given
 polygon, including from edges created by holes. Assumes polygon isn't filled and
-treats the exterior and each hole as a linear ring. 
-"""
+treats the exterior and each hole as a linear ring.
+=#
 function _distance_polygon(point, poly)
     min_dist = _distance_curve(point, GI.getexterior(poly); close_curve = true)
     @inbounds for hole in GI.gethole(poly)
