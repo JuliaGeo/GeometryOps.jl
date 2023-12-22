@@ -33,6 +33,7 @@ include("methods/polygonize.jl")
 include("methods/barycentric.jl")
 include("methods/equals.jl")
 
+include("transformations/extent.jl")
 include("transformations/flip.jl")
 include("transformations/simplify.jl")
 include("transformations/reproject.jl")

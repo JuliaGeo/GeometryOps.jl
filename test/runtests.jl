@@ -23,6 +23,7 @@ const GO = GeometryOps
     @testset "Signed Area" begin include("methods/signed_area.jl") end
     @testset "Overlaps" begin include("methods/overlaps.jl") end
     # Transformations
+    @testset "Embed Extent" begin include("transformations/extent.jl") end
     @testset "Reproject" begin include("transformations/reproject.jl") end
     @testset "Flip" begin include("transformations/flip.jl") end
     @testset "Simplify" begin include("transformations/simplify.jl") end
