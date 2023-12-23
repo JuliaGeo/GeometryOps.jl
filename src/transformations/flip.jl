@@ -9,6 +9,10 @@
 Swap all of the x and y coordinates in obj, otherwise
 keeping the original structure (but not necessarily the
 original type).
+
+## Keywords 
+
+$APPLY_KEYWORDS
 """
 function flip(geom; kw...) 
     if _is3d(geom)

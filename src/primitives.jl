@@ -1,10 +1,19 @@
+const THREADED_KEYWORD = "- `threaded`: `true` or `false`. Whether to use multithreading. Defaults to `false`."
+const CRS_KEYWORD = "- `crs`: The CRS to attach to geometries. Defaults to `nothing`."
+const CALC_EXTENT_KEYWORD = "- `calc_extent`: `true` or `false`. Whether to calculate the extent. Defaults to `false`."
+
+const APPLY_KEYWORDS = """
+$THREADED_KEYWORD
+$CRS_KEYWORD
+$CALC_EXTENT_KEYWORD
+"""
 
 # # Primitive functions
 
 # This file mainly defines the [`apply`](@ref) function.
 
 """
-    apply(f, target::Type{<:AbstractTrait}, obj; crs)
+    apply(f, target::Type{<:AbstractTrait}, obj; kw...)
 
 Reconstruct a geometry or feature using the function `f` on the `target` trait.
 
@@ -12,7 +21,11 @@ Reconstruct a geometry or feature using the function `f` on the `target` trait.
 
 The result is an functionally similar geometry with values depending on `f`
 
-# Flipped point the order in any feature or geometry, or iterables of either:
+$APPLY_KEYWORDS
+
+# Example
+
+Flipped point the order in any feature or geometry, or iterables of either:
 
 ```juia
 import GeoInterface as GI

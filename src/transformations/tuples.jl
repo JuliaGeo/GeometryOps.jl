@@ -3,7 +3,14 @@
 """
     tuples(obj)
 
-Convert all points on obj to `Tuple`s.
+Convert all points in `obj` to `Tuple`s, wherever the are nested.
+
+Returns a similar object or collection of objects using GeoInterface.jl
+geometries wrapping `Tuple` points.
+
+# Keywords
+
+$APPLY_KEYWORDS
 """
 function tuples(geom; kw...) 
     if _is3d(geom)
