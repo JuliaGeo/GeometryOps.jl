@@ -2,8 +2,7 @@ using Test
  
 import GeoInterface as GI
 import GeometryOps as GO
-import Extents
-using GeoInterface.Wrappers
+using GeoInterface: Extents
 
 @testset "embed_extent" begin
     poly = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]), 
