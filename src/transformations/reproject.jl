@@ -30,9 +30,9 @@ needed if it is not retreivable from the geometry with `GeoInterface.crs(geometr
 
 ## Keywords
 
--`always_xy`: force x, y coordinate order, `true` by default.
+- `always_xy`: force x, y coordinate order, `true` by default.
     `false` will expect and return points in the crs coordinate order.
--`time`: the time for the coordinates. `Inf` by default.
+- `time`: the time for the coordinates. `Inf` by default.
 $APPLY_KEYWORDS
 """
 function reproject(geom;
