@@ -1,7 +1,9 @@
 import GeometryOps as GO
-import GeoInterface as GI
+#import GeoInterface as GI
 import LibGEOS as LG
 
-p1 = LG.Polygon([[[0.0, 0.0], [0.5, 1.5], [2.5, -0.5], [0.0, 0.0]]])
-a = GO.within(p1, p1)
+l1 = LG.LineString([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]])
+l9 = LG.LineString([[0.0, 1.0], [0.0, -1.0], [1.0, 1.0]])
+
+GO.crosses(l1, l9)
     

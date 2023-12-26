@@ -77,24 +77,127 @@ A line string is crosses another linestring if the vertices and edges of the
 first linestring are crosses the second linestring, including the first and last
 vertex. Return true if those conditions are met, else false.
 """
-# crosses(
-#     ::GI.LineStringTrait, g1,
-#     ::GI.LineStringTrait, g2,
-# ) = _line_curve_process(
-#     g1, g2;
-#     in_allow = true, on_allow = false, out_allow = true,
-#     in_require = true, on_require = false, out_require = true,
-#     closed_line = false,
-#     closed_curve = false,
-# )
+crosses(
+    ::GI.LineStringTrait, g1,
+    ::GI.LineStringTrait, g2,
+) = _line_curve_crosses_overlap_process(
+        g1, g2;
+        orientation = line_cross,
+        closed_line = false, closed_curve = false,
+    )
 
-function crosses(
-    ::LineStringTrait, g1,
-    ::LineStringTrait, g2
+crosses(
+    ::GI.LineStringTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_crosses_overlap_process(
+        g1, g2;
+        orientation = line_cross,
+        closed_line = false, closed_curve = true,
+    )
+
+crosses(
+    ::GI.LinearRingTrait, g1,
+    ::GI.LineStringTrait, g2,
+) = _line_curve_crosses_overlap_process(
+        g1, g2;
+        orientation = line_cross,
+        closed_line = true, closed_curve = false,
+    )
+
+crosses(
+    ::GI.LinearRingTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_crosses_overlap_process(
+    g1, g2;
+    orientation = line_cross,
+    closed_line = true, closed_curve = true,
 )
 
+function _line_curve_crosses_overlap_process(
+    line, curve;
+    orientation = line_cross,
+    closed_line = false, closed_curve = false,
+)
+    nl = GI.npoint(line)
+    nc = GI.npoint(curve)
+    first_last_equal_line = equals(GI.getpoint(line, 1), GI.getpoint(line, nl))
+    first_last_equal_curve = equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc))
+    nl -= first_last_equal_line ? 1 : 0
+    nc -= first_last_equal_curve ? 1 : 0
+    closed_line |= first_last_equal_line
+    closed_curve |= first_last_equal_curve
 
+    # Loop over each line segment
+    orientation_req_met = false
+    l_start = GI.getpoint(line, closed_line ? nl : 1)
+    for i in (closed_line ? 1 : 2):nl
+        l_end = GI.getpoint(line, i)
+        c_start = GI.getpoint(curve, closed_curve ? nc : 1)
+        for j in (closed_curve ? 1 : 2):nc
+            c_end = GI.getpoint(curve, j)
+            seg_val = _segment_segment_orientation(
+                (l_start, l_end),
+                (c_start, c_end),
+            )
+            @show seg_val
+            if seg_val == line_over
+                return false
+            elseif seg_val == line_cross
+                orientation_req_met = true
+            elseif seg_val == line_hinge && !orientation_req_met
+                _, fracs = _intersection_point(
+                    (_tuple_point(l_start), _tuple_point(l_end)),
+                    (_tuple_point(c_start), _tuple_point(c_end))
+                )
+                if isnothing(fracs)  # line and curve segments are parallel
+                    
+                else
+                    (α, β) = fracs  # 0 ≤ α ≤ 1 and 0 ≤ β ≤ 1 since hinges
+                    β == 0 && break  # if crosses, found on previous segment
+                    # curve intersects through line endpoint
+                    if !closed_line && (
+                        (i == 2 && α == 0) || (i == nl && α == 1)
+                    )
+                        break  # doesn't cross
+                    # curve segment intersects through line vertex or edge
+                    elseif 0 < β < 1
+                        orientation_req_met = true  # crosses
+                    # curve meets line at curve segment endpoint
+                    else  # β == 1
+                        # no curve segment connecting at intersection point
+                        !closed_curve && j == nc && break
+                        # see if next curve segment is on the other side of line
+                        c_next = GI.getpoint(curve, j < nc ? j + 1 : 1)
+                        Δx = GI.x(l_end) - GI.x(l_start)
+                        Δy = GI.y(l_end) - GI.y(l_start)
+                        if Δx == 0
+                            x = GI.x(l_start)
+                            x_next = GI.x(c_next)
+                            x_next == x && break # next curve segment is on line
+                            x_next < x && GI.x(c_start) < x && break
+                            x_next > x && GI.x(c_start) > x && break
+                            orientation_req_met = true
+                        elseif Δy == 0
+                            y = GI.y(l_start)
+                            y_next = GI.y(c_next)
+                            y_next == y && break # next curve segment is on line
+                            y_next < y && GI.y(c_start) < y && break
+                            y_next > y && GI.y(c_start) > y && break
+                            orientation_req_met = true
+                        else
+                            m = Δy / Δx
+                            b = GI.y(c_start) - m * GI.x(c_start)
+                            Δy_start = (m * GI.x(c_start) + b) - GI.y(c_start)
+                            Δy_next = (m * GI.x(c_next) + b) - GI.y(c_next)
+                            Δy_start * Δy_next > 0 && break
+                            orientation_req_met = true
+                        end
 
+                    end
+            end
+        end
+    end
+    return orientation_req_met
 end
 
 """
