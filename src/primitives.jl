@@ -18,27 +18,43 @@ $CALC_EXTENT_KEYWORD
 `apply` apples some function to every geometry matching the `Target`
 GeoInterface trait, in some abitrarily nested object made up of:
 - `AbstractArray`s 
+- Some arbitrary iterables may also work here
 - `FeatureCollectionTrait` objects
 - `FeatureTrait` objects
 - `AbstractGeometryTrait` objects
 
 It recussively calls `apply` through these nested
-layers until it reaches the `Targret`, where it applies `f`, and stops.
+layers until it reaches the `Target`, where it applies `f`, and stops.
 
 The outer recursive functions then progressively rebuild the object
 using GeoInterface objects matchching the original traits.
 
 If `PointTrait` is found  but it is not the `Target`, an error is thrown.
 This likely means the object contains a different geometry trait to 
-the target, such as `MultiPoint` when `LineString` was specified.
+the target, such as `MultiPointTrait` when `LineStringTrait` was specified.
 
 To handle this possibility it may be necessary to make `Target` a
 `Union` of traits found at the same level of nesting, and define methods
 of `f` to handle all cases.
 
-Do not make a union accross "levels" of nesting, e.g. 
+Be careful making a union accross "levels" of nesting, e.g. 
 `Union{FeatureTrait,PolygonTrait}`, as `_apply` will just never reach 
 `PolygonTrait` when all the polgons are wrapped in a `FeatureTrait` object.
+
+## Embedding:
+
+`extent` and `crs` can be embededd in all geometries, features and
+feature collections as part of `apply`. Geometries deeper than `Target`
+will of course not hace new `extent` or `crs` embedded.
+
+- `calc_extent` signals to recalculate an `Extent` and embed it. 
+- `crs` will be embedded as-is
+
+## Threading
+
+Threading is used at the outermost level possible - over
+a array, feature collection or e.g. a MultiPolygonTrait where
+each `PolygonTrait` sub geometry may be calculated on a different thread.
 =#
 
 """
@@ -76,10 +92,10 @@ end
 """
 apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw...)
 
-# Call apply again with the trait of `geom`
+# Call _apply again with the trait of `geom`
 _apply(f, ::Type{Target}, geom; kw...)  where Target =
     _apply(f, Target, GI.trait(geom), geom; kw...)
-# There is no trait and this is an Array - so just iterate over it calling _apply on the contents
+# There is no trait and this is an AbstractArray - so just iterate over it calling _apply on the contents
 function _apply(f, ::Type{Target}, ::Nothing, A::AbstractArray; threaded=false, kw...) where Target
     # For an Array there is nothing else to do but map `_apply` over all values
     # _maptasks may run this level threaded if `threaded==true`, 
@@ -88,7 +104,8 @@ function _apply(f, ::Type{Target}, ::Nothing, A::AbstractArray; threaded=false, 
         _apply(f, Target, A[i]; threaded=false, kw...)
     end
 end
-# Try to _apply over unknown iterables
+# Try to _apply over unknown iterables. We can't use threading on an 
+# arbitrary iterable as we maybe can't index into it. So just `map`.
 _apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
     map(x -> _apply(f, Target, x; kw...), iterable)
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
