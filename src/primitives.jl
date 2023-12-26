@@ -12,12 +12,49 @@ $CALC_EXTENT_KEYWORD
 
 # This file mainly defines the [`apply`](@ref) function.
 
+#=
+## What is `apply`?
+
+`apply` apples some function to every geometry matching the `Target`
+GeoInterface trait, in some abitrarily nested object made up of:
+- `AbstractArray`s 
+- `FeatureCollectionTrait` objects
+- `FeatureTrait` objects
+- `AbstractGeometryTrait` objects
+
+It recussively calls `apply` through these nested
+layers until it reaches the `Targret`, where it applies `f`, and stops.
+
+The outer recursive functions then progressively rebuild the object
+using GeoInterface objects matchching the original traits.
+
+If `PointTrait` is found  but it is not the `Target`, an error is thrown.
+This likely means the object contains a different geometry trait to 
+the target, such as `MultiPoint` when `LineString` was specified.
+
+To handle this possibility it may be necessary to make `Target` a
+`Union` of traits found at the same level of nesting, and define methods
+of `f` to handle all cases.
+
+Do not make a union accross "levels" of nesting, e.g. 
+`Union{FeatureTrait,PolygonTrait}`, as `_apply` will just never reach 
+`PolygonTrait` when all the polgons are wrapped in a `FeatureTrait` object.
+=#
+
 """
     apply(f, target::Type{<:AbstractTrait}, obj; kw...)
 
-Reconstruct a geometry or feature using the function `f` on the `target` trait.
+Reconstruct a geometry, feature, feature collection or nested vectors of
+either using the function `f` on the `target` trait.
 
-`f(target_geom) => x` where `x` also has the `target` trait, or an equivalent.
+`f(target_geom) => x` where `x` also has the `target` trait, or a trait that can 
+be substituted. For example, swapping `PolgonTrait` to `MultiPointTrait` will fail
+if the outer object has `MultiPolygonTrait`, but should work if it has `FeatureTrait`.
+
+Objects "shallower" than the target trait are always completely rebuilt, like
+a `Vector` of `FeatureCollectionTrait` of `FeatureTrait` when the target
+has `PolygonTrait` and is held in the features. But "deeper" opjects may remain 
+unchanged - such as points and linear rings if the tartet is the same `PolygonTrait`.
 
 The result is an functionally similar geometry with values depending on `f`
 
@@ -39,43 +76,55 @@ end
 """
 apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw...)
 
+# Call apply again with the trait of `geom`
 _apply(f, ::Type{Target}, geom; kw...)  where Target =
     _apply(f, Target, GI.trait(geom), geom; kw...)
+# There is no trait and this is an Array - so just iterate over it calling _apply on the contents
 function _apply(f, ::Type{Target}, ::Nothing, A::AbstractArray; threaded=false, kw...) where Target
+    # For an Array there is nothing else to do but map `_apply` over all values
+    # _maptasks may run this level threaded if `threaded==true`, 
+    # but deeper `_apply` called in the closure will not be threaded 
     _maptasks(eachindex(A); threaded) do i
-        _apply(f, Target, A[i]; kw...)
+        _apply(f, Target, A[i]; threaded=false, kw...)
     end
 end
-# Try to _apply over iterables
+# Try to _apply over unknown iterables
 _apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
     map(x -> _apply(f, Target, x; kw...), iterable)
-# Rewrap feature collections
+# Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
 function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; 
     crs=GI.crs(fc), calc_extent=false, threaded=false
 ) where Target
+    # Run _apply on all `features` in the feature collection, possibly threaded
     features = _maptasks(1:GI.nfeature(fc); threaded) do i
         feature = GI.getfeature(fc, i)
-        _apply(f, Target, feature; crs, calc_extent)::GI.Feature
+        _apply(f, Target, feature; crs, calc_extent, threaded=false)::GI.Feature
     end
     if calc_extent
-        extent = reduce(features; init=GI.extent(first(features))) do acc, f
-            Extents.union(acc, Extents.extent(f))
-        end
+        # Calculate the extent of the features
+        extent = mapreduce(GI.extent, Extents.union, features)
+        # Return a FeatureCollection with features, crs and caculated extent
         return GI.FeatureCollection(features; crs, extent)
     else
+        # Return a FeatureCollection with features and crs
         return GI.FeatureCollection(features; crs)
     end
 end
-# Rewrap features
+# Rewrap all FeatureTrait features as GI.Feature, keeping the properties
 function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; 
     crs=GI.crs(feature), calc_extent=false, threaded=false
 ) where Target
+    # Run _apply on the contained geometry 
+    geometry = _apply(f, Target, GI.geometry(feature); crs, calc_extent, threaded)
+    # Get the feature properties
     properties = GI.properties(feature)
-    geometry = _apply(f, Target, GI.geometry(feature); crs, calc_extent)
     if calc_extent
+        # Calculate the extent of the geometry
         extent = GI.extent(geometry)
+        # Return a new Feature with the new geometry and calculated extent, but the oroginal properties and crs 
         return GI.Feature(geometry; properties, crs, extent)
     else
+        # Return a new Feature with the new geometry, but the oroginal properties and crs 
         return GI.Feature(geometry; properties, crs)
     end
 end
@@ -83,26 +132,33 @@ end
 function _apply(f, ::Type{Target}, trait, geom; 
     crs=GI.crs(geom), calc_extent=false, threaded=false
 )::(GI.geointerface_geomtype(trait)) where Target
-    # TODO handle zero length...
+    # Map `_apply` over all sub geometries of `geom`
+    # to create a new vector of geometries
+    # TODO handle zero length
     geoms = _maptasks(1:GI.ngeom(geom); threaded) do i
-        _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent)
+        _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent, threaded=false)
     end
     if calc_extent
-        extent = GI.extent(first(geoms))
-        for g in geoms
-            extent = Extents.union(extent, GI.extent(g))
-        end
+        # Calculate the extent of the sub geometries
+        extent = mapreduce(GI.extent, Extents.union, geoms)
+        # Return a new geometry of the same trait as `geom`, 
+        # holding tnew `geoms` with `crs` and calcualted extent
         return rebuild(geom, geoms; crs, extent)
     else
+        # Return a new geometryof the same trait as `geom`, holding the new `geoms` with `crs`
         return rebuild(geom, geoms; crs)
     end
 end
-# Apply f to the target geometry
-_apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {Target,Trait<:Target} = f(geom)
-# Fail if we hit PointTrait without running `f`
+# Fail loudly if we hit PointTrait without running `f`
+# (after PointTrait there is no further to dig with `_apply`)
 _apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing, kw...) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
-# Specific cases to avoid method ambiguity
+# Finally, these short methods are the main purpse of `apply`.
+# The Trait is a subtype of the Target (or identical to it)
+# So the Target is found. We apply `f` to it and return it to previous 
+# _apply calls to be wrapped with the outer geometries/feature/featurecollection/array.
+_apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {Target,Trait<:Target} = f(geom)
+# Define some specific cases of this match to avoid method ambiguity
 _apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; kw...) = f(geom)
 _apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; kw...) = f(feature)
 _apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; kw...) = f(fc)
@@ -111,7 +167,7 @@ _apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; kw
     unwrap(target::Type{<:AbstractTrait}, obj)
     unwrap(f, target::Type{<:AbstractTrait}, obj)
 
-Unwrap the geometry to vectors, down to the target trait.
+Unwrap the object newst to vectors, down to the target trait.
 
 If `f` is passed in it will be applied to the target geometries
 as they are found.
@@ -139,10 +195,14 @@ unwrap(f, target::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature) = f(feature
 unwrap(f, target::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc) = f(fc)
 
 """
-    flatten(target::Type{<:GI.AbstractTrait}, geom)
+    flatten(target::Type{<:GI.AbstractTrait}, obj)
+    flatten(f, target::Type{<:GI.AbstractTrait}, obj)
 
-Lazily flatten any geometry, feature or iterator of geometries or features
-so that objects with the specified trait are returned by the iterator.
+Lazily flatten any `AbstractArray`, iterator, `FeatureCollectionTrait`, 
+`FeatureTrait` or `AbstractGeometryTrait` object `obj`, so that objects 
+with the `target` trait are returned by the iterator.
+
+If `f` is passed in it will be applied to the target geometries.
 """
 flatten(::Type{Target}, geom) where {Target<:GI.AbstractTrait} = flatten(identity, Target, geom) 
 flatten(f, ::Type{Target}, geom) where {Target<:GI.AbstractTrait} = _flatten(f, Target, geom) 
@@ -181,7 +241,10 @@ All objects in `components` must have the same `GeoInterface.trait`.
 
 Ususally used in combination with `flatten`.
 """
-reconstruct(geom, components) = first(_reconstruct(geom, components))
+function reconstruct(geom, components)
+    obj, iter = _reconstruct(geom, components)
+    return obj
+end
 
 _reconstruct(geom, components) = 
     _reconstruct(typeof(GI.trait(first(components))), geom, components, 1) 
@@ -190,6 +253,7 @@ _reconstruct(::Type{Target}, geom, components, iter) where Target =
 # Try to reconstruct over iterables
 function _reconstruct(::Type{Target}, ::Nothing, iterable, components, iter) where Target 
     vect = map(iterable) do x
+        # iter is updated by _reconstruct here
         obj, iter = _reconstruct(Target, x, components, iter)
         obj
     end
@@ -198,6 +262,7 @@ end
 # Reconstruct feature collections
 function _reconstruct(::Type{Target}, ::GI.FeatureCollectionTrait, fc, components, iter) where Target
     features = map(GI.getfeature(fc)) do feature
+        # iter is updated by _reconstruct here
         newfeature, iter = _reconstruct(Target, feature, components, iter)
         newfeature
     end
@@ -209,6 +274,7 @@ function _reconstruct(::Type{Target}, ::GI.FeatureTrait, feature, components, it
 end
 function _reconstruct(::Type{Target}, trait, geom, components, iter) where Target
     geoms = map(GI.getgeom(geom)) do subgeom
+        # iter is updated by _reconstruct here
         subgeom1, iter = _reconstruct(Target, GI.trait(subgeom), subgeom, components, iter)
         subgeom1
     end
@@ -234,7 +300,7 @@ const BasicsGeoms = Union{GB.AbstractGeometry,GB.AbstractFace,GB.AbstractPoint,G
 
 Rebuild a geometry from child geometries.
 
-By default geometries will be rebuilt as a GeoInterface.Wrappers 
+By default geometries will be rebuilt as a `GeoInterface.Wrappers`
 geometry, but `rebuild` can have methods added to it to dispatch
 on geometries from other packages and specify how to rebuild them.
 
@@ -286,7 +352,7 @@ function _maptasks(f, taskrange; threaded=false)
         end
 
         # Finally we join the results into a new vector
-        return reduce(vcat, map(fetch, tasks))
+        return mapreduce(fetch, vcat, tasks)
     else
         return map(f, taskrange)
     end
