@@ -172,9 +172,9 @@ end
 # (after PointTrait there is no further to dig with `_apply`)
 _apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing, kw...) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
-# Finally, these short methods are the main purpse of `apply`.
-# The Trait is a subtype of the Target (or identical to it)
-# So the Target is found. We apply `f` to it and return it to previous 
+# Finally, these short methods are the main purpose of `apply`.
+# The `Trait` is a subtype of the `Target` (or identical to it)
+# So the `Target` is found. We apply `f` to geom and return it to previous 
 # _apply calls to be wrapped with the outer geometries/feature/featurecollection/array.
 _apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {Target,Trait<:Target} = f(geom)
 # Define some specific cases of this match to avoid method ambiguity
