@@ -104,8 +104,10 @@ function _apply(f, ::Type{Target}, ::Nothing, A::AbstractArray; threaded=false, 
         _apply(f, Target, A[i]; threaded=false, kw...)
     end
 end
-# Try to _apply over unknown iterables. We can't use threading on an 
+# There is no trait and this is not an AbstractArray.
+# Try to aclla _apply over. We can't use threading on an 
 # arbitrary iterable as we maybe can't index into it. So just `map`.
+# (TODO: maybe `collect` if `threaded=true` so we can thread?)
 _apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
     map(x -> _apply(f, Target, x; kw...), iterable)
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
