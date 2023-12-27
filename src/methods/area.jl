@@ -87,6 +87,7 @@ signed_area(trait::CT, curve) where CT <: GI.AbstractCurveTrait =
 area(trait::GI.PolygonTrait, geom) = abs(signed_area(trait, geom))
 
 function signed_area(::GI.PolygonTrait, poly)
+    isempty(poly) && return 0
     s_area = _signed_area(GI.getexterior(poly))
     area = abs(s_area)
     # Remove hole areas from total
