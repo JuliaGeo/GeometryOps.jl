@@ -112,6 +112,7 @@ to be closed.
 =#
 function _signed_area(geom)
     # If empty, return zero
+    println("hi")
     GI.isempty(geom) && return 0
     # Close curve, even if last point isn't explicitly repeated 
     np = GI.npoint(geom)
