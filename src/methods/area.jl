@@ -111,11 +111,9 @@ repeating the first point at the end of the coordinates, curve is still assumed
 to be closed.
 =#
 function _signed_area(geom)
-    # If empty, return zero
-    println("hi")
-    GI.isempty(geom) && return 0
     # Close curve, even if last point isn't explicitly repeated 
     np = GI.npoint(geom)
+    np == 0 && return 0
     first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, np))
     np -= first_last_equal ? 1 : 0 
     # Integrate the area under the curve
