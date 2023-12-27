@@ -87,7 +87,7 @@ signed_area(trait::CT, curve) where CT <: GI.AbstractCurveTrait =
 area(trait::GI.PolygonTrait, geom) = abs(signed_area(trait, geom))
 
 function signed_area(::GI.PolygonTrait, poly)
-    isempty(poly) && return 0
+    GI.isempty(poly) && return 0
     s_area = _signed_area(GI.getexterior(poly))
     area = abs(s_area)
     # Remove hole areas from total
@@ -112,7 +112,7 @@ to be closed.
 =#
 function _signed_area(geom)
     # If empty, return zero
-    isempty(geom) && return 0
+    GI.isempty(geom) && return 0
     # Close curve, even if last point isn't explicitly repeated 
     np = GI.npoint(geom)
     first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, np))
