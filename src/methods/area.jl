@@ -76,11 +76,38 @@ area(::GI.PointTrait, point) = GI.isempty(point) ?
 
 signed_area(trait::GI.PointTrait, point) = area(trait, point)
 
+# MultiPoints
+function area(::GI.MultiPointTrait, multipoint)
+    GI.isempty(multipoint) && return 0
+    np = GI.npoint(multipoint)
+    np == 0 && return 0
+    return zero(typeof(GI.x(GI.getpoint(multipoint, np))))
+end
+
+signed_area(trait::GI.MultiPointTrait, multipoint) = area(trait, multipoint)
+
 # Curves
-area(::CT, curve) where CT <: GI.AbstractCurveTrait = GI.isempty(curve) ?
-    0 : zero(typeof(GI.x(GI.getpoint(curve, 1))))
+function area(::CT, curve) where CT <: GI.AbstractCurveTrait
+    GI.isempty(curve) && return 0
+    np = GI.npoint(curve)
+    np == 0 && return 0
+    return zero(typeof(GI.x(GI.getpoint(curve, np))))
+end
 
 signed_area(trait::CT, curve) where CT <: GI.AbstractCurveTrait =
+    area(trait, curve)
+
+# MultiCurves
+function area(::MCT, multicurve) where MCT <: GI.AbstractMultiCurveTrait
+    GI.isempty(multicurve) && return 0
+    ng = GI.ngeom(multicurve)
+    ng == 0 && return 0
+    np = GI.npoint(GI.getgeom(multicurve, ng))
+    np == 0 && return 0
+    return zero(typeof(GI.x(GI.getpoint(GI.getgeom(multicurve, ng), np))))
+end
+
+signed_area(trait::MCT, curve) where MCT <: GI.AbstractMultiCurveTrait =
     area(trait, curve)
 
 # Polygons
@@ -90,6 +117,7 @@ function signed_area(::GI.PolygonTrait, poly)
     GI.isempty(poly) && return 0
     s_area = _signed_area(GI.getexterior(poly))
     area = abs(s_area)
+    area == 0 && return area
     # Remove hole areas from total
     for hole in GI.gethole(poly)
         area -= abs(_signed_area(hole))
@@ -99,9 +127,12 @@ function signed_area(::GI.PolygonTrait, poly)
 end
 
 # MultiPolygons
-area(::GI.MultiPolygonTrait, geom) =
-    sum((area(poly) for poly in GI.getpolygon(geom)))
+area(::GI.MultiPolygonTrait, multipoly) =
+    sum((area(poly) for poly in GI.getpolygon(multipoly)), init = 0)
 
+# GeometryCollections
+area(::GI.GeometryCollectionTrait, collection) = 
+    sum((area(geom) for geom in GI.getgeom(collection)), init = 0)
 #=
 Helper function:
 
