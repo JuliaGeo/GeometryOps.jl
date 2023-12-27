@@ -71,13 +71,14 @@ computed slighly differently for different geometries:
 signed_area(geom) = signed_area(GI.trait(geom), geom)
 
 # Points
-area(::GI.PointTrait, point) = zero(typeof(GI.x(point)))
+area(::GI.PointTrait, point) = GI.isempty(point) ?
+    0 : zero(typeof(GI.x(point)))
 
 signed_area(trait::GI.PointTrait, point) = area(trait, point)
 
 # Curves
-area(::CT, curve) where CT <: GI.AbstractCurveTrait =
-    zero(typeof(GI.x(GI.getpoint(curve, 1))))
+area(::CT, curve) where CT <: GI.AbstractCurveTrait = GI.isempty(curve) ?
+    0 : zero(typeof(GI.x(GI.getpoint(curve, 1))))
 
 signed_area(trait::CT, curve) where CT <: GI.AbstractCurveTrait =
     area(trait, curve)
@@ -109,6 +110,8 @@ repeating the first point at the end of the coordinates, curve is still assumed
 to be closed.
 =#
 function _signed_area(geom)
+    # If empty, return zero
+    isempty(geom) && return 0
     # Close curve, even if last point isn't explicitly repeated 
     np = GI.npoint(geom)
     first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, np))
