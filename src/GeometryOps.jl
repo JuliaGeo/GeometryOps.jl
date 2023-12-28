@@ -7,6 +7,7 @@ using GeometryBasics
 import Proj
 using LinearAlgebra
 import ExactPredicates
+import Proj.CoordinateTransformations.StaticArrays
 
 using GeoInterface.Extents: Extents
 
@@ -38,5 +39,6 @@ include("transformations/flip.jl")
 include("transformations/simplify.jl")
 include("transformations/reproject.jl")
 include("transformations/tuples.jl")
+include("transformations/transform.jl")
 
 end
