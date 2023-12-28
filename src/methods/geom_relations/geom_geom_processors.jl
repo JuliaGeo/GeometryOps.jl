@@ -227,7 +227,7 @@ end
 
 function _line_curve_process(
     line, curve;
-    in_allow, on_allow, out_allow,
+    over_allow, cross_allow, on_allow, out_allow,  # TODO: seperate crosses and overlaps (?)
     in_require, on_require, out_require,
     closed_line = false,
     closed_curve = false,
@@ -244,7 +244,6 @@ function _line_curve_process(
     nc -= first_last_equal_curve ? 1 : 0
     closed_line |= first_last_equal_line
     closed_curve |= first_last_equal_curve
-    
     # Loop over each line segment
     l_start = GI.getpoint(line, closed_line ? nl : 1)
     i = closed_line ? 1 : 2
@@ -261,47 +260,72 @@ function _line_curve_process(
             )
             # if segments are touching
             if seg_val == line_over
-                !in_allow && return false
+                !over_allow && return false
                 # at least one point in, meets requirments
                 in_req_met = true
-                if seg_val == line_over
-                    point_val = point_segment_orientation(
-                        l_start,
+                point_val = point_segment_orientation(
+                    l_start,
+                    c_start, c_end,
+                )
+                if point_val != point_out
+                    if point_segment_orientation(
+                        l_end,
                         c_start, c_end,
-                    )
-                    if point_val != point_out
-                        if point_segment_orientation(
-                            l_end,
-                            c_start, c_end,
-                        ) != point_out
-                            l_start = l_end
-                            i += 1
-                            break
-                        elseif point_segment_orientation(
-                            c_start,
-                            l_start, l_end,
-                        ) != point_out
-                            l_start = c_start
-                            break
-                        elseif point_segment_orientation(
-                            c_end,
-                            l_start, l_end,
-                        ) != point_out
-                            l_start = c_end
-                            break
-                        end
+                    ) != point_out
+                        l_start = l_end
+                        i += 1
+                        break
+                    elseif point_segment_orientation(
+                        c_start,
+                        l_start, l_end,
+                    ) != point_out && !equals(l_start, c_start)
+                        l_start = c_start
+                        break
+                    elseif point_segment_orientation(
+                        c_end,
+                        l_start, l_end,
+                    ) != point_out && !equals(l_start, c_end)
+                        l_start = c_end
+                        break
                     end
                 end
             else
-                if seg_val == line_hinge
-                    !on_allow && return false
-                    # at least one point on, meets requirments
-                    on_req_met = true
-                elseif seg_val == line_cross
-                    !in_allow && return false
-                     # at least one point in, meets requirments
-                     in_req_met = true
+                if seg_val == line_cross
+                    !cross_allow && return false
+                    in_req_met = true
+                elseif seg_val == line_hinge
+                    _, fracs = _intersection_point(
+                        (_tuple_point(l_start), _tuple_point(l_end)),
+                        (_tuple_point(c_start), _tuple_point(c_end))
+                    )
+                    (α, β) =
+                        if !isnothing(fracs)
+                            fracs
+                        else  # line and curve segments are parallel
+                            if equals(l_start, c_start)
+                                (0, 0)
+                            elseif equals(l_start, c_end)
+                                (0, 1)
+                            elseif equals(l_end, c_start)
+                                (1, 0)
+                            else  # equals(l_end, c_end)
+                                (1, 1)
+                            end
+                        end
+                    if (
+                        (β == 0 && !closed_curve && j == 2) ||
+                        (β == 1 && !closed_curve && j == nc) ||
+                        (α == 0 && !closed_line && i == 2) ||
+                        (α == 1 && !closed_line && i == nl)
+                    )
+                        !on_allow && return false
+                        on_req_met = true
+                    else
+                        !cross_allow && return false
+                        in_req_met = true
+                    end
                 end
+
                 # no overlap for a give segment
                 if j == nc
                     !out_allow && return false
@@ -309,10 +333,83 @@ function _line_curve_process(
                 end
             end
             c_start = c_end
-            j == nc && (i += 1)
+            if j == nc
+                i += 1
+                l_start = l_end
+            end
         end
     end
     return in_req_met && on_req_met && out_req_met
+end
+
+function _line_curve_crosses_overlap_interactions(
+    line, curve;
+    closed_line = false, closed_curve = false,
+)
+    nl = GI.npoint(line)
+    nc = GI.npoint(curve)
+    first_last_equal_line = equals(GI.getpoint(line, 1), GI.getpoint(line, nl))
+    first_last_equal_curve = equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc))
+    nl -= first_last_equal_line ? 1 : 0
+    nc -= first_last_equal_curve ? 1 : 0
+    closed_line |= first_last_equal_line
+    closed_curve |= first_last_equal_curve
+    # Loop over each line segment
+    crosses = false
+    overlaps = false
+    out = false
+    l_start = GI.getpoint(line, closed_line ? nl : 1)
+    for i in (closed_line ? 1 : 2):nl
+        l_end = GI.getpoint(line, i)
+        c_start = GI.getpoint(curve, closed_curve ? nc : 1)
+        for j in (closed_curve ? 1 : 2):nc
+            crosses && overlaps && return (crosses, overlaps)
+            c_end = GI.getpoint(curve, j)
+            seg_val = _segment_segment_orientation(
+                (l_start, l_end),
+                (c_start, c_end),
+            )
+            if seg_val == line_out
+                out = true
+            elseif seg_val == line_over
+                overlaps = true
+
+            elseif seg_val == line_cross
+                crosses = true
+            elseif seg_val == line_hinge
+                out = true
+                _, fracs = _intersection_point(
+                    (_tuple_point(l_start), _tuple_point(l_end)),
+                    (_tuple_point(c_start), _tuple_point(c_end))
+                )
+                (α, β) =
+                    if !isnothing(fracs)
+                        fracs
+                    else
+                        if equals(l_start, c_start)
+                            (0, 0)
+                        elseif equals(l_start, c_end)
+                            (0, 1)
+                        elseif equals(l_end, c_start)
+                            (1, 0)
+                        else  # equals(l_end, c_end)
+                            (1, 1)
+                        end
+                    end
+                if (
+                    !(β == 0) &&
+                    !(β == 1 && !closed_curve && j == nc) &&
+                    !(α == 0 && !closed_line && i == 2) &&
+                    !(α == 1 && !closed_line && i == nl)
+                )
+                    crosses = true
+                end
+            end
+            c_start = c_end
+        end
+        l_start = l_end
+    end
+    return crosses, overlaps
 end
 
 function _line_filled_curve_interactions(

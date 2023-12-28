@@ -80,161 +80,46 @@ vertex. Return true if those conditions are met, else false.
 crosses(
     ::GI.LineStringTrait, g1,
     ::GI.LineStringTrait, g2,
-) = _line_curve_crosses_overlap_process(
+) = _line_curve_process(
         g1, g2;
-        orientation = line_cross,
-        closed_line = false, closed_curve = false,
+        over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
+        in_require = true, on_require = false, out_require = true,
+        closed_line = false,
+        closed_curve = false,
     )
 
 crosses(
     ::GI.LineStringTrait, g1,
     ::GI.LinearRingTrait, g2,
-) = _line_curve_crosses_overlap_process(
+) = _line_curve_process(
         g1, g2;
-        orientation = line_cross,
-        closed_line = false, closed_curve = true,
+        over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
+        in_require = true, on_require = false, out_require = true,
+        closed_line = false,
+        closed_curve = true,
     )
 
 crosses(
     ::GI.LinearRingTrait, g1,
     ::GI.LineStringTrait, g2,
-) = _line_curve_crosses_overlap_process(
+) = _line_curve_process(
         g1, g2;
-        orientation = line_cross,
-        closed_line = true, closed_curve = false,
+        over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
+        in_require = true, on_require = false, out_require = true,
+        closed_line = true,
+        closed_curve = false,
     )
 
 crosses(
     ::GI.LinearRingTrait, g1,
     ::GI.LinearRingTrait, g2,
-) = _line_curve_crosses_overlap_process(
-    g1, g2;
-    orientation = line_cross,
-    closed_line = true, closed_curve = true,
-)
-
-function _line_curve_crosses_overlap_process(
-    line, curve;
-    orientation = line_cross,
-    closed_line = false, closed_curve = false,
-)
-    nl = GI.npoint(line)
-    nc = GI.npoint(curve)
-    first_last_equal_line = equals(GI.getpoint(line, 1), GI.getpoint(line, nl))
-    first_last_equal_curve = equals(GI.getpoint(curve, 1), GI.getpoint(curve, nc))
-    nl -= first_last_equal_line ? 1 : 0
-    nc -= first_last_equal_curve ? 1 : 0
-    closed_line |= first_last_equal_line
-    closed_curve |= first_last_equal_curve
-    # Loop over each line segment
-    orientation_req_met = false
-    l_start = GI.getpoint(line, closed_line ? nl : 1)
-    for i in (closed_line ? 1 : 2):nl
-        l_end = GI.getpoint(line, i)
-        c_start = GI.getpoint(curve, closed_curve ? nc : 1)
-        for j in (closed_curve ? 1 : 2):nc
-            c_end = GI.getpoint(curve, j)
-            seg_val = _segment_segment_orientation(
-                (l_start, l_end),
-                (c_start, c_end),
-            )
-            if seg_val == line_over
-                return false
-            elseif seg_val == line_cross
-                orientation_req_met = true
-            elseif seg_val == line_hinge && !orientation_req_met
-                _, fracs = _intersection_point(
-                    (_tuple_point(l_start), _tuple_point(l_end)),
-                    (_tuple_point(c_start), _tuple_point(c_end))
-                )
-                if !isnothing(fracs)
-                    (α, β) = fracs  # 0 ≤ α ≤ 1 and 0 ≤ β ≤ 1 since hinge
-                    if β == 0 # already checked on previous segment
-                        c_start = c_end
-                        continue
-                    elseif α == 0
-                        if !closed_line && i == 2
-                            c_start = c_end
-                            continue
-                        end
-                    elseif α == 1
-                        if !closed_line && i == nl
-                            c_start = c_end
-                            continue
-                        end
-                    else # 0 < α < 1, β = 1 (if 0 < β < 1 then seg_val = cross)
-                        if !closed_curve && j == nc
-                            c_start = c_end
-                            continue
-                        end
-                        c_next = GI.getpoint(curve, j < nc ? j + 1 : 1)
-                        x_start, y_start = GI.x(c_start), GI.y(c_start)
-                        x_next, y_next = GI.x(c_next), GI.y(c_next)
-                        Δx = GI.x(l_end) - GI.x(l_start)
-                        Δy = GI.y(l_end) - GI.y(l_start)
-                        if Δx == 0
-                            x = GI.x(l_start)
-                            if (x_next - x) * (x_start - x) ≥ 0
-                                c_start = c_end
-                                continue
-                            end
-                        elseif Δy == 0
-                            y = GI.y(l_start)
-                            if (y_next - y) * (y_start - y) ≥ 0
-                                c_start = c_end
-                                continue
-                            end
-                        else
-                            m = Δy / Δx
-                            b = GI.y(l_start) - m * GI.x(l_start)
-                            Δy_start = (m * x_start + b) - y_start
-                            Δy_next = (m * x_next + b) - y_next
-                            if Δy_start * Δy_next ≥ 0
-                                c_start = c_end
-                                continue
-                            end
-                        end
-                        orientation_req_met = true
-                        continue
-                    end
-                end
-                T = typeof(GI.x(l_start))
-                (α, β) =  # α = 0 or α = 1
-                    if equals(l_start, c_start)
-                        (zero(T), zero(T))
-                    elseif equals(l_start, c_end)
-                        (zero(T), one(T))
-                    elseif equals(l_end, c_start)
-                        (one(T), zero(T))
-                    elseif equals(l_end, c_end)
-                        (one(T), one(T))
-                    else
-                        fracs
-                    end
-                if β == 0
-                    c_start = c_end 
-                    continue
-                end
-                l1, l2, l3 = α == 0 ?
-                    (GI.getpoint(line, i > 2 ? (i - 2) : nl), l_start, l_end) :
-                    (l_start, l_end, GI.getpoint(line, i < nl ? (i + 1) : 1))
-                θ1 = atan(GI.y(l1) - GI.y(l2), GI.x(l1) - GI.x(l2))
-                θ2 = atan(GI.y(l3) - GI.y(l2), GI.x(l3) - GI.x(l2))
-                θ1, θ2 = θ1 < θ2 ? (θ1, θ2) : (θ2, θ1)
-
-                c_next = β == 1 ?
-                    GI.getpoint(curve, j < nc ? j + 1 : 1) :
-                    c_end
-                ϕ1 = atan(GI.y(c_start) - GI.y(l2), GI.x(c_start) - GI.x(l2))
-                ϕ2 = atan(GI.y(c_next) - GI.y(l2), GI.x(c_next) - GI.x(l2))
-                orientation_req_met = ((θ1 < ϕ1 < θ2) ⊻ (θ1 < ϕ2 < θ2))
-            end
-            c_start = c_end
-        end
-        l_start = l_end
-    end
-    return orientation_req_met
-end
+) = _line_curve_process(
+        g1, g2;
+        over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
+        in_require = true, on_require = false, out_require = true,
+        closed_line = true,
+        closed_curve = true,
+    )
 
 """
     crosses(::GI.LineStringTrait, g1, ::GI.LinearRingTrait, g2)::Bool
@@ -243,16 +128,7 @@ A line string is crosses a linear ring if the vertices and edges of the
 linestring are crosses the linear ring. Return true if those conditions are met,
 else false.
 """
-# crosses(
-#     ::GI.LineStringTrait, g1,
-#     ::GI.LinearRingTrait, g2,
-# ) = _line_curve_process(
-#     g1, g2;
-#     in_allow = false, on_allow = true, out_allow = true,
-#     in_require = false, on_require = true, out_require = true,
-#     closed_line = false,
-#     closed_curve = true,
-# )
+
 
 """
     crosses(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool
@@ -269,7 +145,7 @@ crosses(
 ) = _line_polygon_process(
     g1, g2;
     in_allow =  false, on_allow = true, out_allow = true,
-    in_require = false, on_require = true, out_require = true,
+    in_require = true, on_require = false, out_require = true,
     closed_line = false,
 )
 

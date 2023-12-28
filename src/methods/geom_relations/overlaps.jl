@@ -142,27 +142,115 @@ return true. Else false.
 #     end
 #     return false
 # end
+# function overlaps(
+#     ::GI.LineStringTrait, g1,
+#     ::GI.LineStringTrait, g2,
+# )
+#     cross, overlap = _line_curve_crosses_overlap_interactions(
+#         g1, g2;
+#         closed_line = false, closed_curve = false,
+#     )
+#     return !cross && overlap
+# end
+
+# function overlaps(
+#     ::GI.LineStringTrait, g1,
+#     ::GI.LinearRingTrait, g2,
+# )
+#     cross, overlap = _line_curve_crosses_overlap_interactions(
+#         g1, g2;
+#         closed_line = true, closed_curve = false,
+#     )
+#     return !cross && overlap
+# end
+# function overlaps(
+#     ::GI.LinearRingTrait, g1,
+#     ::GI.LineStringTrait, g2,
+# )
+#     cross, overlap = _line_curve_crosses_overlap_interactions(
+#         g1, g2;
+#         closed_line = false, closed_curve = true,
+#     )
+#     return !cross && overlap
+# end
+# function overlaps(
+#     ::GI.LinearRingTrait, g1,
+#     ::GI.LinearRingTrait, g2,
+# )
+#     cross, overlap = _line_curve_crosses_overlap_interactions(
+#         g1, g2;
+#         closed_line = true, closed_curve = true,
+#     )
+#     return !cross && overlap
+# end
+
 overlaps(
     ::GI.LineStringTrait, g1,
     ::GI.LineStringTrait, g2,
 ) = _line_curve_process(
-    g1, g2;
-    in_allow = true, on_allow = true, out_allow = true,
-    in_require = true, on_require = false, out_require = true,
-    closed_line = false,
-    closed_curve = false,
-)
+        g1, g2;
+        over_allow = true, cross_allow = false, on_allow = true, out_allow = true,
+        in_require = true, on_require = false, out_require = true,
+        closed_line = false,
+        closed_curve = false,
+    ) && _line_curve_process(
+            g2, g1;
+            over_allow = true, cross_allow = false, on_allow = true, out_allow = true,
+            in_require = true, on_require = false, out_require = true,
+            closed_line = false,
+            closed_curve = false,
+        )
 
 overlaps(
     ::GI.LineStringTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
-    g1, g2;
-    in_allow = true, on_allow = true, out_allow = true,
-    in_require = true, on_require = false, out_require = true,
-    closed_line = false,
-    closed_curve = true,
-)
+        g1, g2;
+        over_allow = true, cross_allow = false, on_allow = true, out_allow = true,
+        in_require = true, on_require = false, out_require = true,
+        closed_line = false,
+        closed_curve = true,
+    ) && _line_curve_process(
+            g2, g1;
+            over_allow = true, cross_allow = false, on_allow = true, out_allow = true,
+            in_require = true, on_require = false, out_require = true,
+            closed_line = true,
+            closed_curve = false,
+        )
+
+overlaps(
+    ::GI.LinearRingTrait, g1,
+    ::GI.LineStringTrait, g2,
+) = _line_curve_process(
+        g1, g2;
+        over_allow = true, cross_allow = false, on_allow = true, out_allow = true,
+        in_require = true, on_require = false, out_require = true,
+        closed_line = true,
+        closed_curve = false,
+    ) && _line_curve_process(
+            g2, g1;
+            over_allow = true, cross_allow = false, on_allow = true, out_allow = true,
+            in_require = true, on_require = false, out_require = true,
+            closed_line = false,
+            closed_curve = true,
+        )
+
+overlaps(
+    ::GI.LinearRingTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+        g1, g2;
+        over_allow = true, cross_allow = false, on_allow = true, out_allow = true,
+        in_require = true, on_require = false, out_require = true,
+        closed_line = true,
+        closed_curve = true,
+    ) && _line_curve_process(
+            g2, g1;
+            over_allow = true, cross_allow = false, on_allow = true, out_allow = true,
+            in_require = true, on_require = false, out_require = true,
+            closed_line = true,
+            closed_curve = true,
+        )
 
 """
     overlaps(

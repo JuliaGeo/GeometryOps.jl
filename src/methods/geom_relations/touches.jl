@@ -80,7 +80,7 @@ touches(
     ::GI.LineStringTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = false, on_allow = true, out_allow = true,
+    over_allow = false, cross_allow = false, on_allow = true, out_allow = true,
     in_require = false, on_require = true, out_require = false,
     closed_line = false,
     closed_curve = false,
@@ -98,7 +98,7 @@ touches(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = false, on_allow = true, out_allow = true,
+    over_allow = false, cross_allow = false, on_allow = true, out_allow = true,
     in_require = false, on_require = true, out_require = false,
     closed_line = false,
     closed_curve = true,

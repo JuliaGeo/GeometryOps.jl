@@ -70,15 +70,15 @@ b7 = LG.LineString([[1.0, 0.0], [0.0, 0.0], [-1.0, -1.0]])
 # Crosses through line edge -> crosses
 @test GO.crosses(v5, h) == LG.crosses(v5, h) == true
 # Line bounces off of vertical curve on edge -> doesn't cross
-@test GO.crosses(b1, v5) == GO.crosses(v5, b1) == LG.crosses(b1, v5) == false
+@test GO.crosses(b1, v5) == GO.crosses(v5, b1) == LG.crosses(b1, v5) == true
 # Line bounces off of horizontal curve on edge --> doesn't cross
-@test GO.crosses(b2, h) == GO.crosses(h, b2) == LG.crosses(b2, h) == false
-# Line bounces off of horizontal curve on vertex --> doesn't cross
-@test GO.crosses(b3, h) == GO.crosses(h, b3) == LG.crosses(b3, h) == false
+@test GO.crosses(b2, h) == GO.crosses(h, b2) == LG.crosses(b2, h) == true
+# Line bounces off of horizontal curve on vertex --> crosses
+@test GO.crosses(b3, h) == GO.crosses(h, b3) == LG.crosses(b3, h) == true
 # Diagonal lines pass through one another --> crosses
 @test GO.crosses(d1, d2) == GO.crosses(d2, d1) == LG.crosses(d1, d2) == true
-# Curve bounces off of diagonal line -> doesn't cross
-@test GO.crosses(d1, b4) == GO.crosses(b4, d1) == LG.crosses(d1, b4) == false
+# Curve bounces off of diagonal line -> crosses
+@test GO.crosses(d1, b4) == GO.crosses(b4, d1) == LG.crosses(d1, b4) == true
 # Lines with parallel segments cross -> cross
 @test GO.crosses(b5, b7) == GO.crosses(b7, b5) == LG.crosses(b7, b5) == true
 # Lines with parallel segments bounce -> crosses

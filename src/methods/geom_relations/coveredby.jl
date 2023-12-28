@@ -40,7 +40,8 @@ implementation based on the geometry trait.
 Each of these calls a method in the geom_geom_processors file. The methods in
 this file determine if the given geometries meet a set of criteria. For the
 `coveredby` function and arguments g1 and g2, this criteria is as follows:
-    - points of g1 are allowed to be in the interior of g2
+    - points of g1 are allowed to be in the interior of g2 (either through
+    overlap or crossing for lines)
     - points of g1 are allowed to be on the boundary of g2
     - points of g1 are not allowed to be in the exterior of g2
     - no points of g1 are required to be in the interior of g2
@@ -164,7 +165,7 @@ coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
     in_require = false, on_require = false, out_require = false,
     closed_line = false,
     closed_curve = false,
@@ -184,7 +185,7 @@ coveredby(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
     in_require = false, on_require = false, out_require = false,
     closed_line = false,
     closed_curve = true,
@@ -223,7 +224,7 @@ coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
     in_require = false, on_require = false, out_require = false,
     closed_line = true,
     closed_curve = false,
@@ -241,7 +242,7 @@ coveredby(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
     in_require = false, on_require = false, out_require = false,
     closed_line = true,
     closed_curve = true,
@@ -262,6 +263,20 @@ coveredby(
     in_allow =  true, on_allow = true, out_allow = false,
     in_require = true, on_require = false, out_require = false,
     closed_line = true,
+)
+
+# Polygons covered by geometries
+
+"""
+
+"""
+coveredby(
+    ::GI.PolygonTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _polygon_polygon_process(
+    g1, g2;
+    in_allow =  true, on_allow = true, out_allow = false,
+    in_require = true, on_require = false, out_require = false,
 )
 
 """

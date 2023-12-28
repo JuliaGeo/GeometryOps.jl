@@ -155,7 +155,7 @@ within(
     ::GI.LineStringTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
     in_require = true, on_require = false, out_require = false,
     closed_line = false,
     closed_curve = false,
@@ -173,7 +173,7 @@ within(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
     in_require = true, on_require = false, out_require = false,
     closed_line = false,
     closed_curve = true,
@@ -211,7 +211,7 @@ within(
     ::GI.LineStringTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
     in_require = true, on_require = false, out_require = false,
     closed_line = true,
     closed_curve = false,
@@ -229,7 +229,7 @@ within(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
     in_require = true, on_require = false, out_require = false,
     closed_line = true,
     closed_curve = true,

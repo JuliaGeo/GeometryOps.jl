@@ -30,12 +30,12 @@ p1 = LG.Polygon(r1, [r2, r3])
 @testset "Covered By" begin include("geom_relations/coveredby.jl") end
 @testset "Covers" begin include("geom_relations/covers.jl") end
 @testset "Crosses" begin include("geom_relations/crosses.jl") end
-# @testset "Disjoint" begin include("geom_relations/disjoint.jl") end
-# @testset "Equals" begin include("geom_relations/equals.jl") end
-# @testset "Touches" begin include("geom_relations/touches.jl") end
-# @testset "Overlaps" begin include("geom_relations/overlaps.jl") end
-# @testset "Intersect" begin include("geom_relations/intersects.jl") end
-# @testset "Within" begin include("geom_relations/within.jl") end
+@testset "Disjoint" begin include("geom_relations/disjoint.jl") end
+@testset "Equals" begin include("geom_relations/equals.jl") end
+@testset "Touches" begin include("geom_relations/touches.jl") end
+@testset "Overlaps" begin include("geom_relations/overlaps.jl") end
+@testset "Intersect" begin include("geom_relations/intersects.jl") end
+@testset "Within" begin include("geom_relations/within.jl") end
 
 
 # @testset "booleans" begin
