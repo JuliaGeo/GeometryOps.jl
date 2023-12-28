@@ -16,12 +16,14 @@ Most of the usecases are driven by GIS and similar Earth data workflows, so this
 ## Methods 
 
 - Signed area, centroid, distance, etc
-- Iteration into geometries (`apply`)
+- Targeted function application over large nested geometries (`apply`)
 - Line and polygon simplification
 - Generalized barycentric coordinates in polygons
+- OGC methods (crosses, contains, intersects, etc)
+- Proection of geometries between coordinate reference systems
 
 ### Planned additions
 
-- OGC methods (crosses, contains, intersects, etc)
 - Polygon union, intersection and clipping
 - Arclength interpolation (absolute and relative)
+- Buffering, hulls
