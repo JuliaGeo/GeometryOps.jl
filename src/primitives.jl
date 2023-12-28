@@ -22,7 +22,7 @@ GeoInterface trait, in some arbitrarily nested object made up of:
 - `FeatureTrait` objects
 - `AbstractGeometryTrait` objects
 
-It recursively calls `apply` through these nested
+`apply` recursively calls itself through these nested
 layers until it reaches the `Target`, where it applies `f`, and stops.
 
 The outer recursive functions then progressively rebuild the object
