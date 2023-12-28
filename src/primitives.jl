@@ -17,8 +17,7 @@ $CALC_EXTENT_KEYWORD
 
 `apply` applies some function to every geometry matching the `Target`
 GeoInterface trait, in some arbitrarily nested object made up of:
-- `AbstractArray`s 
-- Some arbitrary iterables may also work here
+- `AbstractArray`s (we also try to iterate other non-GeoInteface compatible object)
 - `FeatureCollectionTrait` objects
 - `FeatureTrait` objects
 - `AbstractGeometryTrait` objects
