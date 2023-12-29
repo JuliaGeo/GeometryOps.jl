@@ -73,34 +73,23 @@ GO.coveredby(p1, l1)
 true
 ```
 """
-coveredby(g1, g2) = coveredby(trait(g1), g1, trait(g2), g2)
-coveredby(::GI.FeatureTrait, g1, ::Any, g2) = coveredby(GI.geometry(g1), g2)
-coveredby(::Any, g1, t2::GI.FeatureTrait, g2) = coveredby(g1, GI.geometry(g2))
+coveredby(g1, g2) = _coveredby(trait(g1), g1, trait(g2), g2)
+
+# # Convert features to geometries
+_coveredby(::GI.FeatureTrait, g1, ::Any, g2) = coveredby(GI.geometry(g1), g2)
+_coveredby(::Any, g1, t2::GI.FeatureTrait, g2) = coveredby(g1, GI.geometry(g2))
 
 
-# Points coveredby geometries
-"""
-    coveredby(::GI.PointTrait, g1, ::GI.PointTrait, g2)::Bool
+# # Points coveredby geometries
 
-If a point is coveredby another point, then those points must be equal. If they
-are not equal, then they are not coveredby and return false.
-"""
-coveredby(
+# Point is coveredby another point if those points are equal
+_coveredby(
     ::GI.PointTrait, g1,
     ::GI.PointTrait, g2,
 ) = equals(g1, g2)
 
-
-"""
-    coveredby(
-        ::GI.PointTrait, g1,
-        ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
-    )::Bool
-
-A point is coveredby a line or linestring if it is on a vertex or an edge of
-that linestring. Return true if those conditions are met, else false.
-"""
-coveredby(
+# Point is coveredby a line/linestring if it is on a line vertex or an edge
+_coveredby(
     ::GI.PointTrait, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _point_curve_process(
@@ -109,13 +98,8 @@ coveredby(
     repeated_last_coord = false,
 )
 
-"""
-    coveredby(::GI.PointTrait, g1, ::GI.LinearRingTrait, g2)::Bool
-
-A point is coveredby a linear ring if it is on a vertex or an edge of that
-linear ring. Return true if those conditions are met, else false.
-"""
-coveredby(
+# Point is coveredby a linearring if it is on a vertex or an edge of ring
+_coveredby(
     ::GI.PointTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _point_curve_process(
@@ -124,13 +108,8 @@ coveredby(
     repeated_last_coord = true,
 )
 
-"""
-    coveredby(::GI.PointTrait, g1, ::GI.PolygonTrait, g2)::Bool
-
-A point is coveredby a polygon if it is inside of that polygon, including edges 
-and vertices. Return true if those conditions are met, else false.
-"""
-coveredby(
+# Point is coveredby a polygon if it is inside polygon, including edges/vertices
+_coveredby(
     ::GI.PointTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
@@ -138,29 +117,18 @@ coveredby(
     in_allow = true, on_allow = true, out_allow = false,
 )
 
-"""
-coveredby(::GI.AbstractTrait, g1, ::GI.PointTrait, g2)::Bool
-
-Points cannot cover any geometry other than points. Return false if not
-dispatched to more specific function.
-"""
-coveredby(
-    ::GI.AbstractTrait, g1,
+# Points cannot cover any geometry other than points
+_coveredby(
+    ::GI.AbstractGeometryTrait, g1,
     ::GI.PointTrait, g2,
 ) = false
 
-# Lines coveredby geometries
-"""
-    coveredby(
-        ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
-        ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
-    )::Bool
 
-A line or linestring is coveredby another line or linestring if all of the
-interior and boundary points of the first line are on the interior and
-boundary points of the second line.
-"""
-coveredby(
+# # Lines coveredby geometries
+
+#= Linestring is coveredby a line if all interior and boundary points of the
+first line are on the interior/boundary points of the second line. =#
+_coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
@@ -171,16 +139,9 @@ coveredby(
     closed_curve = false,
 )
 
-"""
-    coveredby(
-        ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
-        ::GI.LinearRingTrait, g2,
-    )::Bool
-
-A line or linestring is coveredby a linear ring if all of the interior and
-boundary points of the line are on the edges of the ring.
-"""
-coveredby(
+#= Linestring is coveredby a ring if all interior and boundary points of the
+line are on the edges of the ring. =#
+_coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
@@ -191,14 +152,9 @@ coveredby(
     closed_curve = true,
 )
 
-"""
-    coveredby(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool
-
-A line or linestring is coveredby a polygon if all of the interior and boundary
-points of the line are in the polygon interior or on its edges. This includes
-edges of holes. Return true if those conditions are met, else false.
-"""
-coveredby(
+#= Linestring is coveredby a polygon if all interior and boundary points of the
+line are in the polygon interior or on its edges, inlcuding hole edges. =#
+_coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
@@ -208,18 +164,11 @@ coveredby(
     closed_line = false,
 )
 
-# Rings covered by geometries
-"""
-    coveredby(
-        ::GI.LinearRingTrait, g1,
-        ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
-    )::Bool
+# # Rings covered by geometries
 
-A linear ring is covered by a linestring if all the vertices and edges of the
-linear ring are on the edges/vertices of the linear ring. Return true if
-those conditions are met, else false.
-"""
-coveredby(
+#= Linearring is covered by a line if all vertices and edges of the ring are on
+the edges and vertices of the line. =#
+_coveredby(
     ::GI.LinearRingTrait, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
@@ -230,14 +179,9 @@ coveredby(
     closed_curve = false,
 )
 
-"""
-    coveredby(::GI.LinearRingTrait, g1, ::GI.LinearRingTrait, g2)::Bool
-
-A linear ring is covered by another linear ring if the vertices and edges of the
-first linear ring are on the edges/vertices of the second linear ring. Return
-true if those conditions are met, else false.
-"""
-coveredby(
+#= Linearring is covered by another linear ring if all vertices and edges of the
+first ring are on the edges/vertices of the second ring. =#
+_coveredby(
     ::GI.LinearRingTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
@@ -248,14 +192,9 @@ coveredby(
     closed_curve = true,
 )
 
-"""
-    coveredby(::GI.LinearRingTrait, g1, ::GI.PolygonTrait, g2)::Bool
-
-A linear ring is coveredby a polygon if the vertices and edges of the linear
-ring are either in the polygon interior or on the polygon edges. This includes
-edges of holes. Return true if those conditions are met, else false.
-"""
-coveredby(
+#= Linearring is coveredby a polygon if all vertices and edges of the ring are
+in the polygon interior or on the polygon edges, inlcuding hole edges. =# 
+_coveredby(
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
@@ -265,12 +204,13 @@ coveredby(
     closed_line = true,
 )
 
-# Polygons covered by geometries
 
-"""
+# # Polygons covered by geometries
 
-"""
-coveredby(
+#= Polygon is covered by another polygon if if the interior and edges of the
+first polygon are in the second polygon interior or on polygon edges, including
+hole edges.=#
+_coveredby(
     ::GI.PolygonTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _polygon_polygon_process(
@@ -279,17 +219,44 @@ coveredby(
     in_require = true, on_require = false, out_require = false,
 )
 
-"""
-    coveredby(
-        ::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, g1,
-        ::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, g2,
-    )::Bool
-
-Polygons and multipolygons cannot be covered by curves as they are not filled.
-Return false
-"""
-coveredby(
-    ::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, g1,
-    ::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, g2,
+# Polygons cannot covered by any curves
+_coveredby(
+    ::GI.PolygonTrait, g1,
+    ::GI.AbstractCurveTrait, g2,
 ) = false
+
+
+# # Geometries coveredby multi-geometry/geometry collections
+
+#= Geometry is covered by a multi-geometry or a collection if one of the elements
+of the collection cover the geometry. =#
+function _coveredby(
+    ::GI.AbstractGeometryTrait, g1
+    ::Union{
+        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g2
+)
+    for sub_g2 in GI.getgeom(g2)
+        coveredby(g1, sub_g2) && return true
+    end
+    return false
+end
+
+# # Multi-geometry/geometry collections coveredby geometries
+
+#= Multi-geometry or a geometry collection is covered by a geometry if all
+elements of the collection are covered by the geometry. =#
+function _coveredby(
+    ::Union{
+        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g1,
+    ::GI.AbstractGeometryTrait, g2
+)
+    for sub_g1 in GI.getgeom(g1)
+        !coveredby(sub_g1, g2) && return false
+    end
+    return true
+end
 

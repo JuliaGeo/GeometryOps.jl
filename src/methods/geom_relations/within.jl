@@ -82,7 +82,7 @@ within(::Any, g1, t2::GI.FeatureTrait, g2) = within(g1, GI.geometry(g2))
 For any non-specified pair, g1 cannot be within g2 as g2 is of a higher
 dimension than g1. Return false.
 """
-within(::GI.AbstractTrait, g1, ::GI.AbstractTrait, g2) = false
+within(::GI.AbstractGeometryTrait, g1, ::GI.AbstractGeometryTrait, g2) = false
 
 # Points within geometries
 """
@@ -322,7 +322,7 @@ within(
 A geometry is within a multipolygon if it is within one of the polygons that
 make up the multipolygon. Return true if these conditions are met, else false.
 """
-function within(::GI.AbstractTrait, g1, ::GI.MultiPolygonTrait, g2)
+function within(::GI.AbstractGeometryTrait, g1, ::GI.MultiPolygonTrait, g2)
     for poly in GI.getpolygon(g2)
         if within(g1, poly)
             return true

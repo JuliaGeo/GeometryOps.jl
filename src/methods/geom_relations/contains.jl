@@ -54,11 +54,11 @@ boundary of the secondary (g2) must not intersect the exterior of the first
 ```jldoctest
 import GeometryOps as GO, GeoInterface as GI
 line = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
-point = (1, 2)
+point = GI.Point((1, 2))
 
 GO.contains(line, point)
 # output
 true
 ```
 """
-contains(g1, g2)::Bool = within(g2, g1)
+contains(g1, g2)::Bool = GeometryOps.within(g2, g1)

@@ -17,11 +17,17 @@ using GeometryOps.GeometryBasics
 using Makie
 using CairoMakie
 
+p1 = Point(0.0, 0.0)
+p2 = Point(1.0, 1.0)
+l1 = Line(p1, p2)
 
+f, a, p = lines([p1, p2])
+scatter!(p1, color = :red)
 ```
 
 ```@example cshape
-covers(l1, l2)  # returns true
+covers(l1, p1)  # returns true
+covers(p1, l1)  # returns false
 ```
 
 ## Implementation
@@ -46,8 +52,12 @@ intersect.
 
 ```jldoctest
 import GeometryOps as GO, GeoInterface as GI
-line = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
+l1 = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
+l2 = GI.LineString([(1, 1), (1, 2)])
 
+GO.covers(l1, l2)
+# output
+true
 ```
 """
-covers(g1, g2)::Bool = coveredby(g2, g1)
+covers(g1, g2)::Bool = GeometryOps.coveredby(g2, g1)

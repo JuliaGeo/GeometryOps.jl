@@ -80,7 +80,7 @@ overlaps(geom1, geom2)::Bool = overlaps(
 
 For any non-specified pair, all have non-matching dimensions, return false.
 """
-overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2) = false
+overlaps(::GI.AbstractGeometryTrait, geom1, ::GI.AbstractGeometryTrait, geom2) = false
 
 """
     overlaps(

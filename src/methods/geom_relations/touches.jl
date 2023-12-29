@@ -64,7 +64,7 @@ To check if a geometry is touches by a point, switch the order of the
 arguments to take advantage of point-geometry touches methods.
 """
 touches(
-    trait1::GI.AbstractTrait, g1,
+    trait1::GI.AbstractGeometryTrait, g1,
     trait2::GI.PointTrait, g2,
 ) = touches(trait2, g2, trait1, g1)
 

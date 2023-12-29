@@ -7,13 +7,13 @@ export crosses
 
 The crosses function checks if one geometry is crosses another geometry.
 A geometry can only cross another geometry if they are either two lines, or if
-one of the geometries has a smaller dimensionality than the other geometry.
-If checking two lines, they must meet in one point. If checking two geometries
-of different dimensions, the interiors must meet in at least one point and at
-least one of the geometries must have a point outside of the other geometry.
+the two geometries have different dimensionalities. If checking two lines, they
+must meet in one point. If checking two geometries of different dimensions, the
+interiors must meet in at least one point and at least one of the geometries
+must have a point outside of the other geometry.
 
 Note that points can't cross any geometries, despite different dimension, due to
-their inability to be both crosses and exterior to any other shape.
+their inability to be both interior and exterior to any other shape.
 
 To provide an example, consider these two lines:
 ```@example cshape
@@ -22,11 +22,15 @@ using GeometryOps.GeometryBasics
 using Makie
 using CairoMakie
 
+l1 = Line([Point(0.0, 0.0), Point(1.0, 0.0)])
+l2 = Line([Point(0.5, 1.0), Point(0.5, -1.0)])
 
+f, a, p = lines(l1)
+lines!(l2)
 ```
-
+We can see that these two lines cross at their midpoints.
 ```@example cshape
-
+crosses(l1, l2)  # true
 ```
 
 ## Implementation
@@ -36,10 +40,18 @@ This is the GeoInterface-compatible implementation.
 First, we implement a wrapper method that dispatches to the correct
 implementation based on the geometry trait.
 
-...
+Each of these calls a method in the geom_geom_processors file. The methods in
+this file determine if the given geometries meet a set of criteria. For the
+`crosses` function and arguments g1 and g2, this criteria is as follows:
+    - points of g1 are allowed to be in the interior of g2 (only through
+    crossing and NOT overlap for lines)
+    - points of g1 are allowed to be on the boundary of g2
+    - points of g1 are allowed to be in the exterior of g2
+    - at least one point of g1 are required to be in the interior of g2
+    - no points of g1 are required to be on the boundary of g2
+    - at least one point of g1 are required to be in the exterior of g2
 
 The code for the specific implementations is in the geom_geom_processors file.
-
 =#
 
 """
@@ -54,93 +66,59 @@ must intersect the exterior of the secondary geometry.
 ```jldoctest setup=:(using GeometryOps, GeometryBasics)
 import GeometryOps as GO, GeoInterface as GI
 
+l1 = GI.Line([(0.0, 0.0), (1.0, 0.0)])
+l2 = GI.Line([(0.5, 1.0), (0.5, -1.0)])
 
-
+GO.crosses(l1, l2)
 # output
-
+true
 ```
 """
-crosses(g1, g2) = crosses(trait(g1), g1, trait(g2), g2)
-crosses(::GI.FeatureTrait, g1, ::Any, g2) = crosses(GI.geometry(g1), g2)
-crosses(::Any, g1, t2::GI.FeatureTrait, g2) = crosses(g1, GI.geometry(g2))
+crosses(g1, g2) = _crosses(trait(g1), g1, trait(g2), g2)
 
-"""
+# # Convert features to geometries
+_crosses(::GI.FeatureTrait, g1, ::Any, g2) = crosses(GI.geometry(g1), g2)
+_crosses(::Any, g1, t2::GI.FeatureTrait, g2) = crosses(g1, GI.geometry(g2))
 
-"""
-crosses(::GI.AbstractTrait, g1, ::GI.AbstractTrait, g2) = false
 
-# Lines crosses geometries
-"""
-    crosses(::GI.LineStringTrait, g1, ::GI.LineStringTrait, g2)::Bool
+# # Non-specified geometries 
 
-A line string is crosses another linestring if the vertices and edges of the
-first linestring are crosses the second linestring, including the first and last
-vertex. Return true if those conditions are met, else false.
-"""
-crosses(
-    ::GI.LineStringTrait, g1,
-    ::GI.LineStringTrait, g2,
+# Points and geometries with the same dimensions D where D ≂̸ 1 default to false
+_crosses(::GI.AbstractGeometryTrait, g1, ::GI.AbstractGeometryTrait, g2) = false
+
+
+# # Lines cross geometries
+
+#= Linestring crosses another linestring if the intersection of the two lines
+is exlusivly points (only cross intersections) =#
+_crosses(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
-        g1, g2;
-        over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
-        in_require = true, on_require = false, out_require = true,
-        closed_line = false,
-        closed_curve = false,
-    )
+    g1, g2;
+    over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
+    in_require = true, on_require = false, out_require = true,
+    closed_line = false,
+    closed_curve = false,
+)
 
-crosses(
-    ::GI.LineStringTrait, g1,
+#= Linestring crosses a linearring if the intersection of the line and ring is
+exlusivly points (only cross intersections) =#
+_crosses(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
-        g1, g2;
-        over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
-        in_require = true, on_require = false, out_require = true,
-        closed_line = false,
-        closed_curve = true,
-    )
+    g1, g2;
+    over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
+    in_require = true, on_require = false, out_require = true,
+    closed_line = false,
+    closed_curve = true,
+)
 
-crosses(
-    ::GI.LinearRingTrait, g1,
-    ::GI.LineStringTrait, g2,
-) = _line_curve_process(
-        g1, g2;
-        over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
-        in_require = true, on_require = false, out_require = true,
-        closed_line = true,
-        closed_curve = false,
-    )
-
-crosses(
-    ::GI.LinearRingTrait, g1,
-    ::GI.LinearRingTrait, g2,
-) = _line_curve_process(
-        g1, g2;
-        over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
-        in_require = true, on_require = false, out_require = true,
-        closed_line = true,
-        closed_curve = true,
-    )
-
-"""
-    crosses(::GI.LineStringTrait, g1, ::GI.LinearRingTrait, g2)::Bool
-
-A line string is crosses a linear ring if the vertices and edges of the
-linestring are crosses the linear ring. Return true if those conditions are met,
-else false.
-"""
-
-
-"""
-    crosses(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool
-
-A line string is crosses a polygon if the vertices and edges of the
-linestring are crosses the polygon. Points of the linestring can be on the
-polygon edges, but at least one point must be in the polygon interior. The
-linestring also cannot cross through a hole. Return true if those conditions are
-met, else false.
-"""
-crosses(
-    ::GI.LineStringTrait, g1,
+#= Linestring crosses a polygon if at least some of the line interior is in the
+polygon interior and some of the line interior is exterior to the polygon. =#
+_crosses(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
@@ -149,95 +127,81 @@ crosses(
     closed_line = false,
 )
 
+# # Rings cross geometries
+
+#= Linearring crosses a linestring if the intersection of the line and ring is
+exlusivly points (only cross intersections) =#
+_crosses(
+    trait1::GI.LinearRingTrait, g1,
+    trait2::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _crosses(trait2, g2, trait1, g1)
+
+#= Linearring crosses another ring if the intersection of the two rings is
+exlusivly points (only cross intersections) =#
+_crosses(
+    ::GI.LinearRingTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
+    in_require = true, on_require = false, out_require = true,
+    closed_line = true,
+    closed_curve = true,
+)
+
+#= Linearring crosses a polygon if at least some of the ring interior is in the
+polygon interior and some of the ring interior is exterior to the polygon. =#
+_crosses(
+    ::GI.LinearRingTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _line_polygon_process(
+    g1, g2;
+    in_allow =  false, on_allow = true, out_allow = true,
+    in_require = true, on_require = false, out_require = true,
+    closed_line = true,
+)
 
 
-"""
-     crosses(geom1, geom2)::Bool
+# # Polygons cross geometries
 
-Return `true` if the intersection results in a geometry whose dimension is one less than
-the maximum dimension of the two source geometries and the intersection set is interior to
-both source geometries.
+#= Polygon crosses a curve if at least some of the curve interior is in the
+polygon interior and some of the curve interior is exterior to the polygon.=#
+_crosses(
+    trait1::GI.PolygonTrait, g1,
+    trait2::GI.AbstractCurveTrait, g2
+) = _crosses(trait2, g2, trait1, g1)
 
-TODO: broken
 
-## Examples 
-```julia
-import GeoInterface as GI, GeometryOps as GO
+# # Geometries cross multi-geometry/geometry collections
 
-line1 = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
-line2 = GI.LineString([(-2, 2), (4, 2)])
+#= Geometry crosses a multi-geometry or a collection if the geometry crosses
+one of the elements of the collection. =#
+function _crosses(
+    ::GI.AbstractGeometryTrait, g1
+    ::Union{
+        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g2
+)
+    for sub_g2 in GI.getgeom(g2)
+        crosses(g1, sub_g2) && return true
+    end
+    return false
+end
 
-GO.crosses(line1, line2)
-# output
-true
-```
-"""
-# crosses(g1, g2)::Bool = crosses(trait(g1), g1, trait(g2), g2)::Bool
-# crosses(t1::FeatureTrait, g1, t2, g2)::Bool = crosses(GI.geometry(g1), g2)
-# crosses(t1, g1, t2::FeatureTrait, g2)::Bool = crosses(g1, geometry(g2))
-# crosses(::MultiPointTrait, g1, ::LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)
-# crosses(::MultiPointTrait, g1, ::PolygonTrait, g2)::Bool = multipoint_crosses_poly(g1, g2)
-# crosses(::LineStringTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_lines(g2, g1)
-# crosses(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = line_crosses_poly(g1, g2)
-# crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_line(g1, g2)
-# crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
-# crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
+# # Multi-geometry/geometry collections cross geometries
 
-# # function multipoint_crosses_line(geom1, geom2)
-# #     int_point = false
-# #     ext_point = false
-# #     i = 1
-# #     np2 = GI.npoint(geom2)
-
-# #     while i < GI.npoint(geom1) && !int_point && !ext_point
-# #         for j in 1:GI.npoint(geom2) - 1
-# #             exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
-# #             if point_on_segment(GI.getpoint(geom1, i), (GI.getpoint(geom2, j), GI.getpoint(geom2, j + 1)); exclude_boundary)
-# #                 int_point = true
-# #             else
-# #                 ext_point = true
-# #             end
-# #         end
-# #         i += 1
-# #     end
-
-# #     return int_point && ext_point
-# # end
-
-# function line_crosses_line(line1, line2)
-#     np2 = GI.npoint(line2)
-#     if intersects(line1, line2)
-#         for i in 1:GI.npoint(line1) - 1
-#             for j in 1:GI.npoint(line2) - 1
-#                 exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
-#                 pa = GI.getpoint(line1, i)
-#                 pb = GI.getpoint(line1, i + 1)
-#                 p = GI.getpoint(line2, j)
-#                 te(p, (pa, pb); exclude_boundary) && return true
-#             end
-#         end
-#     end
-#     return false
-# end
-
-# function line_crosses_poly(line, poly)
-#     for l in flatten(AbstractCurveTrait, poly)
-#         intersects(line, l) && return true
-#     end
-#     return false
-# end
-
-# function multipoint_crosses_poly(mp, poly)
-#     int_point = false
-#     ext_point = false
-
-#     for p in GI.getpoint(mp)
-#         if point_in_polygon(p, poly)
-#             int_point = true
-#         else
-#             ext_point = true
-#         end
-#         int_point && ext_point && return true
-#     end
-#     return false
-# end
+#= Multi-geometry or a geometry collection crosses a geometry one elements of
+the collection crosses the geometry. =#
+function _crosses(
+    ::Union{
+        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g1,
+    ::GI.AbstractGeometryTrait, g2
+)
+    for sub_g1 in GI.getgeom(g1)
+        crosses(sub_g1, g2) && return true
+    end
+    return false
+end
