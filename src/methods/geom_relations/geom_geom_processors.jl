@@ -678,7 +678,6 @@ function _polygon_polygon_process(
     return in_req_met && on_req_met && out_req_met 
 end
 
-
 function _point_in_extent(p, extent::Extents.Extent)
     (x1, x2), (y1, y2) = extent.X, extent.Y
     return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2

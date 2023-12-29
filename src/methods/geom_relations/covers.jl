@@ -11,7 +11,7 @@ boundaries must be covered by the "covering" geometry's interior and boundaries.
 The interiors do not need to overlap.
 
 To provide an example, consider these two lines:
-```@example cshape
+```@example covers
 using GeometryOps
 using GeometryOps.GeometryBasics
 using Makie
@@ -25,7 +25,7 @@ f, a, p = lines([p1, p2])
 scatter!(p1, color = :red)
 ```
 
-```@example cshape
+```@example covers
 covers(l1, p1)  # returns true
 covers(p1, l1)  # returns false
 ```

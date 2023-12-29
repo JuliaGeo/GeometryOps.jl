@@ -5,16 +5,17 @@ export overlaps
 #=
 ## What is overlaps?
 
-The overlaps function checks if two geometries overlap. Two geometries can only
-overlap if they have the same dimension, and if they overlap, but one is not
-contained, within, or equal to the other.
+The overlaps function checks if two geometries overlap. Two geometries overlap
+if they have the same dimension, and if they overlap then their interiors
+interact, but they both also need interior points exterior to the other
+geometry. 
 
 Note that this means it is impossible for a single point to overlap with a
 single point and a line only overlaps with another line if only a section of
-each line is colinear. 
+each line is colinear (crosses don't count for interior points interacting). 
 
 To provide an example, consider these two lines:
-```@example cshape
+```@example overlaps
 using GeometryOps
 using GeometryOps.GeometryBasics
 using Makie
@@ -28,7 +29,7 @@ lines!(GI.getpoint(l2), color = :orange)
 scatter!(GI.getpoint(l2), color = :orange)
 ```
 We can see that the two lines overlap in the plot:
-```@example cshape
+```@example overlaps
 overlap(l1, l2)
 ```
 
@@ -37,25 +38,29 @@ overlap(l1, l2)
 This is the GeoInterface-compatible implementation.
 
 First, we implement a wrapper method that dispatches to the correct
-implementation based on the geometry trait. This is also used in the
-implementation, since it's a lot less work! 
+implementation based on the geometry trait.
 
-Note that that since only elements of the same dimension can overlap, any two
-geometries with traits that are of different dimensions autmoatically can
-return false.
+Each of these calls a method in the geom_geom_processors file. The methods in
+this file determine if the given geometries meet a set of criteria. For the
+`overlaps` function and arguments g1 and g2, this criteria is as follows:
+    - points of g1 are allowed to be in the interior of g2
+    - points of g1 are allowed to be on the boundary of g2
+    - points of g1 are allowed to be in the exterior of g2
+    - at least one point of g1 is required to be in the interior of g2
+    - at least one point of g2 is required to be in the interior of g1
+    - no points of g1 is required to be on the boundary of g2
+    - at least one point of g1 is required to be in the exterior of g2
+    - at least one point of g2 is required to be in the exterior of g1
 
-For geometries with the same trait dimension, we must make sure that they share
-a point, an edge, or area for points, lines, and polygons/multipolygons
-respectivly, without being contained. 
+The code for the specific implementations is in the geom_geom_processors file.
 =#
 
 """
     overlaps(geom1, geom2)::Bool
 
-Compare two Geometries of the same dimension and return true if their
-intersection set results in a geometry different from both but of the same
-dimension. This means one geometry cannot be within or contain the other and
-they cannot be equal
+Compare two Geometries of the same dimension and return true if their interiors
+interact, but they both also have interior points exterior to the other
+geometry. 
 
 ## Examples
 ```jldoctest
@@ -68,29 +73,32 @@ GO.overlaps(poly1, poly2)
 true
 ```
 """
-overlaps(geom1, geom2)::Bool = overlaps(
-    GI.trait(geom1),
-    geom1,
-    GI.trait(geom2),
-    geom2,
-)
+overlaps(g1, g2)::Bool = _overlaps(GI.trait(g1), g1, GI.trait(g2), g2)
 
-"""
-    overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2)::Bool
 
-For any non-specified pair, all have non-matching dimensions, return false.
-"""
-overlaps(::GI.AbstractGeometryTrait, geom1, ::GI.AbstractGeometryTrait, geom2) = false
+# # Convert features to geometries
+_overlaps(::GI.FeatureTrait, g1, ::Any, g2) = overlaps(GI.geometry(g1), g2)
+_overlaps(::Any, g1, t2::GI.FeatureTrait, g2) = overlaps(g1, GI.geometry(g2))
 
-"""
-    overlaps(
-        ::GI.MultiPointTrait, points1,
-        ::GI.MultiPointTrait, points2,
-    )::Bool
 
-If the multipoints overlap, meaning some, but not all, of the points within the
-multipoints are shared, return true.
-"""
+# # Non-specified geometries 
+
+# Geometries of different dimensions and points cannot overlap and return false
+_overlaps(
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g2,
+) = false
+
+
+# # Point disjoint geometries
+
+# Point is disjoint from another point if the points are not equal.
+_disjoint(
+    ::GI.PointTrait, g1,
+    ::GI.PointTrait, g2,
+) = !equals(g1, g2)
+
+
 function overlaps(
     ::GI.MultiPointTrait, points1,
     ::GI.MultiPointTrait, points2,
@@ -342,4 +350,26 @@ function _overlaps(
     b1_in = point_segment_orientation(b1, a1, a2) == point_in
     b2_in = point_segment_orientation(b2, a1, a2) == point_in
     return (a1_in ⊻ a2_in) && (b1_in ⊻ b2_in)
+end
+
+
+function overlaps(
+    ::GI.MultiPointTrait, points1,
+    ::GI.MultiPointTrait, points2,
+)
+    one_diff = false  # assume that all the points are the same
+    one_same = false  # assume that all points are different
+    for p1 in GI.getpoint(points1)
+        match_point = false
+        for p2 in GI.getpoint(points2)
+            if equals(p1, p2)  # Point is shared
+                one_same = true
+                match_point = true
+                break
+            end
+        end
+        one_diff |= !match_point  # Point isn't shared
+        one_same && one_diff && return true
+    end
+    return false
 end

@@ -61,4 +61,4 @@ GO.contains(line, point)
 true
 ```
 """
-contains(g1, g2)::Bool = GeometryOps.within(g2, g1)
+contains(g1, g2) = GeometryOps.within(g2, g1)

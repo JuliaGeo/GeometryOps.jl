@@ -8,7 +8,7 @@ The disjoint function checks if one geometry is outside of another geometry,
 without sharing any boundaries or interiors.
 
 To provide an example, consider these two lines:
-```@example cshape
+```@example disjoint
 using GeometryOps
 using GeometryOps.GeometryBasics
 using Makie
@@ -23,7 +23,7 @@ scatter!(GI.getpoint(l2), color = :orange)
 ```
 We can see that none of the edges or vertices of l1 interact with l2 so they are
 disjoint.
-```@example cshape
+```@example disjoint
 disjoint(l1, l2)  # returns true
 ```
 
@@ -47,6 +47,9 @@ this file determine if the given geometries meet a set of criteria. For the
 The code for the specific implementations is in the geom_geom_processors file.
 =#
 
+const DISJOINT_ALLOWS = (in_allow = false, on_allow = false, out_allow = true)
+const DISJOINT_CURVE_ALLOWS = (over_allow = false, cross_allow = false, on_allow = false, out_allow = true)
+const DISJOINT_REQUIRES = (in_require = false, on_require = false, out_require = false)
 """
     disjoint(geom1, geom2)::Bool
 
@@ -74,7 +77,7 @@ disjoint(::FeatureTrait, g1, ::Any, g2)::Bool = disjoint(GI.geometry(g1), g2)
 disjoint(::Any, g1, t2::FeatureTrait, g2)::Bool = disjoint(g1, geometry(g2))
 
 
-# Point disjoint geometries
+# # Point disjoint geometries
 
 # Point is disjoint from another point if the points are not equal.
 _disjoint(
@@ -88,7 +91,7 @@ _disjoint(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _point_curve_process(
     g1, g2;
-    in_allow = false, on_allow = false, out_allow = true,
+    DISJOINT_ALLOWS...,
     repeated_last_coord = false,
 )
 
@@ -98,7 +101,7 @@ _disjoint(
     ::GI.LinearRingTrait, g2,
 ) = _point_curve_process(
     g1, g2;
-    in_allow = false, on_allow = false, out_allow = true,
+    DISJOINT_ALLOWS...,
     repeated_last_coord = true,
 )
 
@@ -109,13 +112,13 @@ _disjoint(
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
     g1, g2;
-    in_allow = false, on_allow = false, out_allow = true,
+    DISJOINT_ALLOWS...,
 )
 
 #= Geometry is disjoint from a point if the point is not in the interior or on
 the boundary of the geometry. =#
 _disjoint(
-    trait1::GI.AbstractGeometryTrait, g1,
+    trait1::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     trait2::GI.PointTrait, g2,
 ) = _disjoint(trait2, g2, trait1, g1)
 
@@ -129,8 +132,8 @@ _disjoint(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = false, cross_allow = false, on_allow = false, out_allow = true,
-    in_require = false, on_require = false, out_require = false,
+    DISJOINT_CURVE_ALLOWS...,
+    DISJOINT_REQUIRES...,
     closed_line = false,
     closed_curve = false,
 )
@@ -142,8 +145,8 @@ _disjoint(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = false, cross_allow = false, on_allow = false, out_allow = true,
-    in_require = false, on_require = false, out_require = false,
+    DISJOINT_CURVE_ALLOWS...,
+    DISJOINT_REQUIRES...,
     closed_line = false,
     closed_curve = true,
 )
@@ -155,15 +158,15 @@ _disjoint(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    in_allow =  false, on_allow = false, out_allow = true,
-    in_require = false, on_require = false, out_require = true,
+    DISJOINT_ALLOWS...,
+    DISJOINT_REQUIRES...,
     closed_line = false,
 )
 
 #= Geometry is disjoint from a linestring if the line's interior and boundary
 points don't intersect with the geometrie's interior and boundary points. =#
 _disjoint(
-    trait1::GI.AbstractGeometryTrait, g1,
+    trait1::Union{GI.LinearRingTrait, GI.PolygonTrait}, g1,
     trait2::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _disjoint(trait2, g2, trait1, g1)
 
@@ -177,8 +180,8 @@ _disjoint(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = false, cross_allow = false, on_allow = false, out_allow = true,
-    in_require = false, on_require = false, out_require = false,
+    DISJOINT_CURVE_ALLOWS...,
+    DISJOINT_REQUIRES...,
     closed_line = true,
     closed_curve = true,
 )
@@ -190,18 +193,10 @@ _disjoint(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    in_allow =  false, on_allow = false, out_allow = true,
-    in_require = false, on_require = false, out_require = true,
+    DISJOINT_ALLOWS...,
+    DISJOINT_REQUIRES...,
     closed_line = true,
 )
-
-#= Geometry is disjoint from a linearring if the ring's interior and boundary
-points don't intersect with the geometrie's interior and boundary points. =#
-_disjoint(
-    trait1::GI.AbstractGeometryTrait, g1,
-    trait2::GI.LinearRingTrait, g2,
-) = _disjoint(trait2, g2, trait1, g1)
-
 
 # # Polygon disjoint geometries
 
@@ -212,8 +207,8 @@ _disjoint(
     ::GI.PolygonTrait, g2,
 ) = _polygon_polygon_process(
     g1, g2;
-    in_allow =  false, on_allow = false, out_allow = true,
-    in_require = false, on_require = false, out_require = false,
+    DISJOINT_ALLOWS...,
+    DISJOINT_REQUIRES...,
 )
 
 
@@ -222,9 +217,9 @@ _disjoint(
 #= Geometry is disjoint from a multi-geometry or a collection if all of the
 elements of the collection are disjoint from the geometry. =#
 function _disjoint(
-    ::GI.AbstractGeometryTrait, g1
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1
     ::Union{
-        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g2
 )
@@ -240,7 +235,7 @@ end
 elements of the collection are covered by the geometry. =#
 function _disjoint(
     ::Union{
-        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g1,
     ::GI.AbstractGeometryTrait, g2

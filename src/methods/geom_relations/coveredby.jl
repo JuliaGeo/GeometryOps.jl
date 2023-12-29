@@ -50,6 +50,10 @@ this file determine if the given geometries meet a set of criteria. For the
 
 The code for the specific implementations is in the geom_geom_processors file.
 =#
+const COVEREDBY_ALLOWS = (in_allow = true, on_allow = true, out_allow = false)
+const COVEREDBY_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = false)
+const COVEREDBY_CURVE_REQUIRES = (in_require = false, on_require = false, out_require = false)
+const COVEREDBY_POLYGON_REQUIRES = (in_require = true, on_require = false, out_require = false,)
 
 """
     coveredby(g1, g2)::Bool
@@ -94,7 +98,7 @@ _coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _point_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    COVEREDBY_ALLOWS...,
     repeated_last_coord = false,
 )
 
@@ -104,7 +108,7 @@ _coveredby(
     ::GI.LinearRingTrait, g2,
 ) = _point_curve_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    COVEREDBY_ALLOWS...,
     repeated_last_coord = true,
 )
 
@@ -114,12 +118,12 @@ _coveredby(
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
     g1, g2;
-    in_allow = true, on_allow = true, out_allow = false,
+    COVEREDBY_ALLOWS...,
 )
 
 # Points cannot cover any geometry other than points
 _coveredby(
-    ::GI.AbstractGeometryTrait, g1,
+    ::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::GI.PointTrait, g2,
 ) = false
 
@@ -133,8 +137,8 @@ _coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
-    in_require = false, on_require = false, out_require = false,
+    COVEREDBY_CURVE_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
     closed_line = false,
     closed_curve = false,
 )
@@ -146,8 +150,8 @@ _coveredby(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
-    in_require = false, on_require = false, out_require = false,
+    COVEREDBY_CURVE_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
     closed_line = false,
     closed_curve = true,
 )
@@ -159,8 +163,8 @@ _coveredby(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    in_allow =  true, on_allow = true, out_allow = false,
-    in_require = false, on_require = false, out_require = false,
+    COVEREDBY_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
     closed_line = false,
 )
 
@@ -173,8 +177,8 @@ _coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
-    in_require = false, on_require = false, out_require = false,
+    COVEREDBY_CURVE_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
     closed_line = true,
     closed_curve = false,
 )
@@ -186,8 +190,8 @@ _coveredby(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
-    in_require = false, on_require = false, out_require = false,
+    COVEREDBY_CURVE_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
     closed_line = true,
     closed_curve = true,
 )
@@ -199,8 +203,8 @@ _coveredby(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    in_allow =  true, on_allow = true, out_allow = false,
-    in_require = true, on_require = false, out_require = false,
+    COVEREDBY_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
     closed_line = true,
 )
 
@@ -215,8 +219,8 @@ _coveredby(
     ::GI.PolygonTrait, g2,
 ) = _polygon_polygon_process(
     g1, g2;
-    in_allow =  true, on_allow = true, out_allow = false,
-    in_require = true, on_require = false, out_require = false,
+    COVEREDBY_ALLOWS...,
+    COVEREDBY_POLYGON_REQUIRES...,
 )
 
 # Polygons cannot covered by any curves
@@ -231,11 +235,11 @@ _coveredby(
 #= Geometry is covered by a multi-geometry or a collection if one of the elements
 of the collection cover the geometry. =#
 function _coveredby(
-    ::GI.AbstractGeometryTrait, g1
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::Union{
-        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
-    }, g2
+    }, g2,
 )
     for sub_g2 in GI.getgeom(g2)
         coveredby(g1, sub_g2) && return true
@@ -249,10 +253,10 @@ end
 elements of the collection are covered by the geometry. =#
 function _coveredby(
     ::Union{
-        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g1,
-    ::GI.AbstractGeometryTrait, g2
+    ::GI.AbstractGeometryTrait, g2,
 )
     for sub_g1 in GI.getgeom(g1)
         !coveredby(sub_g1, g2) && return false

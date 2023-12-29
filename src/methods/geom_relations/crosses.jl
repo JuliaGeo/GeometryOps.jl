@@ -16,7 +16,7 @@ Note that points can't cross any geometries, despite different dimension, due to
 their inability to be both interior and exterior to any other shape.
 
 To provide an example, consider these two lines:
-```@example cshape
+```@example crosses
 using GeometryOps
 using GeometryOps.GeometryBasics
 using Makie
@@ -29,7 +29,7 @@ f, a, p = lines(l1)
 lines!(l2)
 ```
 We can see that these two lines cross at their midpoints.
-```@example cshape
+```@example crosses
 crosses(l1, l2)  # true
 ```
 
@@ -53,6 +53,10 @@ this file determine if the given geometries meet a set of criteria. For the
 
 The code for the specific implementations is in the geom_geom_processors file.
 =#
+
+const CROSSES_CURVE_ALLOWS = (over_allow = false, cross_allow = true, on_allow = true, out_allow = true)
+const CROSSES_POLYGON_ALLOWS = (in_allow =  false, on_allow = true, out_allow = true)
+const CROSSES_REQUIRES = (in_require = true, on_require = false, out_require = true)
 
 """
     crosses(geom1, geom2)::Bool
@@ -84,7 +88,10 @@ _crosses(::Any, g1, t2::GI.FeatureTrait, g2) = crosses(g1, GI.geometry(g2))
 # # Non-specified geometries 
 
 # Points and geometries with the same dimensions D where D ≂̸ 1 default to false
-_crosses(::GI.AbstractGeometryTrait, g1, ::GI.AbstractGeometryTrait, g2) = false
+_crosses(
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g2,
+) = false
 
 
 # # Lines cross geometries
@@ -96,7 +103,7 @@ _crosses(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
+    CROSSES_CURVE_ALLOWS...,
     in_require = true, on_require = false, out_require = true,
     closed_line = false,
     closed_curve = false,
@@ -109,8 +116,8 @@ _crosses(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
-    in_require = true, on_require = false, out_require = true,
+    CROSSES_CURVE_ALLOWS...,
+    CROSSES_REQUIRES...,
     closed_line = false,
     closed_curve = true,
 )
@@ -122,10 +129,11 @@ _crosses(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    in_allow =  false, on_allow = true, out_allow = true,
-    in_require = true, on_require = false, out_require = true,
+    CROSSES_POLYGON_ALLOWS...,
+    CROSSES_REQUIRES...,
     closed_line = false,
 )
+
 
 # # Rings cross geometries
 
@@ -143,8 +151,8 @@ _crosses(
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = false, cross_allow = true, on_allow = true, out_allow = true,
-    in_require = true, on_require = false, out_require = true,
+    CROSSES_CURVE_ALLOWS...,
+    CROSSES_REQUIRES...,
     closed_line = true,
     closed_curve = true,
 )
@@ -156,8 +164,8 @@ _crosses(
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    in_allow =  false, on_allow = true, out_allow = true,
-    in_require = true, on_require = false, out_require = true,
+    CROSSES_POLYGON_ALLOWS...,
+    CROSSES_REQUIRES...,
     closed_line = true,
 )
 
@@ -177,11 +185,11 @@ _crosses(
 #= Geometry crosses a multi-geometry or a collection if the geometry crosses
 one of the elements of the collection. =#
 function _crosses(
-    ::GI.AbstractGeometryTrait, g1
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::Union{
-        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
-    }, g2
+    }, g2,
 )
     for sub_g2 in GI.getgeom(g2)
         crosses(g1, sub_g2) && return true
@@ -195,10 +203,10 @@ end
 the collection crosses the geometry. =#
 function _crosses(
     ::Union{
-        GI.MultiPointTrait, GI.MultiCurveTrait,
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g1,
-    ::GI.AbstractGeometryTrait, g2
+    ::GI.AbstractGeometryTrait, g2,
 )
     for sub_g1 in GI.getgeom(g1)
         crosses(sub_g1, g2) && return true

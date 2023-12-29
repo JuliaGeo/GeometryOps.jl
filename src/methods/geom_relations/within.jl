@@ -5,7 +5,9 @@ export within
 #=
 ## What is within?
 
-The within function checks if one geometry is inside another geometry.
+The within function checks if one geometry is inside another geometry. This
+requires that the two interiors intersect and that the interior and
+boundary of the first geometry is not in the exterior of the second geometry.
 
 To provide an example, consider these two lines:
 ```@example cshape
@@ -35,22 +37,24 @@ This is the GeoInterface-compatible implementation.
 First, we implement a wrapper method that dispatches to the correct
 implementation based on the geometry trait.
 
-The methodology for each geometry pairing is a little different. For a point,
-other points can only be inside of it if they are the same point. Nothing other
-than a point can be within a point. For line string and linear rings, a point is
-within if it is on a vertex or a line. For a line/ring inside of another
-line/ring, we need all vertices and edges to be within the other line/ring's
-edges. Polygons cannot be within a line/ring. Then for polygons, we need
-lines/rings to be either on the edges (but with at least one point within the
-polygon) or within the polygon, but not in any holes. Then for polygons within
-polygons, they must be inside of the interior, including edges, but again not in
-any holes.
+Each of these calls a method in the geom_geom_processors file. The methods in
+this file determine if the given geometries meet a set of criteria. For the
+`within` function and arguments g1 and g2, this criteria is as follows:
+    - points of g1 are allowed to be in the interior of g2 (either through
+    overlap or crossing for lines)
+    - points of g1 are allowed to be on the boundary of g2
+    - points of g1 are not allowed to be in the exterior of g2
+    - at least one point of g1 is required to be in the interior of g2
+    - no points of g1 are required to be on the boundary of g2
+    - no points of g1 are required to be in the exterior of g2
 
-The code for the specific implementations is in the geom_geom_processors file,
-which has generalized code for the within and disjoint functions with a keyword
-argument `process`, which is specified to be the `within_process` for the below
-functions. 
+The code for the specific implementations is in the geom_geom_processors file.
 =#
+
+const WITHIN_POINT_ALLOWS = (in_allow = true, on_allow = false, out_allow = false)
+const WITHIN_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = false)
+const WITHIN_POLYGON_ALLOWS = (in_allow = true, on_allow = true, out_allow = false)
+const WITHIN_REQUIRES = (in_require = true, on_require = false, out_require = false)
 
 """
     within(geom1, geom2)::Bool
@@ -74,280 +78,192 @@ GO.within(point, line)
 true
 ```
 """
-within(g1, g2) = within(trait(g1), g1, trait(g2), g2)
-within(::GI.FeatureTrait, g1, ::Any, g2) = within(GI.geometry(g1), g2)
-within(::Any, g1, t2::GI.FeatureTrait, g2) = within(g1, GI.geometry(g2))
+within(g1, g2) = _within(trait(g1), g1, trait(g2), g2)
 
-"""
-For any non-specified pair, g1 cannot be within g2 as g2 is of a higher
-dimension than g1. Return false.
-"""
-within(::GI.AbstractGeometryTrait, g1, ::GI.AbstractGeometryTrait, g2) = false
+# # Convert features to geometries
+_within(::GI.FeatureTrait, g1, ::Any, g2) = within(GI.geometry(g1), g2)
+_within(::Any, g1, t2::GI.FeatureTrait, g2) = within(g1, GI.geometry(g2))
 
-# Points within geometries
-"""
-    within(::GI.PointTrait, g1, ::GI.PointTrait, g2)::Bool
 
-If a point is within another point, then those points must be equal. If they are
-not equal, then they are not within and return false.
-"""
-within(
+# # Points within geometries
+
+# Point is within another point if those points are equal.
+_within(
     ::GI.PointTrait, g1,
     ::GI.PointTrait, g2,
 ) = equals(g1, g2)
 
-
-"""
-    within(::GI.PointTrait, g1, ::GI.LineStringTrait, g2)::Bool
-
-A point is within a line string if it is on a vertex or an edge of that
-linestring, excluding the start and end vertex if the linestring is not closed.
-Return true if those conditions are met, else false.
-"""
-within(
+#= Point is within a linestring if it is on a vertex or an edge of that line,
+excluding the start and end vertex if the line is not closed. =#
+_within(
     ::GI.PointTrait, g1,
-    ::GI.LineStringTrait, g2,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _point_curve_process(
     g1, g2;
-    in_allow = true, on_allow = false, out_allow = false,
+    WITHIN_POINT_ALLOWS...,
     repeated_last_coord = false,
 )
 
-"""
-    within(::GI.PointTrait, g1, ::GI.LinearRingTrait, g2)::Bool
-
-A point is within a linear ring if it is on a vertex or an edge of that
-linear ring. Return true if those conditions are met, else false.
-"""
-within(
+# Point is within a linearring if it is on a vertex or an edge of that ring.
+_within(
     ::GI.PointTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _point_curve_process(
     g1, g2;
-    in_allow = true, on_allow = false, out_allow = false,
+    WITHIN_POINT_ALLOWS...,
     repeated_last_coord = true,
 )
 
-"""
-    within(::GI.PointTrait, g1, ::GI.PolygonTrait, g2)::Bool
-
-A point is within a polygon if it is inside of that polygon, excluding edges,
-vertices, and holes. Return true if those conditions are met, else false.
-"""
-within(
+#= Point is within a polygon if it is inside of that polygon, excluding edges,
+vertices, and holes. =#
+_within(
     ::GI.PointTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
     g1, g2;
-    in_allow = true, on_allow = false, out_allow = false,
+    WITHIN_POINT_ALLOWS...,
 )
 
-# Lines within geometries
-"""
-    within(::GI.LineStringTrait, g1, ::GI.LineStringTrait, g2)::Bool
+# No geometries other than points can be within points
+_within(
+    ::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::GI.PointTrait, g2,
+) = false
 
-A line string is within another linestring if the vertices and edges of the
-first linestring are within the second linestring, including the first and last
-vertex. Return true if those conditions are met, else false.
-"""
-within(
-    ::GI.LineStringTrait, g1,
-    ::GI.LineStringTrait, g2,
+
+# # Lines within geometries
+
+#= Linestring is within another linestring if their interiors intersect and no
+points of the first line are in the exterior of the second line. =#
+_within(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
-    in_require = true, on_require = false, out_require = false,
+    WITHIN_CURVE_ALLOWS...,
+    WITHIN_REQUIRES...,
     closed_line = false,
     closed_curve = false,
 )
 
-"""
-    within(::GI.LineStringTrait, g1, ::GI.LinearRingTrait, g2)::Bool
-
-A line string is within a linear ring if the vertices and edges of the
-linestring are within the linear ring. Return true if those conditions are met,
-else false.
-"""
-within(
-    ::GI.LineStringTrait, g1,
+#= Linestring is within a linear ring if their interiors intersect and no points
+of the line are in the exterior of the ring. =#
+_within(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
-    in_require = true, on_require = false, out_require = false,
+    WITHIN_CURVE_ALLOWS...,
+    WITHIN_REQUIRES...,
     closed_line = false,
     closed_curve = true,
 )
 
-"""
-    within(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool
-
-A line string is within a polygon if the vertices and edges of the
-linestring are within the polygon. Points of the linestring can be on the
-polygon edges, but at least one point must be in the polygon interior. The
-linestring also cannot cross through a hole. Return true if those conditions are
-met, else false.
-"""
-within(
-    ::GI.LineStringTrait, g1,
+#= Linestring is within a polygon if their interiors intersect and no points of
+the line are in the exterior of the polygon, although they can be on an edge. =#
+_within(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    in_allow =  true, on_allow = true, out_allow = false,
-    in_require = true, on_require = false, out_require = false,
+    WITHIN_POLYGON_ALLOWS...,
+    WITHIN_REQUIRES...,
     closed_line = false,
 )
 
-# Rings within geometries
-"""
-    within(::GI.LinearRingTrait, g1, ::GI.LineStringTrait, g2)::Bool
 
-A linear ring is within a linestring if the vertices and edges of the
-linear ring are within the edges/vertices of the linear ring. Return true if
-those conditions are met, else false.
-"""
-within(
+# # Rings covered by geometries
+
+#= Linearring is within a linestring if their interiors intersect and no points
+of the ring are in the exterior of the line. =#
+_within(
     ::GI.LinearRingTrait, g1,
-    ::GI.LineStringTrait, g2,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
-    in_require = true, on_require = false, out_require = false,
+    WITHIN_CURVE_ALLOWS...,
+    WITHIN_REQUIRES...,
     closed_line = true,
     closed_curve = false,
 )
 
-"""
-    within(::GI.LinearRingTrait, g1, ::GI.LinearRingTrait, g2)::Bool
-
-A linear ring is within another linear ring if the vertices and edges of the
-first linear ring are within the edges/vertices of the second linear ring.
-Return true if those conditions are met, else false.
-"""
-within(
+#= Linearring is within another linearring if their interiors intersect and no
+points of the first ring are in the exterior of the second ring. =#
+_within(
     ::GI.LinearRingTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
     g1, g2;
-    over_allow = true, cross_allow = true, on_allow = true, out_allow = false,
-    in_require = true, on_require = false, out_require = false,
+    WITHIN_CURVE_ALLOWS...,
+    WITHIN_REQUIRES...,
     closed_line = true,
     closed_curve = true,
 )
 
-"""
-    within(::GI.LinearRingTrait, g1, ::GI.PolygonTrait, g2)::Bool
-
-A linear ring is within a polygon if the vertices and edges of the linear ring
-are within the polygon. Points of the linestring can be on the polygon edges,
-but at least one point must be in the polygon interior. The linear ring also
-cannot cross through a hole. Return true if those conditions are met, else
-false.
-"""
-within(
+#= Linearring is within a polygon if their interiors intersect and no points of
+the ring are in the exterior of the polygon, although they can be on an edge. =#
+_within(
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
     g1, g2;
-    in_allow =  true, on_allow = true, out_allow = false,
-    in_require = true, on_require = false, out_require = false,
+    WITHIN_POLYGON_ALLOWS...,
+    WITHIN_REQUIRES...,
     closed_line = true,
 )
 
-# Polygons within polygons
-"""
-    within(::GI.PolygonTrait, g1, ::GI.PolygonTrait, g2)::Bool
 
-A polygon is within another polygon if the interior of the first polygon is
-inside of the second, including edges, and does not intersect with any holes of
-the second polygon. If these conditions are met, return true, else false.
-"""
-within(
+# # Polygons within geometries
+
+#= Polygon is within another polygon if the interior of the first polygon 
+intersects with the interior of the second and no points of the first polygon
+are outside of the second polygon. =#
+_within(
     ::GI.PolygonTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _polygon_polygon_process(
     g1, g2;
-    in_allow =  true, on_allow = true, out_allow = false,
-    in_require = true, on_require = false, out_require = false,
+    WITHIN_POLYGON_ALLOWS...,
+    WITHIN_REQUIRES...,
 )
 
-# function within(
-#     ::GI.PolygonTrait, g1,
-#     ::GI.PolygonTrait, g2;
-# )
-#     ext1 = GI.getexterior(g1)
-#     e1_in_e2, _, e1_out_e2 = _line_filled_curve_interactions(
-#         ext1, GI.getexterior(g2);
-#         closed_line = true,
-#     )
-#     e1_out_e2 && return false
+# Polygons cannot be within any curves
+_within(
+    ::GI.PolygonTrait, g1,
+    ::GI.AbstractCurveTrait, g2,
+) = false
 
-#     for h2 in GI.gethole(g2)
-#         if e1_in_e2  # h2 could be outside of e1, but inside of e2
-#             h2_in_e1, h2_on_e1, _ = _line_filled_curve_interactions(
-#                 h2, ext1;
-#                 closed_line = true,
-#             )
-#             # h2 is inside of e1 and cannot be excluded by a hole since it touches the boundary
-#             h2_on_e1 && h2_in_e1 && return false
-#             if !h2_in_e1  # is h2 disjoint from e1, or is e1 within h2?
-#                 c1_val = point_filled_curve_orientation(centroid(ext1), h2)
-#                 c1_val == point_in && return false  # e1 is within h2
-#                 break  # e1 is disjoint from h2
-#             end
-#         end
-#         # h2 is within e1, but is it within a hole of g1?
-#         h2_in_e1 = true
-#         for h1 in GI.gethole(g1)
-#             _, h2_on_h1, h2_out_h1 = _line_filled_curve_interactions(
-#                 h2, h1;
-#                 closed_line = true,
-#             )
-#             # h2 is outside of h1 and cannot be excluded by another hole since it touches the boundary
-#             h2_on_h1 && h2_out_h1 && return false
-#             if !h2_out_h1  #h2 is within bounds of h1, so not in e1
-#                 h2_in_e1 = false
-#                 break
-#             end
-#         end
-#         h2_in_e1 && return false
-#     end
-#     return true
-# end
 
-# Geometries within multipolygons
-"""
-    within(::GI.AbstractTrait, g1, ::GI.MultiPolygonTrait, g2)::Bool
+# # Geometries within multi-geometry/geometry collections
 
-A geometry is within a multipolygon if it is within one of the polygons that
-make up the multipolygon. Return true if these conditions are met, else false.
-"""
-function within(::GI.AbstractGeometryTrait, g1, ::GI.MultiPolygonTrait, g2)
-    for poly in GI.getpolygon(g2)
-        if within(g1, poly)
-            return true
-        end
+#= Geometry is within a multi-geometry or a collection if the geometry is within
+at least one of the collection elements. =#
+function _within(
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g2,
+)
+    for sub_g2 in GI.getgeom(g2)
+        within(g1, sub_g2) && return true
     end
     return false
 end
 
-"""
-    within(::GI.MultiPolygonTrait, g1, ::GI.MultiPolygonTrait, g2)::Bool
+# # Multi-geometry/geometry collections within geometries
 
-A multipolygon is within a multipolygon if every polygon in the first
-multipolygon is within one of the polygons in the second multipolygon. Return
-true if these conditions are met, else false.
-"""
-function within(::GI.MultiPolygonTrait, g1, ::GI.MultiPolygonTrait, g2)
-    for poly1 in GI.getpolygon(g1)
-        poly1_within = false
-        for poly2 in GI.getpolygon(g2)
-            if within(poly1, poly2)
-                poly1_within = true
-                break
-            end
-        end
-        !poly1_within && return false
+#= Multi-geometry or a geometry collection is within a geometry if all
+elements of the collection are within the geometry. =#
+function _within(
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g1,
+    ::GI.AbstractGeometryTrait, g2,
+)
+    for sub_g1 in GI.getgeom(g1)
+        !within(sub_g1, g2) && return false
     end
     return true
 end
