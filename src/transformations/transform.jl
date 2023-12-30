@@ -42,11 +42,11 @@ ctor{2, Int64}[[2, 1], [4, 3], [6, 5], [2, 1]], nothing, nothing), GeoInterface.
 function transform(f, geom; kw...) 
     if _is3d(geom)
         return apply(PointTrait, geom; kw...) do p
-            f(StaticArrays.SVector{3}((GI.y(p), GI.x(p), GI.z(p))))
+            f(StaticArrays.SVector{3}((GI.x(p), GI.y(p), GI.z(p))))
         end
     else
         return apply(PointTrait, geom; kw...) do p
-            f(StaticArrays.SVector{2}((GI.y(p), GI.x(p))))
+            f(StaticArrays.SVector{2}((GI.x(p), GI.y(p))))
         end
     end
 end
