@@ -123,12 +123,9 @@ function _signed_area(::Type{T}, geom) where T
     # Close curve, even if last point isn't explicitly repeated
     np = GI.npoint(geom)
     np == 0 && return area
-    first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, np))
-    np -= first_last_equal ? 1 : 0 
     # Integrate the area under the curve
     p1 = GI.getpoint(geom, np)
-    for i in 1:np
-        p2 = GI.getpoint(geom, i)
+    for p2 in GI.getpoint(geom)
         # Accumulate the area into `area`
         area += GI.x(p1) * GI.y(p2) - GI.y(p1) * GI.x(p2)
         p1 = p2

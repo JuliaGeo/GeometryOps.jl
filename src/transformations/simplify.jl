@@ -129,15 +129,6 @@ function _simplify(::PolygonTrait, alg, geom)
 end
 ## For curves and rings we simplify
 _simplify(::AbstractCurveTrait, alg, geom) = rebuild(geom, simplify(alg, tuple_points(geom)))
-function _simplify(::LinearRingTrait, alg, geom)
-    ## Make a vector of points 
-    points = tuple_points(geom)
-
-    ## Simplify it once
-    simple = _simplify(alg, points)
-
-    return rebuild(geom, simple)
-end
 
 """
     RadialDistance <: SimplifyAlg
