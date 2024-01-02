@@ -30,16 +30,27 @@ needed if it is not retreivable from the geometry with `GeoInterface.crs(geometr
 
 ## Keywords
 
--`always_xy`: force x, y coordinate order, `true` by default.
+- `always_xy`: force x, y coordinate order, `true` by default.
     `false` will expect and return points in the crs coordinate order.
--`time`: the time for the coordinates. `Inf` by default.
+- `time`: the time for the coordinates. `Inf` by default.
+$APPLY_KEYWORDS
 """
 function reproject(geom;
     source_crs=nothing, target_crs=nothing, transform=nothing, kw...
 )
     if isnothing(transform)
-        source_crs = isnothing(source_crs) ? GeoInterface.crs(geom) : source_crs
+        if isnothing(source_crs) 
+            source_crs = if GI.trait(geom) isa Nothing && geom isa AbstractArray
+                GeoInterface.crs(first(geom))
+            else
+                GeoInterface.crs(geom)
+            end
+        end
+
+        # If its still nothing, error
         isnothing(source_crs) && throw(ArgumentError("geom has no crs attatched. Pass a `source_crs` keyword"))
+
+        # Otherwise reproject
         reproject(geom, source_crs, target_crs; kw...)
     else
         reproject(geom, transform; kw...)
@@ -49,16 +60,17 @@ function reproject(geom, source_crs, target_crs;
     time=Inf,
     always_xy=true,
     transform=Proj.Transformation(Proj.CRS(source_crs), Proj.CRS(target_crs); always_xy),
+    kw...
 )
-    reproject(geom, transform; time, target_crs)
+    reproject(geom, transform; time, target_crs, kw...)
 end
-function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=nothing)
+function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=nothing, kw...)
     if _is3d(geom)
-        return apply(PointTrait, geom; crs=target_crs) do p
+        return apply(PointTrait, geom; crs=target_crs, kw...) do p
             transform(GI.x(p), GI.y(p), GI.z(p))
         end
     else
-        return apply(PointTrait, geom; crs=target_crs) do p
+        return apply(PointTrait, geom; crs=target_crs, kw...) do p
             transform(GI.x(p), GI.y(p))
         end
     end
