@@ -669,7 +669,7 @@ function _line_filled_curve_interactions(
                             curve
                         )
                         npoints = length(ipoints)  # since hinge, at least one
-                        sort!(ipoints, by = p -> euclid_distance(p, l_start))
+                        sort!(ipoints, by = p -> _euclid_distance(Float64, p, l_start))
                         p_start = _tuple_point(l_start)
                         for i in 1:(npoints + 1)
                             p_end = i ≤ npoints ?

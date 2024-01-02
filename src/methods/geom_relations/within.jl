@@ -101,7 +101,7 @@ _within(
 ) = _point_curve_process(
     g1, g2;
     WITHIN_POINT_ALLOWS...,
-    repeated_last_coord = false,
+    closed_curve = false,
 )
 
 # Point is within a linearring if it is on a vertex or an edge of that ring.
@@ -111,7 +111,7 @@ _within(
 ) = _point_curve_process(
     g1, g2;
     WITHIN_POINT_ALLOWS...,
-    repeated_last_coord = true,
+    closed_curve = true,
 )
 
 #= Point is within a polygon if it is inside of that polygon, excluding edges,

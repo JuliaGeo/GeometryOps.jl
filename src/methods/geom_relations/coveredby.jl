@@ -99,7 +99,7 @@ _coveredby(
 ) = _point_curve_process(
     g1, g2;
     COVEREDBY_ALLOWS...,
-    repeated_last_coord = false,
+    closed_curve = false,
 )
 
 # Point is coveredby a linearring if it is on a vertex or an edge of ring
@@ -109,7 +109,7 @@ _coveredby(
 ) = _point_curve_process(
     g1, g2;
     COVEREDBY_ALLOWS...,
-    repeated_last_coord = true,
+    closed_curve = true,
 )
 
 # Point is coveredby a polygon if it is inside polygon, including edges/vertices

@@ -92,7 +92,7 @@ _disjoint(
 ) = _point_curve_process(
     g1, g2;
     DISJOINT_ALLOWS...,
-    repeated_last_coord = false,
+    closed_curve = false,
 )
 
 # Point is disjoint from a linearring if it is not on the ring's edges/vertices. 
@@ -102,7 +102,7 @@ _disjoint(
 ) = _point_curve_process(
     g1, g2;
     DISJOINT_ALLOWS...,
-    repeated_last_coord = true,
+    closed_curve = true,
 )
 
 #= Point is disjoint from a polygon if it is not on any edges, vertices, or
