@@ -34,6 +34,7 @@ include("methods/geom_relations/disjoint.jl")
 include("methods/geom_relations/geom_geom_processors.jl")
 include("methods/geom_relations/intersects.jl")
 include("methods/geom_relations/overlaps.jl")
+include("methods/geom_relations/touches.jl")
 include("methods/geom_relations/within.jl")
 include("methods/polygonize.jl")
 
