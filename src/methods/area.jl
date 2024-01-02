@@ -44,19 +44,25 @@ for polygons.
 =#
 
 """
-    area(geom)::Real
+    area(geom, ::Type{T} = Float64)::T
 
 Returns the area of the geometry. This is computed slighly differently for
 different geometries:
-    - The area of a point is always zero.
-    - The area of a curve is always zero.
+    - The area of a point/multipoint is always zero.
+    - The area of a curve/multicurve is always zero.
     - The area of a polygon is the absolute value of the signed area.
     - The area multi-polygon is the sum of the areas of all of the sub-polygons.
+    - The area of a geometry collection is the sum of the areas of all of the
+    sub-geometries. 
+
+Result will be of type T, where T is an optional argument with a default value
+of Float64.
 """
-area(geom) = area(GI.trait(geom), geom)
+area(geom, ::Type{T} = Float64) where T <: AbstractFloat =
+    _area(T, GI.trait(geom), geom)
 
 """
-    signed_area(geom)::Real
+    signed_area(geom, ::Type{T} = Float64)::T
 
 Returns the signed area of the geometry, based on winding order. This is
 computed slighly differently for different geometries:
@@ -67,38 +73,42 @@ computed slighly differently for different geometries:
     counterclockwise.
     - You cannot compute the signed area of a multipolygon as it doesn't have a
     meaning as each sub-polygon could have a different winding order.
+
+Result will be of type T, where T is an optional argument with a default value
+of Float64.
 """
-signed_area(geom) = signed_area(GI.trait(geom), geom)
+signed_area(geom, ::Type{T} = Float64) where T <: AbstractFloat =
+    _signed_area(T, GI.trait(geom), geom)
 
-# Points
-area(::GI.PointTrait, point) = zero(typeof(GI.x(point)))
+# Points, MultiPoints, Curves, MultiCurves
+_area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
 
-signed_area(trait::GI.PointTrait, point) = area(trait, point)
-
-# Curves
-area(::CT, curve) where CT <: GI.AbstractCurveTrait =
-    zero(typeof(GI.x(GI.getpoint(curve, 1))))
-
-signed_area(trait::CT, curve) where CT <: GI.AbstractCurveTrait =
-    area(trait, curve)
+_signed_area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
 
 # Polygons
-area(trait::GI.PolygonTrait, geom) = abs(signed_area(trait, geom))
+_area(::Type{T}, trait::GI.PolygonTrait, poly) where T =
+    abs(_signed_area(T, trait, poly))
 
-function signed_area(::GI.PolygonTrait, poly)
-    s_area = _signed_area(GI.getexterior(poly))
+function _signed_area(::Type{T}, ::GI.PolygonTrait, poly) where T
+    GI.isempty(poly) && return zero(T)
+    s_area = _signed_area(T, GI.getexterior(poly))
     area = abs(s_area)
+    area == 0 && return area
     # Remove hole areas from total
     for hole in GI.gethole(poly)
-        area -= abs(_signed_area(hole))
+        area -= abs(_signed_area(T, hole))
     end
     # Winding of exterior ring determines sign
     return area * sign(s_area)
 end
 
-# MultiPolygons
-area(::GI.MultiPolygonTrait, geom) =
-    sum((area(poly) for poly in GI.getpolygon(geom)))
+# # MultiPolygons and GeometryCollections
+_area(
+    ::Type{T},
+    ::Union{GI.MultiPolygonTrait, GI.GeometryCollectionTrait},
+    geoms,
+) where T = 
+    sum((area(geom, T) for geom in GI.getgeom(geoms)), init = zero(T))
 
 #=
 Helper function:
@@ -108,20 +118,20 @@ to find the area under the curve. Even if curve isn't explicitly closed by
 repeating the first point at the end of the coordinates, curve is still assumed
 to be closed.
 =#
-function _signed_area(geom)
-    # Close curve, even if last point isn't explicitly repeated 
+function _signed_area(::Type{T}, geom) where T
+    area = zero(T)
+    # Close curve, even if last point isn't explicitly repeated
     np = GI.npoint(geom)
+    np == 0 && return area
     first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, np))
     np -= first_last_equal ? 1 : 0 
     # Integrate the area under the curve
     p1 = GI.getpoint(geom, np)
-    T = typeof(GI.x(p1))
-    area = zero(T)
     for i in 1:np
         p2 = GI.getpoint(geom, i)
         # Accumulate the area into `area`
         area += GI.x(p1) * GI.y(p2) - GI.y(p1) * GI.x(p2)
         p1 = p2
     end
-    return area / 2
+    return T(area / 2)
 end
