@@ -28,4 +28,5 @@ const GO = GeometryOps
     @testset "Reproject" begin include("transformations/reproject.jl") end
     @testset "Flip" begin include("transformations/flip.jl") end
     @testset "Simplify" begin include("transformations/simplify.jl") end
+    @testset "Transform" begin include("transformations/transform.jl") end
 end
