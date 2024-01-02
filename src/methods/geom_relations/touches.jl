@@ -52,7 +52,7 @@ The code for the specific implementations is in the geom_geom_processors file.
 const TOUCHES_POINT_ALLOWED = (in_allow = false, on_allow = true, out_allow = false)
 const TOUCHES_CURVE_ALLOWED = (over_allow = false, cross_allow = false, on_allow = true, out_allow = true)
 const TOUCHES_POLYGON_ALLOWS = (in_allow = false, on_allow = true, out_allow = true)
-const TOUCHES_REQUIRED = (in_require = false, on_require = true, out_require = false)
+const TOUCHES_REQUIRES = (in_require = false, on_require = true, out_require = false)
 
 """
     touches(geom1, geom2)::Bool
@@ -133,7 +133,7 @@ _touches(
 ) = _line_curve_process(
     g1, g2;
     TOUCHES_CURVE_ALLOWED...,
-    TOUCHES_REQUIRED...,
+    TOUCHES_REQUIRES...,
     closed_line = false,
     closed_curve = false,
 )
@@ -147,7 +147,7 @@ _touches(
 ) = _line_curve_process(
     g1, g2;
     TOUCHES_CURVE_ALLOWED...,
-    TOUCHES_REQUIRED...,
+    TOUCHES_REQUIRES...,
     closed_line = false,
     closed_curve = true,
 )
@@ -204,6 +204,17 @@ _touches(
 ) = _touches(trait2, g2, trait1, g1)
 
 
+#= Polygon touches another polygon if they share at least one boundary point and
+no interior points. =#
+_touches(
+    ::GI.PolygonTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _polygon_polygon_process(
+    g1, g2;
+    TOUCHES_POLYGON_ALLOWS...,
+    TOUCHES_REQUIRES...,
+)
+
 # # Geometries touch multi-geometry/geometry collections
 
 #= Geometry touch a multi-geometry or a collection if the geometry touches at
@@ -216,9 +227,9 @@ function _touches(
     }, g2,
 )
     for sub_g2 in GI.getgeom(g2)
-        touches(g1, sub_g2) && return true
+        !touches(g1, sub_g2) && return false
     end
-    return false
+    return true
 end
 
 # # Multi-geometry/geometry collections cross geometries
@@ -233,7 +244,7 @@ function _touches(
     ::GI.AbstractGeometryTrait, g2,
 )
     for sub_g1 in GI.getgeom(g1)
-        touches(sub_g1, g2) && return true
+        !touches(sub_g1, g2) && return false
     end
-    return false
+    return true
 end

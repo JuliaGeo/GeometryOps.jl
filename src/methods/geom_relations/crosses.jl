@@ -55,7 +55,7 @@ The code for the specific implementations is in the geom_geom_processors file.
 =#
 
 const CROSSES_CURVE_ALLOWS = (over_allow = false, cross_allow = true, on_allow = true, out_allow = true)
-const CROSSES_POLYGON_ALLOWS = (in_allow =  false, on_allow = true, out_allow = true)
+const CROSSES_POLYGON_ALLOWS = (in_allow = true, on_allow = true, out_allow = true)
 const CROSSES_REQUIRES = (in_require = true, on_require = false, out_require = true)
 
 """
@@ -104,7 +104,7 @@ _crosses(
 ) = _line_curve_process(
     g1, g2;
     CROSSES_CURVE_ALLOWS...,
-    in_require = true, on_require = false, out_require = true,
+    CROSSES_REQUIRES...,
     closed_line = false,
     closed_curve = false,
 )

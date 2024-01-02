@@ -227,7 +227,7 @@ end
 
 function _line_curve_process(
     line, curve;
-    over_allow, cross_allow, on_allow, out_allow,  # TODO: seperate crosses and overlaps (?)
+    over_allow, cross_allow, on_allow, out_allow,
     in_require, on_require, out_require,
     closed_line = false,
     closed_curve = false,
@@ -312,6 +312,7 @@ function _line_curve_process(
                                 (1, 1)
                             end
                         end
+
                     if (
                         (β == 0 && !closed_curve && j == 2) ||
                         (β == 1 && !closed_curve && j == nc) ||
@@ -321,11 +322,34 @@ function _line_curve_process(
                         !on_allow && return false
                         on_req_met = true
                     else
-                        !cross_allow && return false
                         in_req_met = true
+                        if (!cross_allow || !over_allow) && α != 0 && β != 0
+                            l, c = if β == 1
+                                if α == 1
+                                    (
+                                        (l_end, GI.getpoint(line, i + 1)), 
+                                        (c_end, GI.getpoint(curve, j + 1))
+                                    )
+                                else
+                                    (
+                                        (l_start, l_end),
+                                        (c_end, GI.getpoint(curve, j + 1))
+                                    )
+                                end
+                            else  # β ≠ 1 and α == 1
+                                (
+                                    (l_end, GI.getpoint(line, i + 1)),
+                                    (c_start, c_end)
+                                )
+                            end
+                            if _segment_segment_orientation(l, c) == line_hinge
+                                !cross_allow && return false
+                            else
+                                !over_allow && return false
+                            end
+                        end
                     end
                 end
-
                 # no overlap for a give segment
                 if j == nc
                     !out_allow && return false
@@ -616,12 +640,7 @@ function _polygon_polygon_process(
         !out_allow && return false
         out_req_met = true
     end
-    #=
-    If exterior of poly1 isn't in poly2 and poly2 isn't within poly1 (checked
-    with centroid), polygon interiors do not interact and there is nothing left
-    to check.
-    =#
-    c2 = centroid(poly2)
+
     if !e1_in_p2
         _, _, e2_out_e1 = _line_filled_curve_interactions(
             ext2, ext1;

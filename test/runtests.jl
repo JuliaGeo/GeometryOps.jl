@@ -17,6 +17,7 @@ const GO = GeometryOps
     # Methods
     @testset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
     @testset "Centroid" begin include("methods/centroid.jl") end
+    @testset "Geometry Relations" begin include("methods/geom_relations.jl") end
     @testset "Bools" begin include("methods/bools.jl") end
     @testset "Signed Area" begin include("methods/signed_area.jl") end
 

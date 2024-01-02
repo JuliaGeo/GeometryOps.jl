@@ -217,11 +217,11 @@ _disjoint(
 #= Geometry is disjoint from a multi-geometry or a collection if all of the
 elements of the collection are disjoint from the geometry. =#
 function _disjoint(
-    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
-    }, g2
+    }, g2,
 )
     for sub_g2 in GI.getgeom(g2)
         !disjoint(g1, sub_g2) && return false
@@ -238,7 +238,7 @@ function _disjoint(
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g1,
-    ::GI.AbstractGeometryTrait, g2
+    ::GI.AbstractGeometryTrait, g2,
 )
     for sub_g1 in GI.getgeom(g1)
         !disjoint(sub_g1, g2) && return false
