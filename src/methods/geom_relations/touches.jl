@@ -67,7 +67,7 @@ boundary.
 import GeometryOps as GO, GeoInterface as GI
 
 l1 = GI.Line([(0.0, 0.0), (1.0, 0.0)])
-l2 = GI.Line([(0.5, 1.0), (0.5, -1.0)])
+l2 = GI.Line([(1.0, 1.0), (1.0, -1.0)])
 
 GO.touches(l1, l2)
 # output
