@@ -43,6 +43,8 @@ signed area might not be the area. This is why signed area is only implemented
 for polygons.
 =#
 
+const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPontTrait,GI.PointTrait}
+
 """
     area(geom, ::Type{T} = Float64)::T
 
@@ -58,8 +60,12 @@ different geometries:
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-area(geom, ::Type{T} = Float64) where T <: AbstractFloat =
-    _area(T, GI.trait(geom), geom)
+function area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat
+    applyreduce(+, _AREA_TARGETS, geom; threaded) do g
+        _area(T, GI.trait(g), g)
+    end
+end
+
 
 """
     signed_area(geom, ::Type{T} = Float64)::T
@@ -77,8 +83,11 @@ computed slighly differently for different geometries:
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-signed_area(geom, ::Type{T} = Float64) where T <: AbstractFloat =
-    _signed_area(T, GI.trait(geom), geom)
+function signed_area(geom, ::Type{T} = Float64) where T <: AbstractFloat
+    applyreduce(+, _AREA_TARGETS, geom) do g
+        _signed_area(T, GI.trait(g), g)
+    end
+end
 
 # Points, MultiPoints, Curves, MultiCurves
 _area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
@@ -101,14 +110,6 @@ function _signed_area(::Type{T}, ::GI.PolygonTrait, poly) where T
     # Winding of exterior ring determines sign
     return area * sign(s_area)
 end
-
-# # MultiPolygons and GeometryCollections
-_area(
-    ::Type{T},
-    ::Union{GI.MultiPolygonTrait, GI.GeometryCollectionTrait},
-    geoms,
-) where T = 
-    sum((area(geom, T) for geom in GI.getgeom(geoms)), init = zero(T))
 
 #=
 Helper function:

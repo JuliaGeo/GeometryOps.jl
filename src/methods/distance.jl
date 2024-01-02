@@ -77,8 +77,11 @@ The method will differ based on the type of the geometry provided:
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-distance(point, geom, ::Type{T} = Float64) where T <: AbstractFloat =
-    _distance(T, GI.trait(point), point, GI.trait(geom), geom)
+function distance(point, geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat =
+    applyreduce(min, geom; threaded) do g
+        _distance(T, GI.trait(point), point, GI.trait(g), g)
+    end
+end
 
 """
     signed_distance(point, geom, ::Type{T} = Float64)::T
@@ -99,22 +102,29 @@ Points within `geom` have a negative signed distance, and points outside of
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-signed_distance(point, geom, ::Type{T} = Float64) where T<:AbstractFloat =
-    _signed_distance(T, GI.trait(point), point, GI.trait(geom), geom)
+function signed_distance(point, geom, ::Type{T} = Float64) where T<:AbstractFloat
+    applyreduce(min, geom; threaded) do g
+        _signed_distance(T, GI.trait(point), point, GI.trait(g), g)
+    end
+end
 
 
 # Swap argument order to point as first argument
-_distance(
+function _distance(
     ::Type{T},
-    gtrait::GI.AbstractTrait, geom,
+    gtrait::Union{GI.AbstractTrait,Nothing}, geom,
     ptrait::GI.PointTrait, point,
-) where T = _distance(T, ptrait, point, gtrait, geom)
+) where T 
+    _distance(T, ptrait, point, gtrait, geom)
+end
 
-_signed_distance(
+function _signed_distance(
     ::Type{T},
-    gtrait::GI.AbstractTrait, geom,
+    gtrait::Union{GI.AbstractTrait,Nothing}, geom,
     ptrait::GI.PointTrait, point,
-) where T = _signed_distance(T, ptrait, point, gtrait, geom)
+) where T
+    _signed_distance(T, ptrait, point, gtrait, geom)
+end
 
 # Point-Point, Point-Line, Point-LineString, Point-LinearRing
 _distance(::Type{T}, ::GI.PointTrait, point, ::GI.PointTrait, geom) where T =

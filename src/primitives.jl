@@ -29,15 +29,15 @@ The outer recursive functions then progressively rebuild the object
 using GeoInterface objects matching the original traits.
 
 If `PointTrait` is found  but it is not the `Target`, an error is thrown.
-This likely means the object contains a different geometry trait to 
+This likely means the object contains a different geometry trait to
 the target, such as `MultiPointTrait` when `LineStringTrait` was specified.
 
 To handle this possibility it may be necessary to make `Target` a
 `Union` of traits found at the same level of nesting, and define methods
 of `f` to handle all cases.
 
-Be careful making a union across "levels" of nesting, e.g. 
-`Union{FeatureTrait,PolygonTrait}`, as `_apply` will just never reach 
+Be careful making a union across "levels" of nesting, e.g.
+`Union{FeatureTrait,PolygonTrait}`, as `_apply` will just never reach
 `PolygonTrait` when all the polygons are wrapped in a `FeatureTrait` object.
 
 ## Embedding:
@@ -46,7 +46,7 @@ Be careful making a union across "levels" of nesting, e.g.
 feature collections as part of `apply`. Geometries deeper than `Target`
 will of course not have new `extent` or `crs` embedded.
 
-- `calc_extent` signals to recalculate an `Extent` and embed it. 
+- `calc_extent` signals to recalculate an `Extent` and embed it.
 - `crs` will be embedded as-is
 
 ## Threading
@@ -62,13 +62,13 @@ each `PolygonTrait` sub-geometry may be calculated on a different thread.
 Reconstruct a geometry, feature, feature collection, or nested vectors of
 either using the function `f` on the `target` trait.
 
-`f(target_geom) => x` where `x` also has the `target` trait, or a trait that can 
+`f(target_geom) => x` where `x` also has the `target` trait, or a trait that can
 be substituted. For example, swapping `PolgonTrait` to `MultiPointTrait` will fail
 if the outer object has `MultiPolygonTrait`, but should work if it has `FeatureTrait`.
 
 Objects "shallower" than the target trait are always completely rebuilt, like
 a `Vector` of `FeatureCollectionTrait` of `FeatureTrait` when the target
-has `PolygonTrait` and is held in the features. But "deeper" objects may remain 
+has `PolygonTrait` and is held in the features. But "deeper" objects may remain
 unchanged - such as points and linear rings if the target is the same `PolygonTrait`.
 
 The result is a functionally similar geometry with values depending on `f`
@@ -82,7 +82,7 @@ Flipped point the order in any feature or geometry, or iterables of either:
 ```juia
 import GeoInterface as GI
 import GeometryOps as GO
-geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]), 
+geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]),
                    GI.LinearRing([(3, 4), (5, 6), (6, 7), (3, 4)])])
 
 flipped_geom = GO.apply(GI.PointTrait, geom) do p
@@ -97,20 +97,26 @@ _apply(f, ::Type{Target}, geom; kw...)  where Target =
 # There is no trait and this is an AbstractArray - so just iterate over it calling _apply on the contents
 function _apply(f, ::Type{Target}, ::Nothing, A::AbstractArray; threaded=false, kw...) where Target
     # For an Array there is nothing else to do but map `_apply` over all values
-    # _maptasks may run this level threaded if `threaded==true`, 
-    # but deeper `_apply` called in the closure will not be threaded 
+    # _maptasks may run this level threaded if `threaded==true`,
+    # but deeper `_apply` called in the closure will not be threaded
     _maptasks(eachindex(A); threaded) do i
         _apply(f, Target, A[i]; threaded=false, kw...)
     end
 end
 # There is no trait and this is not an AbstractArray.
-# Try to call _apply over it. We can't use threading 
+# Try to call _apply over it. We can't use threading
 # as we don't know if we can can index into it. So just `map`.
-# (TODO: maybe `collect` first if `threaded=true` so we can thread?)
-_apply(f, ::Type{Target}, ::Nothing, iterable; kw...) where Target =
-    map(x -> _apply(f, Target, x; kw...), iterable)
+function _apply(f, ::Type{Target}, ::Nothing, iterable; threaded=false, kw...) where Target =
+    if threaded
+        # `collect` first so we can use threads
+        _apply(f, Target, collect(iterable); threaded, kw...)
+    else
+        map(x -> _apply(f, Target, x; kw...), iterable)
+    end
+end
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
-function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; 
+# Maybe use threads to call _apply on componenet features
+function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc;
     crs=GI.crs(fc), calc_extent=false, threaded=false
 ) where Target
     # Run _apply on all `features` in the feature collection, possibly threaded
@@ -129,25 +135,26 @@ function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc;
     end
 end
 # Rewrap all FeatureTrait features as GI.Feature, keeping the properties
-function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature; 
+function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature;
     crs=GI.crs(feature), calc_extent=false, threaded=false
 ) where Target
-    # Run _apply on the contained geometry 
+    # Run _apply on the contained geometry
     geometry = _apply(f, Target, GI.geometry(feature); crs, calc_extent, threaded)
     # Get the feature properties
     properties = GI.properties(feature)
     if calc_extent
         # Calculate the extent of the geometry
         extent = GI.extent(geometry)
-        # Return a new Feature with the new geometry and calculated extent, but the oroginal properties and crs 
+        # Return a new Feature with the new geometry and calculated extent, but the oroginal properties and crs
         return GI.Feature(geometry; properties, crs, extent)
     else
-        # Return a new Feature with the new geometry, but the oroginal properties and crs 
+        # Return a new Feature with the new geometry, but the oroginal properties and crs
         return GI.Feature(geometry; properties, crs)
     end
 end
-# Reconstruct nested geometries
-function _apply(f, ::Type{Target}, trait, geom; 
+# Reconstruct nested geometries,
+# maybe using threads to call _apply on component geoms
+function _apply(f, ::Type{Target}, trait, geom;
     crs=GI.crs(geom), calc_extent=false, threaded=false
 )::(GI.geointerface_geomtype(trait)) where Target
     # Map `_apply` over all sub geometries of `geom`
@@ -159,7 +166,7 @@ function _apply(f, ::Type{Target}, trait, geom;
     if calc_extent
         # Calculate the extent of the sub geometries
         extent = mapreduce(GI.extent, Extents.union, geoms)
-        # Return a new geometry of the same trait as `geom`, 
+        # Return a new geometry of the same trait as `geom`,
         # holding tnew `geoms` with `crs` and calcualted extent
         return rebuild(geom, geoms; crs, extent)
     else
@@ -173,19 +180,80 @@ _apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing, kw...) where 
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 # Finally, these short methods are the main purpose of `apply`.
 # The `Trait` is a subtype of the `Target` (or identical to it)
-# So the `Target` is found. We apply `f` to geom and return it to previous 
+# So the `Target` is found. We apply `f` to geom and return it to previous
 # _apply calls to be wrapped with the outer geometries/feature/featurecollection/array.
 _apply(f, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {Target,Trait<:Target} = f(geom)
 # Define some specific cases of this match to avoid method ambiguity
-_apply(f, ::Type{GI.PointTrait}, trait::GI.PointTrait, geom; kw...) = f(geom)
-_apply(f, ::Type{GI.FeatureTrait}, ::GI.FeatureTrait, feature; kw...) = f(feature)
-_apply(f, ::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, fc; kw...) = f(fc)
+for T in (GI.PointTrait, GI.LinearRing, GI.LineString, GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait)
+    @eval _apply(f, target::Type{$T}, trait::$T, x; threaded) = f(x)
+end
+
+"""
+    applyreduce(f, op, target::Type{<:AbstractTrait}, obj; threaded)
+
+Apply function `f` to all objects with the `target` trait,
+and reduce the result with an `op` like `+`. 
+
+The order and grouping of application of `op` is not guaranteed.
+
+If `threaded==true` threads will be used over arrays and iterables, 
+feature collections and nested geometries.
+"""
+function applyreduce end
+# Add dispatch argument for trait
+applyreduce(f, op, target::Type, geom; threaded=false) =
+    _applyreduce(f, op, target, GI.trait(geom), geom; threaded)
+
+# Maybe use threads recucing over arrays
+function _applyreduce(f, op, target::Type, ::Nothing, A::AbstractArray; threaded) =
+    _mapreducetasks(op, eachindex(A); threaded) do i
+        _applyreduce(f, op, target, A[i]; threaded=false)
+    end
+end
+# Try to applyreduce over iterables
+function _applyreduce(f, op, target::Type, ::Nothing, iterable; threaded) =
+    if threaded # Try to `collect` and reduce over the vector with threads
+        _applyreduce(f, op, target, collect(iterable); threaded)
+    else
+        # Try to `mapreduce` the iterable as-is
+        mapreduce(op, iterable) do x
+            _applyreduce(f, op, target, x; threaded=false)
+        end
+    end
+end
+# Maybe use threads reducing over features of feature collections
+function _applyreduce(f, op, target::Type, ::GI.FeatureCollectionTrait, fc; threaded) =
+    _mapreducetasks(op, 1:GI.nfeature(fc); threaded) do i
+        _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=false)
+    end
+end
+# Features just applyreduce to their geometry
+_applyreduce(f, op, target::Type, ::GI.FeatureTrait, feature; threaded) =
+    _applyreduce(f, op, target, GI.geometry(feature); threaded)
+# Maybe use threads over components of nested geometries
+function _applyreduce(f, op, target::Type, trait::GI.AbstractGeometryTrait, geom; threaded) =
+    _mapreducetasks(op, 1:GI.ngeom(geom); threaded) do i
+        _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=false)
+    end
+end
+# Don't thread over points it won't pay off
+_applyreduce(f, op, target::Type, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom; threaded) =
+    _applyreduce(f, op, target, GI.getgeom(geom); threaded=false)
+# Apply f to the target
+_applyreduce(f, op, ::Type{Target}, ::Trait, x; threaded) where {Target,Trait<:Target} = f(x)
+# Fail if we hit PointTrait
+_applyreduce(f, op, target::Type, trait::GI.PointTrait, geom; threaded) =
+    throw(ArgumentError("target $target not found, but reached a `PointTrait` leaf"))
+# Specific cases to avoid method ambiguity
+for T in (GI.PointTrait, GI.LinearRing, GI.LineString, GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait)
+    @eval _applyreduce(f, op, target::Type{$T}, trait::$T, x; threaded) = f(x)
+end
 
 """
     unwrap(target::Type{<:AbstractTrait}, obj)
     unwrap(f, target::Type{<:AbstractTrait}, obj)
 
-Unwrap the object newst to vectors, down to the target trait.
+Unwrap the object to vectors, down to the target trait.
 
 If `f` is passed in it will be applied to the target geometries
 as they are found.
@@ -216,18 +284,18 @@ unwrap(f, target::Type{GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, 
     flatten(target::Type{<:GI.AbstractTrait}, obj)
     flatten(f, target::Type{<:GI.AbstractTrait}, obj)
 
-Lazily flatten any `AbstractArray`, iterator, `FeatureCollectionTrait`, 
-`FeatureTrait` or `AbstractGeometryTrait` object `obj`, so that objects 
+Lazily flatten any `AbstractArray`, iterator, `FeatureCollectionTrait`,
+`FeatureTrait` or `AbstractGeometryTrait` object `obj`, so that objects
 with the `target` trait are returned by the iterator.
 
 If `f` is passed in it will be applied to the target geometries.
 """
-flatten(::Type{Target}, geom) where {Target<:GI.AbstractTrait} = flatten(identity, Target, geom) 
-flatten(f, ::Type{Target}, geom) where {Target<:GI.AbstractTrait} = _flatten(f, Target, geom) 
+flatten(::Type{Target}, geom) where {Target<:GI.AbstractTrait} = flatten(identity, Target, geom)
+flatten(f, ::Type{Target}, geom) where {Target<:GI.AbstractTrait} = _flatten(f, Target, geom)
 
 _flatten(f, ::Type{Target}, geom) where Target = _flatten(f, Target, GI.trait(geom), geom)
 # Try to flatten over iterables
-_flatten(f, ::Type{Target}, ::Nothing, iterable) where Target = 
+_flatten(f, ::Type{Target}, ::Nothing, iterable) where Target =
     Iterators.flatten(Iterators.map(x -> _flatten(f, Target, x), iterable))
 # Flatten feature collections
 function _flatten(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc) where Target
@@ -235,11 +303,11 @@ function _flatten(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc) where Targ
         _flatten(f, Target, feature)
     end |> Iterators.flatten
 end
-_flatten(f, ::Type{Target}, ::GI.FeatureTrait, feature) where Target = 
+_flatten(f, ::Type{Target}, ::GI.FeatureTrait, feature) where Target =
     _flatten(f, Target, GI.geometry(feature))
 # Apply f to the target geometry
 _flatten(f, ::Type{Target}, ::Trait, geom) where {Target,Trait<:Target} = (f(geom),)
-_flatten(f, ::Type{Target}, trait, geom) where Target = 
+_flatten(f, ::Type{Target}, trait, geom) where Target =
     Iterators.flatten(Iterators.map(g -> _flatten(f, Target, g), GI.getgeom(geom)))
 # Fail if we hit PointTrait without running `f`
 _flatten(f, ::Type{Target}, trait::GI.PointTrait, geom) where Target =
@@ -264,12 +332,12 @@ function reconstruct(geom, components)
     return obj
 end
 
-_reconstruct(geom, components) = 
-    _reconstruct(typeof(GI.trait(first(components))), geom, components, 1) 
-_reconstruct(::Type{Target}, geom, components, iter) where Target = 
+_reconstruct(geom, components) =
+    _reconstruct(typeof(GI.trait(first(components))), geom, components, 1)
+_reconstruct(::Type{Target}, geom, components, iter) where Target =
     _reconstruct(Target, GI.trait(geom), geom, components, iter)
 # Try to reconstruct over iterables
-function _reconstruct(::Type{Target}, ::Nothing, iterable, components, iter) where Target 
+function _reconstruct(::Type{Target}, ::Nothing, iterable, components, iter) where Target
     vect = map(iterable) do x
         # iter is updated by _reconstruct here
         obj, iter = _reconstruct(Target, x, components, iter)
@@ -286,7 +354,7 @@ function _reconstruct(::Type{Target}, ::GI.FeatureCollectionTrait, fc, component
     end
     return GI.FeatureCollection(features; crs=GI.crs(fc)), iter
 end
-function _reconstruct(::Type{Target}, ::GI.FeatureTrait, feature, components, iter) where Target 
+function _reconstruct(::Type{Target}, ::GI.FeatureTrait, feature, components, iter) where Target
     geom, iter = _reconstruct(Target, GI.geometry(feature), components, iter)
     return GI.Feature(geom; properties=GI.properties(feature), crs=GI.crs(feature)), iter
 end
@@ -354,17 +422,17 @@ using Base.Threads: nthreads, @threads, @spawn
 function _maptasks(f, taskrange; threaded=false)
     if threaded
         ntasks = length(taskrange)
-        # Customize this as needed. 
+        # Customize this as needed.
         # More tasks have more overhead, but better load balancing
-        tasks_per_thread = 2 
+        tasks_per_thread = 2
         chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
         # partition the range into chunks
-        task_chunks = Iterators.partition(taskrange, chunk_size) 
+        task_chunks = Iterators.partition(taskrange, chunk_size)
         # Map over the chunks
         tasks = map(task_chunks) do chunk
             # Spawn a task to process this chunk
             @spawn begin
-                # Where we map `f` over the chunk indices 
+                # Where we map `f` over the chunk indices
                 map(f, chunk)
             end
         end
@@ -373,5 +441,36 @@ function _maptasks(f, taskrange; threaded=false)
         return mapreduce(fetch, vcat, tasks)
     else
         return map(f, taskrange)
+    end
+end
+
+# Threading utility, modified Mason Protters threading PSA
+# run `f` over ntasks, where f recieves an AbstractArray/range
+# of linear indices
+#
+# WARNING: this will not work for mean/median - only ops
+# where grouping is possible
+function _mapreducetasks(f, op, taskrange; threaded=false)
+    if threaded
+        ntasks = length(taskrange)
+        # Customize this as needed.
+        # More tasks have more overhead, but better load balancing
+        tasks_per_thread = 2
+        chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
+        # partition the range into chunks
+        task_chunks = Iterators.partition(taskrange, chunk_size)
+        # Map over the chunks
+        tasks = map(task_chunks) do chunk
+            # Spawn a task to process this chunk
+            @spawn begin
+                # Where we map `f` over the chunk indices
+                mapreduce(f, op, chunk)
+            end
+        end
+
+        # Finally we join the results into a new vector
+        return mapreduce(fetch, op, tasks)
+    else
+        return mapreduce(f, op, taskrange)
     end
 end
