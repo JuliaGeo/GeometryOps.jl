@@ -63,99 +63,99 @@ gc1 = LG.GeometryCollection([pt1, l5, p6])
 
 test_pairs = [
     # Points and geometries
-    (pt1, pt1, "pt1", "pt1"),  # Same point
-    (pt1, pt2, "pt1", "pt2"),  # Different point
-    (pt1, l1, "pt1", "l1"),   # Point on line endpoint
-    (pt2, l1, "pt2", "l1"),   # Point outside line
-    (pt3, l1, "pt3", "l1"),   # Point on line segment
-    (pt4, l1, "pt4", "l1"),   # Point on line vertex between segments
-    (l1, pt3, "l1", "pt3"),   # oint on line segment (order swapped)
-    (pt1, r1, "pt1", "r1"),   # Point on ring "endpoint"
-    (pt2, r1, "pt2", "r1"),   # Point outside ring
-    (pt3, r1, "pt3", "r1"),   # Point on ring segment
-    (pt4, r1, "pt4", "r1"),   # Point on ring vertex between segments
-    (r1, pt3, "r1", "pt3"),   # Point on ring segment (order swapped)
-    (p1, pt1, "p1", "pt1"),   # Point on vertex of polygon
-    (pt2, p1, "pt2", "p1"),   # Point outside of polygon's external ring
-    (pt4, p1, "pt4", "p1"),   # Point on polygon's edge
-    (pt5, p1, "pt5", "p1"),   # Point inside of polygon
-    (pt6, p1, "pt6", "p1"),   # Point on hole edge
-    (pt7, p1, "pt7", "p1"),   # Point inside of polygon hole
-    (p1, pt5, "p1", "pt5"),   # Point inside of polygon (order swapped)
+    (pt1, pt1, "pt1", "pt1", "Same point"),
+    (pt1, pt2, "pt1", "pt2", "Different point"),
+    (pt1, l1, "pt1", "l1", "Point on line endpoint"),
+    (pt2, l1, "pt2", "l1", "Point outside line"),
+    (pt3, l1, "pt3", "l1", "Point on line segment"),
+    (pt4, l1, "pt4", "l1", "Point on line vertex between segments"),
+    (l1, pt3, "l1", "pt3", "Point on line segment (order swapped)"),
+    (pt1, r1, "pt1", "r1", "Point on ring 'endpoint'"),
+    (pt2, r1, "pt2", "r1", "Point outside ring"),
+    (pt3, r1, "pt3", "r1", "Point on ring segment"),
+    (pt4, r1, "pt4", "r1", "Point on ring vertex between segments"),
+    (r1, pt3, "r1", "pt3", "Point on ring segment (order swapped)"),
+    (p1, pt1, "p1", "pt1", "Point on vertex of polygon"),
+    (pt2, p1, "pt2", "p1", "Point outside of polygon's external ring"),
+    (pt4, p1, "pt4", "p1", "Point on polygon's edge"),
+    (pt5, p1, "pt5", "p1", "Point inside of polygon"),
+    (pt6, p1, "pt6", "p1", "Point on hole edge"),
+    (pt7, p1, "pt7", "p1", "Point inside of polygon hole"),
+    (p1, pt5, "p1", "pt5", "Point inside of polygon (order swapped)"),
     # # Lines and geometries
-    (l1, l1, "l1", "l1"),    # Same line
-    (l2, l1, "l2", "l1"),    # L2 is one segment of l1
-    (l3, l1, "l3", "l1"),    # L3 shares one segment with l1 and has one segment outside
-    (l4, l1, "l4", "l1"),    # L4 shares half of each of l1 segments
-    (l5, l1, "l5", "l1"),    # L5 shares one endpoint with l1 but not segments
-    (l6, l1, "l6", "l1"),    # Lines are disjoint
-    (l7, l1, "l7", "l1"),    # L7 crosses through one of l1's segments
-    (l8, l1, "l8", "l1"),    # Overlaps one segment and crosses through another segment
-    (l9, l1, "l9", "l1"),    # Two segments touch and two segments crosses
-    (l16, l1, "l16", "l1"),  # L16 bounces off of l1's corner
-    (l1, r1, "l1", "r1"),    # Line inside of ring
-    (l3, r1, "l3", "r1"),    # Line covers one edge of linear ring and has segment outside
-    (l5, r1, "l5", "r1"),    # Line and linear ring are only covered by vertex
-    (l6, r1, "l6", "r1"),    # Line and ring are disjoint
-    (l7, r1, "l7", "r1"),    # Line crosses through two ring edges
-    (l8, r1, "l8", "r1"),    # Line crosses through two ring edges and touches third edge
-    (l10, r1, "l10", "r1"),  # Line is equal to linear ring 
-    (l11, r1, "l11", "r1"),  # Line covers linear ring and then has extra segment
-    (l1, p1, "l1", "p1"),    # Line on polygon edge
-    (l3, p1, "l3", "p1"),    # Line on polygon edge and extending beyond polygon edge
-    (l5, p1, "l5", "p1"),    # Line outside polygon connected by a vertex
-    (l7, p1, "l7", "p1"),    # Line through polygon cutting to the outside
-    (l12, p1, "l12", "p1"),  # Line inside polygon
-    (l13, p1, "l13", "p1"),  # Line outside of polygon
-    (l14, p1, "l14", "p1"),  # Line in polygon hole
-    (l15, p8, "l15", "p8"),  # Line outside crown-shaped polygon but touching edges
-    (l15, p9, "l15", "p9"),  # Line within crown-shaped polygon but touching edges
+    (l1, l1, "l1", "l1", "Same line"),
+    (l2, l1, "l2", "l1", "L2 is one segment of l1"),
+    (l3, l1, "l3", "l1", "L3 shares one segment with l1 and has one segment outside"),
+    (l4, l1, "l4", "l1", "L4 shares half of each of l1 segments"),
+    (l5, l1, "l5", "l1", "L5 shares one endpoint with l1 but not segments"),
+    (l6, l1, "l6", "l1", "Lines are disjoint"),
+    (l7, l1, "l7", "l1", "L7 crosses through one of l1's segments"),
+    (l8, l1, "l8", "l1", "Overlaps one segment and crosses through another segment"),
+    (l9, l1, "l9", "l1", "Two segments touch and two segments crosses"),
+    (l16, l1, "l16", "l1", "L16 bounces off of l1's corner"),
+    (l1, r1, "l1", "r1", "Line inside of ring"),
+    (l3, r1, "l3", "r1", "Line covers one edge of linear ring and has segment outside"),
+    (l5, r1, "l5", "r1", "Line and linear ring are only covered by vertex"),
+    (l6, r1, "l6", "r1", "Line and ring are disjoint"),
+    (l7, r1, "l7", "r1", "Line crosses through two ring edges"),
+    (l8, r1, "l8", "r1", "Line crosses through two ring edges and touches third edge"),
+    (l10, r1, "l10", "r1", "Line is equal to linear ring"),
+    (l11, r1, "l11", "r1", "Line covers linear ring and then has extra segment"),
+    (l1, p1, "l1", "p1", "Line on polygon edge"),
+    (l3, p1, "l3", "p1", "Line on polygon edge and extending beyond polygon edge"),
+    (l5, p1, "l5", "p1", "Line outside polygon connected by a vertex"),
+    (l7, p1, "l7", "p1", "Line through polygon cutting to the outside"),
+    (l12, p1, "l12", "p1", "Line inside polygon"),
+    (l13, p1, "l13", "p1", "Line outside of polygon"),
+    (l14, p1, "l14", "p1", "Line in polygon hole"),
+    (l15, p8, "l15", "p8", "Line outside crown-shaped polygon but touching edges"),
+    (l15, p9, "l15", "p9", "Line within crown-shaped polygon but touching edges"),
     # Ring and geometries
-    (r1, l1, "r1", "l1"),    # Line is within linear ring
-    (r1, l3, "r1", "l3"),    # Line covers one edge of linear ring and has segment outside
-    (r1, l5, "r1", "l5"),    # Line and linear ring are only connected at vertex
-    (r1, l6, "r1", "l6"),    # Line and linear ring are disjoint
-    (r1, l7, "r1", "l7"),    # Line crosses though two ring edges
-    (r1, l8, "r1", "l8"),    # Line crosses through two ring edges and touches third edge
-    (r1, l10, "r1", "l10"),  # Line is equal to linear ring
-    (r1, l11, "r1", "l11"),  # Line covers linear ring and then has extra segment
-    (r1, r1, "r1", "r1"),    # Same rings
-    (r2, r1, "r2", "r1"),    # Disjoint ring with one "inside" of hole created
-    (r3, r1, "r3", "r1"),    # Disjoint ring with one "outside" of hole created
-    (r4, r1, "r4", "r1"),    # Rings share two sides and rest of sides dont touch
-    (r1, r5, "r1", "r5"),    # Ring shares all edges with other ring, plus an extra loop
-    (r1, r6, "r1", "r6"),    # Rings share just one vertex
-    (r1, r7, "r1", "r7"),    # Rings cross one another
-    (r4, p1, "r4", "p1"),    # Ring on boundary of polygon
-    (r1, p1, "r1", "p1"),    # Ring on boundary and cutting through polygon
-    (r2, p1, "r2", "p1"),    # Ring on hole bounday
-    (r6, p1, "r6", "p1"),    # Ring touches polygon at one vertex
-    (r7, p1, "r7", "p1"),    # Ring crosses through polygon
-    (r8, p1, "r8", "p1"),    # Ring inside of polygon
-    (r9, p1, "r9", "p1"),    # Ring outside of polygon
-    (r10, p1, "r10", "p1"),  # Ring inside of polygon and shares hole's edge
-    (r11, p1, "r11", "p1"),  # Ring inside of polygon hole
+    (r1, l1, "r1", "l1", "Line is within linear ring"),
+    (r1, l3, "r1", "l3", "Line covers one edge of linear ring and has segment outside"),
+    (r1, l5, "r1", "l5", "Line and linear ring are only connected at vertex"),
+    (r1, l6, "r1", "l6", "Line and linear ring are disjoint"),
+    (r1, l7, "r1", "l7", "Line crosses though two ring edges"),
+    (r1, l8, "r1", "l8", "Line crosses through two ring edges and touches third edge"),
+    (r1, l10, "r1", "l10", "Line is equal to linear ring"),
+    (r1, l11, "r1", "l11", "Line covers linear ring and then has extra segment"),
+    (r1, r1, "r1", "r1", "Same rings"), 
+    (r2, r1, "r2", "r1", "Disjoint ring with one 'inside' of hole created"),
+    (r3, r1, "r3", "r1", "Disjoint ring with one 'outside' of hole created"),
+    (r4, r1, "r4", "r1", "Rings share two sides and rest of sides dont touch"),
+    (r1, r5, "r1", "r5", "Ring shares all edges with other ring, plus an extra loop"),
+    (r1, r6, "r1", "r6", "Rings share just one vertex"),
+    (r1, r7, "r1", "r7", "Rings cross one another"),
+    (r4, p1, "r4", "p1", "Ring on boundary of polygon"),
+    (r1, p1, "r1", "p1", "Ring on boundary and cutting through polygon"),
+    (r2, p1, "r2", "p1", "Ring on hole bounday"),
+    (r6, p1, "r6", "p1", "Ring touches polygon at one vertex"),
+    (r7, p1, "r7", "p1", "Ring crosses through polygon"),
+    (r8, p1, "r8", "p1", "Ring inside of polygon"),
+    (r9, p1, "r9", "p1", "Ring outside of polygon"),
+    (r10, p1, "r10", "p1", "Ring inside of polygon and shares hole's edge"),
+    (r11, p1, "r11", "p1", "Ring inside of polygon hole"),
     # Polygon and geometries
-    (p1, p1, "p1", "p1"),    # Same polygons
-    (p1, p2, "p1", "p2"),    # P1 and p2 are the same but p1 has holes
-    (p2, p1, "p2", "p1"),    # P1 and p2 are the same but p1 has holes (order swapped)
-    (p3, p1, "p3", "p1"),    # P3 is equal to one of p1's holes
-    (p4, p1, "p4", "p1"),    # Polygon's share just one vertex
-    (p5, p1, "p5", "p1"),    # Polygon outside of other polygon
-    (p6, p1, "p6", "p1"),    # Polygon inside of other polygon's hole
-    (p7, p1, "p7", "p1"),    # Polygons overlap
-    (p10, p1, "p10", "p1"),  # Polygon's with nested holes
+    (p1, p1, "p1", "p1", "Same polygons"),
+    (p1, p2, "p1", "p2", "P1 and p2 are the same but p1 has holes"),
+    (p2, p1, "p2", "p1", "P1 and p2 are the same but p1 has holes (order swapped)"),
+    (p3, p1, "p3", "p1", "P3 is equal to one of p1's holes"),
+    (p4, p1, "p4", "p1", "Polygon's share just one vertex"),
+    (p5, p1, "p5", "p1", "Polygon outside of other polygon"),
+    (p6, p1, "p6", "p1", "Polygon inside of other polygon's hole"),
+    (p7, p1, "p7", "p1", "Polygons overlap"),
+    (p10, p1, "p10", "p1", "Polygon's with nested holes"),
     # Multigeometries
-    (mpt1, mpt1, "mpt1", "mpt1"),  # Same set of points for multipoints
-    (mpt1, mpt2, "mpt1", "mpt2"),  # Some point matches, others are different
-    (mpt1, mpt3, "mpt1", "mpt3"),  # No shared points
-    (ml1, ml2, "ml1", "ml2"),      # Lines in ml1 cross and touch ml2
-    (mp1, mp2, "mp1", "mp2"),      # Polygons in mp1 are inside hole and overlap
-    (gc1, ml1, "gc1", "ml1"),      # Make sure collection works with multi-geom
+    (mpt1, mpt1, "mpt1", "mpt1", "Same set of points for multipoints"),
+    (mpt1, mpt2, "mpt1", "mpt2", "Some point matches, others are different"),
+    (mpt1, mpt3, "mpt1", "mpt3", "No shared points"),
+    (ml1, ml2, "ml1", "ml2", "Lines in ml1 cross and touch ml2"),
+    (mp1, mp2, "mp1", "mp2", "Polygons in mp1 are inside hole and overlap"),
+    (gc1, ml1, "gc1", "ml1", "Make sure collection works with multi-geom"),
 ]
 
 function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
-    for (g1, g2, sg1, sg2) in test_pairs
+    for (g1, g2, sg1, sg2, sdesc) in test_pairs
         if swap_points
             g1, g2 = g2, g1
             sg1, sg2 = sg2, sg1
@@ -163,7 +163,7 @@ function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
         go_val = GO_f(g1, g2)
         lg_val = LG_f(g1, g2)
         @test go_val == lg_val
-        go_val != lg_val && println("\n" * "↑ TEST INFO: " * sg1 * " " * f_name * " " * sg2 * "\n\n")
+        go_val != lg_val && println("\n↑ TEST INFO: - $sg1 $f_name $sg2: $sdesc \n\n")
     end
 end
 
