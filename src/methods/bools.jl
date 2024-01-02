@@ -128,7 +128,10 @@ end
 
 #     return slope1 === slope2
 # end
+_isparallel(((ax, ay), (bx, by)), ((cx, cy), (dx, dy))) = 
+    _isparallel(bx - ax, by - ay, dx - cx, dy - cy)
 
+_isparallel(Δx1, Δy1, Δx2, Δy2) = (Δx1 * Δy2 == Δy1 * Δx2)  
 
 """
     point_on_line(point::Point, line::LineString; ignore_end_vertices::Bool=false)::Bool
