@@ -120,18 +120,28 @@ to be closed.
 =#
 function _signed_area(::Type{T}, geom) where T
     area = zero(T)
-    # Close curve, even if last point isn't explicitly repeated
     np = GI.npoint(geom)
     np == 0 && return area
-    first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, np))
-    np -= first_last_equal ? 1 : 0 
+
+    first = true
+    local pfirst, p1
     # Integrate the area under the curve
-    p1 = GI.getpoint(geom, np)
-    for i in 1:np
-        p2 = GI.getpoint(geom, i)
+    for p2 in GI.getpoint(geom)
+        # Skip the first and do it later 
+        # This lets us work within one iteration over geom, 
+        # which means on C call when using points from external libraries.
+        if first
+            p1 = pfirst = p2
+            first = false
+            continue
+        end
         # Accumulate the area into `area`
         area += GI.x(p1) * GI.y(p2) - GI.y(p1) * GI.x(p2)
         p1 = p2
     end
+    # Complete the last edge.
+    # If the first and last where the same this will be zero
+    p2 = pfirst
+    area += GI.x(p1) * GI.y(p2) - GI.y(p1) * GI.x(p2)
     return T(area / 2)
 end
