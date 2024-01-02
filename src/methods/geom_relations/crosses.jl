@@ -41,7 +41,7 @@ function multipoint_crosses_line(geom1, geom2)
     while i < GI.npoint(geom1) && !int_point && !ext_point
         for j in 1:GI.npoint(geom2) - 1
             exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
-            if point_on_segment(GI.getpoint(geom1, i), (GI.getpoint(geom2, j), GI.getpoint(geom2, j + 1)); exclude_boundary)
+            if _point_on_segment(GI.getpoint(geom1, i), (GI.getpoint(geom2, j), GI.getpoint(geom2, j + 1)); exclude_boundary)
                 int_point = true
             else
                 ext_point = true
@@ -62,7 +62,7 @@ function line_crosses_line(line1, line2)
                 pa = GI.getpoint(line1, i)
                 pb = GI.getpoint(line1, i + 1)
                 p = GI.getpoint(line2, j)
-                point_on_segment(p, (pa, pb); exclude_boundary) && return true
+                _point_on_segment(p, (pa, pb); exclude_boundary) && return true
             end
         end
     end
@@ -81,12 +81,57 @@ function multipoint_crosses_poly(mp, poly)
     ext_point = false
 
     for p in GI.getpoint(mp)
-        if point_in_polygon(p, poly)
+        if _point_polygon_process(
+            p, poly;
+            in_allow = true, on_allow = true, out_allow = false,
+        )
             int_point = true
         else
             ext_point = true
         end
         int_point && ext_point && return true
+    end
+    return false
+end
+
+#= TODO: Once crosses is swapped over to use the geom relations workflow, can
+delete these helpers. =#
+
+function _point_on_segment(point, (start, stop); exclude_boundary::Symbol=:none)::Bool
+    x, y = GI.x(point), GI.y(point)
+    x1, y1 = GI.x(start), GI.y(start)
+    x2, y2 = GI.x(stop), GI.y(stop)
+
+    dxc = x - x1
+    dyc = y - y1
+    dx1 = x2 - x1
+    dy1 = y2 - y1
+
+    # TODO use better predicate for crossing here
+    cross = dxc * dy1 - dyc * dx1
+    cross != 0 && return false
+
+    # Will constprop optimise these away?
+    if exclude_boundary === :none
+        if abs(dx1) >= abs(dy1)
+            return dx1 > 0 ? x1 <= x && x <= x2 : x2 <= x && x <= x1
+        end
+        return dy1 > 0 ? y1 <= y && y <= y2 : y2 <= y && y <= y1
+    elseif exclude_boundary === :start
+        if abs(dx1) >= abs(dy1)
+             return dx1 > 0 ? x1 < x && x <= x2 : x2 <= x && x < x1
+        end
+        return dy1 > 0 ? y1 < y && y <= y2 : y2 <= y && y < y1
+    elseif exclude_boundary === :end
+        if abs(dx1) >= abs(dy1)
+            return dx1 > 0 ? x1 <= x && x < x2 : x2 < x && x <= x1
+        end
+        return dy1 > 0 ? y1 <= y && y < y2 : y2 < y && y <= y1
+    elseif exclude_boundary === :both
+        if abs(dx1) >= abs(dy1)
+            return dx1 > 0 ? x1 < x && x < x2 : x2 < x && x < x1
+        end
+        return dy1 > 0 ? y1 < y && y < y2 : y2 < y && y < y1
     end
     return false
 end

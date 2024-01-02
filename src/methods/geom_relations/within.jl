@@ -10,7 +10,7 @@ requires that the two interiors intersect and that the interior and
 boundary of the first geometry is not in the exterior of the second geometry.
 
 To provide an example, consider these two lines:
-```@example cshape
+```@example within
 using GeometryOps
 using GeometryOps.GeometryBasics
 using Makie
@@ -25,7 +25,7 @@ scatter!(GI.getpoint(l2), color = :orange)
 ```
 We can see that all of the points and edges of l2 are within l1, so l2 is
 within l1, but l1 is not within l2
-```@example cshape
+```@example within
 within(l1, l2)  # returns false
 within(l2, l1)  # returns true
 ```

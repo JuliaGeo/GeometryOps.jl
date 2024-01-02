@@ -42,12 +42,8 @@ import GeometryOps as GO
 	p3 = GI.Point([20, 20])
 	l5 = GI.LineString([[0, 0], [3, 3], [38.32, 5.96]])
 
-	@test GO.point_on_line(p2, l4; ignore_end_vertices=true) == false
-	@test GO.point_on_line(p3, l5; ignore_end_vertices=true) == false
-	@test GO.point_on_line(p1, l3) == true
-
 	pt = (-77, 44)
 	poly = GI.Polygon([[[-81, 41], [-81, 47], [-72, 47], [-72, 41], [-81, 41]]])
 
-	@test point_in_polygon(pt, poly) == true
+
 end
