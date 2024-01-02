@@ -157,7 +157,7 @@ function overlaps(
     trait_b::GI.PolygonTrait, poly_b,
 )
     edges_a, edges_b = map(sort! ∘ to_edges, (poly_a, poly_b))
-    return _line_intersects(edges_a, edges_b) &&
+    return _edge_intersects(edges_a, edges_b) &&
         !equals(trait_a, poly_a, trait_b, poly_b)
 end
 
@@ -211,15 +211,8 @@ function overlaps(
     return false
 end
 
-"""
-    _overlaps(
-        (a1, a2)::Edge,
-        (b1, b2)::Edge
-    )::Bool
-
-If the edges overlap, meaning that they are colinear but each have one endpoint
-outside of the other edge, return true. Else false. 
-"""
+#= If the edges overlap, meaning that they are colinear but each have one endpoint
+outside of the other edge, return true. Else false. =#
 function _overlaps(
     (a1, a2)::Edge,
     (b1, b2)::Edge
@@ -230,4 +223,25 @@ function _overlaps(
     a_fully_within = point_on_seg(a1, b1, b2) && point_on_seg(a2, b1, b2)
     b_fully_within = point_on_seg(b1, a1, a2) && point_on_seg(b2, a1, a2)
     return on_top && (!a_fully_within && !b_fully_within)
+end
+
+# Checks it vectors of edges intersect
+function _edge_intersects(
+    edges_a::Vector{Edge},
+    edges_b::Vector{Edge}
+)
+    # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
+    for edge_a in edges_a
+        for edge_b in edges_b
+            _edge_intersects(edge_a, edge_b) && return true 
+        end
+    end
+    return false
+end
+
+
+# Checks if two edges intersect
+function _edge_intersects(edge_a::Edge, edge_b::Edge)
+    meet_type = ExactPredicates.meet(edge_a..., edge_b...)
+    return meet_type == 0 || meet_type == 1
 end

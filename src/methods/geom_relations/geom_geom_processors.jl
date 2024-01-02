@@ -545,10 +545,10 @@ function _segment_segment_orientation(
     cross::T = line_cross, hinge::T = line_hinge,
     over::T = line_over, out::T = line_out,
 ) where T
-    (ax, ay) = _tuple_point(a_point)
-    (bx, by) = _tuple_point(b_point)
-    (cx, cy) = _tuple_point(c_point)
-    (dx, dy) = _tuple_point(d_point)
+    (ax, ay) = Float64.(_tuple_point(a_point))
+    (bx, by) = Float64.(_tuple_point(b_point))
+    (cx, cy) = Float64.(_tuple_point(c_point))
+    (dx, dy) = Float64.(_tuple_point(d_point))
     meet_type = ExactPredicates.meet((ax, ay), (bx, by), (cx, cy), (dx, dy))
     # Lines meet at one point within open segments 
     meet_type == 1 && return cross

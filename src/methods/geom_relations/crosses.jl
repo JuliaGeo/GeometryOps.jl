@@ -55,7 +55,7 @@ end
 
 function line_crosses_line(line1, line2)
     np2 = GI.npoint(line2)
-    if intersects(line1, line2)
+    if GeometryOps.intersects(line1, line2)
         for i in 1:GI.npoint(line1) - 1
             for j in 1:GI.npoint(line2) - 1
                 exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both

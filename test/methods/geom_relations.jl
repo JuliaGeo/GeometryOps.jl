@@ -284,11 +284,11 @@ end
 end
 @testset "Crosses" begin
 	line6 = GI.LineString([(1.0, 1.0), (1.0, 2.0), (1.0, 3.0), (1.0, 4.0)])
-	poly7 = GI.Polygon([[(-1, 2), (3, 2), (3, 3), (-1, 3), (-1, 2)]])
+	poly7 = GI.Polygon([[(-1.0, 2.0), (3.0, 2.0), (3.0, 3.0), (-1.0, 3.0), (-1.0, 2.0)]])
 
 	@test GO.crosses(GI.LineString([(-2, 2), (4, 2)]), line6) == true
 	@test GO.crosses(GI.LineString([(0.5, 2.5), (1.0, 1.0)]), poly7) == true
-	@test GO.crosses(GI.MultiPoint([(1, 2), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == true
-	@test GO.crosses(GI.MultiPoint([(1, 0), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == false
-	@test GO.crosses(GI.LineString([(-2, 2), (-4, 2)]), poly7) == false
+	@test GO.crosses(GI.MultiPoint([(1.0, 2.0), (12.0, 12.0)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == true
+	@test GO.crosses(GI.MultiPoint([(1.0, 0.0), (12.0, 12.0)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == false
+	@test GO.crosses(GI.LineString([(-2.0, 2.0), (-4.0, 2.0)]), poly7) == false
 end
