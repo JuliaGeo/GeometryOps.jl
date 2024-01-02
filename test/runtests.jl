@@ -22,8 +22,6 @@ const GO = GeometryOps
     @testset "Distance" begin include("methods/distance.jl") end
     @testset "Equals" begin include("methods/equals.jl") end
     @testset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
-    # @testset "Intersect" begin include("methods/intersects.jl") end
-    # @testset "Overlaps" begin include("methods/overlaps.jl") end
     # Transformations
     @testset "Embed Extent" begin include("transformations/extent.jl") end
     @testset "Reproject" begin include("transformations/reproject.jl") end
