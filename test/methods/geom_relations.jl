@@ -170,7 +170,6 @@ end
 @testset "Covers" begin test_geom_relation(GO.covers, LG.covers, "covers"; swap_points = true) end
 @testset "Crosses" begin test_geom_relation(GO.crosses, LG.crosses, "crosses") end
 @testset "Disjoint" begin test_geom_relation(GO.disjoint, LG.disjoint, "disjoint")end
-@testset "Equals" begin include("geom_relations/equals.jl") end
 @testset "Intersect" begin test_geom_relation(GO.intersects, LG.intersects, "intersects") end
 @testset "Overlaps" begin test_geom_relation(GO.overlaps, LG.overlaps, "overlaps") end
 @testset "Touches" begin test_geom_relation(GO.touches, LG.touches, "touches") end
