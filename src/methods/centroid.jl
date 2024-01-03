@@ -52,40 +52,23 @@ availible just in case the user also needs the area or length to decrease
 repeat computation.
 =#
 """
-    centroid(geom)::Tuple{T, T}
+    centroid(geom, [T=Float64])::Tuple{T, T}
 
 Returns the centroid of a given line segment, linear ring, polygon, or
 mutlipolygon.
 """
 centroid(geom, ::Type{T} = Float64; threaded=false) where T =
     centroid(GI.trait(geom), geom, T; threaded)
-
-"""
-    centroid(
-        trait::Union{GI.LineStringTrait, GI.LinearRingTrait},
-        geom,
-    )::Tuple{T, T}
-
-Returns the centroid of a line string or linear ring, which is calculated by
-weighting line segments by their length by convention.
-"""
 function centroid(
     trait::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T}=Float64; threaded=false
 ) where T
     centroid_and_length(trait, geom, T)[1]
 end
-
-"""
-    centroid(trait, geom)::Tuple{T, T}
-
-Returns the centroid of a polygon or multipolygon, which is calculated by
-weighting edges by their `area component` by convention.
-"""
 centroid(trait, geom, ::Type{T}; threaded=false) where T = 
     centroid_and_area(geom, T; threaded)[1]
 
 """
-    centroid_and_length(geom)::(::Tuple{T, T}, ::Real)
+    centroid_and_length(geom, [T=Float64])::(::Tuple{T, T}, ::Real)
 
 Returns the centroid and length of a given line/ring. Note this is only valid
 for line strings and linear rings.
@@ -122,7 +105,7 @@ function centroid_and_length(
 end
 
 """
-    centroid_and_area(geom)::(::Tuple{T, T}, ::Real)
+    centroid_and_area(geom, [T=Float64])::(::Tuple{T, T}, ::Real)
 
 Returns the centroid and area of a given geometry.
 """
