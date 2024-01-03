@@ -105,22 +105,26 @@ simplify(data; calc_extent=false, threaded=false, crs=nothing, kw...) =
 
 #= For each algorithm, apply simplication to all curves, multipoints, and
 points, reconstructing everything else around them. =#
-function _simplify(alg::SimplifyAlg, data; kw...)
-    simplifier(geom) = _simplify(trait(geom), alg, geom)
-    apply(simplifier, Union{PolygonTrait,AbstractCurveTrait,MultiPoint,PointTrait}, data; kw...)
-end
+_simplify(alg::SimplifyAlg, data; kw...) =
+    apply(
+        geom -> _simplify(GI.trait(geom), alg, geom),
+        Union{GI.PolygonTrait, GI.AbstractCurveTrait, GI.MultiPointTrait, GI.PointTrait},
+        data;
+        kw...,
+    )
+
 
 ## For Point and MultiPoint traits we do nothing
-_simplify(::PointTrait, alg, geom) = geom
-_simplify(::MultiPointTrait, alg, geom) = geom
+_simplify(::GI.PointTrait, alg, geom) = geom
+_simplify(::GI.MultiPointTrait, alg, geom) = geom
 
 ## For curves, rings, and polygon we simplify
-_simplify(::AbstractCurveTrait, alg, geom) =
-    rebuild(geom, simplify(alg, tuple_points(geom)))
+_simplify(::GI.AbstractCurveTrait, alg, geom) =
+    rebuild(geom, _simplify(alg, tuple_points(geom)))
 
-function _simplify(::PolygonTrait, alg, geom)
+function _simplify(::GI.PolygonTrait, alg, geom)
     ## Force treating children as LinearRing
-    rebuilder(g) = rebuild(g, _simplify(LinearRingTrait(), alg, g))
+    rebuilder(g) = rebuild(g, _simplify(GI.LinearRingTrait(), alg, g))
     lrs = map(rebuilder, GI.getgeom(geom))
     return rebuild(geom, lrs)
 end
@@ -199,6 +203,33 @@ function _simplify(alg::DouglasPeucker, points::Vector)
     return _get_points(alg, points, distances)
 end
 
+function _find_split(points, start_idx, end_idx)
+    max_idx = 0
+    max_dist = zero(Float64)
+    for i in (start_idx + 1):(end_idx - 1)
+        dist = _squared_distance_line(Float64, p, points[start_idx], points[end_idx])
+        if dist < max_dist
+            max_dist = dist
+            max_idx = i
+        end
+    end
+    return i, max_dist
+end
+
+function _simplify_tol(alg::DouglasPeucker, points::Vector)
+    np = length(points)
+    np < 4 && return points
+
+    pts = collect(1:np)
+    init_i, init_val = _find_split(points, 1, np)  # need to make sure last point is repeated if polygon
+    
+    if init_val < algs.tol
+        
+    end
+
+
+end
+
 
 # # Simplify with VisvalingamWhyatt Algorithm
 """
@@ -234,7 +265,7 @@ function _simplify(alg::VisvalingamWhyatt, points::Vector)
     return _get_points(alg, points, areas)
 end
 
-## calculates double the area of a triangle given its vertices
+# Calculates double the area of a triangle given its vertices
 _triangle_double_area(p2, p1, p3) =
     abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2]))
 
@@ -297,7 +328,7 @@ function _build_tolerances(f, points)
 end
 
 function tuple_points(geom)
-    points = Array{Tuple{Float64,Float64}}(undef, GI.ngeom(geom))
+    points = Array{Tuple{Float64,Float64}}(undef, GI.npoint(geom))
     for (i, p) in enumerate(GI.getpoint(geom))
         points[i] = (GI.x(p), GI.y(p))
     end
