@@ -82,7 +82,7 @@ coveredby(g1, g2) = _coveredby(trait(g1), g1, trait(g2), g2)
 # # Convert features to geometries
 _coveredby(::GI.FeatureTrait, g1, ::Any, g2) = coveredby(GI.geometry(g1), g2)
 _coveredby(::Any, g1, t2::GI.FeatureTrait, g2) = coveredby(g1, GI.geometry(g2))
-
+_coveredby(::FeatureTrait, g1, ::FeatureTrait, g2) = coveredby(GI.geometry(g1), GI.geometry(g2))
 
 # # Points coveredby geometries
 

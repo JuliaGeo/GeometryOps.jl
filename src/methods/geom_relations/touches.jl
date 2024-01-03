@@ -79,7 +79,7 @@ touches(g1, g2)::Bool = _touches(trait(g1), g1, trait(g2), g2)
 # # Convert features to geometries
 _touches(::GI.FeatureTrait, g1, ::Any, g2) = touches(GI.geometry(g1), g2)
 _touches(::Any, g1, t2::GI.FeatureTrait, g2) = touches(g1, GI.geometry(g2))
-
+_touches(::FeatureTrait, g1, ::FeatureTrait, g2) = touches(GI.geometry(g1), GI.geometry(g2))
 
 # # Point touches geometries
 

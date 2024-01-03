@@ -70,12 +70,12 @@ GO.disjoint(point, line)
 true
 ```
 """
-disjoint(g1, g2)::Bool = _disjoint(trait(g1), g1, trait(g2), g2)
+disjoint(g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)
 
 # # Convert features to geometries
-disjoint(::FeatureTrait, g1, ::Any, g2)::Bool = disjoint(GI.geometry(g1), g2)
-disjoint(::Any, g1, t2::FeatureTrait, g2)::Bool = disjoint(g1, geometry(g2))
-
+_disjoint(::FeatureTrait, g1, ::Any, g2) = disjoint(GI.geometry(g1), g2)
+_disjoint(::Any, g1, ::FeatureTrait, g2) = disjoint(g1, geometry(g2))
+_disjoint(::FeatureTrait, g1, ::FeatureTrait, g2) = disjoint(GI.geometry(g1), GI.geometry(g2))
 
 # # Point disjoint geometries
 

@@ -201,7 +201,7 @@ line segments, line strings, linear rings, polygons, and multipolygons. If no
 intersection points were possible given geometry extents, return nothing. If
 none are found, return an empty list.
 """
-function intersection_points(::GI.AbstractGeometryTrait, a, ::GI.AbstractGeometryTrait, b)
+function intersection_points(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)
     # Check if the geometries extents even overlap
     Extents.intersects(GI.extent(a), GI.extent(b)) || return nothing
     # Create a list of edges from the two input geometries
