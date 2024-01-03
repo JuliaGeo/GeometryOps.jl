@@ -43,7 +43,7 @@ signed area might not be the area. This is why signed area is only implemented
 for polygons.
 =#
 
-const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPontTrait,GI.PointTrait}
+const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
 
 """
     area(geom, ::Type{T} = Float64)::T
@@ -61,7 +61,7 @@ Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
 function area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat
-    applyreduce(+, _AREA_TARGETS, geom; threaded) do g
+    applyreduce(+, _AREA_TARGETS, geom; threaded, init=zero(T)) do g
         _area(T, GI.trait(g), g)
     end
 end
@@ -83,8 +83,8 @@ computed slighly differently for different geometries:
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-function signed_area(geom, ::Type{T} = Float64) where T <: AbstractFloat
-    applyreduce(+, _AREA_TARGETS, geom) do g
+function signed_area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat
+    applyreduce(+, _AREA_TARGETS, geom; threaded, init=zero(T)) do g
         _signed_area(T, GI.trait(g), g)
     end
 end
