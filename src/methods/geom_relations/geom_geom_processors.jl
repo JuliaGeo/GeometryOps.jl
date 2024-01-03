@@ -132,41 +132,17 @@ function _line_curve_process(
         for j in (closed_curve ? 1 : 2):nc
             c_end = GI.getpoint(curve, j)
             # Check if line and curve segments meet
-            seg_val = _segment_segment_orientation(
-                (l_start, l_end),
-                (c_start, c_end),
-            )
+            seg_val = _segment_segment_orientation((l_start, l_end), (c_start, c_end))
             # If segments are co-linear
             if seg_val == line_over
                 !over_allow && return false
                 # at least one point in, meets requirments
                 in_req_met = true
-                point_val = _point_segment_orientation(
-                    l_start,
-                    c_start, c_end,
-                )
+                point_val = _point_segment_orientation(l_start, c_start, c_end)
                 # If entire segment isn't covered, consider remaining section
                 if point_val != point_out
-                    if _point_segment_orientation(
-                        l_end,
-                        c_start, c_end,
-                    ) != point_out
-                        l_start = l_end
-                        i += 1
-                        break
-                    elseif _point_segment_orientation(
-                        c_start,
-                        l_start, l_end,
-                    ) != point_out && !equals(l_start, c_start)
-                        l_start = c_start
-                        break
-                    elseif _point_segment_orientation(
-                        c_end,
-                        l_start, l_end,
-                    ) != point_out && !equals(l_start, c_end)
-                        l_start = c_end
-                        break
-                    end
+                    i, l_start, break_off = _find_new_seg(i, l_start, l_end, c_start, c_end)
+                    break_off && break
                 end
             else
                 if seg_val == line_cross
@@ -174,30 +150,10 @@ function _line_curve_process(
                     in_req_met = true
                 elseif seg_val == line_hinge  # could cross or overlap
                     # Determine location of intersection point on each segment
-                    _, fracs = _intersection_point(
-                        (_tuple_point(l_start), _tuple_point(l_end)),
-                        (_tuple_point(c_start), _tuple_point(c_end))
-                    )
-                    (α, β) =
-                        if !isnothing(fracs)
-                            fracs
-                        else  # line and curve segments are parallel
-                            if equals(l_start, c_start)
-                                (0, 0)
-                            elseif equals(l_start, c_end)
-                                (0, 1)
-                            elseif equals(l_end, c_start)
-                                (1, 0)
-                            else  # equals(l_end, c_end)
-                                (1, 1)
-                            end
-                        end
-
-                    if (  # don't consider edges of curves as they can't cross
-                        (β == 0 && !closed_curve && j == 2) ||
-                        (β == 1 && !closed_curve && j == nc) ||
-                        (α == 0 && !closed_line && i == 2) ||
-                        (α == 1 && !closed_line && i == nl)
+                    (α, β) = _find_intersect_fracs(l_start, l_end, c_start, c_end)
+                    if ( # Don't consider edges of curves as they can't cross
+                        (!closed_line && ((α == 0 && i == 2) || (α == 1 && i == nl))) ||
+                        (!closed_curve && ((β == 0 && j == 2) || (β == 1 && j == nc)))
                     )
                         !on_allow && return false
                         on_req_met = true
@@ -205,24 +161,11 @@ function _line_curve_process(
                         in_req_met = true
                         # If needed, determine if hinge actually crosses
                         if (!cross_allow || !over_allow) && α != 0 && β != 0
-                            l, c = if β == 1
-                                if α == 1
-                                    (
-                                        (l_end, GI.getpoint(line, i + 1)), 
-                                        (c_end, GI.getpoint(curve, j + 1))
-                                    )
-                                else
-                                    (
-                                        (l_start, l_end),
-                                        (c_end, GI.getpoint(curve, j + 1))
-                                    )
-                                end
-                            else  # β ≠ 1 and α == 1
-                                (
-                                    (l_end, GI.getpoint(line, i + 1)),
-                                    (c_start, c_end)
-                                )
-                            end
+                            # Find next pieces of hinge to see if line and curve cross
+                            l, c = _find_hinge_next_segments(
+                                α, β, l_start, l_end, c_start, c_end,
+                                i, line, j, curve,
+                            )
                             if _segment_segment_orientation(l, c) == line_hinge
                                 !cross_allow && return false
                             else
@@ -231,14 +174,14 @@ function _line_curve_process(
                         end
                     end
                 end
-                # no overlap for a give segment
+                # no overlap for a give segment, some of segment must be out of curve
                 if j == nc
                     !out_allow && return false
                     out_req_met = true
                 end
             end
-            c_start = c_end
-            if j == nc
+            c_start = c_end  # consider next segment of curve
+            if j == nc  # move on to next line segment
                 i += 1
                 l_start = l_end
             end
@@ -246,6 +189,58 @@ function _line_curve_process(
     end
     return in_req_met && on_req_met && out_req_met
 end
+
+#= If entire segment (le to ls) isn't covered by segment (cs to ce), find remaining section
+part of section outside of cs to ce. If completly covered, increase segment index i. =#
+function _find_new_seg(i, ls, le, cs, ce)
+    break_off = true
+    if _point_segment_orientation(le, cs, ce) != point_out
+        ls = le
+        i += 1
+    elseif !equals(ls, cs) && _point_segment_orientation(cs, ls, le) != point_out
+        ls = cs
+    elseif !equals(ls, ce) && _point_segment_orientation(ce, ls, le) != point_out
+        ls = ce
+    else
+        break_off = false
+    end
+    return i, ls, break_off
+end
+
+#= Find where line and curve segments intersect by fraction of length. α is the fraction of
+the line (ls to le) and β is the traction of the curve (cs to ce). =#
+function _find_intersect_fracs(ls, le, cs, ce)
+    _, fracs = _intersection_point(
+        (_tuple_point(ls), _tuple_point(le)),
+        (_tuple_point(cs), _tuple_point(ce))
+    )
+    (α, β) = if !isnothing(fracs)
+        fracs
+    else  # line and curve segments are parallel
+        if equals(ls, cs)
+            (0, 0)
+        elseif equals(ls, ce)
+            (0, 1)
+        elseif equals(le, cs)
+            (1, 0)
+        else  # equals(l_end, c_end)
+            (1, 1)
+        end
+    end
+    return α, β
+end
+
+#= Find next set of segments needed to determine if given hinge segments cross or not.=#
+_find_hinge_next_segments(α, β, ls, le, cs, ce, i, line, j, curve) = 
+    if β == 1
+        if α == 1  # hinge at endpoints, so next segment of both is needed
+            ((le, GI.getpoint(line, i + 1)), (ce, GI.getpoint(curve, j + 1)))
+        else  # hinge at curve endpoint and line interior point, curve next segment needed 
+            ((ls, le), (ce, GI.getpoint(curve, j + 1)))
+        end
+    else  # hinge at curve interior point and line endpoint, line next segment needed
+        ((le, GI.getpoint(line, i + 1)), (cs, ce))
+    end
 
 #=
 Determines if a line meets the given checks with respect to a polygon.
