@@ -249,12 +249,11 @@ function _applyreduce(
     _applyreduce(f, op, target, GI.getgeom(geom); threaded=false, init)
 end
 # Apply f to the target
-function _applyreduce(f, op, ::Type{Target}, ::Trait, x; kw...) where {Target,Trait<:Target} 
+function _applyreduce(f, op, ::Type{Target}, ::Trait, x; kw...) where {Target<:GI.AbstractTrait,Trait<:Target} 
     f(x)
 end
 # Fail if we hit PointTrait
-_applyreduce(f, op, target::Type, trait::GI.PointTrait, geom; kw...) =
-    throw(ArgumentError("target $target not found, but reached a `PointTrait` leaf"))
+_applyreduce(f, op, target, trait, geom; kw...) = throw(ArgumentError("target $target not found"))
 # Specific cases to avoid method ambiguity
 for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString, 

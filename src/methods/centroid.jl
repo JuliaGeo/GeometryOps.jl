@@ -57,7 +57,8 @@ repeat computation.
 Returns the centroid of a given line segment, linear ring, polygon, or
 mutlipolygon.
 """
-centroid(geom; threaded=false) = centroid(GI.trait(geom), geom; threaded)
+centroid(geom, ::Type{T} = Float64; threaded=false) where T =
+    centroid(GI.trait(geom), geom, T; threaded)
 
 """
     centroid(
@@ -80,7 +81,7 @@ end
 Returns the centroid of a polygon or multipolygon, which is calculated by
 weighting edges by their `area component` by convention.
 """
-centroid(trait, geom, T; threaded=false) = 
+centroid(trait, geom, ::Type{T}; threaded=false) where T = 
     centroid_and_area(geom, T; threaded)[1]
 
 """
