@@ -1,151 +1,182 @@
-@testset "intersects" begin
-    @testset "Lines/Rings" begin
-        # Line test intersects -----------------------------------------------------
+# Tests of DE-9IM Methods
 
-        # Test for parallel lines
-        l1 = GI.Line([(0.0, 0.0), (2.5, 0.0)])
-        l2 = GI.Line([(0.0, 1.0), (2.5, 1.0)])
-        @test !GO.intersects(l1, l2)
-        @test isnothing(GO.intersection(l1, l2))
+pt1 = LG.Point([0.0, 0.0])
+pt2 = LG.Point([5.0, 5.0])
+pt3 = LG.Point([1.0, 0.0])
+pt4 = LG.Point([0.5, 0.0])
+pt5 = LG.Point([0.5, 0.25])
+pt6 = LG.Point([0.6, 0.4])
+pt7 = LG.Point([0.4, 0.8])
 
-        # Test for non-parallel lines that don't intersect
-        l1 = GI.Line([(0.0, 0.0), (2.5, 0.0)])
-        l2 = GI.Line([(2.0, -3.0), (3.0, 0.0)])
-        @test !GO.intersects(l1, l2)
-        @test isnothing(GO.intersection(l1, l2))
+l1 = LG.LineString([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0]])
+l2 = LG.LineString([[0.0, 0.0], [1.0, 0.0]])
+l3 = LG.LineString([[-1.0, 0.0], [0.0, 0.0], [1.0, 0.0]])
+l4 = LG.LineString([[0.5, 0.0], [1.0, 0.0], [1.0, 0.5]])
+l5 = LG.LineString([[0.0, 0.0], [-1.0, -1.0]])
+l6 = LG.LineString([[2.0, 2.0], [0.0, 1.0]])
+l7 = LG.LineString([[0.5, 1.0], [0.5, -1.0]])
+l8 = LG.LineString([[0.0, 0.0], [0.5, 0.0], [0.5, 0.5], [1.0, -0.5]])
+l9 = LG.LineString([[0.0, 1.0], [0.0, -1.0], [1.0, 1.0]])
+l10 = LG.LineString([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]])
+l11 = LG.LineString([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0], [-1.0, 0.0]])
+l12 = LG.LineString([[0.6, 0.5], [0.6, 0.9]])
+l13 = LG.LineString([[2.0, 2.0], [3.0, 3.0]])
+l14 = LG.LineString([[0.6, 0.25], [0.6, 0.35]])
+l15 = LG.LineString([[0.0, 3.0], [4.0, 3.0]])
+l16 = LG.LineString([[0.3, -0.7], [1.0, 0.0], [3.0, 0.6]])
 
-        # Test for lines only touching at endpoint
-        l1 = GI.Line([(0.0, 0.0), (2.5, 0.0)])
-        l2 = GI.Line([(2.0, -3.0), (2.5, 0.0)])
-        @test GO.intersects(l1, l2)
-        @test all(GO.intersection(l1, l2) .≈ (2.5, 0.0))
+r1 = LG.LinearRing([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 0.0]])
+r2 = LG.LinearRing([[0.5, 0.2], [0.6, 0.4], [0.7, 0.2], [0.5, 0.2]])
+r3 = LG.LinearRing([[0.2, 0.7], [0.4, 0.9], [0.5, 0.6], [0.2, 0.7]])
+r4 = LG.LinearRing([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]])
+r5 = LG.LinearRing([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [2.0, 1.0], [1.0, 2.0], [1.0, 1.0], [0.0, 0.0]])
+r6 = LG.LinearRing([[0.0, 0.0], [-1.0, 0.0], [-1.0, 1.0], [0.0, 1.0], [0.0, 0.0]])
+r7 = LG.LinearRing([[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5], [0.5, 0.5]])
+r8 = LG.LinearRing([[0.1, 0.1], [0.2, 0.1], [0.2, 0.2], [0.1, 0.2], [0.1, 0.1]])
+r9 = LG.LinearRing([[1.0, -0.5], [0.5, -1.0], [1.5, -1.0], [1.0, -0.5]])
+r10 = LG.LinearRing([[0.5, 0.2], [0.6, 0.4], [0.3, 0.3], [0.5, 0.2]])
+r11 = LG.LinearRing([[0.55, 0.21], [0.55, 0.23], [0.65, 0.23], [0.66, 0.21], [0.55, 0.21]])
 
-        # Test for lines that intersect in the middle
-        l1 = GI.Line([(0.0, 0.0), (5.0, 5.0)])
-        l2 = GI.Line([(0.0, 5.0), (5.0, 0.0)])
-        @test GO.intersects(l1, l2)
-        @test all(GO.intersection(l1, l2) .≈ (2.5, 2.5))
+p1 = LG.Polygon(r4, [r2, r3])
+p2 = LG.Polygon(r4)
+p3 = LG.Polygon(r2)
+p4 = LG.Polygon(r6)
+p5 = LG.Polygon(r9)
+p6 = LG.Polygon(r11)
+p7 = LG.Polygon(r7)
+p8 = LG.Polygon([[[0.0, 0.0], [0.0, 3.0], [1.0, 2.0], [2.0, 3.0], [3.0, 2.0], [4.0, 3.0], [4.0, 0.0], [0.0, 0.0]]])
+p9 = LG.Polygon([[[0.0, 0.0], [0.0, 3.0], [1.0, 4.0], [2.0, 3.0], [3.0, 4.0], [4.0, 3.0], [4.0, 0.0], [0.0, 0.0]]])
+p10 = LG.Polygon([
+    [[0.1, 0.5], [0.1, 0.99], [0.6, 0.99], [0.6, 0.5], [0.1, 0.5]],
+    [[0.15, 0.55], [0.15, 0.95], [0.55, 0.95], [0.55, 0.55], [0.15, 0.55]]
+])
+p11 = LG.Polygon(r3)
 
-        # Line string test intersects ----------------------------------------------
+mpt1 = LG.MultiPoint([pt1, pt2])
+mpt2 = LG.MultiPoint([pt2, pt3])
+mpt3 = LG.MultiPoint([pt4, pt5])
+ml1 = LG.MultiLineString([l5, l6, l7])
+ml2 = LG.MultiLineString([l1])
+mp1 = LG.MultiPolygon([p1])
+mp2 = LG.MultiPolygon([p6, p7])
+gc1 = LG.GeometryCollection([pt1, l5, p6])
 
-        # Single element line strings crossing over each other
-        l1 = LG.LineString([[5.5, 7.2], [11.2, 12.7]])
-        l2 = LG.LineString([[4.3, 13.3], [9.6, 8.1]])
-        @test GO.intersects(l1, l2)
-        go_inter = GO.intersection(l1, l2)
-        lg_inter = LG.intersection(l1, l2)
-        @test go_inter[1][1] .≈ GI.x(lg_inter)
-        @test go_inter[1][2] .≈ GI.y(lg_inter)
+test_pairs = [
+    # Points and geometries
+    (pt1, pt1, "pt1", "pt1", "Same point"),
+    (pt1, pt2, "pt1", "pt2", "Different point"),
+    (pt1, l1, "pt1", "l1", "Point on line endpoint"),
+    (pt2, l1, "pt2", "l1", "Point outside line"),
+    (pt3, l1, "pt3", "l1", "Point on line segment"),
+    (pt4, l1, "pt4", "l1", "Point on line vertex between segments"),
+    (l1, pt3, "l1", "pt3", "Point on line segment (order swapped)"),
+    (pt1, r1, "pt1", "r1", "Point on ring 'endpoint'"),
+    (pt2, r1, "pt2", "r1", "Point outside ring"),
+    (pt3, r1, "pt3", "r1", "Point on ring segment"),
+    (pt4, r1, "pt4", "r1", "Point on ring vertex between segments"),
+    (r1, pt3, "r1", "pt3", "Point on ring segment (order swapped)"),
+    (p1, pt1, "p1", "pt1", "Point on vertex of polygon"),
+    (pt2, p1, "pt2", "p1", "Point outside of polygon's external ring"),
+    (pt4, p1, "pt4", "p1", "Point on polygon's edge"),
+    (pt5, p1, "pt5", "p1", "Point inside of polygon"),
+    (pt6, p1, "pt6", "p1", "Point on hole edge"),
+    (pt7, p1, "pt7", "p1", "Point inside of polygon hole"),
+    (p1, pt5, "p1", "pt5", "Point inside of polygon (order swapped)"),
+    # # Lines and geometries
+    (l1, l1, "l1", "l1", "Same line"),
+    (l2, l1, "l2", "l1", "L2 is one segment of l1"),
+    (l3, l1, "l3", "l1", "L3 shares one segment with l1 and has one segment outside"),
+    (l4, l1, "l4", "l1", "L4 shares half of each of l1 segments"),
+    (l5, l1, "l5", "l1", "L5 shares one endpoint with l1 but not segments"),
+    (l6, l1, "l6", "l1", "Lines are disjoint"),
+    (l7, l1, "l7", "l1", "L7 crosses through one of l1's segments"),
+    (l8, l1, "l8", "l1", "Overlaps one segment and crosses through another segment"),
+    (l9, l1, "l9", "l1", "Two segments touch and two segments crosses"),
+    (l16, l1, "l16", "l1", "L16 bounces off of l1's corner"),
+    (l1, r1, "l1", "r1", "Line inside of ring"),
+    (l3, r1, "l3", "r1", "Line covers one edge of linear ring and has segment outside"),
+    (l5, r1, "l5", "r1", "Line and linear ring are only covered by vertex"),
+    (l6, r1, "l6", "r1", "Line and ring are disjoint"),
+    (l7, r1, "l7", "r1", "Line crosses through two ring edges"),
+    (l8, r1, "l8", "r1", "Line crosses through two ring edges and touches third edge"),
+    (l10, r1, "l10", "r1", "Line is equal to linear ring"),
+    (l11, r1, "l11", "r1", "Line covers linear ring and then has extra segment"),
+    (l1, p1, "l1", "p1", "Line on polygon edge"),
+    (l3, p1, "l3", "p1", "Line on polygon edge and extending beyond polygon edge"),
+    (l5, p1, "l5", "p1", "Line outside polygon connected by a vertex"),
+    (l7, p1, "l7", "p1", "Line through polygon cutting to the outside"),
+    (l12, p1, "l12", "p1", "Line inside polygon"),
+    (l13, p1, "l13", "p1", "Line outside of polygon"),
+    (l14, p1, "l14", "p1", "Line in polygon hole"),
+    (l15, p8, "l15", "p8", "Line outside crown-shaped polygon but touching edges"),
+    (l15, p9, "l15", "p9", "Line within crown-shaped polygon but touching edges"),
+    # Ring and geometries
+    (r1, l1, "r1", "l1", "Line is within linear ring"),
+    (r1, l3, "r1", "l3", "Line covers one edge of linear ring and has segment outside"),
+    (r1, l5, "r1", "l5", "Line and linear ring are only connected at vertex"),
+    (r1, l6, "r1", "l6", "Line and linear ring are disjoint"),
+    (r1, l7, "r1", "l7", "Line crosses though two ring edges"),
+    (r1, l8, "r1", "l8", "Line crosses through two ring edges and touches third edge"),
+    (r1, l10, "r1", "l10", "Line is equal to linear ring"),
+    (r1, l11, "r1", "l11", "Line covers linear ring and then has extra segment"),
+    (r1, r1, "r1", "r1", "Same rings"), 
+    (r2, r1, "r2", "r1", "Disjoint ring with one 'inside' of hole created"),
+    (r3, r1, "r3", "r1", "Disjoint ring with one 'outside' of hole created"),
+    (r4, r1, "r4", "r1", "Rings share two sides and rest of sides dont touch"),
+    (r1, r5, "r1", "r5", "Ring shares all edges with other ring, plus an extra loop"),
+    (r1, r6, "r1", "r6", "Rings share just one vertex"),
+    (r1, r7, "r1", "r7", "Rings cross one another"),
+    (r4, p1, "r4", "p1", "Ring on boundary of polygon"),
+    (r1, p1, "r1", "p1", "Ring on boundary and cutting through polygon"),
+    (r2, p1, "r2", "p1", "Ring on hole bounday"),
+    (r6, p1, "r6", "p1", "Ring touches polygon at one vertex"),
+    (r7, p1, "r7", "p1", "Ring crosses through polygon"),
+    (r8, p1, "r8", "p1", "Ring inside of polygon"),
+    (r9, p1, "r9", "p1", "Ring outside of polygon"),
+    (r10, p1, "r10", "p1", "Ring inside of polygon and shares hole's edge"),
+    (r11, p1, "r11", "p1", "Ring inside of polygon hole"),
+    # Polygon and geometries
+    (p1, p1, "p1", "p1", "Same polygons"),
+    (p1, p2, "p1", "p2", "P1 and p2 are the same but p1 has holes"),
+    (p2, p1, "p2", "p1", "P1 and p2 are the same but p1 has holes (order swapped)"),
+    (p3, p1, "p3", "p1", "P3 is equal to one of p1's holes"),
+    (p4, p1, "p4", "p1", "Polygon's share just one vertex"),
+    (p5, p1, "p5", "p1", "Polygon outside of other polygon"),
+    (p6, p1, "p6", "p1", "Polygon inside of other polygon's hole"),
+    (p7, p1, "p7", "p1", "Polygons overlap"),
+    (p10, p1, "p10", "p1", "Polygon's with nested holes"),
+    # Multigeometries
+    (mpt1, mpt1, "mpt1", "mpt1", "Same set of points for multipoints"),
+    (mpt1, mpt2, "mpt1", "mpt2", "Some point matches, others are different"),
+    (mpt1, mpt3, "mpt1", "mpt3", "No shared points"),
+    (ml1, ml2, "ml1", "ml2", "Lines in ml1 cross and touch ml2"),
+    (mp1, mp2, "mp1", "mp2", "Polygons in mp1 are inside hole and overlap"),
+    (gc1, ml1, "gc1", "ml1", "Make sure collection works with multi-geom"),
+]
 
-        # Multi-element line strings crossing over on vertex
-        l1 = LG.LineString([[0.0, 0.0], [2.5, 0.0], [5.0, 0.0]])
-        l2 = LG.LineString([[2.0, -3.0], [3.0, 0.0], [4.0, 3.0]])
-        @test GO.intersects(l1, l2)
-        go_inter = GO.intersection(l1, l2)
-        @test length(go_inter) == 1
-        lg_inter = LG.intersection(l1, l2)
-        @test go_inter[1][1] .≈ GI.x(lg_inter)
-        @test go_inter[1][2] .≈ GI.y(lg_inter)
-
-        # Multi-element line strings crossing over with multiple intersections
-        l1 = LG.LineString([[0.0, -1.0], [1.0, 1.0], [2.0, -1.0], [3.0, 1.0]])
-        l2 = LG.LineString([[0.0, 0.0], [1.0, 0.0], [3.0, 0.0]])
-        @test GO.intersects(l1, l2)
-        go_inter = GO.intersection(l1, l2)
-        @test length(go_inter) == 3
-        lg_inter = LG.intersection(l1, l2)
-        @test issetequal(
-            Set(go_inter),
-            Set(GO._tuple_point.(GI.getpoint(lg_inter)))
-        )
-
-        # Line strings far apart so extents don't overlap
-        l1 = LG.LineString([[100.0, 0.0], [101.0, 0.0], [103.0, 0.0]])
-        l2 = LG.LineString([[0.0, 0.0], [1.0, 0.0], [3.0, 0.0]])
-        @test !GO.intersects(l1, l2)
-        @test isnothing(GO.intersection(l1, l2))
-
-        # Line strings close together that don't overlap
-        l1 = LG.LineString([[3.0, 0.25], [5.0, 0.25], [7.0, 0.25]])
-        l2 = LG.LineString([[0.0, 0.0], [5.0, 10.0], [10.0, 0.0]])
-        @test !GO.intersects(l1, l2)
-        @test isempty(GO.intersection(l1, l2))
-
-        # Closed linear ring with open line string
-        r1 = LG.LinearRing([[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]])
-        l2 = LG.LineString([[0.0, -2.0], [12.0, 10.0],])
-        @test GO.intersects(r1, l2)
-        go_inter = GO.intersection(r1, l2)
-        @test length(go_inter) == 2
-        lg_inter = LG.intersection(r1, l2)
-        @test issetequal(
-            Set(go_inter),
-            Set(GO._tuple_point.(GI.getpoint(lg_inter)))
-        )
-
-        # Closed linear ring with closed linear ring
-        r1 = LG.LinearRing([[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]])
-        r2 = LG.LineString([[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]])
-        @test GO.intersects(r1, r2)
-        go_inter = GO.intersection(r1, r2)
-        @test length(go_inter) == 2
-        lg_inter = LG.intersection(r1, r2)
-        @test issetequal(
-            Set(go_inter),
-            Set(GO._tuple_point.(GI.getpoint(lg_inter)))
-        )
-    end
-
-    @testset "Polygons" begin
-        # Two polygons that intersect
-        p1 = LG.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
-        p2 = LG.Polygon([[[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]])
-        @test GO.intersects(p1, p2)
-        @test all(GO.intersection_points(p1, p2) .== [(6.5, 3.5), (6.5, -3.5)])
-
-        # Two polygons that don't intersect
-        p1 = LG.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
-        p2 = LG.Polygon([[[13.0, 0.0], [18.0, 5.0], [23.0, 0.0], [18.0, -5.0], [13.0, 0.0]]])
-        @test !GO.intersects(p1, p2)
-        @test isnothing(GO.intersection_points(p1, p2))
-
-        # Polygon that intersects with linestring
-        p1 = LG.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
-        l2 = LG.LineString([[0.0, 0.0], [10.0, 0.0]])
-        @test GO.intersects(p1, l2)
-        GO.intersection_points(p1, l2)
-        @test all(GO.intersection_points(p1, l2) .== [(0.0, 0.0), (10.0, 0.0)])
-
-        # Polygon with a hole, line through polygon and hole
-        p1 = LG.Polygon([
-            [[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]],
-            [[2.0, -1.0], [2.0, 1.0], [3.0, 1.0], [3.0, -1.0], [2.0, -1.0]]
-        ])
-        l2 = LG.LineString([[0.0, 0.0], [10.0, 0.0]])
-        @test GO.intersects(p1, l2)
-        @test all(GO.intersection_points(p1, l2) .== [(0.0, 0.0), (2.0, 0.0), (3.0, 0.0), (10.0, 0.0)])
-
-        # Polygon with a hole, line only within the hole
-        p1 = LG.Polygon([
-            [[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]],
-            [[2.0, -1.0], [2.0, 1.0], [3.0, 1.0], [3.0, -1.0], [2.0, -1.0]]
-        ])
-        l2 = LG.LineString([[2.25, 0.0], [2.75, 0.0]])
-        @test !GO.intersects(p1, l2)
-        @test isempty(GO.intersection_points(p1, l2))
-    end
-
-    @testset "MultiPolygons" begin
-        # TODO: Add these tests
-        # Multi-polygon and polygon that intersect
-
-        # Multi-polygon and polygon that don't intersect
-
-        # Multi-polygon that intersects with linestring
-        
+function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
+    for (g1, g2, sg1, sg2, sdesc) in test_pairs
+        if swap_points
+            g1, g2 = g2, g1
+            sg1, sg2 = sg2, sg1
+        end
+        go_val = GO_f(g1, g2)
+        lg_val = LG_f(g1, g2)
+        @test go_val == lg_val
+        go_val != lg_val && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")
     end
 end
-@testset "overlaps" begin
+
+@testset "Contains" begin test_geom_relation(GO.contains, LG.contains, "contains"; swap_points = true) end
+@testset "Covered By" begin test_geom_relation(GO.coveredby, LG.coveredby, "coveredby") end
+@testset "Covers" begin test_geom_relation(GO.covers, LG.covers, "covers"; swap_points = true) end
+@testset "Disjoint" begin test_geom_relation(GO.disjoint, LG.disjoint, "disjoint")end
+@testset "Intersect" begin test_geom_relation(GO.intersects, LG.intersects, "intersects") end
+@testset "Touches" begin test_geom_relation(GO.touches, LG.touches, "touches") end
+@testset "Within" begin test_geom_relation(GO.within, LG.within, "within") end
+
+
+@testset "Overlaps" begin
     @testset "Points/MultiPoints" begin
         p1 = LG.Point([0.0, 0.0])
         p2 = LG.Point([0.0, 1.0])
@@ -251,68 +282,13 @@ end
         @test GO.overlaps(m1, p4) == LG.overlaps(m1, p4)
     end
 end
-@testset "Contains, within, disjoint" begin
-    poly3 = GI.Polygon([[(1, 1), (1, 10), (10, 10), (10, 1), (1, 1)]])
-	poly4 = GI.Polygon([[(1, 1), (2, 2), (3, 2), (1, 1)]])
-	line5 = GI.LineString([(1.0, 1.0), (2.0, 3.0), (2.0, 3.5)])
-
+@testset "Crosses" begin
 	line6 = GI.LineString([(1.0, 1.0), (1.0, 2.0), (1.0, 3.0), (1.0, 4.0)])
-	poly5 = GI.Polygon([[(1.0, 1.0), (1.0, 20.0), (1.0, 3.0), (1.0, 4.0), (1.0, 1.0)]])
-	line7 = GI.LineString([(1.0, 2.0), (1.0, 3.0), (1.0, 3.5)])
-
-	@test GO.contains(poly3, poly4) == true
-	@test GO.contains(poly3, line5) == true
-	@test GO.contains(line6, (1, 2)) == true
-	@test GO.contains(poly3, poly5) == false
-	@test GO.contains(poly3 , line7) == false
-
-	@test GO.within(poly4, poly3) == true
-	@test GO.within(line5, poly3) == true
-	@test GO.within(poly5, poly3) == false
-	@test GO.within((1, 2), line6) == true
-	@test GO.within(line7, poly3) == false
-
-	poly6 = GI.Polygon([[(-11, -12), (-13, -12), (-13, -13), (-11, -13), (-11, -12)]])
-	poly7 = GI.Polygon([[(-1, 2), (3, 2), (3, 3), (-1, 3), (-1, 2)]])
-	poly8 = GI.Polygon([[(-1, 2), (-13, -12), (-13, -13), (-11, -13), (-1, 2)]])
-
-	@test GO.disjoint(poly7, poly6) == true
-	@test GO.disjoint(poly7, (1, 1)) == true
-	@test GO.disjoint(poly7, GI.LineString([(0, 0), (12, 2), (12, 3), (12, 4)])) == true
-	@test GO.disjoint(poly8, poly7) == false
-
-	line8 = GI.LineString([(124.584961, -12.768946), (126.738281, -17.224758)])
-	line9 = GI.LineString([(123.354492, -15.961329), (127.22168, -14.008696)])
-
-    @test all(GO.intersection(line8, line9)[1] .≈ (125.583754, -14.835723))
-
-	line10 = GI.LineString([
-        (142.03125, -11.695273),
-        (138.691406, -16.804541),
-        (136.40625, -14.604847),
-        (135.966797, -12.039321),
-        (131.308594, -11.436955),
-        (128.232422, -15.36895),
-        (125.947266, -13.581921),
-        (121.816406, -18.729502),
-        (117.421875, -20.632784),
-        (113.378906, -23.402765),
-        (114.169922, -26.667096),
-    ])
-	line11 = GI.LineString([
-        (117.861328, -15.029686),
-        (122.124023, -24.886436),
-        (132.583008, -22.309426),
-        (132.890625, -7.754537),
-    ])
-
-	points = GO.intersection(line10, line11)
-    @test all(points[1] .≈ (119.832884, -19.58857))
-    @test all(points[2] .≈ (132.808697, -11.6309378))
+	poly7 = GI.Polygon([[(-1.0, 2.0), (3.0, 2.0), (3.0, 3.0), (-1.0, 3.0), (-1.0, 2.0)]])
 
 	@test GO.crosses(GI.LineString([(-2, 2), (4, 2)]), line6) == true
 	@test GO.crosses(GI.LineString([(0.5, 2.5), (1.0, 1.0)]), poly7) == true
-	@test GO.crosses(GI.MultiPoint([(1, 2), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == true
-	@test GO.crosses(GI.MultiPoint([(1, 0), (12, 12)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == false
-	@test GO.crosses(GI.LineString([(-2, 2), (-4, 2)]), poly7) == false
+	@test GO.crosses(GI.MultiPoint([(1.0, 2.0), (12.0, 12.0)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == true
+	@test GO.crosses(GI.MultiPoint([(1.0, 0.0), (12.0, 12.0)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == false
+	@test GO.crosses(GI.LineString([(-2.0, 2.0), (-4.0, 2.0)]), poly7) == false
 end

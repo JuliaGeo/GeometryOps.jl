@@ -9,7 +9,7 @@ The equals function checks if two geometries are equal. They are equal if they
 share the same set of points and edges to define the same shape.
 
 To provide an example, consider these two lines:
-```@example cshape
+```@example equals
 using GeometryOps
 using GeometryOps.GeometryBasics
 using Makie
@@ -24,7 +24,7 @@ scatter!(GI.getpoint(l2), color = :orange)
 ```
 We can see that the two lines do not share a commen set of points and edges in
 the plot, so they are not equal:
-```@example cshape
+```@example equals
 equals(l1, l2)  # returns false
 ```
 

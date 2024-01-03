@@ -5,7 +5,10 @@ export intersects, intersection, intersection_points
 #=
 ## What is `intersects` vs `intersection` vs `intersection_points`?
 
-The `intersects` methods check whether two geometries intersect with each other.
+The intersects function checks if a given geometry intersects with another
+geometry, or in other words, the either the interiors or boundaries of the two
+geometries intersect.
+
 The `intersection` methods return the geometry intersection between the two
 input geometries. The `intersection_points` method returns a list of
 intersection points between two geometries.
@@ -44,18 +47,16 @@ f
 
 This is the GeoInterface-compatible implementation.
 
-First, we implement a wrapper method for intersects, intersection, and
-intersection_points that dispatches to the correct implementation based on the
-geometry trait. The two underlying helper functions that are widely used in all
-geometry dispatches are _line_intersects, which determines if two line segments
-intersect and _intersection_point which determines the intersection point
-between two line segments.
+Given that intersects is the exact opposite of disjoint, we simply pass the two
+inputs variables, swapped in order, to disjoint.
 =#
 
 """
     intersects(geom1, geom2)::Bool
 
-Check if two geometries intersect, returning true if so and false otherwise.
+Return true if the interiors or boundaries of the two geometries interact.
+
+`intersects` returns the exact opposite result of `disjoint`.
 
 ## Example
 
@@ -70,77 +71,8 @@ GO.intersects(line1, line2)
 true
 ```
 """
-intersects(geom1, geom2) = intersects(
-    GI.trait(geom1),
-    geom1,
-    GI.trait(geom2),
-    geom2
-)
+intersects(geom1, geom2) = !disjoint(geom1, geom2)
 
-"""
-    intersects(::GI.LineTrait, a, ::GI.LineTrait, b)::Bool
-
-Returns true if two line segments intersect and false otherwise.
-"""
-function intersects(::GI.LineTrait, a, ::GI.LineTrait, b)
-    a1 = _tuple_point(GI.getpoint(a, 1))
-    a2 = _tuple_point(GI.getpoint(a, 2))
-    b1 = _tuple_point(GI.getpoint(b, 1))
-    b2 = _tuple_point(GI.getpoint(b, 2))
-    meet_type = ExactPredicates.meet(a1, a2, b1, b2)
-    return meet_type == 0 || meet_type == 1
-end
-
-"""
-    intersects(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)::Bool
-
-Returns true if two geometries intersect with one another and false
-otherwise. For all geometries but lines, convert the geometry to a list of edges
-and cross compare the edges for intersections.
-"""
-function intersects(
-    trait_a::GI.AbstractTrait, a_geom,
-    trait_b::GI.AbstractTrait, b_geom,
-)   edges_a, edges_b = map(sort! ∘ to_edges, (a_geom, b_geom))
-    return _line_intersects(edges_a, edges_b) ||
-        within(trait_a, a_geom, trait_b, b_geom) ||
-        within(trait_b, b_geom, trait_a, a_geom) 
-end
-
-"""
-    _line_intersects(
-        edges_a::Vector{Edge},
-        edges_b::Vector{Edge}
-    )::Bool
-
-Returns true if there is at least one intersection between edges within the
-two lists of edges.
-"""
-function _line_intersects(
-    edges_a::Vector{Edge},
-    edges_b::Vector{Edge}
-)
-    # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
-    for edge_a in edges_a
-        for edge_b in edges_b
-            _line_intersects(edge_a, edge_b) && return true 
-        end
-    end
-    return false
-end
-
-"""
-    _line_intersects(
-        edge_a::Edge,
-        edge_b::Edge,
-    )::Bool
-
-Returns true if there is at least one intersection between two edges.
-"""
-function _line_intersects(edge_a::Edge, edge_b::Edge)
-    meet_type = ExactPredicates.meet(edge_a..., edge_b...)
-    return meet_type == 0 || meet_type == 1
-end
 
 """
     intersection(geom_a, geom_b)::Union{Tuple{::Real, ::Real}, ::Nothing}
@@ -229,8 +161,8 @@ Calculates the intersection between two line segments. Return nothing if
 there isn't one.
 """
 function intersection(
-    trait_a::GI.AbstractTrait, geom_a,
-    trait_b::GI.AbstractTrait, geom_b,
+    trait_a::GI.AbstractGeometryTrait, geom_a,
+    trait_b::GI.AbstractGeometryTrait, geom_b,
 )
     @assert(
         false,
