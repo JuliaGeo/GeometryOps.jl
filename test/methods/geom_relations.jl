@@ -173,6 +173,6 @@ end
 @testset "Crosses By" begin test_geom_relation(GO.crosses, LG.crosses, "crosses") end
 @testset "Disjoint" begin test_geom_relation(GO.disjoint, LG.disjoint, "disjoint")end
 @testset "Intersect" begin test_geom_relation(GO.intersects, LG.intersects, "intersects") end
-@testset "Overlap" begin test_geom_relation(GO.overlap, LG.overlap, "overlap") end
+@testset "Overlaps" begin test_geom_relation(GO.overlaps, LG.overlaps, "overlaps") end
 @testset "Touches" begin test_geom_relation(GO.touches, LG.touches, "touches") end
 @testset "Within" begin test_geom_relation(GO.within, LG.within, "within") end
