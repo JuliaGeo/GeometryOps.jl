@@ -199,37 +199,36 @@ function _simplify(alg::DouglasPeucker, points::Vector)
     length(points) <= MIN_POINTS && return points
     ## TODO do we need this?
     ## points = alg.prefilter ? simplify(RadialDistance(alg.tol), points) : points
-    distances = _build_tolerances((x, y, z) -> _squared_distance_line(Float64, x, y, z), points)
-    return _get_points(alg, points, distances)
+    pts = if !isnothing(alg.tol)
+        _simplify_tol(alg, points, 1, length(points))
+    else  # TODO: This isn't the correct implementation of DouglasPeucker
+        distances = _build_tolerances((x, y, z) -> _squared_distance_line(Float64, x, y, z), points)
+        _get_points(alg, points, distances)
+    end
+    return pts 
 end
 
-function _find_split(points, start_idx, end_idx)
+# Top down DouglasPeucker when given a tolerance
+function _simplify_tol(alg, points, start_idx, end_idx)
     max_idx = 0
     max_dist = zero(Float64)
     for i in (start_idx + 1):(end_idx - 1)
-        dist = _squared_distance_line(Float64, p, points[start_idx], points[end_idx])
-        if dist < max_dist
+        dist = _squared_distance_line(Float64, points[i], points[start_idx], points[end_idx])
+        if dist > max_dist
             max_dist = dist
             max_idx = i
         end
     end
-    return i, max_dist
-end
-
-function _simplify_tol(alg::DouglasPeucker, points::Vector)
-    np = length(points)
-    np < 4 && return points
-
-    pts = collect(1:np)
-    init_i, init_val = _find_split(points, 1, np)  # need to make sure last point is repeated if polygon
-    
-    if init_val < algs.tol
-        
+    results = if max_dist < alg.tol
+        [points[start_idx], points[end_idx]]
+    else
+        vcat(
+            _simplify_tol(alg, points, start_idx, max_idx)[1:(end - 1)],
+            _simplify_tol(alg, points, max_idx, end_idx),
+        )
     end
-
-
+    return results
 end
-
 
 # # Simplify with VisvalingamWhyatt Algorithm
 """
