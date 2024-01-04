@@ -5,13 +5,14 @@ export overlaps
 #=
 ## What is overlaps?
 
-The overlaps function checks if two geometries overlap. Two geometries can only
-overlap if they have the same dimension, and if they overlap, but one is not
-contained, within, or equal to the other.
+The overlaps function checks if two geometries overlap. Two geometries overlap
+if they have the same dimension, and if they overlap then their interiors
+interact, but they both also need interior points exterior to the other
+geometry. 
 
 Note that this means it is impossible for a single point to overlap with a
 single point and a line only overlaps with another line if only a section of
-each line is colinear. 
+each line is colinear (crosses don't count for interior points interacting). 
 
 To provide an example, consider these two lines:
 ```@example overlaps
@@ -37,25 +38,34 @@ overlap(l1, l2)
 This is the GeoInterface-compatible implementation.
 
 First, we implement a wrapper method that dispatches to the correct
-implementation based on the geometry trait. This is also used in the
-implementation, since it's a lot less work! 
+implementation based on the geometry trait.
 
-Note that that since only elements of the same dimension can overlap, any two
-geometries with traits that are of different dimensions autmoatically can
-return false.
+Each of these calls a method in the geom_geom_processors file. The methods in
+this file determine if the given geometries meet a set of criteria. For the
+`overlaps` function and arguments g1 and g2, this criteria is as follows:
+    - points of g1 are allowed to be in the interior of g2
+    - points of g1 are allowed to be on the boundary of g2
+    - points of g1 are allowed to be in the exterior of g2
+    - at least one point of g1 is required to be in the interior of g2
+    - at least one point of g2 is required to be in the interior of g1
+    - no points of g1 is required to be on the boundary of g2
+    - at least one point of g1 is required to be in the exterior of g2
+    - at least one point of g2 is required to be in the exterior of g1
 
-For geometries with the same trait dimension, we must make sure that they share
-a point, an edge, or area for points, lines, and polygons/multipolygons
-respectivly, without being contained. 
+The code for the specific implementations is in the geom_geom_processors file.
 =#
+
+const OVERLAPS_CURVE_ALLOWS = (over_allow = true, cross_allow = false, on_allow = true, out_allow = true)
+const OVERLAPS_POLYGON_ALLOWS = (in_allow = true, on_allow = true, out_allow = true)
+const OVERLAPS_REQUIRES = (in_require = true, on_require = false, out_require = true)
 
 """
     overlaps(geom1, geom2)::Bool
 
-Compare two Geometries of the same dimension and return true if their
-intersection set results in a geometry different from both but of the same
-dimension. This means one geometry cannot be within or contain the other and
-they cannot be equal
+Compare two Geometries of the same dimension and return true if their interiors
+interact, but they both also have interior points exterior to the other
+geometry. Lines crossing doesn't count for interiors interacting as overlaps
+of curves must be of dimension one. 
 
 ## Examples
 ```jldoctest
@@ -68,38 +78,124 @@ GO.overlaps(poly1, poly2)
 true
 ```
 """
-overlaps(geom1, geom2)::Bool = overlaps(
-    GI.trait(geom1),
-    geom1,
-    GI.trait(geom2),
-    geom2,
+overlaps(g1, g2)::Bool = _overlaps(GI.trait(g1), g1, GI.trait(g2), g2)
+
+
+# # Convert features to geometries
+_overlaps(::GI.FeatureTrait, g1, ::Any, g2) = overlaps(GI.geometry(g1), g2)
+_overlaps(::Any, g1, t2::GI.FeatureTrait, g2) = overlaps(g1, GI.geometry(g2))
+
+
+# # Non-specified geometries 
+
+# Geometries of different dimensions and points cannot overlap and return false
+_overlaps(
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g2,
+) = false
+
+
+# # Lines cross curves
+
+#= Linestring overlaps with another linestring when they share co-linear
+segments (interiors interacting), but both have interior points exterior to the
+other line. =#
+_overlaps(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _line_curve_process(
+    g1, g2;
+    OVERLAPS_CURVE_ALLOWS...,
+    OVERLAPS_REQUIRES...,
+    closed_line = false,
+    closed_curve = false,
+) && _line_curve_process(
+        g2, g1;
+        OVERLAPS_CURVE_ALLOWS...,
+        OVERLAPS_REQUIRES...,
+        closed_line = false,
+        closed_curve = false,
+    )
+
+#= Linestring overlaps with a linearring when they share co-linear segments
+(interiors interacting), but both have interior points exterior to the other. =#
+_overlaps(
+    ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    OVERLAPS_CURVE_ALLOWS...,
+    OVERLAPS_REQUIRES...,
+    closed_line = false,
+    closed_curve = true,
+) && _line_curve_process(
+        g2, g1;
+        OVERLAPS_CURVE_ALLOWS...,
+        OVERLAPS_REQUIRES...,
+        closed_line = true,
+        closed_curve = false,
+    )
+
+
+# # Rings cross curves
+
+#= Linearring overlaps with a linestring when they share co-linear segments
+(interiors interacting), but both have interior points exterior to the other. =#
+_overlaps(
+    trait1::GI.LinearRingTrait, g1,
+    trait2::Union{GI.LineTrait, GI.LineStringTrait}, g2,
+) = _overlaps(trait2, g2, trait1, g1)
+
+#= Linearring overlaps with another linearring when they share co-linear
+segments (interiors interacting), but both have interior points exterior to the
+other line. =#
+_overlaps(
+    ::GI.LinearRingTrait, g1,
+    ::GI.LinearRingTrait, g2,
+) = _line_curve_process(
+    g1, g2;
+    OVERLAPS_CURVE_ALLOWS...,
+    OVERLAPS_REQUIRES...,
+    closed_line = true,
+    closed_curve = true,
+) && _line_curve_process(
+        g2, g1;
+        OVERLAPS_CURVE_ALLOWS...,
+        OVERLAPS_REQUIRES...,
+        closed_line = true,
+        closed_curve = true,
+    )
+
+
+# # Polygons cross polygons
+
+#= Polygon overlaps with another polygon when their interiors intersect, but
+both have interior points exterior to the other polygon. =#
+_overlaps(
+    ::GI.PolygonTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _polygon_polygon_process(
+    g1, g2;
+    OVERLAPS_POLYGON_ALLOWS...,
+    OVERLAPS_REQUIRES...,
+) && _polygon_polygon_process(
+    g2, g1;
+    OVERLAPS_POLYGON_ALLOWS...,
+    OVERLAPS_REQUIRES...,
 )
 
-"""
-    overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2)::Bool
+# # Geometries disjoint multi-geometry/geometry collections
 
-For any non-specified pair, all have non-matching dimensions, return false.
-"""
-overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2) = false
-
-"""
-    overlaps(
-        ::GI.MultiPointTrait, points1,
-        ::GI.MultiPointTrait, points2,
-    )::Bool
-
-If the multipoints overlap, meaning some, but not all, of the points within the
-multipoints are shared, return true.
-"""
-function overlaps(
-    ::GI.MultiPointTrait, points1,
-    ::GI.MultiPointTrait, points2,
+# Multipoints overlap with other multipoints if only some sub-points are shared
+function _overlaps(
+    ::GI.MultiPointTrait, g1,
+    ::GI.MultiPointTrait, g2,
 )
     one_diff = false  # assume that all the points are the same
     one_same = false  # assume that all points are different
-    for p1 in GI.getpoint(points1)
+    for p1 in GI.getpoint(g1)
         match_point = false
-        for p2 in GI.getpoint(points2)
+        for p2 in GI.getpoint(g2)
             if equals(p1, p2)  # Point is shared
                 one_same = true
                 match_point = true
@@ -112,159 +208,34 @@ function overlaps(
     return false
 end
 
-"""
-    overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line)::Bool
-
-If the lines overlap, meaning that they are colinear but each have one endpoint
-outside of the other line, return true. Else false.
-"""
-overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line) =
-    _overlaps((a1, a2), (b1, b2))
-
-"""
-    overlaps(
-        ::Union{GI.LineStringTrait, GI.LinearRing}, line1,
-        ::Union{GI.LineStringTrait, GI.LinearRing}, line2,
-    )::Bool
-
-If the curves overlap, meaning that at least one edge of each curve overlaps,
-return true. Else false.
-"""
-function overlaps(
-    ::Union{GI.LineStringTrait, GI.LinearRing}, line1,
-    ::Union{GI.LineStringTrait, GI.LinearRing}, line2,
-)
-    edges_a, edges_b = map(sort! ∘ to_edges, (line1, line2))
-    for edge_a in edges_a
-        for edge_b in edges_b
-            _overlaps(edge_a, edge_b) && return true
-        end
-    end
-    return false
-end
-
-"""
-    overlaps(
-        trait_a::GI.PolygonTrait, poly_a,
-        trait_b::GI.PolygonTrait, poly_b,
-    )::Bool
-
-If the two polygons intersect with one another, but are not equal, return true.
-Else false.
-"""
-function overlaps(
-    trait_a::GI.PolygonTrait, poly_a,
-    trait_b::GI.PolygonTrait, poly_b,
-)
-    edges_a, edges_b = map(sort! ∘ to_edges, (poly_a, poly_b))
-    return _edge_intersects(edges_a, edges_b) &&
-        !equals(trait_a, poly_a, trait_b, poly_b)
-end
-
-"""
-    overlaps(
-        ::GI.PolygonTrait, poly1,
-        ::GI.MultiPolygonTrait, polys2,
-    )::Bool
-
-Return true if polygon overlaps with at least one of the polygons within the
-multipolygon. Else false.
-"""
-function overlaps(
-    ::GI.PolygonTrait, poly1,
-    ::GI.MultiPolygonTrait, polys2,
-)
-    for poly2 in GI.getgeom(polys2)
-        overlaps(poly1, poly2) && return true
-    end
-    return false
-end
-
-"""
-    overlaps(
-        ::GI.MultiPolygonTrait, polys1,
-        ::GI.PolygonTrait, poly2,
-    )::Bool
-
-Return true if polygon overlaps with at least one of the polygons within the
-multipolygon. Else false.
-"""
-overlaps(trait1::GI.MultiPolygonTrait, polys1, trait2::GI.PolygonTrait, poly2) = 
-    overlaps(trait2, poly2, trait1, polys1)
-
-"""
-    overlaps(
-        ::GI.MultiPolygonTrait, polys1,
-        ::GI.MultiPolygonTrait, polys2,
-    )::Bool
-
-Return true if at least one pair of polygons from multipolygons overlap. Else
-false.
-"""
-function overlaps(
-    ::GI.MultiPolygonTrait, polys1,
-    ::GI.MultiPolygonTrait, polys2,
-)
-    for poly1 in GI.getgeom(polys1)
-        overlaps(poly1, polys2) && return true
-    end
-    return false
-end
-
-#= If the edges overlap, meaning that they are colinear but each have one endpoint
-outside of the other edge, return true. Else false. =#
+#= Geometry overlaps a multi-geometry or a collection if the geometry overlaps
+at least one of the elements of the collection. =#
 function _overlaps(
-    (a1, a2)::Edge,
-    (b1, b2)::Edge
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g2,
 )
-    # meets in more than one point
-    on_top = ExactPredicates.meet(a1, a2, b1, b2) == 0
-    # one end point is outside of other segment
-    a_fully_within = _point_on_seg(a1, b1, b2) && _point_on_seg(a2, b1, b2)
-    b_fully_within = _point_on_seg(b1, a1, a2) && _point_on_seg(b2, a1, a2)
-    return on_top && (!a_fully_within && !b_fully_within)
-end
-
-#= TODO: Once overlaps is swapped over to use the geom relations workflow, can
-delete these helpers. =#
-
-# Checks it vectors of edges intersect
-function _edge_intersects(
-    edges_a::Vector{Edge},
-    edges_b::Vector{Edge}
-)
-    # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
-    for edge_a in edges_a
-        for edge_b in edges_b
-            _edge_intersects(edge_a, edge_b) && return true 
-        end
+    for sub_g2 in GI.getgeom(g2)
+        overlaps(g1, sub_g2) && return true
     end
     return false
 end
 
-# Checks if two edges intersect
-function _edge_intersects(edge_a::Edge, edge_b::Edge)
-    meet_type = ExactPredicates.meet(edge_a..., edge_b...)
-    return meet_type == 0 || meet_type == 1
-end
+# # Multi-geometry/geometry collections cross geometries
 
-# Checks if point is on a segment
-function _point_on_seg(point, start, stop)
-    # Parse out points
-    x, y = GI.x(point), GI.y(point)
-    x1, y1 = GI.x(start), GI.y(start)
-    x2, y2 = GI.x(stop), GI.y(stop)
-    Δxl = x2 - x1
-    Δyl = y2 - y1
-    # Determine if point is on segment
-    cross = (x - x1) * Δyl - (y - y1) * Δxl
-    if cross == 0  # point is on line extending to infinity
-        # is line between endpoints
-        if abs(Δxl) >= abs(Δyl)  # is line between endpoints
-            return Δxl > 0 ? x1 <= x <= x2 : x2 <= x <= x1
-        else
-            return Δyl > 0 ? y1 <= y <= y2 : y2 <= y <= y1
-        end
+#= Multi-geometry or a geometry collection overlaps a geometry if at least one
+elements of the collection overlaps the geometry. =#
+function _overlaps(
+    ::Union{
+        GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
+        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
+    }, g1,
+    ::GI.AbstractGeometryTrait, g2,
+)
+    for sub_g1 in GI.getgeom(g1)
+        overlaps(sub_g1, g2) && return true
     end
     return false
 end
