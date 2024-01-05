@@ -168,7 +168,7 @@ function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edg
 
     # Check if one polygon totally within other and if so, return the larger polygon.
     if isempty(return_polys)
-        if point_in_polygon(edges_a[1][1], poly_b)[1]
+        if within(edges_a[1][1], poly_b)[1]
             list = []
             for i in eachindex(edges_b)
                 push!(list, edges_b[i][1])
@@ -176,7 +176,7 @@ function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edg
             push!(list, edges_b[1][1])
             push!(return_polys, list)
             return return_polys, false
-        elseif point_in_polygon(edges_b[1][1], poly_a)[1]
+        elseif within(edges_b[1][1], poly_a)[1]
             list = []
             for i in eachindex(edges_a)
                 push!(list, edges_a[i][1])
@@ -215,7 +215,7 @@ function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edg
         for j = 2:(length(return_polys)-1)
             poly1 = GI.Polygon([return_polys[outer_idx]])
             poly2 = GI.Polygon([return_polys[j]])
-            if !point_in_polygon(to_edges(poly2)[1][1], poly1)
+            if !within(to_edges(poly2)[1][1], poly1)
                 outer_idx = j
             end
         end

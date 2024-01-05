@@ -188,7 +188,7 @@ function _flag_ent_exit(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_
     status = false
     for ii in eachindex(a_list)
         if ii == 1
-            temp = point_in_polygon(edges_a[ii][1], poly_b)
+            temp = within(edges_a[ii][1], poly_b)
             status = !(temp[1])
             continue
         end
@@ -202,7 +202,7 @@ function _flag_ent_exit(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_
     status = false
     for ii in eachindex(b_list)
         if ii == 1
-            temp = point_in_polygon(edges_b[ii][1], poly_a)
+            temp = within(edges_b[ii][1], poly_a)
             status = !(temp[1])
             continue
         end

@@ -56,3 +56,25 @@ true
 ```
 """
 intersects(geom1, geom2) = !disjoint(geom1, geom2)
+
+
+#= Returns true if there is at least one intersection between edges within the
+two lists of edges. =#
+function _line_intersects(
+    edges_a::Vector{Edge},
+    edges_b::Vector{Edge}
+)
+    # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
+    for edge_a in edges_a
+        for edge_b in edges_b
+            _line_intersects(edge_a, edge_b) && return true 
+        end
+    end
+    return false
+end
+
+# Returns true if there is at least one intersection between two edges.
+function _line_intersects(edge_a::Edge, edge_b::Edge)
+    meet_type = ExactPredicates.meet(edge_a..., edge_b...)
+    return meet_type == 0 || meet_type == 1
+end

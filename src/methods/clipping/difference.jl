@@ -197,9 +197,9 @@ function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list
         end
         push!(list_a, edges_a[1][1])
 
-        if point_in_polygon(edges_a[1][1], poly_b)[1]
+        if within(edges_a[1][1], poly_b)[1]
             return return_polys, diff_polygons
-        elseif point_in_polygon(edges_b[1][1], poly_a)[1]
+        elseif within(edges_b[1][1], poly_a)[1]
             push!(return_polys, list_a)
             push!(return_polys, list_b)
             return return_polys, diff_polygons

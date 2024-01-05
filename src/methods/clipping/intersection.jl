@@ -240,14 +240,14 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_li
     # Check if one polygon totally within other, and if so
     # return the smaller polygon as the intersection
     if isempty(return_polys)
-        if point_in_polygon(edges_a[1][1], poly_b)[1]
+        if within(edges_a[1][1], poly_b)[1]
             list = []
             for i in eachindex(edges_a)
                 push!(list, edges_a[i][1])
             end
             push!(list, edges_a[1][1])
             push!(return_polys, list)
-        elseif point_in_polygon(edges_b[1][1], poly_a)[1]
+        elseif within(edges_b[1][1], poly_a)[1]
             list = []
             for i in eachindex(edges_b)
                 push!(list, edges_b[i][1])

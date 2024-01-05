@@ -1,3 +1,5 @@
+include("clipping_test_utils.jl")
+
 """
     compare_GO_LG_intersection(p1, p2, ϵ)::Bool
 
