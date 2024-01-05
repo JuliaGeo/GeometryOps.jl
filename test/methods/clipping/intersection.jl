@@ -21,7 +21,113 @@ function compare_GO_LG_intersection(p1, p2, ϵ)
     return LG.area(LG.difference(GO_intersection_poly, LG_intersection)) < ϵ
 end
 
-@testset "Intersection_polygons" begin
+@testset "Line-Line Intersection" begin
+    # Parallel lines
+    @test isnothing(GO.intersection(
+        GI.Line([(0.0, 0.0), (2.5, 0.0)]),
+        GI.Line([(0.0, 1.0), (2.5, 1.0)]),
+    ))
+    # Non-parallel lines that don't intersect
+    @test isnothing(GO.intersection(
+        GI.Line([(0.0, 0.0), (2.5, 0.0)]),
+        GI.Line([(2.0, -3.0), (3.0, 0.0)]),
+    ))
+    # Test for lines only touching at endpoint
+    l1 = GI.Line([(0.0, 0.0), (2.5, 0.0)])
+    l2 = GI.Line([(2.0, -3.0), (2.5, 0.0)])
+    @test all(GO.intersection(
+        GI.Line([(0.0, 0.0), (2.5, 0.0)]),
+        GI.Line([(2.0, -3.0), (2.5, 0.0)]),
+    ) .≈ (2.5, 0.0))
+    # Test for lines that intersect in the middle
+    @test all(GO.intersection(
+        GI.Line([(0.0, 0.0), (5.0, 5.0)]),
+        GI.Line([(0.0, 5.0), (5.0, 0.0)]),
+    ) .≈ (2.5, 2.5))
+    # Single element line strings crossing over each other
+    l1 = LG.LineString([[5.5, 7.2], [11.2, 12.7]])
+    l2 = LG.LineString([[4.3, 13.3], [9.6, 8.1]])
+    go_inter = GO.intersection(l1, l2)
+    lg_inter = LG.intersection(l1, l2)
+    @test go_inter[1][1] .≈ GI.x(lg_inter)
+    @test go_inter[1][2] .≈ GI.y(lg_inter)
+    # Multi-element line strings crossing over on vertex
+    l1 = LG.LineString([[0.0, 0.0], [2.5, 0.0], [5.0, 0.0]])
+    l2 = LG.LineString([[2.0, -3.0], [3.0, 0.0], [4.0, 3.0]])
+    go_inter = GO.intersection(l1, l2)
+    lg_inter = LG.intersection(l1, l2)
+    @test go_inter[1][1] .≈ GI.x(lg_inter)
+    @test go_inter[1][2] .≈ GI.y(lg_inter)
+    # Multi-element line strings crossing over with multiple intersections
+    l1 = LG.LineString([[0.0, -1.0], [1.0, 1.0], [2.0, -1.0], [3.0, 1.0]])
+    l2 = LG.LineString([[0.0, 0.0], [1.0, 0.0], [3.0, 0.0]])
+    go_inter = GO.intersection(l1, l2)
+    lg_inter = LG.intersection(l1, l2)
+    @test length(go_inter) == 3
+    @test issetequal(Set(go_inter), Set(GO._tuple_point.(GI.getpoint(lg_inter))))
+    # Line strings far apart so extents don't overlap
+    @test isnothing(GO.intersection(
+        LG.LineString([[100.0, 0.0], [101.0, 0.0], [103.0, 0.0]]),
+        LG.LineString([[0.0, 0.0], [1.0, 0.0], [3.0, 0.0]]),
+    ))
+    # Line strings close together that don't overlap
+    @test isempty(GO.intersection(
+        LG.LineString([[3.0, 0.25], [5.0, 0.25], [7.0, 0.25]]),
+        LG.LineString([[0.0, 0.0], [5.0, 10.0], [10.0, 0.0]]),
+    ))
+    # Closed linear ring with open line string
+    r1 = LG.LinearRing([[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]])
+    l2 = LG.LineString([[0.0, -2.0], [12.0, 10.0],])
+    go_inter = GO.intersection(r1, l2)
+    lg_inter = LG.intersection(r1, l2)
+    @test length(go_inter) == 2
+    @test issetequal(Set(go_inter), Set(GO._tuple_point.(GI.getpoint(lg_inter))))
+    # Closed linear ring with closed linear ring
+    r1 = LG.LinearRing([[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]])
+    r2 = LG.LineString([[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]])
+    go_inter = GO.intersection(r1, r2)
+    lg_inter = LG.intersection(r1, r2)
+    @test length(go_inter) == 2
+    @test issetequal(Set(go_inter), Set(GO._tuple_point.(GI.getpoint(lg_inter))))
+end
+
+@testset "Intersection Points" begin
+    # Two polygons that intersect
+    @test all(GO.intersection_points(
+        LG.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]]),
+        LG.Polygon([[[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]]),
+    ) .== [(6.5, 3.5), (6.5, -3.5)])
+    # Two polygons that don't intersect
+    @test isnothing(GO.intersection_points(
+        LG.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]]),
+        LG.Polygon([[[13.0, 0.0], [18.0, 5.0], [23.0, 0.0], [18.0, -5.0], [13.0, 0.0]]]),
+    ))
+    # Polygon that intersects with linestring
+    @test all(GO.intersection_points(
+        LG.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]]),
+        LG.LineString([[0.0, 0.0], [10.0, 0.0]]),
+    ) .== [(0.0, 0.0), (10.0, 0.0)])
+
+    # Polygon with a hole, line through polygon and hole
+    @test all(GO.intersection_points(
+        LG.Polygon([
+            [[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]],
+            [[2.0, -1.0], [2.0, 1.0], [3.0, 1.0], [3.0, -1.0], [2.0, -1.0]]
+        ]),
+        LG.LineString([[0.0, 0.0], [10.0, 0.0]]),
+    ) .== [(0.0, 0.0), (2.0, 0.0), (3.0, 0.0), (10.0, 0.0)])
+
+    # Polygon with a hole, line only within the hole
+    @test isempty(GO.intersection_points(
+        LG.Polygon([
+            [[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]],
+            [[2.0, -1.0], [2.0, 1.0], [3.0, 1.0], [3.0, -1.0], [2.0, -1.0]]
+        ]),
+        LG.LineString([[2.25, 0.0], [2.75, 0.0]]),
+    ))
+end
+
+@testset "Polygon-Polygon Intersection" begin
     # Two "regular" polygons that intersect
     p1 = [[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]
     p2 = [[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]

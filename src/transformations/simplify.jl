@@ -3,7 +3,7 @@
 # This file holds implementations for the Douglas-Peucker and Visvalingam-Whyatt
 # algorithms for simplifying geometries (specifically polygons and lines).
 
-export simplify, VisvalingamWhyatt, DouglasPeucker
+export simplify, VisvalingamWhyatt, DouglasPeucker, RadialDistance
 
 
 """
@@ -22,6 +22,7 @@ abstract type SimplifyAlg end
 
 const SIMPLIFY_ALG_KEYWORDS = """
 ## Keywords
+
 - `ratio`: the fraction of points that should remain after `simplify`. 
     Useful as it will generalise for large collections of objects.
 - `number`: the number of points that should remain after `simplify`.
@@ -48,7 +49,7 @@ end
 
 """
     simplify(obj; kw...)
-    simplify(::SimplifyAlg, obj)
+    simplify(::SimplifyAlg, obj; kw...)
 
 Simplify a geometry, feature, feature collection, 
 or nested vectors or a table of these.
@@ -61,6 +62,14 @@ listed in order of increasing quality but decreaseing performance.
 
 The default behaviour is `simplify(DouglasPeucker(; kw...), obj)`.
 Pass in other [`SimplifyAlg`](@ref) to use other algorithms.
+
+# Keywords
+
+$APPLY_KEYWORDS
+
+Keywords for DouglasPeucker are allowed when no algorithm is specified:
+
+$SIMPLIFY_ALG_KEYWORDS
 
 # Example
 
@@ -99,8 +108,8 @@ GI.npoint(simple)
 6
 ```
 """
-simplify(data; calc_extent=false, threaded=false, kw...) =
-    _simplify(DouglasPeucker(; kw...), data; calc_extent, threaded)
+simplify(data; calc_extent=false, threaded=false, crs=nothing, kw...) =
+    _simplify(DouglasPeucker(; kw...), data; calc_extent, threaded, crs)
 simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
 
 function _simplify(alg::SimplifyAlg, data; kw...)
@@ -120,15 +129,6 @@ function _simplify(::PolygonTrait, alg, geom)
 end
 ## For curves and rings we simplify
 _simplify(::AbstractCurveTrait, alg, geom) = rebuild(geom, simplify(alg, tuple_points(geom)))
-function _simplify(::LinearRingTrait, alg, geom)
-    ## Make a vector of points 
-    points = tuple_points(geom)
-
-    ## Simplify it once
-    simple = _simplify(alg, points)
-
-    return rebuild(geom, simple)
-end
 
 """
     RadialDistance <: SimplifyAlg
