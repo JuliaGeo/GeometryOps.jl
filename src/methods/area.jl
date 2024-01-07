@@ -48,14 +48,15 @@ const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointT
 """
     area(geom, ::Type{T} = Float64)::T
 
-Returns the area of the geometry. This is computed slighly differently for
-different geometries:
+Returns the area of a geometry or collection of geometries. 
+This is computed slighly differently for different geometries:
+
     - The area of a point/multipoint is always zero.
     - The area of a curve/multicurve is always zero.
     - The area of a polygon is the absolute value of the signed area.
     - The area multi-polygon is the sum of the areas of all of the sub-polygons.
-    - The area of a geometry collection is the sum of the areas of all of the
-    sub-geometries. 
+    - The area of a geometry collection, feature collection of array/iterable 
+        is the sum of the areas of all of the sub-geometries. 
 
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
@@ -70,8 +71,9 @@ end
 """
     signed_area(geom, ::Type{T} = Float64)::T
 
-Returns the signed area of the geometry, based on winding order. This is
-computed slighly differently for different geometries:
+Returns the signed area of a single geometry, based on winding order. 
+This is computed slighly differently for different geometries:
+
     - The signed area of a point is always zero.
     - The signed area of a curve is always zero.
     - The signed area of a polygon is computed with the shoelace formula and is
@@ -83,11 +85,8 @@ computed slighly differently for different geometries:
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-function signed_area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat
-    applyreduce(+, _AREA_TARGETS, geom; threaded, init=zero(T)) do g
-        _signed_area(T, GI.trait(g), g)
-    end
-end
+signed_area(geom, ::Type{T} = Float64) where T <: AbstractFloat =
+    _signed_area(T, GI.trait(geom), geom)
 
 # Points, MultiPoints, Curves, MultiCurves
 _area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
