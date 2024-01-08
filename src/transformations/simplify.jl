@@ -100,31 +100,45 @@ GI.npoint(simple)
 """
 simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
 # Default algorithm is DouglasPeucker
-simplify(data; calc_extent=false, threaded=false, crs=nothing, kw...) =
-    _simplify(DouglasPeucker(; kw...), data; calc_extent, threaded, crs)
+simplify(data; prefilter = nothing, calc_extent=false, threaded=false, crs=nothing, kw...) =
+    _simplify(DouglasPeucker(; kw...), data; prefilter, calc_extent, threaded, crs)
 
 #= For each algorithm, apply simplication to all curves, multipoints, and
 points, reconstructing everything else around them. =#
-_simplify(alg::SimplifyAlg, data; kw...) =
-    apply(
-        geom -> _simplify(GI.trait(geom), alg, geom),
+function _simplify(alg::SimplifyAlg, data; prefilter = nothing, kw...)
+    println("hi")
+    simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter = prefilter)
+    @show simplifier
+    return apply(
+        simplifier,
         Union{GI.PolygonTrait, GI.AbstractCurveTrait, GI.MultiPointTrait, GI.PointTrait},
         data;
         kw...,
     )
+end
 
 
 ## For Point and MultiPoint traits we do nothing
-_simplify(::GI.PointTrait, alg, geom) = geom
-_simplify(::GI.MultiPointTrait, alg, geom) = geom
+_simplify(::GI.PointTrait, alg, geom; kw...) = geom
+_simplify(::GI.MultiPointTrait, alg, geom; kw...) = geom
 
 ## For curves, rings, and polygon we simplify
-_simplify(::GI.AbstractCurveTrait, alg, geom) =
-    rebuild(geom, _simplify(alg, tuple_points(geom)))
+function _simplify(::GI.AbstractCurveTrait, alg, geom; prefilter)
+    @show alg
+    points = if isnothing(prefilter)
+        tuple_points(geom)
+    else
+        _simplify(prefilter, tuple_points(geom))
+    end
+    @show typeof(points)
+    return rebuild(geom, _simplify(alg, points))
+end
 
-function _simplify(::GI.PolygonTrait, alg, geom)
+function _simplify(::GI.PolygonTrait, alg, geom;  kw...)
     ## Force treating children as LinearRing
-    rebuilder(g) = rebuild(g, _simplify(GI.LinearRingTrait(), alg, g))
+    println("WAH")
+    simplifier(geom) = _simplify(GI.LinearRingTrait(), alg, geom; kw...)
+    rebuilder(geom) = rebuild(geom, simplifier)
     lrs = map(rebuilder, GI.getgeom(geom))
     return rebuild(geom, lrs)
 end
@@ -185,13 +199,12 @@ Note: user input `tol` is squared to avoid uneccesary computation in algorithm.
     number::Union{Int64,Nothing} = nothing
     ratio::Union{Float64,Nothing} = nothing
     tol::Union{Float64,Nothing} = nothing
-    prefilter::Bool = false
 
-    function DouglasPeucker(number, ratio, tol, prefilter)
+    function DouglasPeucker(number, ratio, tol)
         _checkargs(number, ratio, tol)
         # square tolerance for reduced computation
         tol = isnothing(tol) ? tol : tol^2
-        return new(number, ratio, tol, prefilter)
+        return new(number, ratio, tol)
     end
 end
 
@@ -248,9 +261,8 @@ Note: user input `tol` is doubled to avoid uneccesary computation in algorithm.
     number::Union{Int,Nothing} = nothing
     ratio::Union{Float64,Nothing} = nothing
     tol::Union{Float64,Nothing} = nothing
-    prefilter::Bool = false
 
-    function VisvalingamWhyatt(number, ratio, tol, prefilter)
+    function VisvalingamWhyatt(number, ratio, tol)
         _checkargs(number, ratio, tol)
         # double tolerance for reduced computation
         tol = isnothing(tol) ? tol : tol*2
