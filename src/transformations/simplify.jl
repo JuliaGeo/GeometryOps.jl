@@ -2,7 +2,7 @@
 
 #=
 This file holds implementations for the RadialDistance, Douglas-Peucker, and
-Visvalingam-Whyatt algorithms for simplifying geometries (specifically for\
+Visvalingam-Whyatt algorithms for simplifying geometries (specifically for
 polygons and lines).
 =#
 
@@ -328,7 +328,7 @@ function _simplify(alg::VisvalingamWhyatt, points::Vector)
 end
 
 # Calculates double the area of a triangle given its vertices
-_triangle_double_area(p2, p1, p3) =
+_triangle_double_area(p1, p2, p3) =
     abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2]))
 
 
@@ -351,8 +351,8 @@ function _build_tolerances(f, points)
 
         if min_vert < length(i)
             right_tolerance = f(
-                points[i[min_vert]],
                 points[i[min_vert - 1]],
+                points[i[min_vert]],
                 points[i[min_vert + 1]],
             )
             if right_tolerance <= this_tolerance
@@ -366,8 +366,8 @@ function _build_tolerances(f, points)
 
         if min_vert > 2
             left_tolerance = f(
-                points[i[min_vert - 1]],
                 points[i[min_vert - 2]],
+                points[i[min_vert - 1]],
                 points[i[min_vert]],
             )
             if left_tolerance <= this_tolerance
@@ -449,7 +449,7 @@ function _flat_tolerances(f, points)
     result[1] = result[end] = Inf
 
     for i in 2:length(result) - 1
-        result[i] = f(points[i], points[i-1], points[i+1])
+        result[i] = f(points[i-1], points[i], points[i+1])
     end
     return result
 end
