@@ -106,9 +106,7 @@ simplify(data; prefilter = nothing, calc_extent=false, threaded=false, crs=nothi
 #= For each algorithm, apply simplication to all curves, multipoints, and
 points, reconstructing everything else around them. =#
 function _simplify(alg::SimplifyAlg, data; prefilter = nothing, kw...)
-    println("hi")
     simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter = prefilter)
-    @show simplifier
     return apply(
         simplifier,
         Union{GI.PolygonTrait, GI.AbstractCurveTrait, GI.MultiPointTrait, GI.PointTrait},
@@ -124,21 +122,18 @@ _simplify(::GI.MultiPointTrait, alg, geom; kw...) = geom
 
 ## For curves, rings, and polygon we simplify
 function _simplify(::GI.AbstractCurveTrait, alg, geom; prefilter)
-    @show alg
     points = if isnothing(prefilter)
         tuple_points(geom)
     else
         _simplify(prefilter, tuple_points(geom))
     end
-    @show typeof(points)
     return rebuild(geom, _simplify(alg, points))
 end
 
 function _simplify(::GI.PolygonTrait, alg, geom;  kw...)
     ## Force treating children as LinearRing
-    println("WAH")
-    simplifier(geom) = _simplify(GI.LinearRingTrait(), alg, geom; kw...)
-    rebuilder(geom) = rebuild(geom, simplifier)
+    simplifier(g) = _simplify(GI.LinearRingTrait(), alg, g; kw...)
+    rebuilder(g) = rebuild(g, simplifier(g))
     lrs = map(rebuilder, GI.getgeom(geom))
     return rebuild(geom, lrs)
 end
@@ -210,8 +205,6 @@ end
 
 function _simplify(alg::DouglasPeucker, points::Vector)
     length(points) <= MIN_POINTS && return points
-    ## TODO do we need this?
-    ## points = alg.prefilter ? simplify(RadialDistance(alg.tol), points) : points
     pts = if !isnothing(alg.tol)
         _simplify_tol(alg, points, 1, length(points))
     else  # TODO: This isn't the correct implementation of DouglasPeucker
@@ -266,7 +259,7 @@ Note: user input `tol` is doubled to avoid uneccesary computation in algorithm.
         _checkargs(number, ratio, tol)
         # double tolerance for reduced computation
         tol = isnothing(tol) ? tol : tol*2
-        return new(number, ratio, tol, prefilter)
+        return new(number, ratio, tol)
     end
 end
 
