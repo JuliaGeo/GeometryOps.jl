@@ -55,7 +55,10 @@ Pass in other [`SimplifyAlg`](@ref) to use other algorithms.
 
 # Keywords
 
+- `prefilter_alg`: `SimplifyAlg` algorithm used to pre-filter object before
+    using primary filtering algorithm.
 $APPLY_KEYWORDS
+
 
 Keywords for DouglasPeucker are allowed when no algorithm is specified:
 
@@ -100,13 +103,15 @@ GI.npoint(simple)
 """
 simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
 # Default algorithm is DouglasPeucker
-simplify(data; prefilter = nothing, calc_extent=false, threaded=false, crs=nothing, kw...) =
-    _simplify(DouglasPeucker(; kw...), data; prefilter, calc_extent, threaded, crs)
+simplify(
+    data; prefilter_alg = nothing,
+    calc_extent=false, threaded=false, crs=nothing, kw...,
+ ) = _simplify(DouglasPeucker(; kw...), data; prefilter_alg, calc_extent, threaded, crs)
 
 #= For each algorithm, apply simplication to all curves, multipoints, and
 points, reconstructing everything else around them. =#
-function _simplify(alg::SimplifyAlg, data; prefilter = nothing, kw...)
-    simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter = prefilter)
+function _simplify(alg::SimplifyAlg, data; prefilter_alg = nothing, kw...)
+    simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg = prefilter_alg)
     return apply(
         simplifier,
         Union{GI.PolygonTrait, GI.AbstractCurveTrait, GI.MultiPointTrait, GI.PointTrait},
@@ -121,11 +126,11 @@ _simplify(::GI.PointTrait, alg, geom; kw...) = geom
 _simplify(::GI.MultiPointTrait, alg, geom; kw...) = geom
 
 ## For curves, rings, and polygon we simplify
-function _simplify(::GI.AbstractCurveTrait, alg, geom; prefilter)
-    points = if isnothing(prefilter)
+function _simplify(::GI.AbstractCurveTrait, alg, geom; prefilter_alg)
+    points = if isnothing(prefilter_alg)
         tuple_points(geom)
     else
-        _simplify(prefilter, tuple_points(geom))
+        _simplify(prefilter_alg, tuple_points(geom))
     end
     return rebuild(geom, _simplify(alg, points))
 end
@@ -203,89 +208,90 @@ Note: user input `tol` is squared to avoid uneccesary computation in algorithm.
     end
 end
 
+#= Simplify using the DouglasPeucker algorithm - nice gif of process on wikipedia:
+(https://en.wikipedia.org/wiki/Ramer-Douglas-Peucker_algorithm) =#
 function _simplify(alg::DouglasPeucker, points::Vector)
-    length(points) <= MIN_POINTS && return points
-    pts = if !isnothing(alg.tol)
-        _simplify_tol(alg, points, 1, length(points))
-    else  # TODO: This isn't the correct implementation of DouglasPeucker
-        _simplify_interative(alg, points)
+    npoints = length(points)
+    npoints <= MIN_POINTS && return points
+    # Determine stopping critetia
+    max_points = !isnothing(alg.tol) ? npoints : (!isnothing(alg.number) ?
+        alg.number : max(3, round(Int, alg.ratio * npoints)))
+    max_tol = !isnothing(alg.tol) ? alg.tol : zero(Float64)
+    # Set up queue
+    queue = Vector{Tuple{Int, Int, Int, Float64}}()
+    queue_idx, queue_dist = 0, zero(Float64)
+    len_queue = 0
+    # Set up results vector
+    results = Vector{Int}(undef, max_points)
+    results[1], results[2] = 1, npoints
+    # Loop through points until stopping criteria are fulfilled
+    i = 2  # already have first and last point added
+    start_idx, end_idx = 1, npoints
+    max_idx, max_dist = _find_max_squared_dist(points, start_idx, end_idx)
+    while i < max_points && max_dist > max_tol
+        # Add next point to results
+        i += 1
+        results[i] = max_idx
+        # Determine which point to add next by checking left and right of point
+        left_idx, left_dist = _find_max_squared_dist(points, start_idx, max_idx)
+        right_idx, right_dist = _find_max_squared_dist(points, max_idx, end_idx)
+        left_vals = (start_idx, left_idx, max_idx, left_dist)
+        right_vals = (max_idx, right_idx, end_idx, right_dist)
+        # Add and remove values from queue
+        if queue_dist > left_dist && queue_dist > right_dist
+            # Value in queue is next value to add to results
+            start_idx, max_idx, end_idx, max_dist = queue[queue_idx]
+            # Add left and/or right values to queue or delete used queue value
+            if left_dist > 0
+                queue[queue_idx] = left_vals
+                right_dist > 0 && push!(queue, right_vals)
+                len_queue += 1
+            elseif right_dist > 0
+                queue[queue_idx] = right_vals
+            else
+                deleteat!(queue, queue_idx)
+                len_queue =- 1
+            end
+            # Determine new maximum queue value
+            queue_dist, queue_idx = !isempty(queue) ?
+                findmax(x -> x[4], queue) : (zero(Float64), 0)
+        elseif left_dist > right_dist  # use left value as next value to add to results
+            push!(queue, right_vals)  # add right value to queue
+            len_queue += 1
+            if right_dist > queue_dist
+                queue_dist = right_dist
+                queue_idx = len_queue
+            end
+            start_idx, max_idx, end_idx, max_dist = left_vals
+        else  # use right value as next value to add to results
+            push!(queue, left_vals)  # add left value to queue
+            len_queue += 1
+            if left_idx > queue_dist
+                queue_dist = left_dist
+                queue_idx = len_queue
+            end
+            start_idx, max_idx, end_idx, max_dist = right_vals
+        end
     end
-    return pts 
+    if i < max_points
+        results = results[1:i]  # for tolerance, cut down to size
+    end
+    return points[sort!(results)]
 end
 
-# Top down DouglasPeucker when given a tolerance
-function _simplify_tol(alg, points, start_idx, end_idx)
-    max_idx, max_dist = _find_max_dist(points, start_idx, end_idx)
-    results = if max_dist < alg.tol
-        [points[start_idx], points[end_idx]]
-    else
-        vcat(
-            _simplify_tol(alg, points, start_idx, max_idx)[1:(end - 1)],
-            _simplify_tol(alg, points, max_idx, end_idx),
-        )
-    end
-    return results
-end
-
-function _find_max_dist(points, start_idx, end_idx)
+#= find maximum distance of any point between the start_idx and end_idx to the line formed
+by conencting the points at start_idx and end_idx. =#
+function _find_max_squared_dist(points, start_idx, end_idx)
     max_idx = 0
     max_dist = zero(Float64)
     for i in (start_idx + 1):(end_idx - 1)
-        dist = _squared_distance_line(Float64, points[i], points[start_idx], points[end_idx])
-        if dist > max_dist
-            max_dist = dist
+        d = _squared_distance_line(Float64, points[i], points[start_idx], points[end_idx])
+        if d > max_dist
+            max_dist = d
             max_idx = i
         end
     end
     return max_idx, max_dist
-end
-
-function _simplify_interative(alg, points)
-    npoints = length(points)
-    points_to_keep = isnothing(alg.ratio) ?
-        alg.number : max(3, round(Int, alg.ratio * npoints))
-    results = Vector{Int}(undef, points_to_keep)
-    results[1], results[points_to_keep] = 1, npoints
-    queue = Vector{Tuple{Int, Int, Int, Float64}}()
-    queue_idx, queue_dist = 0, zero(Float64)
-    
-    i = 2
-    start_idx, end_idx = 1, npoints
-    max_idx, max_dist = _find_max_dist(points, start_idx, end_idx)
-    for i in 2:(points_to_keep - 1)
-        results[i] = max_idx
-        left_idx, left_dist = _find_max_dist(points, start_idx, max_idx)
-        right_idx, right_dist = _find_max_dist(points, max_idx, end_idx)
-        # Add values to queue
-        if right_dist > 0 && (left_dist > right_dist || queue_dist > right_dist)
-            push!(queue, (max_idx, right_idx, end_idx, right_dist))
-            if right_dist > queue_dist
-                queue_dist = right_dist
-                queue_idx = length(queue)
-            end
-        end
-        if left_dist > 0 && (left_dist ≤ right_dist || queue_dist > left_dist)
-            push!(queue, (start_idx, left_idx, max_idx, left_dist))
-            if left_idx > queue_dist
-                queue_dist = left_dist
-                queue_idx = length(queue)
-            end
-        end
-        # Determine next value to add to results and remove value from queue if needed
-        if queue_dist > left_dist && queue_dist > right_dist
-            start_idx, max_idx, end_idx, max_dist = queue[queue_idx]
-            deleteat!(queue, queue_idx)
-            queue_dist, queue_idx = !isempty(queue) ?
-                findmax(x -> x[4], queue) : (zero(Float64), 0)
-        elseif left_dist > right_dist
-            end_idx = max_idx
-            max_idx, max_dist = left_idx, left_dist
-        else
-            start_idx = max_idx
-            max_idx, max_dist = right_idx, right_dist
-        end
-    end
-    return points[sort!(results)]
 end
 
 # # Simplify with VisvalingamWhyatt Algorithm
