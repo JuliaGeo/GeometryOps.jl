@@ -126,18 +126,24 @@ _simplify(::GI.PointTrait, alg, geom; kw...) = geom
 _simplify(::GI.MultiPointTrait, alg, geom; kw...) = geom
 
 ## For curves, rings, and polygon we simplify
-function _simplify(::GI.AbstractCurveTrait, alg, geom; prefilter_alg)
+function _simplify(
+    ::GI.AbstractCurveTrait, alg, geom;
+    prefilter_alg, preserve_endpoint = true,
+)
     points = if isnothing(prefilter_alg)
         tuple_points(geom)
     else
-        _simplify(prefilter_alg, tuple_points(geom))
+        _simplify(prefilter_alg, tuple_points(geom), preserve_endpoint)
     end
-    return rebuild(geom, _simplify(alg, points))
+    return rebuild(geom, _simplify(alg, points, preserve_endpoint))
 end
 
 function _simplify(::GI.PolygonTrait, alg, geom;  kw...)
     ## Force treating children as LinearRing
-    simplifier(g) = _simplify(GI.LinearRingTrait(), alg, g; kw...)
+    simplifier(g) = _simplify(
+        GI.LinearRingTrait(), alg, g;
+        kw..., preserve_endpoint = false,
+    )
     rebuilder(g) = rebuild(g, simplifier(g))
     lrs = map(rebuilder, GI.getgeom(geom))
     return rebuild(geom, lrs)
@@ -169,7 +175,7 @@ Note: user input `tol` is squared to avoid uneccesary computation in algorithm.
     end
 end
 
-function _simplify(alg::RadialDistance, points::Vector)
+function _simplify(alg::RadialDistance, points::Vector, _)
     previous = first(points)
     distances = Array{Float64}(undef, length(points))
     for i in eachindex(points)
@@ -210,19 +216,24 @@ end
 
 #= Simplify using the DouglasPeucker algorithm - nice gif of process on wikipedia:
 (https://en.wikipedia.org/wiki/Ramer-Douglas-Peucker_algorithm) =#
-function _simplify(alg::DouglasPeucker, points::Vector)
+function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
     npoints = length(points)
     npoints <= MIN_POINTS && return points
     # Determine stopping critetia
-    max_points = !isnothing(alg.tol) ? npoints : (!isnothing(alg.number) ?
-        alg.number : max(3, round(Int, alg.ratio * npoints)))
+    max_points = if !isnothing(alg.tol)
+        npoints
+    else
+        npts = !isnothing(alg.number) ? alg.number : max(3, round(Int, alg.ratio * npoints))
+        npts ≥ npoints && return points
+        npts
+    end
     max_tol = !isnothing(alg.tol) ? alg.tol : zero(Float64)
     # Set up queue
     queue = Vector{Tuple{Int, Int, Int, Float64}}()
     queue_idx, queue_dist = 0, zero(Float64)
     len_queue = 0
     # Set up results vector
-    results = Vector{Int}(undef, max_points)
+    results = Vector{Int}(undef, max_points + (preserve_endpoint ? 0 : 1))
     results[1], results[2] = 1, npoints
     # Loop through points until stopping criteria are fulfilled
     i = 2  # already have first and last point added
@@ -244,8 +255,10 @@ function _simplify(alg::DouglasPeucker, points::Vector)
             # Add left and/or right values to queue or delete used queue value
             if left_dist > 0
                 queue[queue_idx] = left_vals
-                right_dist > 0 && push!(queue, right_vals)
-                len_queue += 1
+                if right_dist > 0
+                    push!(queue, right_vals)
+                    len_queue += 1
+                end
             elseif right_dist > 0
                 queue[queue_idx] = right_vals
             else
@@ -266,17 +279,30 @@ function _simplify(alg::DouglasPeucker, points::Vector)
         else  # use right value as next value to add to results
             push!(queue, left_vals)  # add left value to queue
             len_queue += 1
-            if left_idx > queue_dist
+            if left_dist > queue_dist
                 queue_dist = left_dist
                 queue_idx = len_queue
             end
             start_idx, max_idx, end_idx, max_dist = right_vals
         end
     end
-    if i < max_points
-        results = results[1:i]  # for tolerance, cut down to size
+    sorted_results = sort!(@view results[1:i])
+    if !preserve_endpoint && i > 3
+        endpt_dist = _squared_distance_line(Float64, points[1], points[end - 1], points[2])
+        if !isnothing(alg.tol)
+            if endpt_dist < max_tol
+                results[i] = results[2]
+                sorted_results = @view results[2:i]
+            end
+        else
+            if endpt_dist < max_dist
+                insert!(results, searchsortedfirst(sorted_results, max_idx), max_idx)
+                results[i+1] = results[2]
+                sorted_results = @view results[2:i+1]
+            end
+        end
     end
-    return points[sort!(results)]
+    return points[sorted_results]
 end
 
 #= find maximum distance of any point between the start_idx and end_idx to the line formed
@@ -321,7 +347,7 @@ Note: user input `tol` is doubled to avoid uneccesary computation in algorithm.
     end
 end
 
-function _simplify(alg::VisvalingamWhyatt, points::Vector)
+function _simplify(alg::VisvalingamWhyatt, points::Vector, _)
     length(points) <= MIN_POINTS && return points
     areas = _build_tolerances(_triangle_double_area, points)
     return _get_points(alg, points, areas)
