@@ -215,7 +215,7 @@ Note: user input `tol` is squared to avoid uneccesary computation in algorithm.
 end
 
 #= Simplify using the DouglasPeucker algorithm - nice gif of process on wikipedia:
-(https://en.wikipedia.org/wiki/Ramer-Douglas-Peucker_algorithm) =#
+(https://en.wikipedia.org/wiki/Ramer-Douglas-Peucker_algorithm). =#
 function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
     npoints = length(points)
     npoints <= MIN_POINTS && return points
@@ -306,7 +306,8 @@ function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
 end
 
 #= find maximum distance of any point between the start_idx and end_idx to the line formed
-by conencting the points at start_idx and end_idx. =#
+by conencting the points at start_idx and end_idx. Note that the first index of maximum
+value will be used, which might cause differences in results from other algorithms.=#
 function _find_max_squared_dist(points, start_idx, end_idx)
     max_idx = 0
     max_dist = zero(Float64)

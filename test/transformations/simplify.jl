@@ -1,11 +1,8 @@
-using Test
-# import GeoInterface as GI
-# import GeometryOps as GO
 import GeoJSON
 import JLD2
 
-@testset "simplify" begin
-    datadir = realpath(joinpath(dirname(pathof(GO)), "../test/data"))
+datadir = realpath(joinpath(dirname(pathof(GO)), "../test/data"))
+@testset "RadialDistance and VisvalingamWhyatt" begin
     fc = GeoJSON.read(joinpath(datadir, "simplify.geojson"))
     fc2 = GeoJSON.read(joinpath(datadir, "simplify2.geojson"))
     fcs = [fc for i in 1:100]
@@ -16,7 +13,8 @@ import JLD2
         GO.simplify(T(tol=0.001), fc; threaded=true, calc_extent=true)
         GO.simplify(T(tol=0.001), fcs; threaded=true, calc_extent=true)
     end
-
+end
+@testset "DouglasPeucker" begin
     poly_coords = JLD2.jldopen(joinpath(datadir, "complex_polygons.jld2"))["verts"][1:4]
     for c in poly_coords
         npoints = length(c[1])
