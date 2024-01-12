@@ -183,16 +183,36 @@ end
 
 # Returns the Euclidean distance between two points.
 Base.@propagate_inbounds _euclid_distance(::Type{T}, p1, p2) where T =
-    _euclid_distance(T, GI.x(p1), GI.y(p1), GI.x(p2), GI.y(p2))
+    sqrt(_squared_euclid_distance(T, p1, p2))
+
+# Returns the square of the euclidean distance between two points
+Base.@propagate_inbounds _squared_euclid_distance(::Type{T}, p1, p2) where T =
+    _squared_euclid_distance(
+        T,
+        GeoInterface.x(p1), GeoInterface.y(p1),
+        GeoInterface.x(p2), GeoInterface.y(p2),
+    )
+
 # Returns the Euclidean distance between two points given their x and y values.
 Base.@propagate_inbounds _euclid_distance(::Type{T}, x1, y1, x2, y2) where T =
-    T(sqrt((x2 - x1)^2 + (y2 - y1)^2))
+    sqrt(_squared_euclid_distance(T, x1, y1, x2, y2))
+
+# Returns the squared Euclidean distance between two points given their x and y values.
+Base.@propagate_inbounds _squared_euclid_distance(::Type{T}, x1, y1, x2, y2) where T =
+    T((x2 - x1)^2 + (y2 - y1)^2)
 
 #=
 Returns the minimum distance from point p0 to the line defined by endpoints p1
 and p2.
 =#
-function _distance_line(::Type{T}, p0, p1, p2) where T
+_distance_line(::Type{T}, p0, p1, p2) where T =
+    sqrt(_squared_distance_line(T, p0, p1, p2))
+
+#=
+Returns the squared minimum distance from point p0 to the line defined by
+endpoints p1 and p2.
+=#
+function _squared_distance_line(::Type{T}, p0, p1, p2) where T
     x0, y0 = GeoInterface.x(p0), GeoInterface.y(p0)
     x1, y1 = GeoInterface.x(p1), GeoInterface.y(p1)
     x2, y2 = GeoInterface.x(p2), GeoInterface.y(p2)
@@ -208,16 +228,16 @@ function _distance_line(::Type{T}, p0, p1, p2) where T
 
     c1 = sum(w .* v)
     if c1 <= 0  # p0 is closest to first endpoint
-        return _euclid_distance(T, x0, y0, xfirst, yfirst)
+        return _squared_euclid_distance(T, x0, y0, xfirst, yfirst)
     end
 
     c2 = sum(v .* v)
     if c2 <= c1 # p0 is closest to last endpoint
-        return _euclid_distance(T, x0, y0, xlast, ylast)
+        return _squared_euclid_distance(T, x0, y0, xlast, ylast)
     end
 
     b2 = c1 / c2  # projection fraction
-    return _euclid_distance(T, x0, y0, xfirst + (b2 * v[1]), yfirst + (b2 * v[2]))
+    return _squared_euclid_distance(T, x0, y0, xfirst + (b2 * v[1]), yfirst + (b2 * v[2]))
 end
 
 
