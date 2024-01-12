@@ -53,6 +53,8 @@ Also note that singed_distance only makes sense for "filled-in" shapes, like
 polygons, so it isn't implemented for curves.
 =#
 
+const _DISTANCE_TARGETS = Union{GI.AbstractPolygonTrait,GI.LineStringTrait,GI.LinearRingTrait,GI.LineTrait,GI.PointTrait}
+
 """
     distance(point, geom, ::Type{T} = Float64)::T
 
@@ -77,8 +79,47 @@ The method will differ based on the type of the geometry provided:
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-distance(point, geom, ::Type{T} = Float64) where T <: AbstractFloat =
-    _distance(T, GI.trait(point), point, GI.trait(geom), geom)
+function distance(
+    geom1, geom2, ::Type{T} = Float64; threaded=false
+) where T<:AbstractFloat
+    distance(GI.trait(geom1), geom1, GI.trait(geom2), geom2, T; threaded)
+end
+function distance(
+    trait1, geom, trait2::GI.PointTrait, point, ::Type{T} = Float64;
+    threaded=false
+) where T<:AbstractFloat
+    distance(trait2, point, trait1, geom, T) # Swap order
+end
+function distance(
+    trait1::GI.PointTrait, point, trait2, geom, ::Type{T} = Float64;
+    threaded=false
+) where T<:AbstractFloat
+    applyreduce(min, _DISTANCE_TARGETS, geom; threaded, init=typemax(T)) do g
+        _distance(T, trait1, point, GI.trait(g), g)
+    end
+end
+# Needed for method ambiguity
+function distance(
+    trait1::GI.PointTrait, point1, trait2::GI.PointTrait, point2, ::Type{T} = Float64;
+    threaded=false
+) where T<:AbstractFloat
+    _distance(T, trait1, point1, trait2, point2)
+end
+
+# Point-Point, Point-Line, Point-LineString, Point-LinearRing
+_distance(::Type{T}, ::GI.PointTrait, point, ::GI.PointTrait, geom) where T =
+    _euclid_distance(T, point, geom)
+_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LineTrait, geom) where T = 
+    _distance_line(T, point, GI.getpoint(geom, 1), GI.getpoint(geom, 2))
+_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LineStringTrait, geom) where T =
+    _distance_curve(T, point, geom; close_curve = false)
+_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LinearRingTrait, geom) where T =
+    _distance_curve(T, point, geom; close_curve = true)
+# Point-Polygon
+function _distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
+    GI.within(point, geom) && return zero(T)
+    return _distance_polygon(T, point, geom)
+end
 
 """
     signed_distance(point, geom, ::Type{T} = Float64)::T
@@ -99,88 +140,46 @@ Points within `geom` have a negative signed distance, and points outside of
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-signed_distance(point, geom, ::Type{T} = Float64) where T<:AbstractFloat =
-    _signed_distance(T, GI.trait(point), point, GI.trait(geom), geom)
-
-
-# Swap argument order to point as first argument
-_distance(
-    ::Type{T},
-    gtrait::GI.AbstractTrait, geom,
-    ptrait::GI.PointTrait, point,
-) where T = _distance(T, ptrait, point, gtrait, geom)
-
-_signed_distance(
-    ::Type{T},
-    gtrait::GI.AbstractTrait, geom,
-    ptrait::GI.PointTrait, point,
-) where T = _signed_distance(T, ptrait, point, gtrait, geom)
-
-# Point-Point, Point-Line, Point-LineString, Point-LinearRing
-_distance(::Type{T}, ::GI.PointTrait, point, ::GI.PointTrait, geom) where T =
-    _euclid_distance(T, point, geom)
-
-_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LineTrait, geom) where T = 
-    _distance_line(T, point, GI.getpoint(geom, 1), GI.getpoint(geom, 2))
-
-_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LineStringTrait, geom) where T =
-    _distance_curve(T, point, geom, close_curve = false)
-
-_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LinearRingTrait, geom) where T =
-    _distance_curve(T, point, geom, close_curve = true)
-
-_signed_distance(::Type{T}, ptrait::GI.PointTrait, point, gtrait::GI.AbstractTrait, geom) where T =
-    _distance(T, ptrait, point, gtrait, geom)
-
-# Point-Polygon
-function _distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
-    GI.within(point, geom) && return zero(T)
-    return _distance_polygon(T, point, geom)
+function signed_distance(
+    geom1, geom2, ::Type{T} = Float64; threaded=false
+) where T<:AbstractFloat
+    signed_distance(GI.trait(geom1), geom1, GI.trait(geom2), geom2, T; threaded)
+end
+function signed_distance(
+    trait1, geom, trait2::GI.PointTrait, point, ::Type{T} = Float64;
+    threaded=false
+) where T<:AbstractFloat
+    signed_distance(trait2, point, trait1, geom, T; threaded) # Swap order
+end
+function signed_distance(
+    trait1::GI.PointTrait, point, trait2, geom, ::Type{T} = Float64;
+    threaded=false
+) where T<:AbstractFloat
+    applyreduce(min, _DISTANCE_TARGETS, geom; threaded, init=typemax(T)) do g
+        _signed_distance(T, trait1, point, GI.trait(g), g)
+    end
+end
+# Needed for method ambiguity
+function signed_distance(
+    trait1::GI.PointTrait, point1, trait2::GI.PointTrait, point2, ::Type{T} = Float64;
+    threaded=false
+) where T<:AbstractFloat
+    _signed_distance(T, trait1, point1, trait2, point2)
 end
 
+# Point-Geom (just calls _distance)
+function _signed_distance(
+    ::Type{T}, ptrait::GI.PointTrait, point, gtrait::GI.AbstractGeometryTrait, geom
+) where T
+    _distance(T, ptrait, point, gtrait, geom)
+end
+# Point-Polygon
 function _signed_distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
     min_dist = _distance_polygon(T, point, geom)
     # negative if point is inside polygon
     return GI.within(point, geom) ? -min_dist : min_dist
 end
 
-
-# Point-MultiGeometries / Point-GeometryCollections
-function _distance(
-    ::Type{T},
-    ::GI.PointTrait,
-    point,
-    ::Union{
-        GI.MultiPointTrait, GI.MultiCurveTrait,
-        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
-    },
-    geoms,
-) where T
-    min_dist = typemax(T)
-    for g in GI.getgeom(geoms)
-        dist = distance(point, g, T)
-        min_dist = dist < min_dist ? dist : min_dist
-    end
-    return min_dist
-end
-
-function _signed_distance(
-    ::Type{T},
-    ::GI.PointTrait,
-    point,
-    ::Union{
-        GI.MultiPointTrait, GI.MultiCurveTrait,
-        GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
-    },
-    geoms,
-) where T
-    min_dist = typemax(T)
-    for g in GI.getgeom(geoms)
-        dist = signed_distance(point, g, T)
-        min_dist = dist < min_dist ? dist : min_dist
-    end
-    return min_dist
-end
 
 # Returns the Euclidean distance between two points.
 Base.@propagate_inbounds _euclid_distance(::Type{T}, p1, p2) where T =
@@ -218,8 +217,7 @@ function _squared_distance_line(::Type{T}, p0, p1, p2) where T
     x1, y1 = GeoInterface.x(p1), GeoInterface.y(p1)
     x2, y2 = GeoInterface.x(p2), GeoInterface.y(p2)
 
-    xfirst, yfirst, xlast, ylast = x1 < x2 ?
-        (x1, y1, x2, y2) : (x2, y2, x1, y1)
+    xfirst, yfirst, xlast, ylast = x1 < x2 ? (x1, y1, x2, y2) : (x2, y2, x1, y1)
     
     #=
     Vectors from first point to last point (v) and from first point to point of

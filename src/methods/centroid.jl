@@ -52,64 +52,32 @@ availible just in case the user also needs the area or length to decrease
 repeat computation.
 =#
 """
-    centroid(geom)::Tuple{T, T}
+    centroid(geom, [T=Float64])::Tuple{T, T}
 
 Returns the centroid of a given line segment, linear ring, polygon, or
 mutlipolygon.
 """
-centroid(geom) = centroid(GI.trait(geom), geom)
+centroid(geom, ::Type{T} = Float64; threaded=false) where T =
+    centroid(GI.trait(geom), geom, T; threaded)
+function centroid(
+    trait::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T}=Float64; threaded=false
+) where T
+    centroid_and_length(trait, geom, T)[1]
+end
+centroid(trait, geom, ::Type{T}; threaded=false) where T = 
+    centroid_and_area(geom, T; threaded)[1]
 
 """
-    centroid(
-        trait::Union{GI.LineStringTrait, GI.LinearRingTrait},
-        geom,
-    )::Tuple{T, T}
-
-Returns the centroid of a line string or linear ring, which is calculated by
-weighting line segments by their length by convention.
-"""
-centroid(
-    trait::Union{GI.LineStringTrait, GI.LinearRingTrait},
-    geom,
-) = centroid_and_length(trait, geom)[1]
-
-"""
-    centroid(trait, geom)::Tuple{T, T}
-
-Returns the centroid of a polygon or multipolygon, which is calculated by
-weighting edges by their `area component` by convention.
-"""
-centroid(trait, geom) = centroid_and_area(trait, geom)[1]
-
-"""
-    centroid_and_length(geom)::(::Tuple{T, T}, ::Real)
+    centroid_and_length(geom, [T=Float64])::(::Tuple{T, T}, ::Real)
 
 Returns the centroid and length of a given line/ring. Note this is only valid
 for line strings and linear rings.
 """
-centroid_and_length(geom) = centroid_and_length(GI.trait(geom), geom)
-
-"""
-    centroid_and_area(
-        ::Union{GI.LineStringTrait, GI.LinearRingTrait}, 
-        geom,
-    )::(::Tuple{T, T}, ::Real)
-
-Returns the centroid and area of a given geom.
-"""
-centroid_and_area(geom) = centroid_and_area(GI.trait(geom), geom)
-
-"""
-    centroid_and_length(geom)::(::Tuple{T, T}, ::Real)
-
-Returns the centroid and length of a given line/ring. Note this is only valid
-for line strings and linear rings.
-"""
+centroid_and_length(geom, ::Type{T}=Float64) where T = 
+    centroid_and_length(GI.trait(geom), geom, T)
 function centroid_and_length(
-    ::Union{GI.LineStringTrait, GI.LinearRingTrait},
-    geom,
-)
-    T = typeof(GI.x(GI.getpoint(geom, 1)))
+    ::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T},
+) where T
     # Initialize starting values
     xcentroid = T(0)
     ycentroid = T(0)
@@ -137,19 +105,21 @@ function centroid_and_length(
 end
 
 """
-    centroid_and_area(
-        ::Union{GI.LineStringTrait, GI.LinearRingTrait},
-        geom,
-    )::(::Tuple{T, T}, ::Real)
+    centroid_and_area(geom, [T=Float64])::(::Tuple{T, T}, ::Real)
 
-Returns the centroid and area of a given a line string or a linear ring.
-Note that this is only valid if the line segment or linear ring is closed. 
+Returns the centroid and area of a given geometry.
 """
-function centroid_and_area(
-    ::Union{GI.LineStringTrait, GI.LinearRingTrait},
-    geom,
-)
-    T = typeof(GI.x(GI.getpoint(geom, 1)))
+function centroid_and_area(geom, ::Type{T}=Float64; threaded=false) where T
+    target = Union{GI.PolygonTrait,GI.LineStringTrait,GI.LinearRingTrait}
+    init = (zero(T), zero(T)), zero(T)
+    applyreduce(_combine_centroid_and_area, target, geom; threaded, init) do g
+        _centroid_and_area(GI.trait(g), g, T)
+    end
+end
+
+function _centroid_and_area(
+    ::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T}
+) where T
     # Check that the geometry is closed
     @assert(
         GI.getpoint(geom, 1) == GI.getpoint(geom, GI.ngeom(geom)),
@@ -177,22 +147,16 @@ function centroid_and_area(
     ycentroid /= 6area
     return (xcentroid, ycentroid), abs(area)
 end
-
-"""
-    centroid_and_area(::GI.PolygonTrait, geom)::(::Tuple{T, T}, ::Real)
-
-Returns the centroid and area of a given polygon.
-"""
-function centroid_and_area(::GI.PolygonTrait, geom)
+function _centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}) where T
     # Exterior ring's centroid and area
-    (xcentroid, ycentroid), area = centroid_and_area(GI.getexterior(geom))
+    (xcentroid, ycentroid), area = centroid_and_area(GI.getexterior(geom), T)
     # Weight exterior centroid by area
     xcentroid *= area
     ycentroid *= area
     # Loop over any holes within the polygon
     for hole in GI.gethole(geom)
         # Hole polygon's centroid and area
-        (xinterior, yinterior), interior_area = centroid_and_area(hole)
+        (xinterior, yinterior), interior_area = centroid_and_area(hole, T)
         # Accumulate the area component into `area`
         area -= interior_area
         # Weighted average of centroid components
@@ -204,28 +168,13 @@ function centroid_and_area(::GI.PolygonTrait, geom)
     return (xcentroid, ycentroid), area
 end
 
-"""
-    centroid_and_area(::GI.MultiPolygonTrait, geom)::(::Tuple{T, T}, ::Real)
-
-Returns the centroid and area of a given multipolygon.
-"""
-function centroid_and_area(::GI.MultiPolygonTrait, geom)
-    # First polygon's centroid and area
-    (xcentroid, ycentroid), area = centroid_and_area(GI.getpolygon(geom, 1))
-    # Weight first polygon's centroid by area
-    xcentroid *= area
-    ycentroid *= area
-    # Loop over any polygons within the multipolygon
-    for i in 2:GI.ngeom(geom)
-        # Polygon centroid and area
-        (xpoly, ypoly), poly_area = centroid_and_area(GI.getpolygon(geom, i))
-        # Accumulate the area component into `area`
-        area += poly_area
-        # Weighted average of centroid components
-        xcentroid += xpoly * poly_area
-        ycentroid += ypoly * poly_area
-    end
-    xcentroid /= area
-    ycentroid /= area
-    return (xcentroid, ycentroid), area
+# The `op` argument for _applyreduce and point / area
+# It combines two (point, area) tuples into one, taking
+# the average of the centroid points weighted by the
+# area of the geom they are from.
+function _combine_centroid_and_area(((x1, y1), area1), ((x2, y2), area2))
+    area = area1 + area2
+    x = (x1 * area1 + x2 * area2) / area
+    y = (y1 * area1 + y2 * area2) / area
+    return (x, y), area
 end
