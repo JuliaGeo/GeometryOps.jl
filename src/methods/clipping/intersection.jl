@@ -166,7 +166,7 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_li
         # Initialize array to store the intersection polygon cartesian points
         pt_list = Vector{Tuple{Float64, Float64}}(undef, 0)
         # Add the first point to the array
-        push!(pt_list, (intr_list[current.idx][1], intr_list[current.idx][2]))
+        push!(pt_list, current.point)
         
         # Mark first intersection point as processed
         processed_pts = processed_pts + 1
@@ -203,7 +203,7 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_li
                 # Add current node to the pt_list
                 if current.inter
                     # Add cartesian coordinates from inter_list
-                    push!(pt_list, (intr_list[current.idx][1], intr_list[current.idx][2]))
+                    push!(pt_list, current.point)
                     
                     # Keep track of processed intersection points
                     if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
@@ -213,7 +213,9 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_li
                     
                 else
                     # Add cartesian coordinates from "list", which should point to either a_list or b_list
-                    push!(pt_list, (list_edges[current.idx][1][1], list_edges[current.idx][1][2]))
+                    # testa = (list_edges[current.idx][1][1], list_edges[current.idx][1][2])
+                    # testb = current.point
+                    push!(pt_list, current.point)
                 end
 
                 current_node_not_intersection = !current.inter
