@@ -197,12 +197,12 @@ end
 
     This function flags all the intersection points as either an 'entry' or 'exit' point.
 """
-function _flag_ent_exit(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list, edges_a, edges_b)
+function _flag_ent_exit(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list)
     # Put in ent exit flags for poly_a
     status = false
     for ii in eachindex(a_list)
         if ii == 1
-            temp = within(edges_a[ii][1], poly_b)
+            temp = within(a_list[ii].point, poly_b)
             status = !(temp[1])
             continue
         end
@@ -216,7 +216,7 @@ function _flag_ent_exit(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_
     status = false
     for ii in eachindex(b_list)
         if ii == 1
-            temp = within(edges_b[ii][1], poly_a)
+            temp = within(b_list[ii].point, poly_a)
             status = !(temp[1])
             continue
         end
@@ -283,9 +283,9 @@ function _build_ab_list(poly_a, poly_b)
     end
 
     # Flag the entry and exists
-    a_list, b_list = _flag_ent_exit(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list, edges_a, edges_b)
+    a_list, b_list = _flag_ent_exit(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list)
 
-    return a_list, b_list, a_idx_list, intr_list, edges_a, edges_b
+    return a_list, b_list, a_idx_list, intr_list
 end
 
 # This is the struct that makes up a_list and b_list

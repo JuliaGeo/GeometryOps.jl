@@ -38,8 +38,8 @@ function union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     ext_poly_b = GI.Polygon([ext_poly_b])
     # Then, I get the union of the exteriors
-    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = _build_ab_list(ext_poly_a, ext_poly_b)
-    temp = _trace_union(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    a_list, b_list, a_idx_list, intr_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    temp = _trace_union(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list, intr_list)
     polys = temp[1]
     diff_polys = temp[2]
     # If the original polygons had holes, we call '_get_union_holes' to take that
@@ -63,7 +63,7 @@ end
 
 """
     _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list,
-      intr_list, edges_a, edges_b)::Vector{Vector{Tuple{Float64}}}::return_polys, disjoint
+      intr_list)::Vector{Vector{Tuple{Float64}}}::return_polys, disjoint
 
 Traces the outlines of two polygons in order to find their union.
 It returns the outlines of all polygons formed in the union. If
@@ -73,7 +73,7 @@ are disjoint or not
 
 """
 
-function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
     # Keep track of number of processed intersection points
@@ -83,7 +83,6 @@ function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edg
     while processed_pts < length(intr_list)
         # Create variables "list_edges" and "list" so that we can toggle between
         # a_list and b_list
-        list_edges = edges_a
         list = a_list
 
         # Find index of first unprocessed intersecting point in subject polygon
@@ -154,10 +153,8 @@ function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edg
             # Switch to neighbor list
             if list == a_list
                 list = b_list
-                list_edges = edges_b
             else
                 list = a_list
-                list_edges = edges_a
             end
             idx = current.neighbor
             current = list[idx]
@@ -168,35 +165,31 @@ function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edg
 
     # Check if one polygon totally within other and if so, return the larger polygon.
     if isempty(return_polys)
-        if within(edges_a[1][1], poly_b)[1]
+        if within(a_list[1].point, poly_b)[1]
             list = []
-            for i in eachindex(edges_b)
-                push!(list, edges_b[i][1])
+            for point in GI.getpoint(poly_b)
+                push!(list, _tuple_point(point))
             end
-            push!(list, edges_b[1][1])
             push!(return_polys, list)
             return return_polys, false
-        elseif within(edges_b[1][1], poly_a)[1]
+        elseif within(b_list[1].point, poly_a)[1]
             list = []
-            for i in eachindex(edges_a)
-                push!(list, edges_a[i][1])
+            for point in GI.getpoint(poly_a)
+                push!(list, _tuple_point(point))
             end
-            push!(list, edges_a[1][1])
             push!(return_polys, list)
             return return_polys, false
         else
             # In the case that the polygons don't intersect and aren't contained in
             # one another, return both polygons.
             list_a = []
-            for i in eachindex(edges_b)
-                push!(list_a, edges_a[i][1])
+            for point in GI.getpoint(poly_a)
+                push!(list_a, _tuple_point(point))
             end
-            push!(list_a, edges_a[1][1])
             list_b = []
-            for i in eachindex(edges_b)
-                push!(list_b, edges_b[i][1])
+            for point in GI.getpoint(poly_b)
+                push!(list_b, _tuple_point(point))
             end
-            push!(list_b, edges_b[1][1])
 
             push!(return_polys, list_a)
             push!(return_polys, list_b)

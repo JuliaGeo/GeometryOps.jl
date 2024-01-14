@@ -59,8 +59,8 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     ext_poly_b = GI.Polygon([ext_poly_b])
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list, intr_list, edges_a, edges_b = _build_ab_list(ext_poly_a, ext_poly_b)
-    polys = _trace_intersection(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+    a_list, b_list, a_idx_list, intr_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    polys = _trace_intersection(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list, intr_list)
     # If the original polygons had no holes, then we are pretty much done. Otherwise,
     # we call '_get_inter_holes' to take into account the holes.
     if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
@@ -136,14 +136,14 @@ end
 
 """
     _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list,
-      intr_list, edges_a, edges_b)::Vector{Vector{Tuple{Float64}}}
+      intr_list)::Vector{Vector{Tuple{Float64}}}
 
 Traces the outlines of two polygons in order to find their intersection.
 It returns the outlines of all polygons formed in the intersection. If
 they do not intersect, it returns an empty array.
 
 """
-function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
 
@@ -154,7 +154,6 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_li
     while processed_pts < length(intr_list)
         # Create variables "list_edges" and "list" so that we can toggle between
         # a_list and b_list
-        list_edges = edges_a
         list = a_list
 
         # Find index of first unprocessed intersecting point in subject polygon
@@ -213,8 +212,6 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_li
                     
                 else
                     # Add cartesian coordinates from "list", which should point to either a_list or b_list
-                    # testa = (list_edges[current.idx][1][1], list_edges[current.idx][1][2])
-                    # testb = current.point
                     push!(pt_list, current.point)
                 end
 
@@ -227,10 +224,8 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_li
             # Switch to neighbor list
             if list == a_list
                 list = b_list
-                list_edges = edges_b
             else
                 list = a_list
-                list_edges = edges_a
             end
             idx = current.neighbor
             current = list[idx]
@@ -242,19 +237,17 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_li
     # Check if one polygon totally within other, and if so
     # return the smaller polygon as the intersection
     if isempty(return_polys)
-        if within(edges_a[1][1], poly_b)[1]
+        if within(a_list[1].point, poly_b)[1]
             list = []
-            for i in eachindex(edges_a)
-                push!(list, edges_a[i][1])
+            for point in GI.getpoint(poly_a)
+                push!(list, _tuple_point(point))
             end
-            push!(list, edges_a[1][1])
             push!(return_polys, list)
-        elseif within(edges_b[1][1], poly_a)[1]
+        elseif within(b_list[1].point, poly_a)[1]
             list = []
-            for i in eachindex(edges_b)
-                push!(list, edges_b[i][1])
+            for point in GI.getpoint(poly_b)
+                push!(list, _tuple_point(point))
             end
-            push!(list, edges_b[1][1])
             push!(return_polys, list)
         end
     end

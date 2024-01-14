@@ -40,11 +40,11 @@ function difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.Polygon([ext_poly_b])
     # Find the difference of the exterior of the polygons
     a_list, b_list,
-    a_idx_list, intr_list,
-    edges_a, edges_b = _build_ab_list(ext_poly_a, ext_poly_b)
+    a_idx_list, intr_list = _build_ab_list(ext_poly_a, ext_poly_b)
+
     test = _trace_difference(ext_poly_a, ext_poly_b, 
                             a_list, b_list, a_idx_list,
-                             intr_list, edges_a, edges_b)
+                             intr_list)
     polys = test[1]
     diff_polygons = test[2]
     # If the original polygons had holes, take that into account.
@@ -69,7 +69,7 @@ end
 
 """
     _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list,
-      intr_list, edges_a, edges_b)::Vector{Vector{Tuple{Float64}}}, Bool
+      intr_list)::Vector{Vector{Tuple{Float64}}}, Bool
 
 Traces the outlines of two polygons in order to find their difference.
 It returns the outlines of all the components of the difference. The Bool
@@ -78,7 +78,7 @@ the larger Vector) are part of the same polygon (true) or each different
 polygons (true).
 """
 
-function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list, edges_a, edges_b)
+function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
 
@@ -89,7 +89,6 @@ function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list
     while processed_pts < length(intr_list)
         # Create variables "list_edges" and "list" so that we can toggle between
         # a_list and b_list
-        list_edges = edges_a
         list = a_list
 
         # Find index of first unprocessed intersecting point in subject polygon
@@ -163,10 +162,8 @@ function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list
             # Switch to neighbor list
             if list == a_list
                 list = b_list
-                list_edges = edges_b
             else
                 list = a_list
-                list_edges = edges_a
             end
             idx = current.neighbor
             current = list[idx]
@@ -186,20 +183,18 @@ function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list
     # Check if one polygon totally within other
     if isempty(return_polys)
         list_b = []
-        for i in eachindex(edges_b)
-            push!(list_b, edges_b[i][1])
+        for point in GI.getpoint(poly_b)
+            push!(list_b, _tuple_point(point))
         end
-        push!(list_b, edges_b[1][1])
 
         list_a = []
-        for i in eachindex(edges_a)
-            push!(list_a, edges_a[i][1])
+        for point in GI.getpoint(poly_a)
+            push!(list_a, _tuple_point(point))
         end
-        push!(list_a, edges_a[1][1])
 
-        if within(edges_a[1][1], poly_b)[1]
+        if within(a_list[1].point, poly_b)[1]
             return return_polys, diff_polygons
-        elseif within(edges_b[1][1], poly_a)[1]
+        elseif within(b_list[1].point, poly_a)[1]
             push!(return_polys, list_a)
             push!(return_polys, list_b)
             return return_polys, diff_polygons
