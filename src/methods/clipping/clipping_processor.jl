@@ -89,14 +89,14 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
                             push!(alpha_a_list, alphas[1])
                             push!(alpha_b_list, alphas[2])
                         end
-
                         counter = counter + 1
 
                         idx = acount - 1
                         while true
                             if a_list[idx].inter
                                 if a_list[idx].alpha < alphas[1]
-                                    insert!(a_list, idx+1, PolyNode(counter-1, int_pt, true, 0, false, alphas[1]))
+                                    insert!(a_list, idx+1, PolyNode(counter-1, int_pt, true,
+                                                                     0, false, alphas[1]))
                                     acount = acount + 1
                                     break
                                 else
@@ -108,25 +108,18 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
                                 break
                             end
                         end
-
                         a_idx_list[counter-1] = idx + 1
-
-
                     end
-                    
                 end
                 jj = jj + 1
                 g1 = g2
             end
-
         end
-        
         p1 = p2
         ii = ii + 1
     end
     
     # Truncate the inter_related lists
-
     intr_list = intr_list[1:counter-1] 
     a_idx_list = a_idx_list[1:counter-1]
     b_idx_list = b_idx_list[1:counter-1]
