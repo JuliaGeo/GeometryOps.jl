@@ -263,7 +263,7 @@ function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
                 queue[queue_idx] = right_vals
             else
                 deleteat!(queue, queue_idx)
-                len_queue =- 1
+                len_queue -= 1
             end
             # Determine new maximum queue value
             queue_dist, queue_idx = !isempty(queue) ?
