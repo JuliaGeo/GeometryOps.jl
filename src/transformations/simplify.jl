@@ -239,7 +239,7 @@ function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
     i = 2  # already have first and last point added
     start_idx, end_idx = 1, npoints
     max_idx, max_dist = _find_max_squared_dist(points, start_idx, end_idx)
-    while i < max_points && max_dist > max_tol
+    while i ≤ min(MIN_POINTS + 1, max_points) || (i < max_points && max_dist > max_tol)
         # Add next point to results
         i += 1
         results[i] = max_idx
@@ -309,7 +309,7 @@ end
 by conencting the points at start_idx and end_idx. Note that the first index of maximum
 value will be used, which might cause differences in results from other algorithms.=#
 function _find_max_squared_dist(points, start_idx, end_idx)
-    max_idx = 0
+    max_idx = start_idx
     max_dist = zero(Float64)
     for i in (start_idx + 1):(end_idx - 1)
         d = _squared_distance_line(Float64, points[i], points[start_idx], points[end_idx])
