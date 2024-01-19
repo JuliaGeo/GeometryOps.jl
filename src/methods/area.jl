@@ -49,7 +49,7 @@ const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointT
     area(geom, ::Type{T} = Float64)::T
 
 Returns the area of a geometry or collection of geometries. 
-This is computed slighly differently for different geometries:
+This is computed slightly differently for different geometries:
 
     - The area of a point/multipoint is always zero.
     - The area of a curve/multicurve is always zero.
