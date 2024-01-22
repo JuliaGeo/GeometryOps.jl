@@ -128,7 +128,7 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
                     acount = acount + counter - prev_counter
                 end
                 
-        end
+            end
 
         end
         p1 = p2
@@ -199,20 +199,17 @@ function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list)
 end
 
 """
-    _flag_ent_exit(
-        ::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, 
-        poly_b, a_list, b_list, edges_a, edges_b
-    )::a_list, b_list
+    _flag_ent_exit(poly_b, a_list)::a_list
 
     This function flags all the intersection points as either an 'entry' or 'exit' point.
 """
-function _flag_ent_exit(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_list, b_list)
+function _flag_ent_exit(poly_b, a_list)
     # Put in ent exit flags for poly_a
     status = false
     for ii in eachindex(a_list)
         if ii == 1
             temp = within(a_list[ii].point, poly_b)
-            status = !(temp[1])
+            status = !(temp)
             continue
         end
         if a_list[ii].inter
@@ -221,21 +218,22 @@ function _flag_ent_exit(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b, a_
         end
     end
 
-    # Put in ent exit flags for poly_b
-    status = false
-    for ii in eachindex(b_list)
-        if ii == 1
-            temp = within(b_list[ii].point, poly_a)
-            status = !(temp[1])
-            continue
-        end
-        if b_list[ii].inter
-            b_list[ii].ent_exit = status
-            status = !status
-        end
-    end
+    # # Put in ent exit flags for poly_b
+    # status = false
+    # for ii in eachindex(b_list)
+    #     if ii == 1
+    #         temp = within(b_list[ii].point, poly_a)
+    #         status = !(temp[1])
+    #         continue
+    #     end
+    #     if b_list[ii].inter
+    #         b_list[ii].ent_exit = status
+    #         status = !status
+    #     end
+    # end
 
-    return a_list, b_list
+    # return a_list, b_list
+    return a_list
 end
 
 """
@@ -275,10 +273,6 @@ function _build_ab_list(poly_a, poly_b)
     alpha_a_list = Array{Real, 1}(undef, k)
     alpha_b_list = Array{Real, 1}(undef, k)
 
-    # These lists store the cartesian coordinates of poly_a and poly_b
-    edges_a = to_edges(poly_a)
-    edges_b = to_edges(poly_b)
-
     intr_list, a_idx_list, b_idx_list, 
     alpha_a_list, alpha_b_list = _build_a_list(intr_list, a_idx_list, b_idx_list, 
                                                         alpha_a_list, alpha_b_list, a_list, b_list, poly_a, poly_b)
@@ -292,7 +286,8 @@ function _build_ab_list(poly_a, poly_b)
     end
 
     # Flag the entry and exists
-    a_list, b_list = _flag_ent_exit(GI.trait(poly_a), poly_a, GI.trait(poly_b), poly_b, a_list, b_list)
+    a_list = _flag_ent_exit(poly_b, a_list)
+    b_list = _flag_ent_exit(poly_a, b_list)
 
     return a_list, b_list, a_idx_list, intr_list
 end
