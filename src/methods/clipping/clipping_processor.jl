@@ -53,6 +53,7 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
             jj = 0
             start2 = true
             local g1
+            prev_counter = counter
             for g2 in GI.getpoint(poly_b)
                 if start2
                     start2 = false
@@ -90,30 +91,45 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
                             push!(alpha_b_list, alphas[2])
                         end
                         counter = counter + 1
-
-                        idx = acount - 1
-                        while true
-                            if a_list[idx].inter
-                                if a_list[idx].alpha < alphas[1]
-                                    insert!(a_list, idx+1, PolyNode(counter-1, int_pt, true,
-                                                                     0, false, alphas[1]))
-                                    acount = acount + 1
-                                    break
-                                else
-                                    idx = idx - 1
-                                end
-                            else
-                                insert!(a_list, idx+1, PolyNode(counter-1, int_pt, true, 0, false, alphas[1]))
-                                acount = acount + 1
-                                break
-                            end
-                        end
-                        a_idx_list[counter-1] = idx + 1
                     end
                 end
                 jj = jj + 1
                 g1 = g2
             end
+
+            # After iterating through all edges of poly_b for edge ii of poly_a,
+            # add the intersection points to a_list in CORRECT ORDER if we found any
+            if prev_counter < counter
+                # If only found one
+                if counter == prev_counter+1
+                    insert!(a_list, acount, PolyNode(counter-1, intr_list[counter-1], true, 0, false, alpha_a_list[counter-1]))
+                    insert!(a_idx_list, counter-1, acount)
+                    # a_idx_list[counter-1] = acount
+                    acount = acount + 1
+                else
+                    # Order intersection points based on alpha values
+                    new_order = sortperm(alpha_a_list[prev_counter:counter-1])
+                    pts_to_add = Array{PolyNode, 1}(undef, counter - prev_counter)
+                    for kk in eachindex(new_order)
+                        # Create PolyNodes of the new intersection points in the correct order
+                        # and store the correct index in a_idx_list
+                        pts_to_add[new_order[kk]] = PolyNode(prev_counter+kk-1, intr_list[prev_counter+kk-1], true, 0, false, alpha_a_list[prev_counter+kk-1])
+                        if prev_counter+kk-1 <= length(a_idx_list)
+                            a_idx_list[prev_counter+kk-1] = acount + new_order[kk] - 1
+                        else
+                            length_diff = prev_counter+kk-1-length(a_idx_list)
+                            append!(a_idx_list, zeros(length_diff))
+                            a_idx_list[prev_counter+kk-1] = acount + new_order[kk] - 1
+                        end
+                    end
+
+                    # Add the PolyNodes to a_list and update acount
+                    splice!(a_list, acount:(acount-1), pts_to_add)
+                    acount = acount + counter - prev_counter
+                end
+                
+        end
+
         end
         p1 = p2
         ii = ii + 1
