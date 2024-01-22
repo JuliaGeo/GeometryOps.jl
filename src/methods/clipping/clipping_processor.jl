@@ -110,7 +110,7 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
                     for kk in eachindex(new_order)
                         # Create PolyNodes of the new intersection points in the correct order
                         # and store the correct index in a_idx_list
-                        pts_to_add[new_order[kk]] = PolyNode(prev_counter+kk-1, intr_list[prev_counter+kk-1], true, b_idx_list[prev_counter+kk-1], false, (alpha_a_list[prev_counter+kk-1], alpha_a_list[prev_counter+kk-1]))
+                        pts_to_add[new_order[kk]] = PolyNode(prev_counter+kk-1, intr_list[prev_counter+kk-1], true, b_idx_list[prev_counter+kk-1], false, (alpha_a_list[prev_counter+kk-1], alpha_b_list[prev_counter+kk-1]))
                         if prev_counter+kk-1 <= length(a_idx_list)
                             a_idx_list[prev_counter+kk-1] = acount + new_order[kk] - 1
                         else
@@ -176,14 +176,11 @@ function _build_b_list2(a_idx_list, a_list, poly_b)
             while current_node.neighbor == i
                 b_list[bcounter] = PolyNode(counter, current_node.point, true, sort_a_idx_list[counter], false, current_node.fracs)
                 current_node.neighbor = bcounter
+                current_node.idx = counter
                 bcounter += 1
                 counter += 1
-                # counter>length(sort_a_idx_list) && break
-                if counter > length(sort_a_idx_list)
-                    break
-                else
-                    current_node = a_list[sort_a_idx_list[counter]]
-                end
+                counter>length(sort_a_idx_list) && break
+                current_node = a_list[sort_a_idx_list[counter]]
             end
         end
     end
@@ -211,7 +208,7 @@ function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_a_list, 
             new_order = sortperm(alpha_b_list[i])
             pts_to_add = Array{PolyNode, 1}(undef, length(i))
             for m in eachindex(i)
-                pts_to_add[new_order[m]] = PolyNode(i[m], intr_list[i[m]], true, a_idx_list[i[m]], false, (alpha_b_list[i[m]], alpha_a_list[i[m]]))
+                pts_to_add[new_order[m]] = PolyNode(i[m], intr_list[i[m]], true, a_idx_list[i[m]], false, (alpha_a_list[i[m]], alpha_b_list[i[m]]))
                 b_neighbors[i[m]] = ii + new_order[m]
             end   
             # I use splice instead of insert so I can insert array   
@@ -287,7 +284,6 @@ function _build_ab_list(poly_a, poly_b)
                                                         alpha_a_list, alpha_b_list, a_list, poly_a, poly_b)
     # b_neighbors, b_list = _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list)
     b_list, sort_a_idx_list = _build_b_list2(a_idx_list, a_list, poly_b)
-
 
     # # Iterate through a_list and update the neighbor indices
     # for ii in eachindex(a_list)
