@@ -30,6 +30,8 @@ geometry trait. This is also used in the implementation, since it's a lot less
 work!
 =#
 
+const _ANGLE_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
+
 """
     angles(geom, ::Type{T} = Float64)
 
@@ -46,8 +48,11 @@ This is computed differently for different geometries:
 Result will be a Vector, or nested set of vectors, of type T where an optional argument with
 a default value of Float64.
 """
-angles(geom, ::Type{T} = Float64) where T <: AbstractFloat =
-    _angles(T, GI.trait(geom), geom)
+function angles(geom, ::Type{T} = Float64; threaded =false) where T <: AbstractFloat
+    applyreduce(vcat, _ANGLE_TARGETS, geom; threaded, init = Vector{T}()) do g
+        _angles(T, GI.trait(g), g)
+    end
+end
 
 # Points and single line segments have no angles
 _angles(::Type{T}, ::Union{GI.PointTrait, GI.LineTrait}, geom) where T = T[]
@@ -55,7 +60,7 @@ _angles(::Type{T}, ::Union{GI.PointTrait, GI.LineTrait}, geom) where T = T[]
 #= The angles of a linestring are the angles formed by the line. If the first and last point
 are not explicitly repeated, the geom is not considered closed. The angles should all be on
 one side of the line, but a particular side is not guaranteed by this function. =#
-function _angles(::Type{T}, ::Union{GI.LineStringTrait}, geom) where T
+function _angles(::Type{T}, ::GI.LineStringTrait, geom) where T
     npoints = GI.npoint(geom)
     first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, npoints))
     angle_list = Vector{T}(undef, npoints - (first_last_equal ? 1 : 2))
@@ -68,34 +73,39 @@ end
 
 #= The angles of a linearring are the angles within the closed line and include the angles
 formed by connecting the first and last points of the curve. =#
-function _angles(::Type{T}, ::GI.LinearRingTrait, geom) where T
+function _angles(::Type{T}, ::GI.LinearRingTrait, geom; interior = true) where T
     npoints = GI.npoint(geom)
     first_last_equal = equals(GI.getpoint(geom, 1), GI.getpoint(geom, npoints))
     angle_list = Vector{T}(undef, npoints - (first_last_equal ? 1 : 0))
     _find_angles!(
         T, angle_list, geom;
-        offset = true, close_geom = !first_last_equal,
+        offset = true, close_geom = !first_last_equal, interior = interior,
     )
     return angle_list
 end
 
-#= The angles of a polygon is a vector of lists angles of its rings. Note that 
-this means that the angles of any holes will be the exterior angles of the holes
-outside of the geometry, rather than the interior angles=#
-_angles(::Type{T}, ::GI.PolygonTrait, geom) where T =
-    [_angles(T, GI.LinearRingTrait(), g) for g in GI.getring(geom)]
-
-# Angles of a multi-geometry is simply a list of the angles of its sub-geometries.
-_angles(::Type{T}, ::MultiGeomTrait, geom) where T = [angles(g, T) for g in GI.getgeom(geom)]
+#= The angles of a polygon is a vector of polygon angles. Note that if there are holes
+within the polyogn, the angles will be listed after the exterior ring angles in order of the
+holes. All angles, including the hole angles, are interior angles of the polygon.=#
+function _angles(::Type{T}, ::GI.PolygonTrait, geom) where T
+    angles = _angles(T, GI.LinearRingTrait(), GI.getexterior(geom); interior = true)
+    for h in GI.gethole(geom)
+        append!(angles, _angles(T, GI.LinearRingTrait(), h; interior = false))
+    end
+    return angles
+end
 
 #=
 Find angles of a curve and insert the values into the angle_list. If offset is true, then
 save space for the angle at the first vertex, as the curve is closed, at the front of
 angle_list. If close_geom is true, then despite the first and last point not being
 explicitly repeated, the curve is closed and the angle of the last point should be added to
-angle_list.
+angle_list. If interior is true, then all angles will be on the same side of the line 
 =#
-function _find_angles!(::Type{T}, angle_list, geom; offset, close_geom) where T
+function _find_angles!(
+    ::Type{T}, angle_list, geom;
+    offset, close_geom, interior = true,
+) where T
     local p1, prev_p1_diff, p2_p1_diff
     local start_point, start_diff
     local extreem_idx, extreem_x, extreem_y
@@ -133,13 +143,13 @@ function _find_angles!(::Type{T}, angle_list, geom; offset, close_geom) where T
     end
     #= Make sure that all of the angles are on the same side of the line and inside of the
     closed ring if the input geometry is closed. =#
-    convex_sgn = sign(angle_list[extreem_idx])
+    inside_sgn = sign(angle_list[extreem_idx]) * (interior ? 1 : -1)
     for i in eachindex(angle_list)
         idx_sgn = sign(angle_list[i])
         if idx_sgn == -1
             angle_list[i] = abs(angle_list[i])
         end
-        if idx_sgn != convex_sgn
+        if idx_sgn != inside_sgn
             angle_list[i] = 360 - angle_list[i]
         end
     end
