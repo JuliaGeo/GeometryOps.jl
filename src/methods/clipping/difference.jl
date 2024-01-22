@@ -40,10 +40,10 @@ function difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.Polygon([ext_poly_b])
     # Find the difference of the exterior of the polygons
     a_list, b_list,
-    a_idx_list, intr_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    a_idx_list, intr_list, sort_a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
 
     test = _trace_difference(ext_poly_a, ext_poly_b, 
-                            a_list, b_list, a_idx_list,
+                            a_list, b_list, sort_a_idx_list,
                              intr_list)
     polys = test[1]
     diff_polygons = test[2]

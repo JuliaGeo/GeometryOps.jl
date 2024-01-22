@@ -59,8 +59,8 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     ext_poly_b = GI.Polygon([ext_poly_b])
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list, intr_list = _build_ab_list(ext_poly_a, ext_poly_b)
-    polys = _trace_intersection(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list, intr_list)
+    a_list, b_list, a_idx_list, intr_list, sort_a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    polys = _trace_intersection(ext_poly_a, ext_poly_b, a_list, b_list, sort_a_idx_list, intr_list)
     # If the original polygons had no holes, then we are pretty much done. Otherwise,
     # we call '_get_inter_holes' to take into account the holes.
     if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
