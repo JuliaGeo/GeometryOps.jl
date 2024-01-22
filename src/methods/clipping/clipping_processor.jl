@@ -44,9 +44,9 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
         
             # Add the first point of the edge to the list of points in a_list
             if acount <= length(a_list)
-                a_list[acount] = PolyNode(ii, _tuple_point(p1), false, 0, false, 0.0)
+                a_list[acount] = PolyNode(ii, _tuple_point(p1), false, 0, false, (0.0, 0.0))
             else
-                push!(a_list, PolyNode(ii, _tuple_point(p1), false, 0, false, 0.0))
+                push!(a_list, PolyNode(ii, _tuple_point(p1), false, 0, false, (0.0, 0.0)))
             end
             acount = acount + 1
 
@@ -60,10 +60,7 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
                 else
                     # Add the first point of the edge to b_list
                     if ii == 1 
-                        # display("got here")
-                        # display(jj)
-                        # display(g1)
-                        b_list[jj] = PolyNode(jj, _tuple_point(g1), false, 0, false, 0.0)
+                        b_list[jj] = PolyNode(jj, _tuple_point(g1), false, 0, false, (0.0, 0.0))
                     end
 
                     # Check if edge jj of poly_b intersects with edge ii of poly_a
@@ -102,7 +99,7 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
             if prev_counter < counter
                 # If only found one
                 if counter == prev_counter+1
-                    insert!(a_list, acount, PolyNode(counter-1, intr_list[counter-1], true, 0, false, alpha_a_list[counter-1]))
+                    insert!(a_list, acount, PolyNode(counter-1, intr_list[counter-1], true, 0, false, (alpha_a_list[counter-1], alpha_b_list[counter-1])))
                     insert!(a_idx_list, counter-1, acount)
                     # a_idx_list[counter-1] = acount
                     acount = acount + 1
@@ -113,7 +110,7 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
                     for kk in eachindex(new_order)
                         # Create PolyNodes of the new intersection points in the correct order
                         # and store the correct index in a_idx_list
-                        pts_to_add[new_order[kk]] = PolyNode(prev_counter+kk-1, intr_list[prev_counter+kk-1], true, 0, false, alpha_a_list[prev_counter+kk-1])
+                        pts_to_add[new_order[kk]] = PolyNode(prev_counter+kk-1, intr_list[prev_counter+kk-1], true, 0, false, (alpha_a_list[prev_counter+kk-1], alpha_a_list[prev_counter+kk-1]))
                         if prev_counter+kk-1 <= length(a_idx_list)
                             a_idx_list[prev_counter+kk-1] = acount + new_order[kk] - 1
                         else
@@ -165,7 +162,7 @@ end
     but after this function is run it include intersection points to.
 """
 
-function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list)
+function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list)
     # Iterate through the b_list and add in intersection points
     # Occasionally I need to skip the new points I added to the array
     skip = false
@@ -185,7 +182,7 @@ function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list)
             new_order = sortperm(alpha_b_list[i])
             pts_to_add = Array{PolyNode, 1}(undef, length(i))
             for m in eachindex(i)
-                pts_to_add[new_order[m]] = PolyNode(i[m], intr_list[i[m]], true, a_idx_list[i[m]], false, alpha_b_list[i[m]])
+                pts_to_add[new_order[m]] = PolyNode(i[m], intr_list[i[m]], true, a_idx_list[i[m]], false, (alpha_b_list[i[m]], alpha_a_list[i[m]]))
                 b_neighbors[i[m]] = ii + new_order[m]
             end   
             # I use splice instead of insert so I can insert array   
@@ -217,22 +214,6 @@ function _flag_ent_exit(poly_b, a_list)
             status = !status
         end
     end
-
-    # # Put in ent exit flags for poly_b
-    # status = false
-    # for ii in eachindex(b_list)
-    #     if ii == 1
-    #         temp = within(b_list[ii].point, poly_a)
-    #         status = !(temp[1])
-    #         continue
-    #     end
-    #     if b_list[ii].inter
-    #         b_list[ii].ent_exit = status
-    #         status = !status
-    #     end
-    # end
-
-    # return a_list, b_list
     return a_list
 end
 
@@ -276,7 +257,7 @@ function _build_ab_list(poly_a, poly_b)
     intr_list, a_idx_list, b_idx_list, 
     alpha_a_list, alpha_b_list = _build_a_list(intr_list, a_idx_list, b_idx_list, 
                                                         alpha_a_list, alpha_b_list, a_list, b_list, poly_a, poly_b)
-    b_neighbors, b_list = _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_b_list)
+    b_neighbors, b_list = _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list)
 
     # Iterate through a_list and update the neighbor indices
     for ii in eachindex(a_list)
@@ -299,5 +280,5 @@ mutable struct PolyNode{T <: AbstractFloat}
     inter::Bool
     neighbor::Int
     ent_exit::Bool
-    alpha::T
+    fracs::Tuple{T,T}
 end
