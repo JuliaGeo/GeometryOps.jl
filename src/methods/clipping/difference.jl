@@ -89,7 +89,7 @@ function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list)
         list = a_list
 
         # Find index of first unprocessed intersecting point in subject polygon
-        starting_pt = minimum(tracker)
+        starting_pt, tracker_idx = findmin(tracker)
         idx = starting_pt
 
         # Get current first unprocessed intersection point PolyNode
@@ -101,7 +101,7 @@ function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list)
         
         # Mark first intersection point as processed
         processed_pts = processed_pts + 1
-        tracker[current.idx] = typemax(Int)
+        tracker[tracker_idx] = typemax(Int)
 
         current_node_not_starting = true
         while current_node_not_starting # While the current node isn't the starting one
