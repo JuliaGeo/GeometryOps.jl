@@ -17,9 +17,7 @@ f, a, p = poly(rect; axis = (; aspect = DataAspect()))
 ```
 This is clearly a rectangle, with angles of 90 degrees.
 ```@example angles
-lines!(a, rect; color = 1:length(coordinates(rect))+1)
-f
-angles(area)
+angles(rect)
 ```
 
 ## Implementation
