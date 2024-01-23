@@ -23,18 +23,13 @@ function _build_a_list(poly_a, poly_b)
     a_list = Vector{PolyNode}(undef, _nedge(poly_a))
     # Find intersection points and adds them to a_list
     a_idx_list = Vector{Int}()
-    # "counter" is used to index all inter-related lists
-    counter = 0
+    # "intr_count" is used to index all inter-related lists
+    intr_count = 0
     # "acount" is used to index a_list
     acount = 1
-
-    start = true
     local p1
-    ii = 0
     for (i, p2) in enumerate(GI.getpoint(poly_a))
-        if start
-            start = false
-        else
+        if i > 1
             new_point =  PolyNode(i - 1, _tuple_point(p1), false, 0, false, (0.0, 0.0))
             # Add the first point of the edge to the list of points in a_list
             if acount <= length(a_list)
@@ -44,39 +39,34 @@ function _build_a_list(poly_a, poly_b)
             end
             acount = acount + 1
 
-            jj = 0
-            start2 = true
             local g1
-            prev_counter = counter
+            prev_counter = intr_count
             for (j, g2) in enumerate(GI.getpoint(poly_b))
-                if start2
-                    start2 = false
-                else
+                if j > 1
                     # Check if edge jj of poly_b intersects with edge ii of poly_a
                     if _line_intersects([(_tuple_point(p1), _tuple_point(p2))], [(_tuple_point(g1), _tuple_point(g2))]);
                         int_pt, fracs = _intersection_point((_tuple_point(p1), _tuple_point(p2)), (_tuple_point(g1), _tuple_point(g2)))
                         # if not intersection point, skip this edge (the if statement above should 
                         # catch this but i guess not)
                         isnothing(int_pt) && continue
-                        new_intr = PolyNode(counter, int_pt, true, j - 1, false, fracs)
+                        new_intr = PolyNode(intr_count, int_pt, true, j - 1, false, fracs)
                         if acount <= length(a_list)
                             a_list[acount] = new_intr
                         else
                             push!(a_list, new_intr)
                         end
                         push!(a_idx_list, acount)
-                        counter += 1
+                        intr_count += 1
                         acount += 1
                     end
                 end
-                jj = jj + 1
                 g1 = g2
             end
 
             # After iterating through all edges of poly_b for edge ii of poly_a,
             # add the intersection points to a_list in CORRECT ORDER if we found any
-            if prev_counter < counter
-                inter_points = @view a_list[(acount - counter + prev_counter):(acount - 1)]
+            if prev_counter < intr_count
+                inter_points = @view a_list[(acount - intr_count + prev_counter):(acount - 1)]
                 sort!(inter_points, by = x -> x.fracs[1])
                 for (i, p) in enumerate(inter_points)
                     p.idx = prev_counter + i
@@ -84,7 +74,6 @@ function _build_a_list(poly_a, poly_b)
             end
         end
         p1 = p2
-        ii = ii + 1
     end
     return a_list, a_idx_list
 end
@@ -107,29 +96,33 @@ end
     but after this function is run it include intersection points to.
 """
 function _build_b_list(a_idx_list, a_list, poly_b)
-    sort_a_idx_list = sort(a_idx_list, by = x-> a_list[x].neighbor+a_list[x].fracs[2])
-    b_list = Array{PolyNode, 1}(undef, _nedge(poly_b)+length(a_idx_list))
-    counter = 1
+    # Sort intersection points by insertion order in b_list
+    sort!(a_idx_list, by = x-> a_list[x].neighbor + a_list[x].fracs[2])
+    # Initialize needed values and lists
+    n_polyb_pts = GI.npoint(poly_b)
+    n_intr_pts = length(a_idx_list)
+    b_list = Vector{PolyNode}(undef, n_polyb_pts - 1 + n_intr_pts)
+    intr_count = 1
     bcounter = 1
+    # Loop over points in poly_b and add each point and intersection point
     for (i, pi) in enumerate(GI.getpoint(poly_b))
-        i == GI.npoint(poly_b) && break
-
+        (i == n_polyb_pts) && break
         b_list[bcounter] = PolyNode(i, _tuple_point(pi), false, 0, false, (0.0, 0.0))
         bcounter += 1
-        if counter <= length(sort_a_idx_list)
-            current_node = a_list[sort_a_idx_list[counter]]
+        if intr_count <= n_intr_pts
+            current_node = a_list[a_idx_list[intr_count]]
             while current_node.neighbor == i
-                b_list[bcounter] = PolyNode(counter, current_node.point, true, sort_a_idx_list[counter], false, current_node.fracs)
+                b_list[bcounter] = PolyNode(intr_count, current_node.point, true, a_idx_list[intr_count], false, current_node.fracs)
                 current_node.neighbor = bcounter
-                current_node.idx = counter
                 bcounter += 1
-                counter += 1
-                counter>length(sort_a_idx_list) && break
-                current_node = a_list[sort_a_idx_list[counter]]
+                intr_count += 1
+                intr_count > n_intr_pts && break
+                current_node = a_list[a_idx_list[intr_count]]
             end
         end
     end
-    return b_list, sort_a_idx_list
+    sort!(a_idx_list)
+    return b_list
 end
 
 """
@@ -137,21 +130,18 @@ end
 
     This function flags all the intersection points as either an 'entry' or 'exit' point.
 """
-function _flag_ent_exit(poly_b, a_list)
-    # Put in ent exit flags for poly_a
-    status = false
-    for ii in eachindex(a_list)
+function _flag_ent_exit!(poly, pt_list)
+    # Put in ent exit flags for poly
+    local status
+    for ii in eachindex(pt_list)
         if ii == 1
-            temp = within(a_list[ii].point, poly_b)
-            status = !(temp)
-            continue
-        end
-        if a_list[ii].inter
-            a_list[ii].ent_exit = status
+            status = !within(pt_list[ii].point, poly)
+        elseif pt_list[ii].inter
+            pt_list[ii].ent_exit = status
             status = !status
         end
     end
-    return a_list
+    return
 end
 
 """
@@ -169,13 +159,13 @@ end
 function _build_ab_list(poly_a, poly_b)
     # Make a list for nodes of each polygon
     a_list, a_idx_list = _build_a_list(poly_a, poly_b)
-    b_list, sort_a_idx_list = _build_b_list(a_idx_list, a_list, poly_b)
+    b_list = _build_b_list(a_idx_list, a_list, poly_b)
 
     # Flag the entry and exists
-    a_list = _flag_ent_exit(poly_b, a_list)
-    b_list = _flag_ent_exit(poly_a, b_list)
+    _flag_ent_exit!(poly_b, a_list)
+    _flag_ent_exit!(poly_a, b_list)
 
-    return a_list, b_list, sort_a_idx_list
+    return a_list, b_list, a_idx_list
 end
 
 # This is the struct that makes up a_list and b_list

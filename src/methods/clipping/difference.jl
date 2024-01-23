@@ -39,10 +39,10 @@ function difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     ext_poly_b = GI.Polygon([ext_poly_b])
     # Find the difference of the exterior of the polygons
-    a_list, b_list, sort_a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    a_list, b_list, a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
 
     test = _trace_difference(ext_poly_a, ext_poly_b, 
-                            a_list, b_list, sort_a_idx_list)
+                            a_list, b_list, a_idx_list)
     polys = test[1]
     diff_polygons = test[2]
     # If the original polygons had holes, take that into account.
@@ -142,7 +142,7 @@ function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list)
                     # Keep track of processed intersection points
                     if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
                         processed_pts = processed_pts + 1
-                        tracker[current.idx] = typemax(Int)
+                        tracker[current.idx] = typemax(Int)  # TODO: I think we should get rid of idx if we can...
                     end
                     
                 else

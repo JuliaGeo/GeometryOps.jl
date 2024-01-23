@@ -38,8 +38,8 @@ function union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     ext_poly_b = GI.Polygon([ext_poly_b])
     # Then, I get the union of the exteriors
-    a_list, b_list, sort_a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
-    temp = _trace_union(ext_poly_a, ext_poly_b, a_list, b_list, sort_a_idx_list)
+    a_list, b_list, a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    temp = _trace_union(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list)
     polys = temp[1]
     diff_polys = temp[2]
     # If the original polygons had holes, we call '_get_union_holes' to take that
