@@ -139,7 +139,7 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
     alpha_a_list = alpha_a_list[1:counter-1]
     alpha_b_list = alpha_b_list[1:counter-1]
 
-    return intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list
+    return a_idx_list, b_idx_list, alpha_a_list, alpha_b_list
 end
 
 """
@@ -161,7 +161,7 @@ end
     b_list starts out as an array of PolyNodes only containing the original points of poly_b
     but after this function is run it include intersection points to.
 """
-function _build_b_list2(a_idx_list, a_list, poly_b)
+function _build_b_list(a_idx_list, a_list, poly_b)
     sort_a_idx_list = sort(a_idx_list, by = x-> a_list[x].neighbor+a_list[x].fracs[2])
     b_list = Array{PolyNode, 1}(undef, _nedge(poly_b)+length(a_idx_list))
     counter = 1
@@ -185,40 +185,6 @@ function _build_b_list2(a_idx_list, a_list, poly_b)
         end
     end
     return b_list, sort_a_idx_list
-end
-
-
-function _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list)
-    # Iterate through the b_list and add in intersection points
-    # Occasionally I need to skip the new points I added to the array
-    skip = false
-    num_skips = 0
-    b_neighbors = Array{Int, 1}(undef, length(intr_list))
-    for ii in 1:(length(b_list)+length(intr_list))
-        if skip
-            num_skips = num_skips - 1
-            if num_skips == 0
-                skip = false
-            end
-            continue
-        end
-        i = findall(x->x==b_list[ii].idx, b_idx_list)
-        if !isempty(i)     
-            # Order intersection points based on alpha values
-            new_order = sortperm(alpha_b_list[i])
-            pts_to_add = Array{PolyNode, 1}(undef, length(i))
-            for m in eachindex(i)
-                pts_to_add[new_order[m]] = PolyNode(i[m], intr_list[i[m]], true, a_idx_list[i[m]], false, (alpha_a_list[i[m]], alpha_b_list[i[m]]))
-                b_neighbors[i[m]] = ii + new_order[m]
-            end   
-            # I use splice instead of insert so I can insert array   
-            splice!(b_list, ii+1:ii, pts_to_add)
-            skip = true
-            num_skips = length(i)
-        end
-    end
-
-    return b_neighbors, b_list
 end
 
 """
@@ -279,24 +245,16 @@ function _build_ab_list(poly_a, poly_b)
     alpha_a_list = Array{Real, 1}(undef, k)
     alpha_b_list = Array{Real, 1}(undef, k)
 
-    intr_list, a_idx_list, b_idx_list, 
+    a_idx_list, b_idx_list, 
     alpha_a_list, alpha_b_list = _build_a_list(intr_list, a_idx_list, b_idx_list, 
                                                         alpha_a_list, alpha_b_list, a_list, poly_a, poly_b)
-    # b_neighbors, b_list = _build_b_list(b_list, intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_list)
-    b_list, sort_a_idx_list = _build_b_list2(a_idx_list, a_list, poly_b)
-
-    # # Iterate through a_list and update the neighbor indices
-    # for ii in eachindex(a_list)
-    #     if a_list[ii].inter
-    #         a_list[ii].neighbor = b_neighbors[a_list[ii].idx]
-    #     end
-    # end
+    b_list, sort_a_idx_list = _build_b_list(a_idx_list, a_list, poly_b)
 
     # Flag the entry and exists
     a_list = _flag_ent_exit(poly_b, a_list)
     b_list = _flag_ent_exit(poly_a, b_list)
 
-    return a_list, b_list, a_idx_list, intr_list, sort_a_idx_list
+    return a_list, b_list, sort_a_idx_list
 end
 
 # This is the struct that makes up a_list and b_list

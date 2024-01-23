@@ -38,8 +38,8 @@ function union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     ext_poly_b = GI.Polygon([ext_poly_b])
     # Then, I get the union of the exteriors
-    a_list, b_list, a_idx_list, intr_list, sort_a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
-    temp = _trace_union(ext_poly_a, ext_poly_b, a_list, b_list, sort_a_idx_list, intr_list)
+    a_list, b_list, sort_a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    temp = _trace_union(ext_poly_a, ext_poly_b, a_list, b_list, sort_a_idx_list)
     polys = temp[1]
     diff_polys = temp[2]
     # If the original polygons had holes, we call '_get_union_holes' to take that
@@ -62,8 +62,7 @@ end
 
 
 """
-    _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list,
-      intr_list)::Vector{Vector{Tuple{Float64}}}::return_polys, disjoint
+    _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list)::Vector{Vector{Tuple{Float64}}}::return_polys, disjoint
 
 Traces the outlines of two polygons in order to find their union.
 It returns the outlines of all polygons formed in the union. If
@@ -73,14 +72,14 @@ are disjoint or not
 
 """
 
-function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list)
+function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
     # Keep track of number of processed intersection points
     processed_pts = 0
     tracker = copy(a_idx_list)
 
-    while processed_pts < length(intr_list)
+    while processed_pts < length(a_idx_list)
         # Create variables "list_edges" and "list" so that we can toggle between
         # a_list and b_list
         list = a_list

@@ -59,8 +59,8 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     ext_poly_b = GI.Polygon([ext_poly_b])
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list, intr_list, sort_a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
-    polys = _trace_intersection(ext_poly_a, ext_poly_b, a_list, b_list, sort_a_idx_list, intr_list)
+    a_list, b_list, sort_a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    polys = _trace_intersection(ext_poly_a, ext_poly_b, a_list, b_list, sort_a_idx_list)
     # If the original polygons had no holes, then we are pretty much done. Otherwise,
     # we call '_get_inter_holes' to take into account the holes.
     if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
@@ -135,15 +135,14 @@ function intersection(
 end
 
 """
-    _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list,
-      intr_list)::Vector{Vector{Tuple{Float64}}}
+    _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list)::Vector{Vector{Tuple{Float64}}}
 
 Traces the outlines of two polygons in order to find their intersection.
 It returns the outlines of all polygons formed in the intersection. If
 they do not intersect, it returns an empty array.
 
 """
-function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_list)
+function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
 
@@ -151,7 +150,7 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list, intr_li
     processed_pts = 0
     tracker = copy(a_idx_list)
 
-    while processed_pts < length(intr_list)
+    while processed_pts < length(a_idx_list)
         # Create variables "list_edges" and "list" so that we can toggle between
         # a_list and b_list
         list = a_list
