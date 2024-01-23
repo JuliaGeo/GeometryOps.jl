@@ -17,10 +17,6 @@ const GB = GeometryBasics
 
 const TuplePoint = Tuple{Float64,Float64}
 const Edge = Tuple{TuplePoint,TuplePoint}
-const MultiGeomTrait = Union{
-    GI.MultiPointTrait, GI.MultiCurveTrait,
-    GI.MultiPolygonTrait, GI.GeometryCollectionTrait}
-
 
 include("primitives.jl")
 include("utils.jl")

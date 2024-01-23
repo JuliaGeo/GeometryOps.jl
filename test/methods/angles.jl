@@ -1,4 +1,5 @@
 pt1 = GI.Point((0.0, 0.0))
+mpt1 = GI.MultiPoint([pt1, pt1])
 l1 = GI.Line([(0.0, 0.0), (0.0, 1.0)])
 
 concave_coords = [(0.0, 0.0), (0.0, 1.0), (-1.0, 1.0), (-1.0, 2.0), (2.0, 2.0), (2.0, 0.0), (0.0, 0.0)]
@@ -20,6 +21,7 @@ c1 = GI.GeometryCollection([pt1, l2, p2])
 
 # Points and lines
 @test isempty(GO.angles(pt1))
+@test isempty(GO.angles(mpt1))
 @test isempty(GO.angles(l1))
 
 # LineStrings and Linear Rings

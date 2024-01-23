@@ -10,10 +10,11 @@ To provide an example, consider this rectangle:
 ```@example angles
 using GeometryOps
 using GeometryOps.GeometryBasics
-using Makie
+using Makie, CairoMakie
 
 rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
 f, a, p = poly(rect; axis = (; aspect = DataAspect()))
+f
 ```
 This is clearly a rectangle, with angles of 90 degrees.
 ```@example angles
@@ -53,7 +54,7 @@ function angles(geom, ::Type{T} = Float64; threaded =false) where T <: AbstractF
 end
 
 # Points and single line segments have no angles
-_angles(::Type{T}, ::Union{GI.PointTrait, GI.LineTrait}, geom) where T = T[]
+_angles(::Type{T}, ::Union{GI.PointTrait, GI.MultiPointTrait, GI.LineTrait}, geom) where T = T[]
 
 #= The angles of a linestring are the angles formed by the line. If the first and last point
 are not explicitly repeated, the geom is not considered closed. The angles should all be on
