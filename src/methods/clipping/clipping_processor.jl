@@ -3,9 +3,9 @@
 #=
     _build_a_list(poly_a, poly_b) -> (a_list, a_idx_list)
 
-This function take in two polygons and creates a vector of PolyNodes to represent poly_a,
-including its intersection points with poly_b. The information stored in each PolyNode is
-needed for clipping using the Greiner-Hormann clipping algorithm.
+This function take in two polygon rings and creates a vector of PolyNodes to represent
+poly_a, including its intersection points with poly_b. The information stored in each
+PolyNode is needed for clipping using the Greiner-Hormann clipping algorithm.
     
 Note: After calling this function, a_list is not fully formed because the neighboring
 indicies of the intersection points in b_list still need to be updated. Also we still have
@@ -126,7 +126,10 @@ function _flag_ent_exit!(poly, pt_list)
     local status
     for ii in eachindex(pt_list)
         if ii == 1
-            status = !within(pt_list[ii].point, poly)
+            status = !_point_filled_curve_orientation(
+                pt_list[ii].point, poly;
+                in = true, on = false, out = false
+            )
         elseif pt_list[ii].inter
             pt_list[ii].ent_exit = status
             status = !status
@@ -138,9 +141,9 @@ end
 #=
     _build_ab_list(poly_a, poly_b) -> (a_list, b_list, a_idx_list)
 
-This function calls '_build_a_list', '_build_b_list', and '_flag_ent_exit'
-in order to fully form a_list and b_list. The 'a_list' and 'b_list'
-that it returns are the fully updated vectors of PolyNodes that represent
+This function takes in two polygon rings and calls '_build_a_list', '_build_b_list', and
+'_flag_ent_exit' in order to fully form a_list and b_list. The 'a_list' and 'b_list'
+that it returns are the fully updated vectors of PolyNodes that represent the rings
 'poly_a' and 'poly_b', respectively. This function also returns
 'a_idx_list', which at its "ith" index stores the index in 'a_list' at
 which the "ith" intersection point lies.

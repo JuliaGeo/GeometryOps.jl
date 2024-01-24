@@ -34,29 +34,22 @@ union(geom_a, geom_b) =
 function union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     # First, I get the exteriors of the two polygons
     ext_poly_a = GI.getexterior(poly_a)
-    ext_poly_a = GI.Polygon([ext_poly_a])
     ext_poly_b = GI.getexterior(poly_b)
-    ext_poly_b = GI.Polygon([ext_poly_b])
     # Then, I get the union of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
-    temp = _trace_union(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list)
-    polys = temp[1]
-    diff_polys = temp[2]
+    polys, diff_polys = _trace_union(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list)
     # If the original polygons had holes, we call '_get_union_holes' to take that
     # into account.
-    if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
+    final_polys = if GI.nhole(poly_a) == 0 && GI.nhole(poly_b) == 0
         if !diff_polys
-            return [polys]
+            [polys]
         else
-            final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, length(polys))
-            for i in 1:length(polys)
-                final_polys[i] = [polys[i]]
-            end
-            return final_polys
+            [[p] for p in polys]
         end
     else
-        return _get_union_holes(polys, poly_a, poly_b, ext_poly_b, diff_polys)
-    end 
+        _get_union_holes(polys, poly_a, poly_b, ext_poly_b, diff_polys)
+    end
+    return final_polys
 end
 
 
@@ -165,14 +158,20 @@ function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list)
 
     # Check if one polygon totally within other and if so, return the larger polygon.
     if isempty(return_polys)
-        if within(a_list[1].point, poly_b)[1]
+        if _point_filled_curve_orientation(
+            a_list[1].point, poly_b;
+            in = true, on = false, out = false
+        )
             list = []
             for point in GI.getpoint(poly_b)
                 push!(list, _tuple_point(point))
             end
             push!(return_polys, list)
             return return_polys, false
-        elseif within(b_list[1].point, poly_a)[1]
+        elseif _point_filled_curve_orientation(
+            b_list[1].point, poly_a;
+            in = true, on = false, out = false
+        )
             list = []
             for point in GI.getpoint(poly_a)
                 push!(list, _tuple_point(point))
@@ -208,7 +207,10 @@ function _trace_union(poly_a, poly_b, a_list, b_list, a_idx_list)
         for j = 2:(length(return_polys)-1)
             poly1 = GI.Polygon([return_polys[outer_idx]])
             poly2 = GI.Polygon([return_polys[j]])
-            if !within(to_edges(poly2)[1][1], poly1)
+            if !_point_filled_curve_orientation(
+                to_edges(poly2)[1][1], poly1;
+                in = true, on = false, out = false
+            )
                 outer_idx = j
             end
         end
@@ -254,7 +256,7 @@ function _get_union_holes(return_polys, poly_a, poly_b, ext_poly_b, diff_polys)
         for hole in GI.gethole(poly_a)
             # I use ext_poly_b here instead of poly_b in order to not overcount
             # area that is a hole of poly_a and in a hole of poly_b
-            new_hole = difference(GI.Polygon([hole]), ext_poly_b)
+            new_hole = difference(GI.Polygon([hole]), GI.Polygon([ext_poly_b]))
             for h in new_hole
                 if length(h)>0
                     # I claim I can index h at one, because it can't

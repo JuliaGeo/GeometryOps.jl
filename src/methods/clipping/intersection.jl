@@ -55,24 +55,18 @@ GO.intersection(p1, p2)
 function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     # First we get the exteriors of 'poly_a' and 'poly_b'
     ext_poly_a = GI.getexterior(poly_a)
-    ext_poly_a = GI.Polygon([ext_poly_a])
     ext_poly_b = GI.getexterior(poly_b)
-    ext_poly_b = GI.Polygon([ext_poly_b])
     # Then we find the intersection of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
     polys = _trace_intersection(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list)
-    # If the original polygons had no holes, then we are pretty much done. Otherwise,
+    # If the original polygons had no holes, then we are done. Otherwise,
     # we call '_get_inter_holes' to take into account the holes.
-    if GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
-        final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, length(polys))
-        for i in 1:length(polys)
-            final_polys[i] = [polys[i]]
-        end
-        return final_polys
+    final_polys = if GI.nhole(poly_a) == 0 && GI.nhole(poly_b) == 0
+        [[p] for p in polys]
     else
-        return _get_inter_holes(polys, poly_a, poly_b)
+        _get_inter_holes(polys, poly_a, poly_b)
     end    
-
+    return final_polys
 end
 
 
@@ -237,13 +231,19 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list)
     # Check if one polygon totally within other, and if so
     # return the smaller polygon as the intersection
     if isempty(return_polys)
-        if within(a_list[1].point, poly_b)[1]
+        if _point_filled_curve_orientation(
+            a_list[1].point, poly_b;
+            in = true, on = false, out = false
+        )
             list = []
             for point in GI.getpoint(poly_a)
                 push!(list, _tuple_point(point))
             end
             push!(return_polys, list)
-        elseif within(b_list[1].point, poly_a)[1]
+        elseif _point_filled_curve_orientation(
+            b_list[1].point, poly_a;
+            in = true, on = false, out = false
+        )
             list = []
             for point in GI.getpoint(poly_b)
                 push!(list, _tuple_point(point))
