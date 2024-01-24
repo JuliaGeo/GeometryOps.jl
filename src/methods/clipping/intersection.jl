@@ -129,102 +129,66 @@ function intersection(
 end
 
 """
-    _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list)::Vector{Vector{Tuple{Float64}}}
+    _trace_intersection(poly_a, poly_b, a_list, b_list, tracker)::Vector{Vector{Tuple{Float64}}}
 
 Traces the outlines of two polygons in order to find their intersection.
 It returns the outlines of all polygons formed in the intersection. If
 they do not intersect, it returns an empty array.
 
 """
-function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list)
+function _trace_intersection(poly_a, poly_b, a_list, b_list, tracker)
+    n_a_points, n_b_points = length(a_list), length(b_list)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
-
     # Keep track of number of processed intersection points
+    n_inter_pts = length(tracker)
     processed_pts = 0
-    tracker = copy(a_idx_list)
 
-    while processed_pts < length(a_idx_list)
-        # Create variables "list_edges" and "list" so that we can toggle between
-        # a_list and b_list
-        list = a_list
-
-        # Find index of first unprocessed intersecting point in subject polygon
-        tracker_idx = findfirst(x -> x != 0, tracker)
-        starting_pt = tracker[tracker_idx]
-        idx = starting_pt
-
-        # Get current first unprocessed intersection point PolyNode
-        current = a_list[idx]
-        # Initialize array to store the intersection polygon cartesian points
-        pt_list = Vector{Tuple{Float64, Float64}}(undef, 0)
-        # Add the first point to the array
-        push!(pt_list, current.point)
-        
-        # Mark first intersection point as processed
-        processed_pts = processed_pts + 1
+    while processed_pts < n_inter_pts
+        curr_list, next_list = a_list, b_list
+        curr_npoints, next_npoints = n_a_points, n_b_points
+        # Find first unprocessed intersecting point in subject polygon
+        processed_pts += 1
+        tracker_idx = findnext(x -> x != 0, tracker, processed_pts)
+        idx = tracker[tracker_idx]
         tracker[tracker_idx] = 0
+        start_pt = a_list[idx]
 
-        current_node_not_starting = true
-        while current_node_not_starting # While the current node isn't the starting one
-            status2 = false
-            current_node_not_intersection = true
-            while current_node_not_intersection # The current node isn't an intersection
-                
-                if current.inter
-                    status2 = current.ent_exit
-                end
+        # Set first point in polygon
+        curr = curr_list[idx]
+        pt_list = [curr.point]
 
-                # Depending on status of first intersection point, either
-                # traverse polygon forwards or backwards
-                if status2
-                    idx = idx + 1
-                else
-                    idx = idx -1
-                end
+        curr_not_start = true
+        while curr_not_start
+            forward = false
+            curr_not_intr = true
+            while curr_not_intr
+                forward = curr.inter ? curr.ent_exit : forward
+                # Traverse polygon either forwards or backwards
+                idx += forward ? 1 : (-1)
+                idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
+                idx = (idx == 0) ? curr_npoints : idx
 
-                # Wrap around the point list
-                if idx > length(list)
-                    idx = mod(idx, length(list))
-                elseif idx == 0
-                    idx = length(list)
-                end
-
-                # Get current node
-                current = list[idx]
-
-                # Add current node to the pt_list
-                if current.inter
-                    # Add cartesian coordinates from inter_list
-                    push!(pt_list, current.point)
-                    
+                # Get current node and add to pt_list
+                curr = curr_list[idx]
+                push!(pt_list, curr.point)
+                if curr.inter 
                     # Keep track of processed intersection points
-                    if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
+                    curr_not_start = curr != start_pt && curr != b_list[start_pt.neighbor]
+                    if curr_not_start
                         processed_pts = processed_pts + 1
-                        tracker[current.idx] = 0
+                        tracker[curr.idx] = 0
                     end
-                    
-                else
-                    # Add cartesian coordinates from "list", which should point to either a_list or b_list
-                    push!(pt_list, current.point)
+                    curr_not_intr = false
                 end
-
-                current_node_not_intersection = !current.inter
             end
-            
-            # Break once get back to starting point
-            current_node_not_starting = (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
 
-            # Switch to neighbor list
-            if list == a_list
-                list = b_list
-            else
-                list = a_list
-            end
-            idx = current.neighbor
-            current = list[idx]
+            # Switch to next list and next point
+            curr_list, next_list = next_list, curr_list
+            curr_npoints, next_npoints = next_npoints, curr_npoints
+            idx = curr.neighbor
+            curr = curr_list[idx]
         end
-
         push!(return_polys, pt_list)
     end
 
@@ -235,19 +199,13 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list)
             a_list[1].point, poly_b;
             in = true, on = false, out = false
         )
-            list = []
-            for point in GI.getpoint(poly_a)
-                push!(list, _tuple_point(point))
-            end
+            list = [_tuple_point(p) for p in GI.getpoint(poly_a)]
             push!(return_polys, list)
         elseif _point_filled_curve_orientation(
             b_list[1].point, poly_a;
             in = true, on = false, out = false
         )
-            list = []
-            for point in GI.getpoint(poly_b)
-                push!(list, _tuple_point(point))
-            end
+            list = [_tuple_point(p) for p in GI.getpoint(poly_b)]
             push!(return_polys, list)
         end
     end

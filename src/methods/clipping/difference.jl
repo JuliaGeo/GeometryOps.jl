@@ -53,7 +53,7 @@ function difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
 end
 
 """
-    _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list)::Vector{Vector{Tuple{Float64}}}, Bool
+    _trace_difference(poly_a, poly_b, a_list, b_list, tracker)::Vector{Vector{Tuple{Float64}}}, Bool
 
 Traces the outlines of two polygons in order to find their difference.
 It returns the outlines of all the components of the difference. The Bool
@@ -62,15 +62,14 @@ the larger Vector) are part of the same polygon (true) or each different
 polygons (true).
 """
 
-function _trace_difference(poly_a, poly_b, a_list, b_list, a_idx_list)
+function _trace_difference(poly_a, poly_b, a_list, b_list, tracker)
     # Pre-allocate array for return polygons
     return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
 
     # Keep track of number of processed intersection points
     processed_pts = 0
-    tracker = copy(a_idx_list)
 
-    while processed_pts < length(a_idx_list)
+    while processed_pts < length(tracker)
         # Create variables "list_edges" and "list" so that we can toggle between
         # a_list and b_list
         list = a_list
