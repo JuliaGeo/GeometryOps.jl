@@ -58,6 +58,7 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     # Then we find the intersection of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    
     polys = _trace_intersection(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list)
     # If the original polygons had no holes, then we are done. Otherwise,
     # we call '_get_inter_holes' to take into account the holes.
@@ -137,74 +138,15 @@ they do not intersect, it returns an empty array.
 
 """
 function _trace_intersection(poly_a, poly_b, a_list, b_list, tracker)
-    n_a_points, n_b_points = length(a_list), length(b_list)
-    # Pre-allocate array for return polygons
-    return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
-    # Keep track of number of processed intersection points
-    n_inter_pts = length(tracker)
-    processed_pts = 0
-
-    while processed_pts < n_inter_pts
-        curr_list, next_list = a_list, b_list
-        curr_npoints, next_npoints = n_a_points, n_b_points
-        # Find first unprocessed intersecting point in subject polygon
-        processed_pts += 1
-        tracker_idx = findnext(x -> x != 0, tracker, processed_pts)
-        idx = tracker[tracker_idx]
-        tracker[tracker_idx] = 0
-        start_pt = a_list[idx]
-
-        # Set first point in polygon
-        curr = curr_list[idx]
-        pt_list = [curr.point]
-
-        curr_not_start = true
-        while curr_not_start
-            forward = false
-            curr_not_intr = true
-            while curr_not_intr
-                forward = curr.inter ? curr.ent_exit : forward
-                # Traverse polygon either forwards or backwards
-                idx += forward ? 1 : (-1)
-                idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
-                idx = (idx == 0) ? curr_npoints : idx
-
-                # Get current node and add to pt_list
-                curr = curr_list[idx]
-                push!(pt_list, curr.point)
-                if curr.inter 
-                    # Keep track of processed intersection points
-                    curr_not_start = curr != start_pt && curr != b_list[start_pt.neighbor]
-                    if curr_not_start
-                        processed_pts = processed_pts + 1
-                        tracker[curr.idx] = 0
-                    end
-                    curr_not_intr = false
-                end
-            end
-
-            # Switch to next list and next point
-            curr_list, next_list = next_list, curr_list
-            curr_npoints, next_npoints = next_npoints, curr_npoints
-            idx = curr.neighbor
-            curr = curr_list[idx]
-        end
-        push!(return_polys, pt_list)
-    end
+   return_polys = _trace_polynodes(a_list, b_list, tracker, (x, y) -> x ? 1 : (-1))
 
     # Check if one polygon totally within other, and if so
     # return the smaller polygon as the intersection
     if isempty(return_polys)
-        if _point_filled_curve_orientation(
-            a_list[1].point, poly_b;
-            in = true, on = false, out = false
-        )
+        if _point_filled_curve_orientation(a_list[1].point, poly_b) == point_in
             list = [_tuple_point(p) for p in GI.getpoint(poly_a)]
             push!(return_polys, list)
-        elseif _point_filled_curve_orientation(
-            b_list[1].point, poly_a;
-            in = true, on = false, out = false
-        )
+        elseif _point_filled_curve_orientation(b_list[1].point, poly_a) == point_in
             list = [_tuple_point(p) for p in GI.getpoint(poly_b)]
             push!(return_polys, list)
         end

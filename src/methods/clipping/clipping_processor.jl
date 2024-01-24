@@ -1,5 +1,38 @@
 # # This file contains the shared helper functions for the polygon clipping functionalities.
 
+#= This is the struct that makes up a_list and b_list. Many values are only used if point is
+an intersection point (ipt). =#
+mutable struct PolyNode{T <: AbstractFloat}
+    idx::Int           # If ipt, index of point in a_idx_list, else 0
+    point::Tuple{T,T}  # (x, y) values of given point
+    inter::Bool        # If ipt, true, else 0
+    neighbor::Int      # If ipt, index of equivalent point in a_list or b_list, else 0
+    ent_exit::Bool     # If ipt, true if enter and false if exit, else false
+    fracs::Tuple{T,T}  # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
+end
+
+#=
+    _build_ab_list(poly_a, poly_b) -> (a_list, b_list, a_idx_list)
+
+This function takes in two polygon rings and calls '_build_a_list', '_build_b_list', and
+'_flag_ent_exit' in order to fully form a_list and b_list. The 'a_list' and 'b_list'
+that it returns are the fully updated vectors of PolyNodes that represent the rings
+'poly_a' and 'poly_b', respectively. This function also returns
+'a_idx_list', which at its "ith" index stores the index in 'a_list' at
+which the "ith" intersection point lies.
+=#
+function _build_ab_list(poly_a, poly_b)
+    # Make a list for nodes of each polygon
+    a_list, a_idx_list = _build_a_list(poly_a, poly_b)
+    b_list = _build_b_list(a_idx_list, a_list, poly_b)
+
+    # Flag the entry and exists
+    _flag_ent_exit!(poly_b, a_list)
+    _flag_ent_exit!(poly_a, b_list)
+
+    return a_list, b_list, a_idx_list
+end
+
 #=
     _build_a_list(poly_a, poly_b) -> (a_list, a_idx_list)
 
@@ -138,35 +171,59 @@ function _flag_ent_exit!(poly, pt_list)
     return
 end
 
-#=
-    _build_ab_list(poly_a, poly_b) -> (a_list, b_list, a_idx_list)
+function _trace_polynodes(a_list, b_list, tracker, f_step)
+    n_a_pts, n_b_pts = length(a_list), length(b_list)
+    n_intr_pts = length(tracker)
+    # Pre-allocate array for return polygons
+    return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
+    # Keep track of number of processed intersection points
+    processed_pts = 0
 
-This function takes in two polygon rings and calls '_build_a_list', '_build_b_list', and
-'_flag_ent_exit' in order to fully form a_list and b_list. The 'a_list' and 'b_list'
-that it returns are the fully updated vectors of PolyNodes that represent the rings
-'poly_a' and 'poly_b', respectively. This function also returns
-'a_idx_list', which at its "ith" index stores the index in 'a_list' at
-which the "ith" intersection point lies.
-=#
-function _build_ab_list(poly_a, poly_b)
-    # Make a list for nodes of each polygon
-    a_list, a_idx_list = _build_a_list(poly_a, poly_b)
-    b_list = _build_b_list(a_idx_list, a_list, poly_b)
+    while processed_pts < n_intr_pts
+        curr_list, curr_npoints = a_list, n_a_pts
+        on_a_list = true
+        # Find first unprocessed intersecting point in subject polygon
+        processed_pts += 1
+        tracker_idx = findnext(x -> x != 0, tracker, processed_pts)
+        idx = tracker[tracker_idx]
+        tracker[tracker_idx] = 0
+        start_pt = a_list[idx]
 
-    # Flag the entry and exists
-    _flag_ent_exit!(poly_b, a_list)
-    _flag_ent_exit!(poly_a, b_list)
+        # Set first point in polygon
+        curr = curr_list[idx]
+        pt_list = [curr.point]
 
-    return a_list, b_list, a_idx_list
-end
+        curr_not_start = true
+        while curr_not_start
+            step = f_step(curr.ent_exit, on_a_list)
+            curr_not_intr = true
+            while curr_not_intr
+                # Traverse polygon either forwards or backwards
+                idx += step
+                idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
+                idx = (idx == 0) ? curr_npoints : idx
 
-#= This is the struct that makes up a_list and b_list. Many values are only used if point is
-an intersection point (ipt). =#
-mutable struct PolyNode{T <: AbstractFloat}
-    idx::Int           # If ipt, index of point in a_idx_list, else 0
-    point::Tuple{T,T}  # (x, y) values of given point
-    inter::Bool        # If ipt, true, else 0
-    neighbor::Int      # If ipt, index of equivalent point in a_list or b_list, else 0
-    ent_exit::Bool     # If ipt, true if enter and false if exit, else false
-    fracs::Tuple{T,T}  # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
+                # Get current node and add to pt_list
+                curr = curr_list[idx]
+                push!(pt_list, curr.point)
+                if curr.inter 
+                    # Keep track of processed intersection points
+                    curr_not_start = curr != start_pt && curr != b_list[start_pt.neighbor]
+                    if curr_not_start
+                        processed_pts += 1
+                        tracker[curr.idx] = 0
+                    end
+                    curr_not_intr = false
+                end
+            end
+
+            # Switch to next list and next point
+            curr_list, curr_npoints = on_a_list ? (b_list, n_b_pts) : (a_list, n_a_pts)
+            on_a_list = !on_a_list
+            idx = curr.neighbor
+            curr = curr_list[idx]
+        end
+        push!(return_polys, pt_list)
+    end
+    return return_polys
 end
