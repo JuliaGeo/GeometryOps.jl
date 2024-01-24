@@ -156,7 +156,8 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list)
         list = a_list
 
         # Find index of first unprocessed intersecting point in subject polygon
-        starting_pt, tracker_idx = findmin(tracker)
+        tracker_idx = findfirst(x -> x != 0, tracker)
+        starting_pt = tracker[tracker_idx]
         idx = starting_pt
 
         # Get current first unprocessed intersection point PolyNode
@@ -168,7 +169,7 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list)
         
         # Mark first intersection point as processed
         processed_pts = processed_pts + 1
-        tracker[tracker_idx] = typemax(Int)
+        tracker[tracker_idx] = 0
 
         current_node_not_starting = true
         while current_node_not_starting # While the current node isn't the starting one
@@ -206,7 +207,7 @@ function _trace_intersection(poly_a, poly_b, a_list, b_list, a_idx_list)
                     # Keep track of processed intersection points
                     if (current != a_list[starting_pt] && current != b_list[a_list[starting_pt].neighbor])
                         processed_pts = processed_pts + 1
-                        tracker[current.idx] = typemax(Int)
+                        tracker[current.idx] = 0
                     end
                     
                 else
