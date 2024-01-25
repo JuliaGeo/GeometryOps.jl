@@ -9,16 +9,16 @@ include("clipping_test_utils.jl")
 function compare_GO_LG_intersection(p1, p2, ϵ)
     GO_intersection = GO.intersection(p1,p2)
     LG_intersection = LG.intersection(p1,p2)
-    if isempty(GO_intersection[1]) && LG.isEmpty(LG_intersection)
+    if isempty(GO_intersection) && LG.isEmpty(LG_intersection)
         return true
     end
 
     if length(GO_intersection)==1
-        temp = convert_tuple_to_array(GO_intersection)
-        GO_intersection_poly = LG.Polygon(temp[1])
+        #temp = convert_tuple_to_array(GO_intersection)
+        GO_intersection_poly = GO_intersection[1]
     else
-        temp = convert_tuple_to_array(GO_intersection)
-        GO_intersection_poly = LG.MultiPolygon(temp)
+        # temp = convert_tuple_to_array(GO_intersection)
+        GO_intersection_poly = GI.MultiPolygon(GO_intersection)
     end
     return LG.area(LG.difference(GO_intersection_poly, LG_intersection)) < ϵ
 end

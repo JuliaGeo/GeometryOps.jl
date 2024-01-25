@@ -29,6 +29,8 @@ GO.intersection(line1, line2)
 """
 intersection(geom_a, geom_b) =
     intersection(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+
+
 """
     intersection(
         ::GI.PolygonTrait, poly_a,
@@ -58,16 +60,22 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     # Then we find the intersection of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
-    
-    polys = _trace_intersection(ext_poly_a, ext_poly_b, a_list, b_list, a_idx_list)
+    traced_polys = _trace_polynodes(a_list, b_list, a_idx_list, (x, y) -> x ? 1 : (-1))
+    polys = [GI.Polygon([p]) for p in traced_polys]
+
+    if isempty(polys)
+        if _point_filled_curve_orientation(a_list[1].point, ext_poly_b) == point_in
+            push!(polys, poly_a)
+        elseif _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in
+            push!(polys, poly_b)
+        end
+    end
     # If the original polygons had no holes, then we are done. Otherwise,
-    # we call '_get_inter_holes' to take into account the holes.
-    final_polys = if GI.nhole(poly_a) == 0 && GI.nhole(poly_b) == 0
-        [[p] for p in polys]
-    else
-        _get_inter_holes(polys, poly_a, poly_b)
+    # we call '_get_inter_holes!' to take into account the holes.
+    if GI.nhole(poly_a) != 0 && GI.nhole(poly_b) != 0
+        _get_inter_holes!(polys, poly_a, poly_b)
     end    
-    return final_polys
+    return polys
 end
 
 
@@ -130,35 +138,7 @@ function intersection(
 end
 
 """
-    _trace_intersection(poly_a, poly_b, a_list, b_list, tracker)::Vector{Vector{Tuple{Float64}}}
-
-Traces the outlines of two polygons in order to find their intersection.
-It returns the outlines of all polygons formed in the intersection. If
-they do not intersect, it returns an empty array.
-
-"""
-function _trace_intersection(poly_a, poly_b, a_list, b_list, tracker)
-   return_polys = _trace_polynodes(a_list, b_list, tracker, (x, y) -> x ? 1 : (-1))
-
-    # Check if one polygon totally within other, and if so
-    # return the smaller polygon as the intersection
-    if isempty(return_polys)
-        if _point_filled_curve_orientation(a_list[1].point, poly_b) == point_in
-            list = [_tuple_point(p) for p in GI.getpoint(poly_a)]
-            push!(return_polys, list)
-        elseif _point_filled_curve_orientation(b_list[1].point, poly_a) == point_in
-            list = [_tuple_point(p) for p in GI.getpoint(poly_b)]
-            push!(return_polys, list)
-        end
-    end
-
-    # If the polygons don't intersect and aren't contained within each
-    # other, return_polys will be empty
-    return return_polys
-end
-
-"""
-    _get_inter_holes(return_polys, poly_a, poly_b)::Vector{Vector{Vector{Tuple{Float64, Float64}}}}
+    _get_inter_holes!(return_polys, poly_a, poly_b)::Vector{Vector{Vector{Tuple{Float64, Float64}}}}
 
 When the _trace_difference function was called, it only took into account the
 exteriors of the two polygons when computing the difference. The function
@@ -167,47 +147,35 @@ and adjust the output of _trace_difference (return_polys) accordingly.
 
 """
 
-function _get_inter_holes(return_polys, poly_a, poly_b)
-    # Initiaze our return object
-    final_polys =  Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 0)
-
-    for poly in return_polys
-        # Turning polygon into the desired return type I can add more polygons to it
-        poly = [[poly]]
-
-        # We subtract the holes of 'poly_a' and 'poly_b' from the output we got
-        # from _trace_intersection (return_polys)
-        for hole in GI.gethole(poly_a) 
-            replacement_p = Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 0)
-            for p in poly
-                # When we take the difference of our existing intersectio npolygons and 
-                # the holes of polygon_a, we might split it up into smaller polygons. 
-                new_ps = difference(GI.Polygon(p), GI.Polygon([hole]))
-                append!(replacement_p, new_ps)
+function _get_inter_holes!(return_polys, poly_a, poly_b)
+    n_polys = length(return_polys)
+    for i in 1:n_polys
+        n_new_per_poly = 0
+        for hole in Iterator.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
+            hole_poly = GI.Polygon([hole])
+            for j in Iterator.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
+                if !isnothing(return_polys[j])
+                    new_polys = difference(return_polys[j], hole_poly)
+                    n_new_polys = length(new_polys)
+                    if n_new_polys == 0
+                        return_polys[j] = nothing
+                    else
+                        return_polys[j] = new_polys[1]
+                        if n_new_polys > 1
+                            append!(return_polys, @view new_polys[2:end])
+                            n_new_per_poly += n_new_polys - 1
+                        end
+                    end
+                end
             end
-            poly = replacement_p
         end
-        
-        for hole in GI.gethole(poly_b)
-            replacement_p = Vector{Vector{Vector{Tuple{Float64, Float64}}}}(undef, 0)
-            for p in poly
-                # When we take the difference of our existing intersectio npolygons and 
-                # the holes of polygon_a, we might split it up into smaller polygons. 
-                new_ps = difference(GI.Polygon(p), GI.Polygon([hole]))
-                append!(replacement_p, new_ps)
-            end
-            poly = replacement_p
-        end
-        
-        append!(final_polys, poly)
+        n_polys += n_new_per_poly
     end
-
-    return final_polys
-        
+    filter!(!isnothing, return_polys)::Vector{GI.Polygon}
+    return
 end
 
 """
->>>>>>> main:src/methods/geom_relations/intersects.jl
     intersection_points(
         geom_a,
         geom_b,
