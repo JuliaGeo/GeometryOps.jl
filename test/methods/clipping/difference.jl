@@ -1,11 +1,9 @@
-include("clipping_test_utils.jl")
-
-"""
+#=
     compare_GO_LG_difference(p1, p2, ϵ)::Bool
 
     Returns true if the 'difference' function from LibGEOS and 
     GeometryOps return similar enough polygons (determined by ϵ).
-"""
+=#
 function compare_GO_LG_difference(p1, p2, ϵ)
     GO_difference = GO.difference(p1,p2; target = GI.PolygonTrait)
     LG_difference = LG.difference(p1,p2)

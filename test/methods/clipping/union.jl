@@ -1,11 +1,9 @@
-include("clipping_test_utils.jl")
-
-"""
+#=
     compare_GO_LG_union(p1, p2, ϵ)::Bool
 
     Returns true if the 'union' function from LibGEOS and 
     GeometryOps return similar enough polygons (determined by ϵ).
-"""
+=#
 function compare_GO_LG_union(p1, p2, ϵ)
     GO_union = GO.union(p1,p2; target = GI.PolygonTrait)
     LG_union = LG.union(p1,p2)

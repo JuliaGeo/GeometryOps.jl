@@ -1,11 +1,9 @@
-include("clipping_test_utils.jl")
-
-"""
+#=
     compare_GO_LG_intersection(p1, p2, ϵ)::Bool
 
     Returns true if the 'intersection' function from LibGEOS and 
     GeometryOps return similar enough polygons (determined by ϵ).
-"""
+=#
 function compare_GO_LG_intersection(p1, p2, ϵ)
     GO_intersection = GO.intersection(p1,p2; target = GI.PolygonTrait)
     LG_intersection = LG.intersection(p1,p2)
