@@ -7,7 +7,7 @@ include("clipping_test_utils.jl")
     GeometryOps return similar enough polygons (determined by ϵ).
 """
 function compare_GO_LG_difference(p1, p2, ϵ)
-    GO_difference = GO.difference(p1,p2)
+    GO_difference = GO.difference(p1,p2; target = GI.PolygonTrait)
     LG_difference = LG.difference(p1,p2)
     if isempty(GO_difference) && LG.isEmpty(LG_difference)
         return true

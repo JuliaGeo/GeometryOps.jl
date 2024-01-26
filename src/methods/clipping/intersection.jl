@@ -1,18 +1,15 @@
-# #  Intersection Polygon Clipping
+# #  Intersection
 export intersection, intersection_points
 
-# This 'intersection' implementation returns the intersection of two polygons.
-# It returns a Vector{Vector{Vector{Tuple{Float}}}. The Vector{Vector{Tuple{Float}
-# is empty if the two polygons don't intersect. The algorithm to determine the 
-# intersection was adapted from "Efficient clipping of efficient polygons," by 
-# Greiner and Hormann (1998). DOI: https://doi.org/10.1145/274363.274364
 
 """
-    intersection(geom_a, geom_b)::Union{Tuple{::Real, ::Real}, ::Nothing}
+    intersection(geom_a, geom_b, ::Type{T}; target::Type{Target})
 
-Return an intersection point between two geometries. Return nothing if none are
-found. Else, the return type depends on the input. It will be a union between:
-a point, a line, a linear ring, a polygon, or a multipolygon
+Return the intersection between two geometries as a list of geometries. Return an empty list
+if none are found. The type of the list will be constrained as much as possible given the
+input geometries. Furthermore, the user can provide a `taget` type as a keyword argument and
+a list of target geometries found in the intersection will be returned. The user can also
+provide a float type that they would like the points of returned geometries to be. 
 
 ## Example
 
@@ -21,116 +18,66 @@ import GeoInterface as GI, GeometryOps as GO
 
 line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
 line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
-GO.intersection(line1, line2)
+GO.intersection(line1, line2; target = GI.PointType)
 
 # output
-(125.58375366067547, -14.83572303404496)
+[GI.Point((125.58375366067547, -14.83572303404496))]
 ```
 """
-intersection(geom_a, geom_b) =
-    intersection(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+function intersection(
+    geom_a, geom_b, ::Type{T} = Float64; target::Type{Target} = Nothing,
+) where {T <: AbstractFloat, Target <: GI.AbstractTrait}
+    return _intersection(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+end
+
+# Curve-Curve Intersections with target Point
+_intersection(
+    ::Type{GI.PointTrait}, ::Type{T},
+    trait_a::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_a,
+    trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b,
+) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
 
 
-"""
-    intersection(
-        ::GI.PolygonTrait, poly_a,
-        ::GI.PolygonTrait, poly_b,
-    )::Vector{Vector{Vector{Tuple{Float64}}}}    
-
-Calculates the intersection between two polygons. If the intersection is empty, 
-the vector of a vector is empty (note the outermost vector is technically not empty).
-## Example
-
-```jldoctest
-import GeoInterface as GI, GeometryOps as GO
-
-p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
-p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
-GO.intersection(p1, p2)
-
-# output
-1-element Vector{Vector{Vector{Tuple{Float64, Float64}}}}:
-[[[(6.5, 3.5), (10.0, 0.0), (6.5, -3.5), (3.0, 0.0), (6.5, 3.5)]]]
-```
-"""
-
-function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
+#= Polygon-Polygon Intersections with target Polygon
+The algorithm to determine the intersection was adapted from "Efficient clipping
+of efficient polygons," by Greiner and Hormann (1998).
+DOI: https://doi.org/10.1145/274363.274364 =#
+function _intersection(
+    ::Type{GI.PolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.PolygonTrait, poly_b,
+) where {T}
     # First we get the exteriors of 'poly_a' and 'poly_b'
     ext_poly_a = GI.getexterior(poly_a)
     ext_poly_b = GI.getexterior(poly_b)
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_poly_a, ext_poly_b)
     polys = _trace_polynodes(a_list, b_list, a_idx_list, (x, y) -> x ? 1 : (-1))
 
     if isempty(polys)
         if _point_filled_curve_orientation(a_list[1].point, ext_poly_b) == point_in
-            push!(polys, GI.Polygon([ext_poly_a])) # hmmmm what should happen here with holes?? used to just save exterior
+            push!(polys, GI.Polygon([ext_poly_a]))
         elseif _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in
             push!(polys, GI.Polygon([ext_poly_b]))
         end
     end
-    # If the original polygons had no holes, then we are done. Otherwise,
-    # we call '_get_inter_holes!' to take into account the holes.
+    # If the original polygons had holes, take that into account.
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
         hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
-        _remove_holes_from_polys!(polys, hole_iterator)
+        _add_holes_to_polys!(T, polys, hole_iterator)
     end    
     return polys
 end
 
-"""
-    intersection(
-        ::GI.LineTrait, line_a,
-        ::GI.LineTrait, line_b,
-    )::Union{
-        ::Tuple{::Real, ::Real},
-        ::Nothing
-    }
-
-Calculates the intersection between two line segments. Return nothing if
-there isn't one.
-"""
-function intersection(::GI.LineTrait, line_a, ::GI.LineTrait, line_b)
-    # Get start and end points for both lines
-    a1 = GI.getpoint(line_a, 1)
-    a2 = GI.getpoint(line_a, 2)
-    b1 = GI.getpoint(line_b, 1)
-    b2 = GI.getpoint(line_b, 2)
-    # Determine the intersection point
-    point, fracs = _intersection_point((a1, a2), (b1, b2))
-    # Determine if intersection point is on line segments
-    if !isnothing(point) && 0 <= fracs[1] <= 1 && 0 <= fracs[2] <= 1
-        return point
-    end
-    return nothing
-end
-
-intersection(
-    trait_a::Union{GI.LineStringTrait, GI.LinearRingTrait},
-    geom_a,
-    trait_b::Union{GI.LineStringTrait, GI.LinearRingTrait},
-    geom_b,
-) = intersection_points(trait_a, geom_a, trait_b, geom_b)
-
-"""
-    intersection(
-        ::GI.AbstractTrait, geom_a,
-        ::GI.AbstractTrait, geom_b,
-    )::Union{
-        ::Vector{Vector{Tuple{::Real, ::Real}}}, # is this a good return type?
-        ::Nothing
-    }
-
-Calculates the intersection between two line segments. Return nothing if
-there isn't one.
-"""
-function intersection(
+# Many type and target combos aren't implemented
+function _intersection(
+    ::Type{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
-)
+) where {Target, T}
     @assert(
         false,
-        "Intersection between $trait_a and $trait_b isn't implemented yet.",
+        "Intersection between $trait_a and $trait_b with target $Target isn't implemented yet.",
     )
     return nothing
 end
@@ -144,43 +91,33 @@ end
         ::Nothing,
     }
 
-Return a list of intersection points between two geometries. If no intersection
-point was possible given geometry extents, return nothing. If none are found,
-return an empty list.
+Return a list of intersection points between two geometries of type GI.Point.
+If no intersection point was possible given geometry extents, returns an empty
+list.
 """
-intersection_points(geom_a, geom_b) =
-    intersection_points(GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat =
+    _intersection_points(T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 
-"""
-    intersection_points(
-        ::GI.AbstractTrait, geom_a,
-        ::GI.AbstractTrait, geom_b,
-    )::Union{
-        ::Vector{::Tuple{::Real, ::Real}},
-        ::Nothing,
-    }
 
-Calculates the list of intersection points between two geometries, inlcuding
-line segments, line strings, linear rings, polygons, and multipolygons. If no
-intersection points were possible given geometry extents, return nothing. If
-none are found, return an empty list.
-"""
-function intersection_points(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)
+#= Calculates the list of intersection points between two geometries, inlcuding line
+segments, line strings, linear rings, polygons, and multipolygons. If no intersection points
+were possible given geometry extents or if none are found, return an empty list of
+GI.Points. =#
+function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b) where T
+    # Initialize an empty list of points
+    result = GI.Point[]
     # Check if the geometries extents even overlap
-    Extents.intersects(GI.extent(a), GI.extent(b)) || return nothing
+    Extents.intersects(GI.extent(a), GI.extent(b)) || return result
     # Create a list of edges from the two input geometries
     edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
     npoints_a, npoints_b  = length(edges_a), length(edges_b)
     a_closed = npoints_a > 1 && edges_a[1][1] == edges_a[end][1]
     b_closed = npoints_b > 1 && edges_b[1][1] == edges_b[end][1]
     if npoints_a > 0 && npoints_b > 0
-        # Initialize an empty list of points
-        T = typeof(edges_a[1][1][1]) # x-coordinate of first point in first edge
-        result = Tuple{T,T}[]
         # Loop over pairs of edges and add any intersection points to results
         for i in eachindex(edges_a)
             for j in eachindex(edges_b)
-                point, fracs = _intersection_point(edges_a[i], edges_b[j])
+                point, fracs = _intersection_point(T, edges_a[i], edges_b[j])
                 if !isnothing(point)
                     #=
                     Determine if point is on edge (all edge endpoints excluded
@@ -192,25 +129,18 @@ function intersection_points(::GI.AbstractTrait, a, ::GI.AbstractTrait, b)
                     on_b_edge = (!b_closed && j == npoints_b && 0 <= β <= 1) ||
                         (0 <= β < 1)
                     if on_a_edge && on_b_edge
-                        push!(result, point)
+                        push!(result, GI.Point(point))
                     end
                 end
             end
         end
-        return result
     end
-    return nothing
+    return result
 end
 
-"""
-    _intersection_point(
-        (a1, a2)::Tuple,
-        (b1, b2)::Tuple,
-    )
-
-Calculates the intersection point between two lines if it exists, and as if the
-line extended to infinity, and the fractional component of each line from the
-initial end point to the intersection point.
+#= Calculates the intersection point between two lines if it exists, and as if the line
+extended to infinity, and the fractional component of each line from the initial end point
+to the intersection point.
 Inputs:
     (a1, a2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} first line
     (b1, b2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} second line
@@ -221,8 +151,8 @@ Outputs:
 
 Calculation derivation can be found here:
     https://stackoverflow.com/questions/563198/
-"""
-function _intersection_point((a1, a2)::Tuple, (b1, b2)::Tuple)
+=#
+function _intersection_point(::Type{T}, (a1, a2)::Tuple, (b1, b2)::Tuple) where T
     # First line runs from p to p + r
     px, py = GI.x(a1), GI.y(a1)
     rx, ry = GI.x(a2) - px, GI.y(a2) - py
@@ -238,7 +168,7 @@ function _intersection_point((a1, a2)::Tuple, (b1, b2)::Tuple)
         u = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
         x = px + t * rx
         y = py + t * ry
-        return (x, y), (t, u)
+        return (T(x), T(y)), (T(t), T(u))
     end
     return nothing, nothing
 end

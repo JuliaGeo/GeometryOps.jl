@@ -211,6 +211,7 @@ end
 the line (ls to le) and β is the traction of the curve (cs to ce). =#
 function _find_intersect_fracs(ls, le, cs, ce)
     _, fracs = _intersection_point(
+        Float64,
         (_tuple_point(ls), _tuple_point(le)),
         (_tuple_point(cs), _tuple_point(ce))
     )
@@ -659,7 +660,7 @@ function _line_filled_curve_interactions(
                         p_start = _tuple_point(l_start)
                         for i in 1:(npoints + 1)
                             p_end = i ≤ npoints ?
-                                ipoints[i] :
+                                _tuple_point(ipoints[i]) :
                                 _tuple_point(l_end)
                             mid_val = _point_filled_curve_orientation(
                                 (p_start .+ p_end) ./ 2,
