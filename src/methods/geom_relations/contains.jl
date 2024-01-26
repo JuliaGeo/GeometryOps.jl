@@ -12,8 +12,8 @@ boundary of the second geometry is not in the exterior of the first geometry.
 
 To provide an example, consider these two lines:
 ```@example contains
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
@@ -23,12 +23,13 @@ f, a, p = lines(GI.getpoint(l1), color = :blue)
 scatter!(GI.getpoint(l1), color = :blue)
 lines!(GI.getpoint(l2), color = :orange)
 scatter!(GI.getpoint(l2), color = :orange)
+f
 ```
 We can see that all of the points and edges of l2 are within l1, so l1 contains
 l2. However, l2 does not contain l1.
 ```@example contains
-contains(l1, l2)  # returns true
-contains(l2, l1)  # returns false
+GO.contains(l1, l2)  # returns true
+GO.contains(l2, l1)  # returns false
 ```
 
 ## Implementation

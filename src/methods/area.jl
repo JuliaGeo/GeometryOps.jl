@@ -13,20 +13,26 @@ negative area. The area is the absolute value of the signed area.
 
 To provide an example, consider this rectangle:
 ```@example rect
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
+using CairoMakie
 
-rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
-f, a, p = poly(rect; axis = (; aspect = DataAspect()))
+rect = GI.Polygon([[(0,0), (0,1), (1,1), (1,0), (0, 0)]])
+f, a, p = poly(collect(GI.getpoint(rect)); axis = (; aspect = DataAspect()))
 ```
 This is clearly a rectangle, etc.  But now let's look at how the points look:
 ```@example rect
-lines!(a, rect; color = 1:length(coordinates(rect))+1)
+lines!(
+    collect(GI.getpoint(rect));
+    color = 1:GI.npoint(rect), linewidth = 10.0)
 f
 ```
-The points are ordered in a clockwise fashion, which means that the signed area
+The points are ordered in a counterclockwise fashion, which means that the signed area
 is negative.  If we reverse the order of the points, we get a postive area.
+```@example rect
+GO.signed_area(rect)  # -1.0
+```
 
 ## Implementation
 
@@ -49,7 +55,7 @@ const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointT
     area(geom, ::Type{T} = Float64)::T
 
 Returns the area of a geometry or collection of geometries. 
-This is computed slighly differently for different geometries:
+This is computed slightly differently for different geometries:
 
     - The area of a point/multipoint is always zero.
     - The area of a curve/multicurve is always zero.

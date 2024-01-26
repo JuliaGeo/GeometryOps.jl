@@ -12,22 +12,21 @@ of the first geometry isn't outside of the second geometry.
 
 To provide an example, consider this point and line:
 ```@example coveredby
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
-p1 = Point(0.0, 0.0)
-p2 = Point(1.0, 1.0)
-l1 = Line(p1, p2)
-
-f, a, p = lines([p1, p2])
+p1 = (0.0, 0.0)
+l1 = GI.Line([p1, (1.0, 1.0)])
+f, a, p = lines(GI.getpoint(l1))
 scatter!(p1, color = :red)
+f
 ```
 As we can see, `p1` is on the endpoint of l1. This means it is not `within`, but
 it does meet the definition of `coveredby`.
 ```@example coveredby
-coveredby(p1, l1)  # true
+GO.coveredby(p1, l1)  # true
 ```
 
 ## Implementation

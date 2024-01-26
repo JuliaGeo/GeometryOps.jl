@@ -15,8 +15,8 @@ each line is colinear.
 
 To provide an example, consider these two lines:
 ```@example overlaps
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
@@ -26,10 +26,11 @@ f, a, p = lines(GI.getpoint(l1), color = :blue)
 scatter!(GI.getpoint(l1), color = :blue)
 lines!(GI.getpoint(l2), color = :orange)
 scatter!(GI.getpoint(l2), color = :orange)
+f
 ```
 We can see that the two lines overlap in the plot:
 ```@example overlaps
-overlap(l1, l2)
+GO.overlaps(l1, l2)  # true
 ```
 
 ## Implementation
