@@ -93,45 +93,34 @@ function to_extent(edges::Vector{Edge})
     x, y = extrema(first, edges)
     Extents.Extent(X=x, Y=y)
 end
-# by default, build a list of points in x, and then add if repeat_last = true && first and last point not only equal
-function to_points(x, repeat_last=false)
-    if repeat_last
-        points = Vector{TuplePoint}(undef, _npoint(x))
-    else
-        points = Vector{TuplePoint}(undef, _npoint(x)-1)
-    end
-    _to_points!(points, x, 1, repeat_last)
+
+function to_points(x)
+    points = Vector{TuplePoint}(undef, _npoint(x))
+    _to_points!(points, x, 1)
     return points
 end
 
-_to_points!(points::Vector, x, n, repeat_last) = _to_points!(points, trait(x), x, n, repeat_last)
-function _to_points!(points::Vector, ::FeatureCollectionTrait, fc, n, repeat_last)
+_to_points!(points::Vector, x, n) = _to_points!(points, trait(x), x, n)
+function _to_points!(points::Vector, ::FeatureCollectionTrait, fc, n)
     for f in GI.getfeature(fc)
-        n = _to_points!(points, f, n, repeat_last)
+        n = _to_points!(points, f, n)
     end
 end
-_to_points!(points::Vector, ::FeatureTrait, f, n, repeat_last) = _to_points!(points, GI.geometry(f), n, repeat_last)
-function _to_points!(points::Vector, ::AbstractGeometryTrait, fc, n, repeat_last)
+_to_points!(points::Vector, ::FeatureTrait, f, n) = _to_points!(points, GI.geometry(f), n)
+function _to_points!(points::Vector, ::AbstractGeometryTrait, fc, n)
     for f in GI.getgeom(fc)
-        n = _to_points!(points, f, n, repeat_last)
+        n = _to_points!(points, f, n)
     end
 end
-function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}, geom, n, repeat_last)
+function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}, geom, n)
     p1 = GI.getpoint(geom, 1) 
     p1x, p1y = GI.x(p1), GI.y(p1)
-    points[1] = (p1x, p1y)
     for i in 2:GI.npoint(geom)
         p2 = GI.getpoint(geom, i)
         p2x, p2y = GI.x(p2), GI.y(p2)
-        if repeat_last
-            points[i] = (p2x, p2y)
-        else
-            points[n] = (p2x, p2y)
-        end
-
+        points[n] = (p1x, p1y), (p2x, p2y)
         p1 = p2
         n += 1
     end
-
     return n
 end
