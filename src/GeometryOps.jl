@@ -9,6 +9,7 @@ using LinearAlgebra
 import ExactPredicates
 using Random
 import Proj.CoordinateTransformations.StaticArrays
+import Base.@kwdef
 
 using GeoInterface.Extents: Extents
 
