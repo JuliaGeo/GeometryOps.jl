@@ -37,8 +37,7 @@ function union(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     # Then, I get the union of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
-    traced_polys = _trace_polynodes(a_list, b_list, a_idx_list, (x, y) -> x ? (-1) : 1)
-    polys = [GI.Polygon([p]) for p in traced_polys]
+    polys = _trace_polynodes(a_list, b_list, a_idx_list, (x, y) -> x ? (-1) : 1)
     # Check if one polygon totally within other and if so, return the larger polygon.
     if isempty(polys)
         if _point_filled_curve_orientation(a_list[1].point, ext_poly_b) == point_in

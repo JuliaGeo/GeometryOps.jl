@@ -175,7 +175,7 @@ function _trace_polynodes(a_list, b_list, tracker, f_step)
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     n_intr_pts = length(tracker)
     # Pre-allocate array for return polygons
-    return_polys = Vector{Vector{Tuple{Float64, Float64}}}(undef, 0)
+    return_polys = Vector{GI.Polygon}(undef, 0)
     # Keep track of number of processed intersection points
     processed_pts = 0
 
@@ -223,7 +223,7 @@ function _trace_polynodes(a_list, b_list, tracker, f_step)
             idx = curr.neighbor
             curr = curr_list[idx]
         end
-        push!(return_polys, pt_list)
+        push!(return_polys, GI.Polygon([pt_list]))
     end
     return return_polys
 end

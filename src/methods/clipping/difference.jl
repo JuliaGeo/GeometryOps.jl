@@ -38,8 +38,7 @@ function difference(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
     ext_poly_b = GI.getexterior(poly_b)
     # Find the difference of the exterior of the polygons
     a_list, b_list, a_idx_list = _build_ab_list(ext_poly_a, ext_poly_b)
-    traced_polys = _trace_polynodes(a_list, b_list, a_idx_list, (x, y) -> (x ⊻ y) ? 1 : (-1))
-    polys = [GI.Polygon([p]) for p in traced_polys]
+    polys = _trace_polynodes(a_list, b_list, a_idx_list, (x, y) -> (x ⊻ y) ? 1 : (-1))
     if isempty(polys)
         if _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in
             poly_a_b_hole = GI.Polygon([ext_poly_a, ext_poly_b])
