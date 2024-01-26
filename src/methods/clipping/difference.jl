@@ -18,7 +18,7 @@ import GeoInterface as GI, GeometryOps as GO
 
 poly1 = GI.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
 poly2 = GI.Polygon([[[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]])
-GO.difference(poly1, poly2)
+GO.difference(poly1, poly2; target = GI.PolygonTrait)
 
 # output
 [GI.Polygon([[(6.5, 3.5), (5.0, 5.0), (0.0, 0.0), (5.0, -5.0), (6.5, -3.5), (3.0, 0.0), (6.5, 3.5)]])]
