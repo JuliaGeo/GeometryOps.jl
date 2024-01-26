@@ -12,17 +12,18 @@ The interiors do not need to overlap.
 
 To provide an example, consider these two lines:
 ```@example covers
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
-p1 = Point(0.0, 0.0)
-p2 = Point(1.0, 1.0)
-l1 = Line(p1, p2)
+p1 = (0.0, 0.0)
+p2 = (1.0, 1.0)
+l1 = GI.Line([p1, p2])
 
-f, a, p = lines([p1, p2])
+f, a, p = lines(GI.getpoint(l1))
 scatter!(p1, color = :red)
+f
 ```
 
 ```@example covers

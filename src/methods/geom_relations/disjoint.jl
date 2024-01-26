@@ -9,8 +9,8 @@ without sharing any boundaries or interiors.
 
 To provide an example, consider these two lines:
 ```@example disjoint
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
@@ -20,6 +20,7 @@ f, a, p = lines(GI.getpoint(l1), color = :blue)
 scatter!(GI.getpoint(l1), color = :blue)
 lines!(GI.getpoint(l2), color = :orange)
 scatter!(GI.getpoint(l2), color = :orange)
+f
 ```
 We can see that none of the edges or vertices of l1 interact with l2 so they are
 disjoint.
@@ -59,7 +60,7 @@ Return `true` if the first geometry is disjoint from the second geometry. The
 interiors and boundaries of both geometries must not intersect.
 
 ## Examples
-```jldoctest setup=:(using GeometryOps, GeometryBasics)
+```jldoctest setup=:(using GeometryOps, GeoInterface)
 import GeometryOps as GO, GeoInterface as GI
 
 line = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])

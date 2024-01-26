@@ -8,17 +8,16 @@ Angles are the angles formed by a given geometries line segments, if it has line
 
 To provide an example, consider this rectangle:
 ```@example angles
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie, CairoMakie
 
-rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
-f, a, p = poly(rect; axis = (; aspect = DataAspect()))
-f
+rect = GI.Polygon([[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)]])
+f, a, p = poly(collect(GI.getpoint(rect)); axis = (; aspect = DataAspect()))
 ```
 This is clearly a rectangle, with angles of 90 degrees.
 ```@example angles
-angles(rect)
+GO.angles(rect)  # [90, 90, 90, 90]
 ```
 
 ## Implementation

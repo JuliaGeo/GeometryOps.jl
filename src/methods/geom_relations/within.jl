@@ -11,8 +11,8 @@ boundary of the first geometry is not in the exterior of the second geometry.
 
 To provide an example, consider these two lines:
 ```@example within
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO 
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
@@ -22,12 +22,13 @@ f, a, p = lines(GI.getpoint(l1), color = :blue)
 scatter!(GI.getpoint(l1), color = :blue)
 lines!(GI.getpoint(l2), color = :orange)
 scatter!(GI.getpoint(l2), color = :orange)
+f
 ```
 We can see that all of the points and edges of l2 are within l1, so l2 is
 within l1, but l1 is not within l2
 ```@example within
-within(l1, l2)  # returns false
-within(l2, l1)  # returns true
+within(l1, l2)  # false
+within(l2, l1)  # true
 ```
 
 ## Implementation

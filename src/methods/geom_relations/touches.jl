@@ -13,16 +13,17 @@ geometies interior or boundary.
 
 To provide an example, consider these two lines:
 ```@example touches
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
-l1 = Line([Point(0.0, 0.0), Point(1.0, 0.0)])
-l2 = Line([Point(1.0, 0.0), Point(1.0, -1.0)])
+l1 = GI.Line([(0.0, 0.0), (1.0, 0.0)])
+l2 = GI.Line([(1.0, 0.0), (1.0, -1.0)])
 
-f, a, p = lines(l1)
-lines!(l2)
+f, a, p = lines(GI.getpoint(l1))
+lines!(GI.getpoint(l2))
+f
 ```
 We can see that these two lines touch only at their endpoints.
 ```@example touches
