@@ -14,21 +14,18 @@ centroids are calculated by weighting edge's by their 'area components'.
 
 To provide an example, consider this concave polygon in the shape of a 'C':
 ```@example cshape
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
-cshape = Polygon([
-    Point(0,0), Point(0,3), Point(3,3), Point(3,2), Point(1,2),
-    Point(1,1), Point(3,1), Point(3,0), Point(0,0),
-])
-f, a, p = poly(cshape; axis = (; aspect = DataAspect()))
+cshape = GI.Polygon([[(0,0), (0,3), (3,3), (3,2), (1,2), (1,1), (3,1), (3,0), (0,0)]])
+f, a, p = poly(collect(GI.getpoint(cshape)); axis = (; aspect = DataAspect()))
 ```
 Let's see what the centroid looks like (plotted in red):
 ```@example cshape
-cent = centroid(cshape)
-scatter!(a, GI.x(cent), GI.y(cent), color = :red)
+cent = GO.centroid(cshape)
+scatter!(GI.x(cent), GI.y(cent), color = :red)
 f
 ```
 

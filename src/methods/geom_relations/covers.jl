@@ -27,8 +27,8 @@ f
 ```
 
 ```@example covers
-covers(l1, p1)  # returns true
-covers(p1, l1)  # returns false
+GO.covers(l1, p1)  # returns true
+GO.covers(p1, l1)  # returns false
 ```
 
 ## Implementation

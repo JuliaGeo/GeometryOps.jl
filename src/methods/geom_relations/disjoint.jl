@@ -25,7 +25,7 @@ f
 We can see that none of the edges or vertices of l1 interact with l2 so they are
 disjoint.
 ```@example disjoint
-disjoint(l1, l2)  # returns true
+GO.disjoint(l1, l2)  # returns true
 ```
 
 ## Implementation

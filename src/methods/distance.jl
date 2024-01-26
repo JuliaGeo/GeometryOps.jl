@@ -16,25 +16,25 @@ either be postitive or 0.
 
 To provide an example, consider this rectangle:
 ```@example rect
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 
-rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
-point_in = Point(0.5, 0.5) 
-point_out = Point(0.5, 1.5)
-f, a, p = poly(rect; axis = (; aspect = DataAspect()))
-scatter!(f, point_in)
-scatter!(f, point_out)
+rect = GI.Polygon([[(0,0), (0,1), (1,1), (1,0), (0, 0)]])
+point_in = (0.5, 0.5) 
+point_out = (0.5, 1.5)
+f, a, p = poly(collect(GI.getpoint(rect)); axis = (; aspect = DataAspect()))
+scatter!(GI.x(point_in), GI.y(point_in); color = :red)
+scatter!(GI.x(point_out), GI.y(point_out); color = :orange)
 f
 ```
 This is clearly a rectangle with one point inside and one point outside. The
 points are both an equal distance to the polygon. The distance to point_in is
 negative while the distance to point_out is positive.
 ```@example rect
-distance(point_in, poly)  # == 0
-signed_distance(point_in, poly)  # < 0
-signed_distance(point_out, poly)  # > 0
+GO.distance(point_in, poly)  # == 0
+GO.signed_distance(point_in, poly)  # < 0
+GO.signed_distance(point_out, poly)  # > 0
 ```
 
 ## Implementation

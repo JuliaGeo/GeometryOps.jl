@@ -23,7 +23,7 @@ of tuple points.
 To provide an example, consider these two lines:
 ```@example intersects_intersection
 import GeometryOps as GO
-import GeoInterface a GI
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
