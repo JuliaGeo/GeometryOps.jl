@@ -19,6 +19,7 @@ To provide an example, consider this rectangle:
 import GeometryOps as GO
 import GeoInterface as GI
 using Makie
+using CairoMakie
 
 rect = GI.Polygon([[(0,0), (0,1), (1,1), (1,0), (0, 0)]])
 point_in = (0.5, 0.5) 
@@ -32,9 +33,9 @@ This is clearly a rectangle with one point inside and one point outside. The
 points are both an equal distance to the polygon. The distance to point_in is
 negative while the distance to point_out is positive.
 ```@example rect
-GO.distance(point_in, poly)  # == 0
-GO.signed_distance(point_in, poly)  # < 0
-GO.signed_distance(point_out, poly)  # > 0
+GO.distance(point_in, rect)  # == 0
+GO.signed_distance(point_in, rect)  # < 0
+GO.signed_distance(point_out, rect)  # > 0
 ```
 
 ## Implementation
@@ -117,7 +118,7 @@ _distance(::Type{T}, ::GI.PointTrait, point, ::GI.LinearRingTrait, geom) where T
     _distance_curve(T, point, geom; close_curve = true)
 # Point-Polygon
 function _distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
-    GI.within(point, geom) && return zero(T)
+    within(point, geom) && return zero(T)
     return _distance_polygon(T, point, geom)
 end
 
@@ -176,8 +177,8 @@ end
 # Point-Polygon
 function _signed_distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
     min_dist = _distance_polygon(T, point, geom)
+    return within(point, geom) ? -min_dist : min_dist
     # negative if point is inside polygon
-    return GI.within(point, geom) ? -min_dist : min_dist
 end
 
 

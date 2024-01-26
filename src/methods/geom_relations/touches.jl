@@ -27,7 +27,7 @@ f
 ```
 We can see that these two lines touch only at their endpoints.
 ```@example touches
-touches(l1, l2)  # true
+GO.touches(l1, l2)  # true
 ```
 
 ## Implementation

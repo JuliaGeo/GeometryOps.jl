@@ -27,8 +27,8 @@ f
 We can see that all of the points and edges of l2 are within l1, so l2 is
 within l1, but l1 is not within l2
 ```@example within
-within(l1, l2)  # false
-within(l2, l1)  # true
+GO.within(l1, l2)  # false
+GO.within(l2, l1)  # true
 ```
 
 ## Implementation
