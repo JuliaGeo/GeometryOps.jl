@@ -18,10 +18,11 @@ import GeoInterface as GI, GeometryOps as GO
 
 line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
 line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
-GO.intersection(line1, line2; target = GI.PointTrait)
+inter_points = GO.intersection(line1, line2; target = GI.PointTrait)
+GI.coordinates.(inter_points)
 
 # output
-[GI.Point((125.58375366067547, -14.83572303404496))]
+[[125.58375366067547, -14.83572303404496]]
 ```
 """
 function intersection(
