@@ -14,10 +14,8 @@ function compare_GO_LG_intersection(p1, p2, ϵ)
     end
 
     if length(GO_intersection)==1
-        #temp = convert_tuple_to_array(GO_intersection)
         GO_intersection_poly = GO_intersection[1]
     else
-        # temp = convert_tuple_to_array(GO_intersection)
         GO_intersection_poly = GI.MultiPolygon(GO_intersection)
     end
     return LG.area(LG.difference(GO_intersection_poly, LG_intersection)) < ϵ

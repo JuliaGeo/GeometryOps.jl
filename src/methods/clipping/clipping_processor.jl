@@ -227,3 +227,31 @@ function _trace_polynodes(a_list, b_list, tracker, f_step)
     end
     return return_polys
 end
+
+function _remove_holes_from_polys!(return_polys, hole_iterator)
+    n_polys = length(return_polys)
+    for i in 1:n_polys
+        n_new_per_poly = 0
+        for hole in hole_iterator
+            hole_poly = GI.Polygon([hole])
+            for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
+                if !isnothing(return_polys[j])
+                    new_polys = difference(return_polys[j], hole_poly)
+                    n_new_polys = length(new_polys)
+                    if n_new_polys == 0
+                        return_polys[j] = nothing
+                    else
+                        return_polys[j] = new_polys[1]
+                        if n_new_polys > 1
+                            append!(return_polys, @view new_polys[2:end])
+                            n_new_per_poly += n_new_polys - 1
+                        end
+                    end
+                end
+            end
+        end
+        n_polys += n_new_per_poly
+    end
+    filter!(!isnothing, return_polys)::Vector{<:GI.Polygon}
+    return
+end

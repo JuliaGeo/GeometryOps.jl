@@ -9,16 +9,14 @@ include("clipping_test_utils.jl")
 function compare_GO_LG_difference(p1, p2, ϵ)
     GO_difference = GO.difference(p1,p2)
     LG_difference = LG.difference(p1,p2)
-    if isempty(GO_difference[1]) && LG.isEmpty(LG_difference)
+    if isempty(GO_difference) && LG.isEmpty(LG_difference)
         return true
     end
 
     if length(GO_difference)==1
-        temp = convert_tuple_to_array(GO_difference)
-        GO_difference_poly = LG.Polygon(temp[1])
+        GO_difference_poly = GO_difference[1]
     else
-        temp = convert_tuple_to_array(GO_difference)
-        GO_difference_poly = LG.MultiPolygon(temp)
+        GO_difference_poly = GI.MultiPolygon(GO_difference)
     end
     return LG.area(LG.difference(GO_difference_poly, LG_difference)) < ϵ
 end
@@ -42,6 +40,4 @@ end
     # ugly difference test
     pa = [[(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0), (0.0, 0.0)], [(5.0, 5.0), (7.0, 5.0), (7.0, 7.0), (5.0, 7.0), (5.0, 5.0)]]
     pb = [[(3.0, -1.0), (10.0, -1.0), (10.0, 9.0), (3.0, 9.0), (3.0, -1.0)], [(4.0, 3.0), (5.0, 3.0), (5.0, 4.0), (4.0, 4.0), (4.0, 3.0)], [(6.0, 1.0), (7.0, 1.0), (7.0, 2.0), (6.0, 2.0), (6.0, 1.0)]]
-    
-
 end

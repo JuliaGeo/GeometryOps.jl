@@ -65,20 +65,19 @@ function intersection(::GI.PolygonTrait, poly_a, ::GI.PolygonTrait, poly_b)
 
     if isempty(polys)
         if _point_filled_curve_orientation(a_list[1].point, ext_poly_b) == point_in
-            push!(polys, poly_a)
+            push!(polys, GI.Polygon([ext_poly_a])) # hmmmm what should happen here with holes?? used to just save exterior
         elseif _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in
-            push!(polys, poly_b)
+            push!(polys, GI.Polygon([ext_poly_b]))
         end
     end
     # If the original polygons had no holes, then we are done. Otherwise,
     # we call '_get_inter_holes!' to take into account the holes.
-    if GI.nhole(poly_a) != 0 && GI.nhole(poly_b) != 0
-        _get_inter_holes!(polys, poly_a, poly_b)
+    if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
+        hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
+        _remove_holes_from_polys!(polys, hole_iterator)
     end    
     return polys
 end
-
-
 
 """
     intersection(
@@ -135,44 +134,6 @@ function intersection(
         "Intersection between $trait_a and $trait_b isn't implemented yet.",
     )
     return nothing
-end
-
-"""
-    _get_inter_holes!(return_polys, poly_a, poly_b)::Vector{Vector{Vector{Tuple{Float64, Float64}}}}
-
-When the _trace_difference function was called, it only took into account the
-exteriors of the two polygons when computing the difference. The function
-'_get_difference_holes' takes into account the holes of the original polygons
-and adjust the output of _trace_difference (return_polys) accordingly.
-
-"""
-
-function _get_inter_holes!(return_polys, poly_a, poly_b)
-    n_polys = length(return_polys)
-    for i in 1:n_polys
-        n_new_per_poly = 0
-        for hole in Iterator.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
-            hole_poly = GI.Polygon([hole])
-            for j in Iterator.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
-                if !isnothing(return_polys[j])
-                    new_polys = difference(return_polys[j], hole_poly)
-                    n_new_polys = length(new_polys)
-                    if n_new_polys == 0
-                        return_polys[j] = nothing
-                    else
-                        return_polys[j] = new_polys[1]
-                        if n_new_polys > 1
-                            append!(return_polys, @view new_polys[2:end])
-                            n_new_per_poly += n_new_polys - 1
-                        end
-                    end
-                end
-            end
-        end
-        n_polys += n_new_per_poly
-    end
-    filter!(!isnothing, return_polys)::Vector{GI.Polygon}
-    return
 end
 
 """
@@ -282,5 +243,3 @@ function _intersection_point((a1, a2)::Tuple, (b1, b2)::Tuple)
     end
     return nothing, nothing
 end
-
-
