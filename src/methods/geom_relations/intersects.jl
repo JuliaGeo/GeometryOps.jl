@@ -11,21 +11,21 @@ geometries intersect.
 
 To provide an example, consider these two lines:
 ```@example intersects_intersection
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
-point1, point2 = Point(124.584961,-12.768946), Point(126.738281,-17.224758)
-point3, point4 = Point(123.354492,-15.961329), Point(127.22168,-14.008696)
-line1 = Line(point1, point2)
-line2 = Line(point3, point4)
-f, a, p = lines([point1, point2])
-lines!([point3, point4])
+
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+f, a, p = lines(GI.getpoint(line1))
+lines!(GI.getpoint(line2))
+f
 ```
 We can see that they intersect, so we expect intersects to return true, and we
 can visualize the intersection point in red.
 ```@example intersects_intersection
-GO.intersects(line1, line2)  # return true
+GO.intersects(line1, line2)  # true
 ```
 
 ## Implementation

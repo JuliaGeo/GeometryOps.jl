@@ -24,88 +24,90 @@ export MeanValue
 
 # ## Example
 # This example was taken from [this page of CGAL's documentation](https://doc.cgal.org/latest/Barycentric_coordinates_2/index.html).
+#=
+```@example barycentric
+import GeometryOps as GO
+using GeometryOps.GeometryBasics
+using Makie
+using CairoMakie
+# Define a polygon
+polygon_points = Point3f[
+(0.03, 0.05, 0.00), (0.07, 0.04, 0.02), (0.10, 0.04, 0.04),
+(0.14, 0.04, 0.06), (0.17, 0.07, 0.08), (0.20, 0.09, 0.10),
+(0.22, 0.11, 0.12), (0.25, 0.11, 0.14), (0.27, 0.10, 0.16),
+(0.30, 0.07, 0.18), (0.31, 0.04, 0.20), (0.34, 0.03, 0.22),
+(0.37, 0.02, 0.24), (0.40, 0.03, 0.26), (0.42, 0.04, 0.28),
+(0.44, 0.07, 0.30), (0.45, 0.10, 0.32), (0.46, 0.13, 0.34),
+(0.46, 0.19, 0.36), (0.47, 0.26, 0.38), (0.47, 0.31, 0.40),
+(0.47, 0.35, 0.42), (0.45, 0.37, 0.44), (0.41, 0.38, 0.46),
+(0.38, 0.37, 0.48), (0.35, 0.36, 0.50), (0.32, 0.35, 0.52),
+(0.30, 0.37, 0.54), (0.28, 0.39, 0.56), (0.25, 0.40, 0.58),
+(0.23, 0.39, 0.60), (0.21, 0.37, 0.62), (0.21, 0.34, 0.64),
+(0.23, 0.32, 0.66), (0.24, 0.29, 0.68), (0.27, 0.24, 0.70),
+(0.29, 0.21, 0.72), (0.29, 0.18, 0.74), (0.26, 0.16, 0.76),
+(0.24, 0.17, 0.78), (0.23, 0.19, 0.80), (0.24, 0.22, 0.82),
+(0.24, 0.25, 0.84), (0.21, 0.26, 0.86), (0.17, 0.26, 0.88),
+(0.12, 0.24, 0.90), (0.07, 0.20, 0.92), (0.03, 0.15, 0.94),
+(0.01, 0.10, 0.97), (0.02, 0.07, 1.00)]
+# Plot it!
+# First, we'll plot the polygon using Makie's rendering:
+f, a1, p1 = poly(
+    polygon_points; 
+    color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), 
+    axis = (; 
+        aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
+    ), 
+    figure = (; resolution = (800, 400),)
+)
 
-# ```@example barycentric
-# using GeometryOps, Makie
-# using GeometryOps.GeometryBasics
-# # Define a polygon
-# polygon_points = Point3f[
-# (0.03, 0.05, 0.00), (0.07, 0.04, 0.02), (0.10, 0.04, 0.04),
-# (0.14, 0.04, 0.06), (0.17, 0.07, 0.08), (0.20, 0.09, 0.10),
-# (0.22, 0.11, 0.12), (0.25, 0.11, 0.14), (0.27, 0.10, 0.16),
-# (0.30, 0.07, 0.18), (0.31, 0.04, 0.20), (0.34, 0.03, 0.22),
-# (0.37, 0.02, 0.24), (0.40, 0.03, 0.26), (0.42, 0.04, 0.28),
-# (0.44, 0.07, 0.30), (0.45, 0.10, 0.32), (0.46, 0.13, 0.34),
-# (0.46, 0.19, 0.36), (0.47, 0.26, 0.38), (0.47, 0.31, 0.40),
-# (0.47, 0.35, 0.42), (0.45, 0.37, 0.44), (0.41, 0.38, 0.46),
-# (0.38, 0.37, 0.48), (0.35, 0.36, 0.50), (0.32, 0.35, 0.52),
-# (0.30, 0.37, 0.54), (0.28, 0.39, 0.56), (0.25, 0.40, 0.58),
-# (0.23, 0.39, 0.60), (0.21, 0.37, 0.62), (0.21, 0.34, 0.64),
-# (0.23, 0.32, 0.66), (0.24, 0.29, 0.68), (0.27, 0.24, 0.70),
-# (0.29, 0.21, 0.72), (0.29, 0.18, 0.74), (0.26, 0.16, 0.76),
-# (0.24, 0.17, 0.78), (0.23, 0.19, 0.80), (0.24, 0.22, 0.82),
-# (0.24, 0.25, 0.84), (0.21, 0.26, 0.86), (0.17, 0.26, 0.88),
-# (0.12, 0.24, 0.90), (0.07, 0.20, 0.92), (0.03, 0.15, 0.94),
-# (0.01, 0.10, 0.97), (0.02, 0.07, 1.00)]
-# # Plot it!
-# # First, we'll plot the polygon using Makie's rendering:
-# f, a1, p1 = poly(
-#     polygon_points; 
-#     color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), 
-#     axis = (; 
-#         aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
-#     ), 
-#     figure = (; resolution = (800, 400),)
-# )
-#
-# Makie.update_state_before_display!(f) # We have to call this explicitly, to get the axis limits correct
-# # Now that we've plotted the first polygon,
-# # we can render it using barycentric coordinates.
-# a1_bbox = a1.finallimits[] # First we get the extent of the axis
-# ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(a1_bbox), maximum(a1_bbox))))
-#
-# a2, p2box = poly( # Now, we plot a cropping rectangle around the axis so we only show the polygon
-#     f[1, 2], 
-#     GeometryOps.GeometryBasics.Polygon( # This is a rectangle with an internal hole shaped like the polygon.
-#         Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], 
-#         [reverse(Point2f.(polygon_points))]
-#     ); 
-#     color = :white, xautolimits = false, yautolimits = false,
-#     axis = (; 
-#         aspect = DataAspect(), title = "Barycentric coordinate based polygon rendering", subtitle = "GeometryOps",
-#         limits = (ext.X, ext.Y), 
-#     )
-# )
-# hidedecorations!(a1)
-# hidedecorations!(a2)
-# cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
-# # Finally, we perform barycentric interpolation on a grid,
-# xrange = LinRange(ext.X..., widths(a2.scene.px_area[])[1] * 4) # 2 rendered pixels per "physical" pixel
-# yrange = LinRange(ext.Y..., widths(a2.scene.px_area[])[2] * 4) # 2 rendered pixels per "physical" pixel
-# @time mean_values = barycentric_interpolate.(
-#     (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
-#     (Point2f.(polygon_points),), # The polygon points as `Point2f`
-#     (last.(polygon_points,),),   # The values per polygon point - can be anything which supports addition and division
-#     Point2f.(xrange, yrange')    # The points at which to interpolate
-# )
-# # and render!
-# hm = heatmap!(
-#     a2, xrange, yrange, mean_values;
-#     colormap = p1.colormap, # Use the same colormap as the original polygon plot
-#     colorrange = p1.plots[1].colorrange[], # Access the rendered mesh plot's colorrange directly
-#     transformation = (; translation = Vec3f(0,0,-1)), # This gets the heatmap to render "behind" the previously plotted polygon
-#     xautolimits = false, yautolimits = false
-# )
-# f
-# ```
+Makie.update_state_before_display!(f) # We have to call this explicitly, to get the axis limits correct
+# Now that we've plotted the first polygon,
+# we can render it using barycentric coordinates.
+a1_bbox = a1.finallimits[] # First we get the extent of the axis
+ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(a1_bbox), maximum(a1_bbox))))
 
-# ## Barycentric-coordinate API
-# In some cases, we actually want barycentric interpolation, and have no interest 
-# in the coordinates themselves.  
-# 
-# However, the coordinates can be useful for debugging, and when performing 3D rendering,
-# multiple barycentric values (depth, uv) are needed for depth buffering.
-#
+a2, p2box = poly( # Now, we plot a cropping rectangle around the axis so we only show the polygon
+    f[1, 2], 
+    GeometryOps.GeometryBasics.Polygon( # This is a rectangle with an internal hole shaped like the polygon.
+        Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], 
+        [reverse(Point2f.(polygon_points))]
+    ); 
+    color = :white, xautolimits = false, yautolimits = false,
+    axis = (; 
+        aspect = DataAspect(), title = "Barycentric coordinate based polygon rendering", subtitle = "GeometryOps",
+        limits = (ext.X, ext.Y), 
+    )
+)
+hidedecorations!(a1)
+hidedecorations!(a2)
+cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
+# Finally, we perform barycentric interpolation on a grid,
+xrange = LinRange(ext.X..., widths(a2.scene.px_area[])[1] * 4) # 2 rendered pixels per "physical" pixel
+yrange = LinRange(ext.Y..., widths(a2.scene.px_area[])[2] * 4) # 2 rendered pixels per "physical" pixel
+@time mean_values = barycentric_interpolate.(
+    (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
+    (Point2f.(polygon_points),), # The polygon points as `Point2f`
+    (last.(polygon_points,),),   # The values per polygon point - can be anything which supports addition and division
+    Point2f.(xrange, yrange')    # The points at which to interpolate
+)
+# and render!
+hm = heatmap!(
+    a2, xrange, yrange, mean_values;
+    colormap = p1.colormap, # Use the same colormap as the original polygon plot
+    colorrange = p1.plots[1].colorrange[], # Access the rendered mesh plot's colorrange directly
+    transformation = (; translation = Vec3f(0,0,-1)), # This gets the heatmap to render "behind" the previously plotted polygon
+    xautolimits = false, yautolimits = false
+)
+f
+```
+
+## Barycentric-coordinate API
+In some cases, we actually want barycentric interpolation, and have no interest 
+in the coordinates themselves.  
+
+However, the coordinates can be useful for debugging, and when performing 3D rendering,
+multiple barycentric values (depth, uv) are needed for depth buffering.
+=#
 
 const _VecTypes = Union{Tuple{Vararg{T, N}}, GeometryBasics.StaticArraysCore.StaticArray{Tuple{N}, T, 1}} where {N, T}
 

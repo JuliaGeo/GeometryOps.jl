@@ -22,6 +22,7 @@ const Edge = Tuple{TuplePoint,TuplePoint}
 include("primitives.jl")
 include("utils.jl")
 
+include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
 include("methods/bools.jl")

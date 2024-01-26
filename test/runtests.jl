@@ -15,6 +15,7 @@ const GO = GeometryOps
 @testset "GeometryOps.jl" begin
     @testset "Primitives" begin include("primitives.jl") end
     # # Methods
+    @testset "Angles" begin include("methods/angles.jl") end
     @testset "Area" begin include("methods/area.jl") end
     @testset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
     @testset "Bools" begin include("methods/bools.jl") end
