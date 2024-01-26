@@ -22,7 +22,8 @@ diff_poly = GO.difference(poly1, poly2; target = GI.PolygonTrait)
 GI.coordinates.(diff_poly)
 
 # output
-[[[[6.5, 3.5], [5.0, 5.0], [0.0, 0.0], [5.0, -5.0], [6.5, -3.5], [3.0, 0.0], [6.5, 3.5]]]]
+1-element Vector{Vector{Vector{Vector{Float64}}}}:
+[[[6.5, 3.5], [5.0, 5.0], [0.0, 0.0], [5.0, -5.0], [6.5, -3.5], [3.0, 0.0], [6.5, 3.5]]]
 ```
 """
 function difference(

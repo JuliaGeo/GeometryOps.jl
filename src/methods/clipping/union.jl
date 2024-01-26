@@ -22,7 +22,8 @@ union_poly = GO.union(p1, p2; target = GI.PolygonTrait)
 GI.coordinates.(union_poly)
 
 # output
-[[[[6.5, 3.5], [5.0, 5.0], [0.0, 0.0], [5.0, -5.0], [6.5, -3.5], [8.0, -5.0], [13.0, 0.0], [8.0, 5.0], [6.5, 3.5]]]]
+1-element Vector{Vector{Vector{Vector{Float64}}}}:
+[[[6.5, 3.5], [5.0, 5.0], [0.0, 0.0], [5.0, -5.0], [6.5, -3.5], [8.0, -5.0], [13.0, 0.0], [8.0, 5.0], [6.5, 3.5]]]
 ```
 """
 function union(
