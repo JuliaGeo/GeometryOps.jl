@@ -25,7 +25,7 @@ function _build_ab_list(::Type{T}, poly_a, poly_b) where T
     a_list, a_idx_list = _build_a_list(T, poly_a, poly_b)
     b_list = _build_b_list(T, a_idx_list, a_list, poly_b)
 
-    # Flag the entry and exists
+    # Flag the entry and exits
     _flag_ent_exit!(poly_b, a_list)
     _flag_ent_exit!(poly_a, b_list)
 
