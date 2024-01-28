@@ -12,13 +12,7 @@ TODO: broken
 ## Examples 
 ```julia
 import GeoInterface as GI, GeometryOps as GO
-
-line1 = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
-line2 = GI.LineString([(-2, 2), (4, 2)])
-
-GO.crosses(line1, line2)
-# output
-true
+# TODO: Add working example
 ```
 """
 crosses(g1, g2)::Bool = crosses(trait(g1), g1, trait(g2), g2)::Bool

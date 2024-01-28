@@ -10,8 +10,8 @@ share the same set of points and edges to define the same shape.
 
 To provide an example, consider these two lines:
 ```@example equals
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
@@ -21,11 +21,12 @@ f, a, p = lines(GI.getpoint(l1), color = :blue)
 scatter!(GI.getpoint(l1), color = :blue)
 lines!(GI.getpoint(l2), color = :orange)
 scatter!(GI.getpoint(l2), color = :orange)
+f
 ```
 We can see that the two lines do not share a commen set of points and edges in
 the plot, so they are not equal:
 ```@example equals
-equals(l1, l2)  # returns false
+GO.equals(l1, l2)  # returns false
 ```
 
 ## Implementation

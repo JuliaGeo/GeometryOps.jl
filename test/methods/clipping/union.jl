@@ -1,20 +1,21 @@
-include("clipping_test_utils.jl")
-
-"""
+#=
     compare_GO_LG_union(p1, p2, ϵ)::Bool
 
     Returns true if the 'union' function from LibGEOS and 
     GeometryOps return similar enough polygons (determined by ϵ).
-"""
+=#
 function compare_GO_LG_union(p1, p2, ϵ)
-    GO_union = GO.union(p1,p2)
+    GO_union = GO.union(p1,p2; target = GI.PolygonTrait)
     LG_union = LG.union(p1,p2)
-    if isempty(GO_union[1]) && LG.isEmpty(LG_union)
+    if isempty(GO_union) && LG.isEmpty(LG_union)
         return true
     end
 
-    temp = convert_tuple_to_array(GO_union)
-    GO_union_poly = LG.Polygon(temp[1])
+    if length(GO_union)==1
+        GO_union_poly = GO_union[1]
+    else
+        GO_union_poly = GI.MultiPolygon(GO_union)
+    end
 
     return LG.area(LG.difference(GO_union_poly, LG_union)) < ϵ
 end

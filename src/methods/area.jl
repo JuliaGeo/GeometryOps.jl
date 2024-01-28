@@ -13,20 +13,26 @@ negative area. The area is the absolute value of the signed area.
 
 To provide an example, consider this rectangle:
 ```@example rect
-using GeometryOps
-using GeometryOps.GeometryBasics
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
+using CairoMakie
 
-rect = Polygon([Point(0,0), Point(0,1), Point(1,1), Point(1,0), Point(0, 0)])
-f, a, p = poly(rect; axis = (; aspect = DataAspect()))
+rect = GI.Polygon([[(0,0), (0,1), (1,1), (1,0), (0, 0)]])
+f, a, p = poly(collect(GI.getpoint(rect)); axis = (; aspect = DataAspect()))
 ```
 This is clearly a rectangle, etc.  But now let's look at how the points look:
 ```@example rect
-lines!(a, rect; color = 1:length(coordinates(rect))+1)
+lines!(
+    collect(GI.getpoint(rect));
+    color = 1:GI.npoint(rect), linewidth = 10.0)
 f
 ```
-The points are ordered in a clockwise fashion, which means that the signed area
+The points are ordered in a counterclockwise fashion, which means that the signed area
 is negative.  If we reverse the order of the points, we get a postive area.
+```@example rect
+GO.signed_area(rect)  # -1.0
+```
 
 ## Implementation
 
@@ -43,29 +49,37 @@ signed area might not be the area. This is why signed area is only implemented
 for polygons.
 =#
 
+const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
+
 """
     area(geom, ::Type{T} = Float64)::T
 
-Returns the area of the geometry. This is computed slighly differently for
-different geometries:
+Returns the area of a geometry or collection of geometries. 
+This is computed slightly differently for different geometries:
+
     - The area of a point/multipoint is always zero.
     - The area of a curve/multicurve is always zero.
     - The area of a polygon is the absolute value of the signed area.
     - The area multi-polygon is the sum of the areas of all of the sub-polygons.
-    - The area of a geometry collection is the sum of the areas of all of the
-    sub-geometries. 
+    - The area of a geometry collection, feature collection of array/iterable 
+        is the sum of the areas of all of the sub-geometries. 
 
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-area(geom, ::Type{T} = Float64) where T <: AbstractFloat =
-    _area(T, GI.trait(geom), geom)
+function area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat
+    applyreduce(+, _AREA_TARGETS, geom; threaded, init=zero(T)) do g
+        _area(T, GI.trait(g), g)
+    end
+end
+
 
 """
     signed_area(geom, ::Type{T} = Float64)::T
 
-Returns the signed area of the geometry, based on winding order. This is
-computed slighly differently for different geometries:
+Returns the signed area of a single geometry, based on winding order. 
+This is computed slighly differently for different geometries:
+
     - The signed area of a point is always zero.
     - The signed area of a curve is always zero.
     - The signed area of a polygon is computed with the shoelace formula and is
@@ -101,14 +115,6 @@ function _signed_area(::Type{T}, ::GI.PolygonTrait, poly) where T
     # Winding of exterior ring determines sign
     return area * sign(s_area)
 end
-
-# # MultiPolygons and GeometryCollections
-_area(
-    ::Type{T},
-    ::Union{GI.MultiPolygonTrait, GI.GeometryCollectionTrait},
-    geoms,
-) where T = 
-    sum((area(geom, T) for geom in GI.getgeom(geoms)), init = zero(T))
 
 #=
 Helper function:
