@@ -117,22 +117,20 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
     b_closed = npoints_b > 1 && edges_b[1][1] == edges_b[end][1]
     if npoints_a > 0 && npoints_b > 0
         # Loop over pairs of edges and add any intersection points to results
-        for i in eachindex(edges_a)
-            for j in eachindex(edges_b)
-                point, fracs = _intersection_point(T, edges_a[i], edges_b[j])
-                if !isnothing(point)
-                    #=
-                    Determine if point is on edge (all edge endpoints excluded
-                    except for the last edge for an open geometry)
-                    =#
-                    α, β = fracs
-                    on_a_edge = (!a_closed && i == npoints_a && 0 <= α <= 1) ||
-                        (0 <= α < 1)
-                    on_b_edge = (!b_closed && j == npoints_b && 0 <= β <= 1) ||
-                        (0 <= β < 1)
-                    if on_a_edge && on_b_edge
-                        push!(result, GI.Point(point))
-                    end
+        for i in eachindex(edges_a), j in eachindex(edges_b)
+            point, fracs = _intersection_point(T, edges_a[i], edges_b[j])
+            if !isnothing(point)
+                #=
+                Determine if point is on edge (all edge endpoints excluded
+                except for the last edge for an open geometry)
+                =#
+                α, β = fracs
+                on_a_edge = (!a_closed && i == npoints_a && 0 <= α <= 1) ||
+                    (0 <= α < 1)
+                on_b_edge = (!b_closed && j == npoints_b && 0 <= β <= 1) ||
+                    (0 <= β < 1)
+                if on_a_edge && on_b_edge
+                    push!(result, GI.Point(point))
                 end
             end
         end
