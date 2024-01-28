@@ -3,7 +3,7 @@ export intersection, intersection_points
 
 
 """
-    intersection(geom_a, geom_b, ::Type{T}; target::Type{Target})
+    intersection(geom_a, geom_b, [T::Type]; target::Type)
 
 Return the intersection between two geometries as a list of geometries. Return an empty list
 if none are found. The type of the list will be constrained as much as possible given the
