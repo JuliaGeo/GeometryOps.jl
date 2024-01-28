@@ -87,9 +87,6 @@ function _union(
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
 ) where {Target, T}
-    @assert(
-        false,
-        "Intersection between $trait_a and $trait_b with target $Target isn't implemented yet.",
-    )
+    throw(ArgumentError("Intersection between $trait_a and $trait_b with target $Target isn't implemented yet."))
     return nothing
 end
