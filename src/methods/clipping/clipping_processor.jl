@@ -58,13 +58,8 @@ function _build_a_list(intr_list, a_idx_list, b_idx_list, alpha_a_list, alpha_b_
                 if start2
                     start2 = false
                 else
-                    # Add the first point of the edge to b_list
-                    # if ii == 1 
-                    #     b_list[jj] = PolyNode(jj, _tuple_point(g1), false, 0, false, (0.0, 0.0))
-                    # end
 
                     # Check if edge jj of poly_b intersects with edge ii of poly_a
-                    # display(typeof([((p1[1], p1[2]), (p2[1], p2[2]))]))
                     if _line_intersects([(_tuple_point(p1), _tuple_point(p2))], [(_tuple_point(g1), _tuple_point(g2))]);
                         
                         int_pt, alphas = _intersection_point((_tuple_point(p1), _tuple_point(p2)), (_tuple_point(g1), _tuple_point(g2)))

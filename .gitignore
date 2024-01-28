@@ -1,3 +1,10 @@
 /Manifest.toml
 /docs/build/
 .vscode/
+
+*.png
+*.ipynb
+profile_test_clipping.jl
+simple_try.jl
+try2.jl
+tryLana.jl
