@@ -1,8 +1,8 @@
-# # This file contains the shared helper functions for the polygon clipping functionalities.
+# # This file contains the shared helper functions forlyNode the polygon clipping functionalities.
 
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
-mutable struct PolyNode{T <: AbstractFloat}
+struct PolyNode{T <: AbstractFloat}
     idx::Int           # If ipt, index of point in a_idx_list, else 0
     point::Tuple{T,T}  # (x, y) values of given point
     inter::Bool        # If ipt, true, else 0
@@ -92,7 +92,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
             inter_points = @view a_list[(a_count - Δintrs + 1):a_count]
             sort!(inter_points, by = x -> x.fracs[1])
             for (i, p) in enumerate(inter_points)
-                p.idx = prev_counter + i
+                inter_points[i] = PolyNode(prev_counter + i, p.point, p.inter, p.neighbor, p.ent_exit, p.fracs)
             end
         end
     
@@ -142,7 +142,8 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, poly_b) where T
             while curr_node.neighbor == i  # Add all intersection points in current edge
                 b_count += 1
                 b_list[b_count] = PolyNode(curr_node.idx, curr_node.point, true, curr_idx, false, curr_node.fracs)
-                curr_node.neighbor = b_count
+                a_list[curr_idx] = PolyNode(curr_node.idx, curr_node.point, curr_node.inter, b_count, curr_node.ent_exit, curr_node.fracs)
+                curr_node = a_list[curr_idx]
                 intr_curr += 1
                 intr_curr > n_intr_pts && break
                 curr_idx = a_idx_list[intr_curr]
@@ -169,7 +170,7 @@ function _flag_ent_exit!(poly, pt_list)
                 in = true, on = false, out = false
             )
         elseif pt_list[ii].inter
-            pt_list[ii].ent_exit = status
+            pt_list[ii] = PolyNode(pt_list[ii].idx, pt_list[ii].point, pt_list[ii].inter, pt_list[ii].neighbor, status, pt_list[ii].fracs)
             status = !status
         end
     end
