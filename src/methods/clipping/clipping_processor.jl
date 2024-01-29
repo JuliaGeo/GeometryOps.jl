@@ -68,17 +68,18 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
         prev_counter = intr_count
         for (j, b_p2) in enumerate(GI.getpoint(poly_b))
             b_pt2 = _tuple_point(b_p2)
-            if j > 1
-                int_pt, fracs = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
-                # if no intersection point, skip this edge
-                if !isnothing(int_pt) && all(0 .≤ fracs .≤ 1)
-                    # Set neighbor field to b edge (j-1) to keep track of intersection
-                    new_intr = PolyNode(intr_count, int_pt, true, j - 1, false, fracs)
-                    a_count += 1
-                    intr_count += 1
-                    _add!(a_list, a_count, new_intr, n_a_edges)
-                    push!(a_idx_list, a_count)
-                end
+            if j <=1
+                continue
+            end
+            int_pt, fracs = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
+            # if no intersection point, skip this edge
+            if !isnothing(int_pt) && all(0 .≤ fracs .≤ 1)
+                # Set neighbor field to b edge (j-1) to keep track of intersection
+                new_intr = PolyNode(intr_count, int_pt, true, j - 1, false, fracs)
+                a_count += 1
+                intr_count += 1
+                _add!(a_list, a_count, new_intr, n_a_edges)
+                push!(a_idx_list, a_count)
             end
             b_pt1 = b_pt2
         end
