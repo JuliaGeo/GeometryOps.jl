@@ -96,7 +96,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
     return a_list, a_idx_list
 end
 
-# Add value x at index i tgo given array - if list isn't long enough, push value to array
+# Add value x at index i to given array - if list isn't long enough, push value to array
 function _add!(arr, i, x, l = length(arr))
     if i <= l
         arr[i] = x
