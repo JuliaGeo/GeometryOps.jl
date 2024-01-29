@@ -2,7 +2,7 @@
 export union
 
 """
-    union(geom_a, geom_b, ::Type{T}; target::Type{Target})
+    union(geom_a, geom_b, [::Type{T}]; target::Type)
 
 Return the union between two geometries as a list of geometries. Return an empty list if
 none are found. The type of the list will be constrained as much as possible given the input
