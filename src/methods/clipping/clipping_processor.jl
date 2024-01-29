@@ -57,6 +57,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
     for (i, a_p2) in enumerate(GI.getpoint(poly_a))
         a_pt2 = (T(GI.x(a_p2)), T(GI.y(a_p2)))
         if i <= 1
+            a_pt1 = a_pt2
             continue
         end
         # Add the first point of the edge to the list of points in a_list
@@ -69,6 +70,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
         for (j, b_p2) in enumerate(GI.getpoint(poly_b))
             b_pt2 = _tuple_point(b_p2)
             if j <=1
+                b_pt1 = b_pt2
                 continue
             end
             int_pt, fracs = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
