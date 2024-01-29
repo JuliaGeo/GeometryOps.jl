@@ -56,41 +56,43 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
     local a_pt1
     for (i, a_p2) in enumerate(GI.getpoint(poly_a))
         a_pt2 = (T(GI.x(a_p2)), T(GI.y(a_p2)))
-        if i > 1
-            # Add the first point of the edge to the list of points in a_list
-            new_point = PolyNode(0, a_pt1, false, 0, false, (zero(T), zero(T)))
-            a_count += 1
-            _add!(a_list, a_count, new_point, n_a_edges)
-            # Find intersections with edges of poly_b
-            local b_pt1
-            prev_counter = intr_count
-            for (j, b_p2) in enumerate(GI.getpoint(poly_b))
-                b_pt2 = _tuple_point(b_p2)
-                if j > 1
-                    int_pt, fracs = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
-                    # if no intersection point, skip this edge
-                    if !isnothing(int_pt) && all(0 .≤ fracs .≤ 1)
-                        # Set neighbor field to b edge (j-1) to keep track of intersection
-                        new_intr = PolyNode(intr_count, int_pt, true, j - 1, false, fracs)
-                        a_count += 1
-                        intr_count += 1
-                        _add!(a_list, a_count, new_intr, n_a_edges)
-                        push!(a_idx_list, a_count)
-                    end
+        if i <= 1
+            continue
+        end
+        # Add the first point of the edge to the list of points in a_list
+        new_point = PolyNode(0, a_pt1, false, 0, false, (zero(T), zero(T)))
+        a_count += 1
+        _add!(a_list, a_count, new_point, n_a_edges)
+        # Find intersections with edges of poly_b
+        local b_pt1
+        prev_counter = intr_count
+        for (j, b_p2) in enumerate(GI.getpoint(poly_b))
+            b_pt2 = _tuple_point(b_p2)
+            if j > 1
+                int_pt, fracs = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
+                # if no intersection point, skip this edge
+                if !isnothing(int_pt) && all(0 .≤ fracs .≤ 1)
+                    # Set neighbor field to b edge (j-1) to keep track of intersection
+                    new_intr = PolyNode(intr_count, int_pt, true, j - 1, false, fracs)
+                    a_count += 1
+                    intr_count += 1
+                    _add!(a_list, a_count, new_intr, n_a_edges)
+                    push!(a_idx_list, a_count)
                 end
-                b_pt1 = b_pt2
             end
+            b_pt1 = b_pt2
+        end
 
-            # Order intersection points by placement along edge using fracs value
-            if prev_counter < intr_count
-                Δintrs = intr_count - prev_counter
-                inter_points = @view a_list[(a_count - Δintrs + 1):a_count]
-                sort!(inter_points, by = x -> x.fracs[1])
-                for (i, p) in enumerate(inter_points)
-                    p.idx = prev_counter + i
-                end
+        # Order intersection points by placement along edge using fracs value
+        if prev_counter < intr_count
+            Δintrs = intr_count - prev_counter
+            inter_points = @view a_list[(a_count - Δintrs + 1):a_count]
+            sort!(inter_points, by = x -> x.fracs[1])
+            for (i, p) in enumerate(inter_points)
+                p.idx = prev_counter + i
             end
         end
+    
         a_pt1 = a_pt2
     end
     return a_list, a_idx_list
