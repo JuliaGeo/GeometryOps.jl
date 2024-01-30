@@ -43,7 +43,6 @@ function multipoint_crosses_line(geom1, geom2)
         end
         i += 1
     end
-
     return int_point && ext_point
 end
 

@@ -32,18 +32,4 @@ import GeometryOps as GO
 
 	@test isclockwise(l1) == true
 	@test isclockwise(l2) == false
-
-	l3 = GI.LineString([[0, 0], [3, 3], [4, 4]])
-	p1 = GI.Point([1,1])
-
-	l4 = GI.LineString([[0, 0], [3, 3]])
-	p2 = GI.Point([0, 0])
-
-	p3 = GI.Point([20, 20])
-	l5 = GI.LineString([[0, 0], [3, 3], [38.32, 5.96]])
-
-	pt = (-77, 44)
-	poly = GI.Polygon([[[-81, 41], [-81, 47], [-72, 47], [-72, 41], [-81, 41]]])
-
-
 end
