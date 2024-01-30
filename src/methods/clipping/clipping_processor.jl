@@ -177,7 +177,7 @@ function _flag_ent_exit!(poly, pt_list)
 end
 
 #=
-    _trace_polynodes(a_list, b_list, a_idx_list, f_step)::Vector{GI.Polygon}
+    _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step)::Vector{GI.Polygon}
 
 This function takes the outputs of _build_ab_list and traces the lists to determine which
 polygons are formed as described in Greiner and Hormann. The function f_step determines in
@@ -191,13 +191,12 @@ false if we are tracing b_list. The functions used for each clipping operation a
 
 A list of GeoInterface polygons is returned from this function. 
 =#
-function _trace_polynodes(a_list, b_list, a_idx_list, f_step)
+function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     n_intr_pts = length(a_idx_list)
-    return_polys = Vector{GI.Polygon}(undef, 0)
+    return_polys = Vector{_get_poly_type(T)}(undef, 0)
     # Keep track of number of processed intersection points
     processed_pts = 0
-
     while processed_pts < n_intr_pts
         curr_list, curr_npoints = a_list, n_a_pts
         on_a_list = true
@@ -244,8 +243,13 @@ function _trace_polynodes(a_list, b_list, a_idx_list, f_step)
         end
         push!(return_polys, GI.Polygon([pt_list]))
     end
-    return return_polys::Vector{GI.Polygon}
+    return return_polys
 end
+
+# Get type of polygons that will be made
+# TODO: Increase type options
+_get_poly_type(::Type{T}) where T =
+    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
 
 #=
     _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator)
@@ -281,6 +285,6 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
         n_polys += n_new_per_poly
     end
     # Remove all polygon that were marked for removal
-    filter!(!isnothing, return_polys)::Vector{GI.Polygon}
+    filter!(!isnothing, return_polys)
     return
 end
