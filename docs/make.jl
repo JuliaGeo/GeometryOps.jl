@@ -35,7 +35,7 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
     end
 end
 
-cp(joinpath(dirname(@__DIR__), "README.md", joinpath(@__DIR__, "src", "index.md")) # copy the main README as the index
+cp(joinpath(dirname(@__DIR__), "README.md"), joinpath(@__DIR__, "src", "index.md")) # copy the main README as the index
 
 makedocs(;
     modules=[GeometryOps],
