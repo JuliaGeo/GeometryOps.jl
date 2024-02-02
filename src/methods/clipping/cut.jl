@@ -33,7 +33,6 @@ function _cut(::Type{T}, ::GI.PolygonTrait, poly, line) where T
     n_intr_pts = length(intr_list)
     # If an impossible number of intersection points, return original polygon
     if n_intr_pts < 2 || isodd(n_intr_pts)
-        @warn "Line doesn't fully cut through polygon. Returning original polygon."
         return [tuples(poly)]
     end
     # Cut polygon by line
