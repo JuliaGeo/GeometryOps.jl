@@ -28,7 +28,7 @@ GI.coordinates.(diff_poly)
 """
 function difference(
     geom_a, geom_b, ::Type{T} = Float64; target::Type{Target} = Nothing,
-) where {T <: AbstractFloat, Target <: GI.AbstractTrait}
+) where {T <: AbstractFloat, Target <: Union{Nothing, GI.AbstractTrait}}
     return _difference(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
@@ -81,3 +81,4 @@ function _difference(
     )
     return nothing
 end
+
