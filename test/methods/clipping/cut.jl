@@ -59,7 +59,7 @@ p3 = GI.Polygon([[(0.0, 0.0), (0.0, 5.0), (2.5, 7.5), (5.0, 5.0), (7.5, 7.5), (1
     ))
 
     # Line doesn't cut through polygon
-    . = "Line doesn't fully cut through polygon. Returning original polygon."
+    warn_str = "Line doesn't fully cut through polygon. Returning original polygon."
     cut_polys = (@test_logs (:warn, warn_str) GO.cut(p1, l4))
     @test all(GO.equals.(cut_polys, [p1]))
     cut_polys = (@test_logs (:warn, warn_str) GO.cut(p1, l5))
