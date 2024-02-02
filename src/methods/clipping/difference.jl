@@ -77,7 +77,7 @@ function _difference(
 ) where {Target, T}
     @assert(
         false,
-        "Intersection between $trait_a and $trait_b with target $Target isn't implemented yet.",
+        "Difference between $trait_a and $trait_b with target $Target isn't implemented yet.",
     )
     return nothing
 end
