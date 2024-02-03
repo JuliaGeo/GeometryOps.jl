@@ -27,7 +27,7 @@ GeometryOps.contains
 coveredby
 covers
 crosses
-disjiont
+disjoint
 intersects
 overlaps
 touches

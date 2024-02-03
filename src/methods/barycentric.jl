@@ -55,7 +55,7 @@ f, a1, p1 = poly(
     polygon_points; 
     color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), 
     axis = (; 
-        aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
+       axistype = Axis, aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
     ), 
     figure = (; resolution = (800, 400),)
 )

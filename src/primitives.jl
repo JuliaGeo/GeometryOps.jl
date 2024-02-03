@@ -82,7 +82,7 @@ $APPLY_KEYWORDS
 
 Flipped point the order in any feature or geometry, or iterables of either:
 
-```juia
+```julia
 import GeoInterface as GI
 import GeometryOps as GO
 geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]),

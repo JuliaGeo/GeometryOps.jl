@@ -1,3 +1,5 @@
+# # Line-curve interaction
+
 #= Code is based off of DE-9IM Standards (https://en.wikipedia.org/wiki/DE-9IM)
 and attempts a standardized solution for most of the functions.
 =#
