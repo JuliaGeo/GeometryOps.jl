@@ -55,9 +55,9 @@ f, a1, p1 = poly(
     polygon_points; 
     color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), 
     axis = (; 
-       axistype = Axis, aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
+       type = Axis, aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
     ), 
-    figure = (; resolution = (800, 400),)
+    figure = (; size = (800, 400),)
 )
 
 Makie.update_state_before_display!(f) # We have to call this explicitly, to get the axis limits correct
@@ -84,8 +84,8 @@ hidedecorations!(a1)
 hidedecorations!(a2)
 cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
 # Finally, we perform barycentric interpolation on a grid,
-xrange = LinRange(ext.X..., widths(a2.scene.px_area[])[1] * 4) # 2 rendered pixels per "physical" pixel
-yrange = LinRange(ext.Y..., widths(a2.scene.px_area[])[2] * 4) # 2 rendered pixels per "physical" pixel
+xrange = LinRange(ext.X..., size(a2.scene)[1] * 4) # 2 rendered pixels per "physical" pixel
+yrange = LinRange(ext.Y..., size(a2.scene)[2] * 4) # 2 rendered pixels per "physical" pixel
 @time mean_values = barycentric_interpolate.(
     (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
     (Point2f.(polygon_points),), # The polygon points as `Point2f`
