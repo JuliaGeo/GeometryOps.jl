@@ -50,7 +50,8 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Source code" => literate_pages
+        "Source code" => literate_pages,
+        "API Reference" => "api.md",
     ],
     warnonly = true,
 )
