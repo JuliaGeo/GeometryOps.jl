@@ -2,8 +2,20 @@
 and attempts a standardized solution for most of the functions.
 =#
 
+"""
+    Enum PointOrientation
+
+Enum for the orientation of a point with respect to a curve. A point can be
+`point_in` the curve, `point_on` the curve, or `point_out` of the curve.
+"""
 @enum PointOrientation point_in=1 point_on=2 point_out=3
 
+"""
+    Enum LineOrientation
+Enum for the orientation of a line with respect to a curve. A line can be
+`line_cross` (crossing over the curve), `line_hinge` (crossing the endpoint of the curve),
+`line_over` (colinear with the curve), or `line_out` (not interacting with the curve).
+"""
 @enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
 

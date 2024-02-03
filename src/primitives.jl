@@ -54,6 +54,9 @@ will of course not have new `extent` or `crs` embedded.
 Threading is used at the outermost level possible - over
 an array, feature collection, or e.g. a MultiPolygonTrait where
 each `PolygonTrait` sub-geometry may be calculated on a different thread.
+
+Currently, threading defaults to `false` for all objects, but can be turned on
+by passing the keyword argument `threaded=true` to `apply`.
 =#
 
 """
