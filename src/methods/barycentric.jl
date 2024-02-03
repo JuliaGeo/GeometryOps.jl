@@ -66,17 +66,19 @@ Makie.update_state_before_display!(f) # We have to call this explicitly, to get 
 a1_bbox = a1.finallimits[] # First we get the extent of the axis
 ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(a1_bbox), maximum(a1_bbox))))
 
-a2, p2box = poly( # Now, we plot a cropping rectangle around the axis so we only show the polygon
-    f[1, 2], 
+a2 = Axis(
+        f[1, 2], 
+        aspect = DataAspect(), 
+        title = "Barycentric coordinate based polygon rendering", subtitle = "GeometryOps",
+        limits = (ext.X, ext.Y)
+    )
+p2box = poly!( # Now, we plot a cropping rectangle around the axis so we only show the polygon
+    a2, 
     GeometryOps.GeometryBasics.Polygon( # This is a rectangle with an internal hole shaped like the polygon.
         Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], 
         [reverse(Point2f.(polygon_points))]
     ); 
-    color = :white, xautolimits = false, yautolimits = false,
-    axis = (; 
-        aspect = DataAspect(), title = "Barycentric coordinate based polygon rendering", subtitle = "GeometryOps",
-        limits = (ext.X, ext.Y), 
-    )
+    color = :white, xautolimits = false, yautolimits = false
 )
 hidedecorations!(a1)
 hidedecorations!(a2)
