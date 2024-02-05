@@ -15,6 +15,7 @@ Documentation for [GeometryOps](https://github.com/asinghvi17/GeometryOps.jl)'s 
 ## `apply` and associated functions
 ```@docs
 apply
+apply_reduce
 reproject
 transform
 ```

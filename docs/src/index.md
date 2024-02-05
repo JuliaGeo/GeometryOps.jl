@@ -18,3 +18,13 @@ We welcome contributions, either as pull requests or discussion on issues!
 
 !!! note
     See the [Primitive Functions](@ref) page for more information on this.
+
+The `apply` function allows you to decompose a given collection of geometries down to a certain level, and then operate on it. 
+
+Functionally, it's similar to `map` in the way you apply it to geometries.
+
+### What's this `GeoInterface.Wrapper` thing?
+
+Write a comment about GeoInterface.Wrapper and why it helps in type stability to guarantee a particular return type.
+
+### 
