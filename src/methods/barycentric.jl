@@ -26,7 +26,7 @@ export MeanValue
 # This example was taken from [this page of CGAL's documentation](https://doc.cgal.org/latest/Barycentric_coordinates_2/index.html).
 #=
 ```@example barycentric
-import GeometryOps as GO
+using GeometryOps
 using GeometryOps.GeometryBasics
 using Makie
 using CairoMakie
@@ -97,9 +97,9 @@ hm = heatmap!(
     a2, xrange, yrange, mean_values;
     colormap = p1.colormap, # Use the same colormap as the original polygon plot
     colorrange = p1.plots[1].colorrange[], # Access the rendered mesh plot's colorrange directly
-    transformation = (; translation = Vec3f(0,0,-1)), # This gets the heatmap to render "behind" the previously plotted polygon
     xautolimits = false, yautolimits = false
 )
+translate!(hm, 0, 0, -1) # translate the heatmap behind the cropping polygon!
 f
 ```
 
