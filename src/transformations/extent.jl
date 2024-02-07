@@ -1,3 +1,5 @@
+# # Extent embedding
+
 """
     embed_extent(obj)
 

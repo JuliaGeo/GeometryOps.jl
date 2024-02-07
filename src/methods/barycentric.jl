@@ -26,7 +26,7 @@ export MeanValue
 # This example was taken from [this page of CGAL's documentation](https://doc.cgal.org/latest/Barycentric_coordinates_2/index.html).
 #=
 ```@example barycentric
-import GeometryOps as GO
+using GeometryOps
 using GeometryOps.GeometryBasics
 using Makie
 using CairoMakie
@@ -55,9 +55,9 @@ f, a1, p1 = poly(
     polygon_points; 
     color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), 
     axis = (; 
-        aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
+       type = Axis, aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
     ), 
-    figure = (; resolution = (800, 400),)
+    figure = (; size = (800, 400),)
 )
 
 Makie.update_state_before_display!(f) # We have to call this explicitly, to get the axis limits correct
@@ -66,24 +66,26 @@ Makie.update_state_before_display!(f) # We have to call this explicitly, to get 
 a1_bbox = a1.finallimits[] # First we get the extent of the axis
 ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(a1_bbox), maximum(a1_bbox))))
 
-a2, p2box = poly( # Now, we plot a cropping rectangle around the axis so we only show the polygon
-    f[1, 2], 
+a2 = Axis(
+        f[1, 2], 
+        aspect = DataAspect(), 
+        title = "Barycentric coordinate based polygon rendering", subtitle = "GeometryOps",
+        limits = (ext.X, ext.Y)
+    )
+p2box = poly!( # Now, we plot a cropping rectangle around the axis so we only show the polygon
+    a2, 
     GeometryOps.GeometryBasics.Polygon( # This is a rectangle with an internal hole shaped like the polygon.
         Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], 
         [reverse(Point2f.(polygon_points))]
     ); 
-    color = :white, xautolimits = false, yautolimits = false,
-    axis = (; 
-        aspect = DataAspect(), title = "Barycentric coordinate based polygon rendering", subtitle = "GeometryOps",
-        limits = (ext.X, ext.Y), 
-    )
+    color = :white, xautolimits = false, yautolimits = false
 )
 hidedecorations!(a1)
 hidedecorations!(a2)
 cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
 # Finally, we perform barycentric interpolation on a grid,
-xrange = LinRange(ext.X..., widths(a2.scene.px_area[])[1] * 4) # 2 rendered pixels per "physical" pixel
-yrange = LinRange(ext.Y..., widths(a2.scene.px_area[])[2] * 4) # 2 rendered pixels per "physical" pixel
+xrange = LinRange(ext.X..., size(a2.scene)[1] * 4) # 2 rendered pixels per "physical" pixel
+yrange = LinRange(ext.Y..., size(a2.scene)[2] * 4) # 2 rendered pixels per "physical" pixel
 @time mean_values = barycentric_interpolate.(
     (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
     (Point2f.(polygon_points),), # The polygon points as `Point2f`
@@ -95,9 +97,9 @@ hm = heatmap!(
     a2, xrange, yrange, mean_values;
     colormap = p1.colormap, # Use the same colormap as the original polygon plot
     colorrange = p1.plots[1].colorrange[], # Access the rendered mesh plot's colorrange directly
-    transformation = (; translation = Vec3f(0,0,-1)), # This gets the heatmap to render "behind" the previously plotted polygon
     xautolimits = false, yautolimits = false
 )
+translate!(hm, 0, 0, -1) # translate the heatmap behind the cropping polygon!
 f
 ```
 

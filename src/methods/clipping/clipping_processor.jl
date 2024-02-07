@@ -1,4 +1,5 @@
-# # This file contains the shared helper functions forlyNode the polygon clipping functionalities.
+# # Polygon clipping helpers
+# This file contains the shared helper functions for the polygon clipping functionalities.
 
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
