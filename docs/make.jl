@@ -2,7 +2,7 @@ using GeometryOps
 using Documenter
 using Literate
 using Makie, CairoMakie
-CairoMakie.activate!(px_per_unit = 2, type = "png", inline = true) # TODO: make this svg
+CairoMakie.activate!(px_per_unit = 2, type = "svg", inline = true) # TODO: make this svg
 
 DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps; using GeometryOps.GeometryBasics); recursive=true)
 
@@ -48,7 +48,8 @@ makedocs(;
     ),
     pages=[
         "Home" => "index.md",
-        "Source code" => literate_pages
+        "API Reference" => "api.md",
+        "Source code" => literate_pages,
     ],
     warnonly = true,
 )
