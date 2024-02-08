@@ -50,7 +50,7 @@ makedocs(;
         "Home" => "index.md",
         "Source code" => literate_pages
     ],
-    strict=false,
+    warnonly = true,
 )
 
 deploydocs(;

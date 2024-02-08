@@ -14,9 +14,9 @@ single point and a line only overlaps with another line if only a section of
 each line is colinear. 
 
 To provide an example, consider these two lines:
-```@example cshape
-using GeometryOps
-using GeometryOps.GeometryBasics
+```@example overlaps
+import GeometryOps as GO
+import GeoInterface as GI
 using Makie
 using CairoMakie
 
@@ -26,10 +26,11 @@ f, a, p = lines(GI.getpoint(l1), color = :blue)
 scatter!(GI.getpoint(l1), color = :blue)
 lines!(GI.getpoint(l2), color = :orange)
 scatter!(GI.getpoint(l2), color = :orange)
+f
 ```
 We can see that the two lines overlap in the plot:
-```@example cshape
-overlap(l1, l2)
+```@example overlaps
+GO.overlaps(l1, l2)  # true
 ```
 
 ## Implementation
@@ -157,7 +158,7 @@ function overlaps(
     trait_b::GI.PolygonTrait, poly_b,
 )
     edges_a, edges_b = map(sort! ∘ to_edges, (poly_a, poly_b))
-    return _line_intersects(edges_a, edges_b) &&
+    return _edge_intersects(edges_a, edges_b) &&
         !equals(trait_a, poly_a, trait_b, poly_b)
 end
 
@@ -211,15 +212,8 @@ function overlaps(
     return false
 end
 
-"""
-    _overlaps(
-        (a1, a2)::Edge,
-        (b1, b2)::Edge
-    )::Bool
-
-If the edges overlap, meaning that they are colinear but each have one endpoint
-outside of the other edge, return true. Else false. 
-"""
+#= If the edges overlap, meaning that they are colinear but each have one endpoint
+outside of the other edge, return true. Else false. =#
 function _overlaps(
     (a1, a2)::Edge,
     (b1, b2)::Edge
@@ -227,7 +221,51 @@ function _overlaps(
     # meets in more than one point
     on_top = ExactPredicates.meet(a1, a2, b1, b2) == 0
     # one end point is outside of other segment
-    a_fully_within = point_on_seg(a1, b1, b2) && point_on_seg(a2, b1, b2)
-    b_fully_within = point_on_seg(b1, a1, a2) && point_on_seg(b2, a1, a2)
+    a_fully_within = _point_on_seg(a1, b1, b2) && _point_on_seg(a2, b1, b2)
+    b_fully_within = _point_on_seg(b1, a1, a2) && _point_on_seg(b2, a1, a2)
     return on_top && (!a_fully_within && !b_fully_within)
+end
+
+#= TODO: Once overlaps is swapped over to use the geom relations workflow, can
+delete these helpers. =#
+
+# Checks it vectors of edges intersect
+function _edge_intersects(
+    edges_a::Vector{Edge},
+    edges_b::Vector{Edge}
+)
+    # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
+    for edge_a in edges_a
+        for edge_b in edges_b
+            _edge_intersects(edge_a, edge_b) && return true 
+        end
+    end
+    return false
+end
+
+# Checks if two edges intersect
+function _edge_intersects(edge_a::Edge, edge_b::Edge)
+    meet_type = ExactPredicates.meet(edge_a..., edge_b...)
+    return meet_type == 0 || meet_type == 1
+end
+
+# Checks if point is on a segment
+function _point_on_seg(point, start, stop)
+    # Parse out points
+    x, y = GI.x(point), GI.y(point)
+    x1, y1 = GI.x(start), GI.y(start)
+    x2, y2 = GI.x(stop), GI.y(stop)
+    Δxl = x2 - x1
+    Δyl = y2 - y1
+    # Determine if point is on segment
+    cross = (x - x1) * Δyl - (y - y1) * Δxl
+    if cross == 0  # point is on line extending to infinity
+        # is line between endpoints
+        if abs(Δxl) >= abs(Δyl)  # is line between endpoints
+            return Δxl > 0 ? x1 <= x <= x2 : x2 <= x <= x1
+        else
+            return Δyl > 0 ? y1 <= y <= y2 : y2 <= y <= y1
+        end
+    end
+    return false
 end
