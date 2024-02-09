@@ -224,12 +224,12 @@ end
 #= Find where line and curve segments intersect by fraction of length. α is the fraction of
 the line (ls to le) and β is the traction of the curve (cs to ce). All inputs are tuples. =#
 function _find_intersect_fracs(ls, le, cs, ce)
-    _, fracs = _intersection_point(
+    point, fracs = _intersection_point(
         Float64,
         (ls, le),
         (cs, ce)
     )
-    (α, β) = if !isnothing(fracs)
+    (α, β) = if !isnothing(point)
         fracs
     else  # line and curve segments are parallel
         if equals(ls, cs)
