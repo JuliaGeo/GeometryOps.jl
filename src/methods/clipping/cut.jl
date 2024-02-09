@@ -1,4 +1,23 @@
+# # Polygon cutting
+# maybe a bit of context/explanation
+# This is inspired by Matlab's [`cutpolygon`](https://www.mathworks.com/matlabcentral/fileexchange/24449-cutpolygon) function. 
+# ## Example
 
+```julia
+import GeoInterface as GI, GeometryOps as GO
+using CairoMakie
+CairoMakie.activate!(pt_per_unit = 4); # hide
+
+poly = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+line = GI.Line([(5.0, -5.0), (5.0, 15.0)])
+cut_polys = GO.cut(poly, line)
+
+f, a, p1 = poly(cut_polys; colors = [:blue, :orange])
+lines!(a, line; color = :black)
+f
+`` ` # remove the space when committing
+
+# ## Implementation
 """
     cut(geom, line, [T::Type])
 
