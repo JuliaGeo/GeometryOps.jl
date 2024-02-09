@@ -1,23 +1,38 @@
 # # Polygon cutting
-# maybe a bit of context/explanation
-# This is inspired by Matlab's [`cutpolygon`](https://www.mathworks.com/matlabcentral/fileexchange/24449-cutpolygon) function. 
-# ## Example
 
+export cut
+
+#=
+## What is cut?
+
+The cut function cuts a polygon through a line segment. This is inspired by functions such
+as Matlab's [`cutpolygon`](https://www.mathworks.com/matlabcentral/fileexchange/24449-cutpolygon)
+function.
+
+To provide an example, consider the following polygon and line:
 ```julia
 import GeoInterface as GI, GeometryOps as GO
 using CairoMakie
-CairoMakie.activate!(pt_per_unit = 4); # hide
+using Makie
 
 poly = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
 line = GI.Line([(5.0, -5.0), (5.0, 15.0)])
 cut_polys = GO.cut(poly, line)
 
-f, a, p1 = poly(cut_polys; colors = [:blue, :orange])
-lines!(a, line; color = :black)
+f, a, p1 = Makie.poly(collect(GI.getpoint(cut_polys[1])); color = :blue)
+Makie.poly!(collect(GI.getpoint(cut_polys[2])); color = :orange)
+Makie.lines!(GI.getpoint(line); color = :black)
 f
-`` ` # remove the space when committing
+```
 
-# ## Implementation
+## Implementation
+
+This function depends on polygon clipping helper function and is inspired by the
+Greiner-Hormann clipping algorithm used elsewhere in this library. The inspiration came from
+[this](https://stackoverflow.com/questions/3623703/how-can-i-split-a-polygon-by-a-line)
+Stack Overflow discussion. 
+=#
+
 """
     cut(geom, line, [T::Type])
 
