@@ -22,8 +22,8 @@ stores the index in 'a_list' at which the "ith" intersection point lies.
 =#
 function _build_ab_list(::Type{T}, poly_a, poly_b) where T
     # Make a list for nodes of each polygon
-    a_list, a_idx_list = _build_a_list(T, poly_a, poly_b)
-    b_list = _build_b_list(T, a_idx_list, a_list, poly_b)
+    a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b)
+    b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
 
     # Flag the entry and exits
     _flag_ent_exit!(poly_b, a_list)
@@ -51,6 +51,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
     a_list = Vector{PolyNode{T}}(undef, n_a_edges)  # list of points in poly_a
     a_idx_list = Vector{Int}()  # finds indices of intersection points in a_list
     a_count = 0  # number of points added to a_list
+    n_b_intrs = 0
     # Loop through points of poly_a
     local a_pt1
     for (i, a_p2) in enumerate(GI.getpoint(poly_a))
@@ -73,13 +74,30 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                 continue
             end
             int_pt, fracs = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
-            # if no intersection point, skip this edge
-            if !isnothing(int_pt) && 0 ≤ fracs[1] < 1 && 0 ≤ fracs[2] < 1
-                # Set neighbor field to b edge (j-1) to keep track of intersection
-                new_intr = PolyNode(int_pt, true, j - 1, false, fracs)
-                a_count += 1
-                _add!(a_list, a_count, new_intr, n_a_edges)
-                push!(a_idx_list, a_count)
+            if !isnothing(fracs)
+                α, β = fracs
+                collinear = isnothing(int_pt)
+                # if no intersection point, skip this edge
+                if !collinear && 0 < α < 1 && 0 < β < 1
+                    # Set neighbor field to b edge (j-1) to keep track of intersection
+                    new_intr = PolyNode(int_pt, true, j - 1, false, fracs)
+                    a_count += 1
+                    n_b_intrs += 1
+                    _add!(a_list, a_count, new_intr, n_a_edges)
+                    push!(a_idx_list, a_count)
+                else
+                    if (0 < β < 1 && (collinear || α == 0)) || (α == β == 0)
+                        n_b_intrs += β == 0 ? 0 : 1
+                        a_list[prev_counter] = PolyNode(a_pt1, true, j - 1, false, fracs)
+                        push!(a_idx_list, prev_counter)
+                    end
+                    if (0 < α < 1 && (collinear || β == 0))
+                        new_intr = PolyNode(b_pt1, true, j - 1, false, fracs)
+                        a_count += 1
+                        _add!(a_list, a_count, new_intr, n_a_edges)
+                        push!(a_idx_list, a_count)
+                    end
+                end
             end
             b_pt1 = b_pt2
         end
@@ -93,7 +111,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
     
         a_pt1 = a_pt2
     end
-    return a_list, a_idx_list
+    return a_list, a_idx_list, n_b_intrs
 end
 
 # Add value x at index i to given array - if list isn't long enough, push value to array
@@ -116,13 +134,13 @@ is needed for clipping using the Greiner-Hormann clipping algorithm.
 Note: after calling this function, b_list is not fully updated. The entry/exit flags still
 need to be updated. However, the neightbor value in a_list is now updated.
 =#
-function _build_b_list(::Type{T}, a_idx_list, a_list, poly_b) where T
+function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
     # Sort intersection points by insertion order in b_list
     sort!(a_idx_list, by = x-> a_list[x].neighbor + a_list[x].fracs[2])
     # Initialize needed values and lists
     n_b_edges = _nedge(poly_b)
     n_intr_pts = length(a_idx_list)
-    b_list = Vector{PolyNode{T}}(undef, n_b_edges + n_intr_pts)
+    b_list = Vector{PolyNode{T}}(undef, n_b_edges + n_b_intrs)
     intr_curr = 1
     b_count = 0
     # Loop over points in poly_b and add each point and intersection point
@@ -134,11 +152,16 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, poly_b) where T
         if intr_curr ≤ n_intr_pts
             curr_idx = a_idx_list[intr_curr]
             curr_node = a_list[curr_idx]
+            prev_counter = b_count
             while curr_node.neighbor == i  # Add all intersection points in current edge
-                b_count += 1
-                b_list[b_count] = PolyNode(curr_node.point, true, curr_idx, false, curr_node.fracs)
-                a_list[curr_idx] = PolyNode(curr_node.point, curr_node.inter, b_count, curr_node.ent_exit, curr_node.fracs)
-                curr_node = a_list[curr_idx]
+                b_idx = if equals(curr_node.point, b_list[prev_counter].point)
+                    prev_counter
+                else
+                    b_count += 1
+                    b_count
+                end
+                b_list[b_idx] = PolyNode(curr_node.point, true, curr_idx, false, curr_node.fracs)
+                a_list[curr_idx] = PolyNode(curr_node.point, curr_node.inter, b_idx, curr_node.ent_exit, curr_node.fracs)
                 intr_curr += 1
                 intr_curr > n_intr_pts && break
                 curr_idx = a_idx_list[intr_curr]
