@@ -163,16 +163,18 @@ function _intersection_point(::Type{T}, (a1, a2)::Tuple, (b1, b2)::Tuple) where 
     r_cross_s = rx * sy - ry * sx
     Δqp_x = qx - px
     Δqp_y = qy - py
-    point, fracs = if r_cross_s != 0
+    point, fracs = if r_cross_s != 0  # if lines aren't parallel
         t = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
         u = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
         x = px + t * rx
         y = py + t * ry
         (T(x), T(y)), (T(t), T(u))
-    else
+    elseif  sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
         t = (Δqp_x * rx + Δqp_y * ry) / (rx^2 + ry^2)
-        u = (-Δqp_x * sx -Δqp_y * sy) / (sx^2 + sy^2)
+        u = -(Δqp_x * sx + Δqp_y * sy) / (sx^2 + sy^2)
         nothing, (T(t), T(u))
+    else
+        nothing, nothing
     end
     return point, fracs
 end
