@@ -4,7 +4,6 @@
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
 struct PolyNode{T <: AbstractFloat}
-    idx::Int           # If ipt, index of point in a_idx_list, else 0
     point::Tuple{T,T}  # (x, y) values of given point
     inter::Bool        # If ipt, true, else 0
     neighbor::Int      # If ipt, index of equivalent point in a_list or b_list, else 0
@@ -51,7 +50,6 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
     n_a_edges = _nedge(poly_a)
     a_list = Vector{PolyNode{T}}(undef, n_a_edges)  # list of points in poly_a
     a_idx_list = Vector{Int}()  # finds indices of intersection points in a_list
-    intr_count = 0  # number of intersection points found
     a_count = 0  # number of points added to a_list
     # Loop through points of poly_a
     local a_pt1
@@ -62,12 +60,12 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
             continue
         end
         # Add the first point of the edge to the list of points in a_list
-        new_point = PolyNode(0, a_pt1, false, 0, false, (zero(T), zero(T)))
+        new_point = PolyNode(a_pt1, false, 0, false, (zero(T), zero(T)))
         a_count += 1
         _add!(a_list, a_count, new_point, n_a_edges)
         # Find intersections with edges of poly_b
         local b_pt1
-        prev_counter = intr_count
+        prev_counter = a_count
         for (j, b_p2) in enumerate(GI.getpoint(poly_b))
             b_pt2 = _tuple_point(b_p2)
             if j <=1
@@ -78,9 +76,8 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
             # if no intersection point, skip this edge
             if !isnothing(int_pt) && 0 ≤ fracs[1] < 1 && 0 ≤ fracs[2] < 1
                 # Set neighbor field to b edge (j-1) to keep track of intersection
-                new_intr = PolyNode(intr_count, int_pt, true, j - 1, false, fracs)
+                new_intr = PolyNode(int_pt, true, j - 1, false, fracs)
                 a_count += 1
-                intr_count += 1
                 _add!(a_list, a_count, new_intr, n_a_edges)
                 push!(a_idx_list, a_count)
             end
@@ -88,13 +85,10 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
         end
 
         # Order intersection points by placement along edge using fracs value
-        if prev_counter < intr_count
-            Δintrs = intr_count - prev_counter
+        if prev_counter < a_count
+            Δintrs = a_count - prev_counter
             inter_points = @view a_list[(a_count - Δintrs + 1):a_count]
             sort!(inter_points, by = x -> x.fracs[1])
-            for (i, p) in enumerate(inter_points)
-                inter_points[i] = PolyNode(prev_counter + i, p.point, p.inter, p.neighbor, p.ent_exit, p.fracs)
-            end
         end
     
         a_pt1 = a_pt2
@@ -136,14 +130,14 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, poly_b) where T
         (i == n_b_edges + 1) && break
         b_count += 1
         pt = (T(GI.x(p)), T(GI.y(p)))
-        b_list[b_count] = PolyNode(0, pt, false, 0, false, (zero(T), zero(T)))
+        b_list[b_count] = PolyNode(pt, false, 0, false, (zero(T), zero(T)))
         if intr_curr ≤ n_intr_pts
             curr_idx = a_idx_list[intr_curr]
             curr_node = a_list[curr_idx]
             while curr_node.neighbor == i  # Add all intersection points in current edge
                 b_count += 1
-                b_list[b_count] = PolyNode(curr_node.idx, curr_node.point, true, curr_idx, false, curr_node.fracs)
-                a_list[curr_idx] = PolyNode(curr_node.idx, curr_node.point, curr_node.inter, b_count, curr_node.ent_exit, curr_node.fracs)
+                b_list[b_count] = PolyNode(curr_node.point, true, curr_idx, false, curr_node.fracs)
+                a_list[curr_idx] = PolyNode(curr_node.point, curr_node.inter, b_count, curr_node.ent_exit, curr_node.fracs)
                 curr_node = a_list[curr_idx]
                 intr_curr += 1
                 intr_curr > n_intr_pts && break
@@ -171,7 +165,7 @@ function _flag_ent_exit!(poly, pt_list)
                 in = true, on = false, out = false
             )
         elseif pt_list[ii].inter
-            pt_list[ii] = PolyNode(pt_list[ii].idx, pt_list[ii].point, pt_list[ii].inter, pt_list[ii].neighbor, status, pt_list[ii].fracs)
+            pt_list[ii] = PolyNode(pt_list[ii].point, pt_list[ii].inter, pt_list[ii].neighbor, status, pt_list[ii].fracs)
             status = !status
         end
     end
@@ -231,7 +225,12 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
                     curr_not_start = curr != start_pt && curr != b_list[start_pt.neighbor]
                     if curr_not_start
                         processed_pts += 1
-                        a_idx_list[curr.idx] = 0
+                        for (i, a_idx) in enumerate(a_idx_list)
+                            if a_idx != 0 && equals(a_list[a_idx].point, curr.point)
+                                a_idx_list[i] = 0
+                            end
+                        end
+                        # a_idx_list[curr.idx] = 0
                     end
                     curr_not_intr = false
                 end
