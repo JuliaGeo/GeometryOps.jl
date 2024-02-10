@@ -75,9 +75,8 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                 continue
             end
             int_pt, fracs = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
-            α, β = fracs
             # if no intersection point, skip this edge
-            if !isnothing(int_pt) && 0 ≤ α < 1 && 0 ≤ β < 1
+            if !isnothing(int_pt) && 0 ≤ fracs[1] < 1 && 0 ≤ fracs[2] < 1
                 # Set neighbor field to b edge (j-1) to keep track of intersection
                 new_intr = PolyNode(intr_count, int_pt, true, j - 1, false, fracs)
                 a_count += 1
