@@ -79,7 +79,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                 collinear = isnothing(int_pt)
                 # if no intersection point, skip this edge
                 if !collinear && 0 < α < 1 && 0 < β < 1
-                    # Set neighbor field to b edge (j-1) to keep track of intersection
+                    # Intersection point that isn't a vertex
                     new_intr = PolyNode(int_pt, true, j - 1, false, fracs)
                     a_count += 1
                     n_b_intrs += 1
@@ -87,11 +87,13 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                     push!(a_idx_list, a_count)
                 else
                     if (0 < β < 1 && (collinear || α == 0)) || (α == β == 0)
+                        # a_pt1 is an intersection point
                         n_b_intrs += β == 0 ? 0 : 1
                         a_list[prev_counter] = PolyNode(a_pt1, true, j - 1, false, fracs)
                         push!(a_idx_list, prev_counter)
                     end
                     if (0 < α < 1 && (collinear || β == 0))
+                        # b_pt1 is an intersection point
                         new_intr = PolyNode(b_pt1, true, j - 1, false, fracs)
                         a_count += 1
                         _add!(a_list, a_count, new_intr, n_a_edges)
@@ -155,6 +157,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
             prev_counter = b_count
             while curr_node.neighbor == i  # Add all intersection points in current edge
                 b_idx = if equals(curr_node.point, b_list[prev_counter].point)
+                    # intersection point is vertex of b
                     prev_counter
                 else
                     b_count += 1
