@@ -56,12 +56,12 @@ GI.coordinates.(cut_polys)
  [[[5.0, 0.0], [10.0, 0.0], [10.0, 10.0], [5.0, 10.0], [5.0, 0.0]]]
 ```
 """
-cut(geom, line::GI.Line, ::Type{T} = Float64) where {T <: AbstractFloat} =
-    _cut(T, GI.trait(geom), geom, line)
+cut(geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} =
+    _cut(T, GI.trait(geom), geom, GI.trait(line), line)
 
 #= Cut a given polygon by given line. Add polygon holes back into resulting pieces if there
 are any holes. =#
-function _cut(::Type{T}, ::GI.PolygonTrait, poly, line) where T
+function _cut(::Type{T}, ::GI.PolygonTrait, poly, ::GI.LineTrait, line) where T
     ext_poly = GI.getexterior(poly)
     poly_list, intr_list = _build_a_list(T, ext_poly, line)
     n_intr_pts = length(intr_list)
