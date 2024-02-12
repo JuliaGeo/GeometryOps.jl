@@ -9,6 +9,7 @@ struct PolyNode{T <: AbstractFloat}
     neighbor::Int      # If ipt, index of equivalent point in a_list or b_list, else 0
     ent_exit::Bool     # If ipt, true if enter and false if exit, else false
     fracs::Tuple{T,T}  # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
+    crossing::Bool
 end
 
 #=
@@ -61,7 +62,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
             continue
         end
         # Add the first point of the edge to the list of points in a_list
-        new_point = PolyNode(a_pt1, false, 0, false, (zero(T), zero(T)))
+        new_point = PolyNode(a_pt1, false, 0, false, (zero(T), zero(T)), false)
         a_count += 1
         _add!(a_list, a_count, new_point, n_a_edges)
         # Find intersections with edges of poly_b
@@ -80,7 +81,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                 # if no intersection point, skip this edge
                 if !collinear && 0 < α < 1 && 0 < β < 1
                     # Intersection point that isn't a vertex
-                    new_intr = PolyNode(int_pt, true, j - 1, false, fracs)
+                    new_intr = PolyNode(int_pt, true, j - 1, false, fracs, false)
                     a_count += 1
                     n_b_intrs += 1
                     _add!(a_list, a_count, new_intr, n_a_edges)
@@ -89,12 +90,12 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                     if (0 < β < 1 && (collinear || α == 0)) || (α == β == 0)
                         # a_pt1 is an intersection point
                         n_b_intrs += β == 0 ? 0 : 1
-                        a_list[prev_counter] = PolyNode(a_pt1, true, j - 1, false, fracs)
+                        a_list[prev_counter] = PolyNode(a_pt1, true, j - 1, false, fracs, false)
                         push!(a_idx_list, prev_counter)
                     end
                     if (0 < α < 1 && (collinear || β == 0))
                         # b_pt1 is an intersection point
-                        new_intr = PolyNode(b_pt1, true, j - 1, false, fracs)
+                        new_intr = PolyNode(b_pt1, true, j - 1, false, fracs, false)
                         a_count += 1
                         _add!(a_list, a_count, new_intr, n_a_edges)
                         push!(a_idx_list, a_count)
@@ -150,7 +151,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
         (i == n_b_edges + 1) && break
         b_count += 1
         pt = (T(GI.x(p)), T(GI.y(p)))
-        b_list[b_count] = PolyNode(pt, false, 0, false, (zero(T), zero(T)))
+        b_list[b_count] = PolyNode(pt, false, 0, false, (zero(T), zero(T)), false)
         if intr_curr ≤ n_intr_pts
             curr_idx = a_idx_list[intr_curr]
             curr_node = a_list[curr_idx]
@@ -163,8 +164,8 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
                     b_count += 1
                     b_count
                 end
-                b_list[b_idx] = PolyNode(curr_node.point, true, curr_idx, false, curr_node.fracs)
-                a_list[curr_idx] = PolyNode(curr_node.point, curr_node.inter, b_idx, curr_node.ent_exit, curr_node.fracs)
+                b_list[b_idx] = PolyNode(curr_node.point, true, curr_idx, false, curr_node.fracs, false)
+                a_list[curr_idx] = PolyNode(curr_node.point, curr_node.inter, b_idx, curr_node.ent_exit, curr_node.fracs, false)
                 intr_curr += 1
                 intr_curr > n_intr_pts && break
                 curr_idx = a_idx_list[intr_curr]
@@ -191,7 +192,7 @@ function _flag_ent_exit!(poly, pt_list)
                 in = true, on = false, out = false
             )
         elseif pt_list[ii].inter
-            pt_list[ii] = PolyNode(pt_list[ii].point, pt_list[ii].inter, pt_list[ii].neighbor, status, pt_list[ii].fracs)
+            pt_list[ii] = PolyNode(pt_list[ii].point, pt_list[ii].inter, pt_list[ii].neighbor, status, pt_list[ii].fracs, false)
             status = !status
         end
     end
@@ -314,4 +315,79 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
     # Remove all polygon that were marked for removal
     filter!(!isnothing, return_polys)
     return
+end
+
+function _signed_area_triangle(P, Q, R)
+    return (GI.x(Q)-GI.x(P))*(GI.y(R)-GI.y(P))-(GI.y(Q)-GI.y(P))*(GI.x(R)-GI.x(P))
+end
+
+function _classify_crossing!(a_list, b_list, i)
+    I = a_list[i].point
+    j = a_list[i].neighbor
+    idx = i-1
+    if i-1<1
+        idx = length(a_list)
+    end
+    Q₋ = a_list[idx].point
+    idx = i+1
+    if idx>length(a_list)
+        idx = 1
+    end
+    Q₊ = a_list[idx].point
+    idx = j-1
+    if j-1<1
+        idx = length(b_list)
+    end
+    P₋ = b_list[idx].point
+    idx = j + 1
+    if j+1 > length(b_list)
+        idx = 1
+    end
+    P₊ = b_list[idx].point
+
+    # Check if we are dealing with intersection or overlap
+    if (P₊ == Q₋) || (P₊ == Q₊) || (P₋ == Q₊) || (P₋ == Q₋)
+        _classify_crossing_overlap!(Q₋, P₋, I, P₊, a_list, b_list, i)
+    else
+        _classify_crossing_intersection!(Q₋, P₋, I, P₊, a_list, b_list)
+    end
+
+end
+
+function _classify_crossing_overlap!(Q₋, P₋,I, P₊, a_list, b_list, i)
+    back_chain = []
+    if (P₋ == Q₊)
+        back_chain.append(Q₊)
+end
+
+function _classify_crossing_intersection!(Q₋, P₋, I, P₊, a_list, b_list)
+    # Check what sides Q- and Q+ are on
+    side_Q₋ = _get_side(Q₋, P₋, I, P₊)
+    side_Q₊ = _get_side(Q₊, P₋, I, P₊)
+    a = a_list[i]
+    b = b_list[j]
+    if side_Q₋ == side_Q₊
+        a_list[i] = PolyNode(a.point, a.inter, a.neighbor, a.ent_exit, a.fracs, false)
+        b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, false)
+    else
+        a_list[i] = PolyNode(a.point, a.inter, a.neighbor, a.ent_exit, a.fracs, true)
+        b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, true)
+    end
+end
+
+# output 0 means left/straight, 1 means right
+function _get_side(Q, P1, P2, P3)
+    s1 = _signed_area_triangle(Q, P1, P2)
+    s2 = _signed_area_triangle(Q, P2, P3)
+    s3 = _signed_area_triangle(P1, P2, P3)
+
+    if s3 >= 0
+        if (s1 > 0) && (s2 > 0)
+            return 0
+        end
+    else
+        if (s1 > 0) || (s2 > 0)
+            return 1
+        end
+    end
 end
