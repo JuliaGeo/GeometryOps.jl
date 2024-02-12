@@ -11,7 +11,7 @@ export polygonize
 
 # ## Example
 
-# Here's a basic implementation, using the `Makie.peaks()` function.  First, let's investigate the nature of the function:
+# Here's a basic example, using the `Makie.peaks()` function.  First, let's investigate the nature of the function:
 # ```@example polygonize
 # using Makie, GeometryOps
 # n = 49

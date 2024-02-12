@@ -30,12 +30,21 @@ scatter!(GI.x(point_out), GI.y(point_out); color = :orange)
 f
 ```
 This is clearly a rectangle with one point inside and one point outside. The
-points are both an equal distance to the polygon. The distance to point_in is
-negative while the distance to point_out is positive.
+points are both an equal distance to the polygon. The distance to `point_in` is
+negative while the distance to `point_out` is positive.
 ```@example rect
-GO.distance(point_in, rect)  # == 0
-GO.signed_distance(point_in, rect)  # < 0
+(
+GO.distance(point_in, rect),  # == 0
+GO.signed_distance(point_in, rect),  # < 0
 GO.signed_distance(point_out, rect)  # > 0
+)
+```
+
+Consider also a heatmap of signed distances around this object:
+```@example rect
+xrange = yrange = LinRange(-0.5, 1.5, 300)
+f, a, p = heatmap(xrange, yrange, GO.signed_distance.(Point2f.(xrange, yrange'), Ref(rect)); colormap = :RdBu, colorrange = (-0.75, 0.75))
+a.aspect = DataAspect(); Colorbar(f[1, 2], p, label = "Signed distance"); lines!(a, GI.convert(GO.GeometryBasics, rect)); f
 ```
 
 ## Implementation
