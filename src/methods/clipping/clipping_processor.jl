@@ -1,6 +1,8 @@
 # # Polygon clipping helpers
 # This file contains the shared helper functions for the polygon clipping functionalities.
 
+# @enum PointEdgeSide left=0, right=1
+
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
 struct PolyNode{T <: AbstractFloat}
@@ -26,9 +28,13 @@ function _build_ab_list(::Type{T}, poly_a, poly_b) where T
     a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b)
     b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
 
+    #TODO: for now put crossing stuff here
+
     # Flag the entry and exits
     _flag_ent_exit!(poly_b, a_list)
     _flag_ent_exit!(poly_a, b_list)
+    # Flag crossings
+    _classify_crossing!(a_list, b_list)
 
     return a_list, b_list, a_idx_list
 end
@@ -165,7 +171,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
                     b_count
                 end
                 b_list[b_idx] = PolyNode(curr_node.point, true, curr_idx, false, curr_node.fracs, false)
-                a_list[curr_idx] = PolyNode(curr_node.point, curr_node.inter, b_idx, curr_node.ent_exit, curr_node.fracs, false)
+                a_list[curr_idx] = PolyNode(curr_node.point, curr_node.inter, b_idx, curr_node.ent_exit, curr_node.fracs, curr_node.crossing)
                 intr_curr += 1
                 intr_curr > n_intr_pts && break
                 curr_idx = a_idx_list[intr_curr]
@@ -321,61 +327,128 @@ function _signed_area_triangle(P, Q, R)
     return (GI.x(Q)-GI.x(P))*(GI.y(R)-GI.y(P))-(GI.y(Q)-GI.y(P))*(GI.x(R)-GI.x(P))
 end
 
-function _classify_crossing!(a_list, b_list, i)
-    I = a_list[i].point
+function _classify_crossing!(a_list, b_list)
+    skip_idx = 0
+    for i in eachindex(a_list)
+        # check if it's intersection point, if not, continue
+        if !(a_list[i].inter)
+            continue
+        end
+        # check if it is already a crossing point, if so mark it in b, then continue
+        if a_list[i].crossing
+            j = a_list[i].neighbor
+            b = b_list[j]
+            b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, true)
+            continue
+        end
+        # check if we have already processed this point because it was in a chain
+        if i <= skip_idx
+            continue
+        end
+        # Now deal with the degenerate points
+        I = a_list[i].point
+        j = a_list[i].neighbor
+        P₋, P₊, Q₋, Q₊ = _get_ps_qs(i, a_list, b_list)
+
+        skip_idx = _classify_crossing_intersection!(Q₋, P₋, I, P₊, Q₊, a_list, b_list, i, j)
+    end
+
+end
+
+function _get_ps_qs(i, a_list, b_list)
     j = a_list[i].neighbor
     idx = i-1
     if i-1<1
         idx = length(a_list)
     end
-    Q₋ = a_list[idx].point
+    P₋ = a_list[idx].point
     idx = i+1
     if idx>length(a_list)
         idx = 1
     end
-    Q₊ = a_list[idx].point
+    P₊ = a_list[idx].point
     idx = j-1
     if j-1<1
         idx = length(b_list)
     end
-    P₋ = b_list[idx].point
+    Q₋ = b_list[idx].point
     idx = j + 1
     if j+1 > length(b_list)
         idx = 1
     end
-    P₊ = b_list[idx].point
-
-    # Check if we are dealing with intersection or overlap
-    if (P₊ == Q₋) || (P₊ == Q₊) || (P₋ == Q₊) || (P₋ == Q₋)
-        _classify_crossing_overlap!(Q₋, P₋, I, P₊, a_list, b_list, i)
-    else
-        _classify_crossing_intersection!(Q₋, P₋, I, P₊, a_list, b_list)
-    end
-
+    Q₊ = b_list[idx].point
+    
+    return P₋, P₊, Q₋, Q₊
 end
 
-function _classify_crossing_overlap!(Q₋, P₋,I, P₊, a_list, b_list, i)
-    back_chain = []
-    if (P₋ == Q₊)
-        back_chain.append(Q₊)
-end
-
-function _classify_crossing_intersection!(Q₋, P₋, I, P₊, a_list, b_list)
+function _classify_crossing_intersection!(Q₋, P₋, I, P₊, Q₊, a_list, b_list, i, j)
     # Check what sides Q- and Q+ are on
     side_Q₋ = _get_side(Q₋, P₋, I, P₊)
     side_Q₊ = _get_side(Q₊, P₋, I, P₊)
     a = a_list[i]
     b = b_list[j]
-    if side_Q₋ == side_Q₊
+    
+    if (P₊ == Q₋) || (P₊ == Q₊)
+        # mark first node in chain as bounce
         a_list[i] = PolyNode(a.point, a.inter, a.neighbor, a.ent_exit, a.fracs, false)
         b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, false)
+        # get the side of the first point of the chain
+        local start_chain_side
+        if (P₊ == Q₋)
+            start_chain_side = side_Q₊
+        else
+            start_chain_side = side_Q₋
+        end
+        # look ahead at intersection poitns
+        while true
+            i = i+1
+            if i>length(a_list)
+                i = 1
+            end
+            I = a_list[i].point
+            j = a_list[i].neighbor
+            a = a_list[i]
+            b = b_list[j]
+            P₋, P₊, Q₋, Q₊ = _get_ps_qs(i, a_list, b_list)
+            # if poly P is on poly Q to both sides of i
+            if ((P₋ == Q₋) && (P₊ == Q₊)) || ((P₋ == Q₊) && (P₊ == Q₋))
+                a_list[i] = PolyNode(a.point, a.inter, a.neighbor, a.ent_exit, a.fracs, false)
+                b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, false)
+            else # we must be at the end of the polynode overlap chain
+                # get the side of the end of the chain
+                if (P₋ == Q₋) 
+                    end_chain_side = _get_side(Q₊, P₋, I, P₊)
+                elseif (P₋ == Q₊)
+                    end_chain_side = _get_side(Q₋, P₋, I, P₊)
+                end
+                # figure out if delayed crossing or delayed bounce
+                if start_chain_side == end_chain_side
+                    a_list[i] = PolyNode(a.point, a.inter, a.neighbor, a.ent_exit, a.fracs, false)
+                    b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, false)
+                else
+                    a_list[i] = PolyNode(a.point, a.inter, a.neighbor, a.ent_exit, a.fracs, true)
+                    b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, true)
+                end
+                # break because we are at the end of the polynode overlap chain
+                break
+            end
+
+        end
     else
-        a_list[i] = PolyNode(a.point, a.inter, a.neighbor, a.ent_exit, a.fracs, true)
-        b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, true)
+        if side_Q₋ == side_Q₊
+            a_list[i] = PolyNode(a.point, a.inter, a.neighbor, a.ent_exit, a.fracs, false)
+            b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, false)
+        else
+            a_list[i] = PolyNode(a.point, a.inter, a.neighbor, a.ent_exit, a.fracs, true)
+            b_list[j] = PolyNode(b.point, b.inter, b.neighbor, b.ent_exit, b.fracs, true)
+        end
     end
+
+    # return what index we ended up at so we know how many intersection points to skip in a_list
+    return i
 end
 
-# output 0 means left/straight, 1 means right
+# output 0 means left, 1 means right
 function _get_side(Q, P1, P2, P3)
     s1 = _signed_area_triangle(Q, P1, P2)
     s2 = _signed_area_triangle(Q, P2, P3)
@@ -384,10 +457,14 @@ function _get_side(Q, P1, P2, P3)
     if s3 >= 0
         if (s1 > 0) && (s2 > 0)
             return 0
+        else
+            return 1
         end
     else
         if (s1 > 0) || (s2 > 0)
             return 1
+        else
+            return 0
         end
     end
 end
