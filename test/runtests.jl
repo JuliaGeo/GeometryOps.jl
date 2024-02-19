@@ -24,6 +24,7 @@ const GO = GeometryOps
     @testset "Distance" begin include("methods/distance.jl") end
     @testset "Equals" begin include("methods/equals.jl") end
     # Clipping
+    @testset "Cut" begin include("methods/clipping/cut.jl") end
     @testset "Difference" begin include("methods/clipping/difference.jl") end
     @testset "Intersection" begin include("methods/clipping/intersection.jl") end
     @testset "Union" begin include("methods/clipping/union.jl") end

@@ -28,7 +28,7 @@ GI.coordinates.(union_poly)
 """
 function union(
     geom_a, geom_b, ::Type{T} = Float64; target::Type{Target} = Nothing,
-) where {T <: AbstractFloat, Target <: GI.AbstractTrait}
+) where {T <: AbstractFloat, Target <: Union{Nothing, GI.AbstractTrait}}
     _union(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
@@ -87,6 +87,6 @@ function _union(
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
 ) where {Target, T}
-    throw(ArgumentError("Intersection between $trait_a and $trait_b with target $Target isn't implemented yet."))
+    throw(ArgumentError("Union between $trait_a and $trait_b with target $Target isn't implemented yet."))
     return nothing
 end
