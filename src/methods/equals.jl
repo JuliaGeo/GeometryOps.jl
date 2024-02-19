@@ -40,6 +40,11 @@ implementation, since it's a lot less work!
 Note that while we need the same set of points and edges, they don't need to be
 provided in the same order for polygons. For for example, we need the same set
 points for two multipoints to be equal, but they don't have to be saved in the
+<<<<<<< HEAD
+same order. This requires checking every point against every other point in the
+two geometries we are comparing. Additionally, geometries and multi-geometries
+can be equal if the multi-geometry only includes that single geometry.
+=======
 same order. The winding order also doesn't have to be the same to represent the
 same geometry. This requires checking every point against every other point in
 the two geometries we are comparing. Also, some geometries must be "closed" like
@@ -47,6 +52,7 @@ polygons and linear rings. These will be assumed to be closed, even if they
 don't have a repeated last point explicity written in the coordinates.
 Additionally, geometries and multi-geometries can be equal if the multi-geometry
 only includes that single geometry.
+>>>>>>> 8851c2389f53b8def02390c2154e012ead90000e
 =#
 
 """
