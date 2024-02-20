@@ -7,7 +7,7 @@
 function compare_GO_LG_union(p1, p2, ϵ)
     GO_union = GO.union(p1,p2; target = GI.PolygonTrait)
     LG_union = LG.union(p1,p2)
-    if isempty(GO_union) && LG.isEmpty(LG_union)
+    if isempty(GO_union) && (LG.isEmpty(LG_union) || LG.area(LG_union) == 0)
         return true
     end
 

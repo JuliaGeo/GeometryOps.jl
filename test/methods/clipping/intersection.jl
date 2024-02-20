@@ -7,7 +7,7 @@
 function compare_GO_LG_intersection(p1, p2, ϵ)
     GO_intersection = GO.intersection(p1,p2; target = GI.PolygonTrait)
     LG_intersection = LG.intersection(p1,p2)
-    if isempty(GO_intersection) && LG.isEmpty(LG_intersection)
+    if isempty(GO_intersection) && (LG.isEmpty(LG_intersection) || LG.area(LG_intersection) == 0)
         return true
     end
 
@@ -189,7 +189,7 @@ end
 
     @test compare_GO_LG_intersection(GI.Polygon([poly_5]), GI.Polygon([poly_6]), 1e-5)
 
-     # Concave polygons that intersect
+    # Concave polygons that intersect
     poly_7 = [(1.2938349167338743, -3.175128530227131),
     (-2.073885870841754, -1.6247711001754137),
     (-5.787437985975053, 0.06570713422599561),

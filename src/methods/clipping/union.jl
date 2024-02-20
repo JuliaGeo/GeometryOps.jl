@@ -44,11 +44,9 @@ function _union(
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Then, I get the union of the exteriors
-    a_list, b_list, a_idx_list, (all_intr, has_cross) = _build_ab_list(T, ext_a, ext_b)
-    if same_polygon && GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
-        return poly_a
-    end
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> x ? (-1) : 1)
+    
     # Check if one polygon totally within other and if so, return the larger polygon.
     if isempty(polys)
         if _point_filled_curve_orientation(a_list[1].point, ext_b) == point_in
