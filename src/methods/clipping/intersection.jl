@@ -53,7 +53,10 @@ function _intersection(
     ext_poly_a = GI.getexterior(poly_a)
     ext_poly_b = GI.getexterior(poly_b)
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_poly_a, ext_poly_b)
+    a_list, b_list, a_idx_list, same_polygon = _build_ab_list(T, ext_poly_a, ext_poly_b)
+    if same_polygon && GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
+        return poly_a
+    end
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> x ? 1 : (-1))
 
     if isempty(polys)

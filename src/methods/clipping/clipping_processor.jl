@@ -33,9 +33,9 @@ function _build_ab_list(::Type{T}, poly_a, poly_b) where T
 
     # Flag the entry and exits
     _flag_ent_exit!(poly_b, a_list)
-    _flag_ent_exit!(poly_a, b_list)
+    same_polygon = _flag_ent_exit!(poly_a, b_list)
 
-    return a_list, b_list, a_idx_list
+    return a_list, b_list, a_idx_list, same_polygon
 end
 
 #=
@@ -322,23 +322,47 @@ false if we are tracing b_list. The functions used for each clipping operation a
     - Intersection: (x, y) -> x ? 1 : (-1)
     - Difference: (x, y) -> (x ⊻ y) ? 1 : (-1)
     - Union: (x, y) -> (x ⊻ y) ? 1 : (-1)
+    _ Union: (x, y) -> x ? (-1) : 1
 
 A list of GeoInterface polygons is returned from this function. 
 =#
+function _get_a_cross_list(a_list)
+    a_cross_list = []
+    for i in eachindex(a_list)
+        if a_list[i].crossing
+            push!(a_cross_list, i)
+        end
+    end
+
+    if isempty(a_cross_list)
+        return nothing
+    end
+    return a_cross_list
+end
+
 function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
     n_a_pts, n_b_pts = length(a_list), length(b_list)
-    n_intr_pts = length(a_idx_list)
+    a_cross_list = _get_a_cross_list(a_list)
+    # n_intr_pts = length(a_idx_list)
+
+    # When polygons do intersect, but just touching or one inside the other
+    if isnothing(a_cross_list)
+        if length(a_idx_list)>0
+            #TODO return smth 
+        end
+    end
+    n_cross_pts = length(a_cross_list)
     return_polys = Vector{_get_poly_type(T)}(undef, 0)
     # Keep track of number of processed intersection points
     processed_pts = 0
-    while processed_pts < n_intr_pts
+    while processed_pts < n_cross_pts
         curr_list, curr_npoints = a_list, n_a_pts
         on_a_list = true
         # Find first unprocessed intersecting point in subject polygon
         processed_pts += 1
-        first_idx = findnext(x -> x != 0, a_idx_list, processed_pts)
-        idx = a_idx_list[first_idx]
-        a_idx_list[first_idx] = 0
+        first_idx = findnext(x -> x != 0, a_cross_list, processed_pts)
+        idx = a_cross_list[first_idx]
+        a_cross_list[first_idx] = 0
         start_pt = a_list[idx]
 
         # Set first point in polygon
@@ -348,8 +372,9 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
         curr_not_start = true
         while curr_not_start
             step = f_step(curr.ent_exit, on_a_list)
-            curr_not_intr = true
-            while curr_not_intr
+            # changed curr_not_intr to curr_not_same_ent_flag
+            curr_not_crossing = true
+            while curr_not_crossing
                 # Traverse polygon either forwards or backwards
                 idx += step
                 idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
@@ -358,19 +383,19 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
                 # Get current node and add to pt_list
                 curr = curr_list[idx]
                 push!(pt_list, curr.point)
-                if curr.inter 
+                if curr.inter && curr.crossing
                     # Keep track of processed intersection points
                     curr_not_start = curr != start_pt && curr != b_list[start_pt.neighbor]
                     if curr_not_start
                         processed_pts += 1
-                        for (i, a_idx) in enumerate(a_idx_list)
+                        for (i, a_idx) in enumerate(a_cross_list)
                             if a_idx != 0 && equals(a_list[a_idx].point, curr.point)
-                                a_idx_list[i] = 0
+                                a_cross_list[i] = 0
                             end
                         end
                         # a_idx_list[curr.idx] = 0
                     end
-                    curr_not_intr = false
+                    curr_not_crossing = false
                 end
             end
 

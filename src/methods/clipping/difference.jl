@@ -44,7 +44,11 @@ function _difference(
     ext_poly_a = GI.getexterior(poly_a)
     ext_poly_b = GI.getexterior(poly_b)
     # Find the difference of the exterior of the polygons
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_poly_a, ext_poly_b)
+    a_list, b_list, a_idx_list, same_polygon = _build_ab_list(T, ext_poly_a, ext_poly_b)
+    if same_polygon && GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
+        # What do we return for empty polygon???
+        return nothing
+    end
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> (x ⊻ y) ? 1 : (-1))
     if isempty(polys)
         if _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in

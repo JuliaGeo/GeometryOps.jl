@@ -276,4 +276,39 @@ end
     # Two ugly polygons with 2 holes each
     p1 = [[(0.0, 0.0), (5.0, 0.0), (5.0, 8.0), (0.0, 8.0), (0.0, 0.0)], [(4.0, 0.5), (4.5, 0.5), (4.5, 3.5), (4.0, 3.5), (4.0, 0.5)], [(2.0, 4.0), (4.0, 4.0), (4.0, 6.0), (2.0, 6.0), (2.0, 4.0)]]
     p2 = [[(3.0, 1.0), (8.0, 1.0), (8.0, 7.0), (3.0, 7.0), (3.0, 5.0), (6.0, 5.0), (6.0, 3.0), (3.0, 3.0), (3.0, 1.0)], [(3.5, 5.5), (6.0, 5.5), (6.0, 6.5), (3.5, 6.5), (3.5, 5.5)], [(5.5, 1.5), (5.5, 2.5), (3.5, 2.5), (3.5, 1.5), (5.5, 1.5)]]
+
+    # Polygons that test performance with degenerate intersectio points
+    ugly1 = GI.Polygon([[[0.0, 0.0], [8.0, 0.0], [10.0, -1.0], [8.0, 1.0], [8.0, 2.0], [7.0, 5.0], [6.0, 4.0], [3.0, 5.0], [3.0, 3.0], [0.0, 0.0]]])
+    ugly2 = GI.Polygon([[[1.0, 1.0], [3.0, -1.0], [6.0, 2.0], [8.0, 0.0], [8.0, 4.0], [4.0, 4.0], [1.0, 1.0]]])
+    @test compare_GO_LG_intersection(ugly1, ugly2, 1e-5)
+
+    # When every point is an intersection point (some bounce some crossing)
+    fig13_p1 = GI.Polygon([[[0.0, 0.0], [4.0, 0.0], [4.0, 2.0], [3.0, 1.0], [1.0, 1.0], [0.0, 2.0], [0.0, 0.0]]])
+    fig13_p2 = GI.Polygon([[[4.0, 0.0], [3.0, 1.0], [1.0, 1.0], [0.0, 0.0], [0.0, 2.0], [4.0, 2.0], [4.0, 0.0]]])
+    @test compare_GO_LG_intersection(fig13_p1, fig13_p2, 1e-5)
+
+    # the only intersection is a bounce point, polygons are touching each other at one pt
+    touch_1 = GI.Polygon([[[0.0, 0.0], [2.0, 1.0], [4.0, 0.0], [2.0, 4.0], [1.0, 2.0], [0.0, 3.0], [0.0, 0.0]]])
+    touch_2 = GI.Polygon([[[4.0, 3.0], [3.0, 2.0], [4.0, 2.0], [4.0, 3.0]]])
+    @test compare_GO_LG_intersection(touch_1, touch_2, 1e-5)
+
+    # One polygon inside the other, sharing part of an edge
+    inside_edge_1 = GI.Polygon([[[0.0, 0.0], [3.0, 0.0], [3.0, 3.0], [0.0, 3.0], [0.0, 0.0]]])
+    inside_edge_2 = GI.Polygon([[[1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0], [1.0, 0.0]]])
+    @test compare_GO_LG_intersection(inside_edge_1, inside_edge_2, 1e-5)
+
+    # only cross intersection points
+    cross_tri_1 = inside_edge_1
+    cross_tri_2 = GI.Polygon([[[2.0, 1.0], [4.0, 1.0], [3.0, 2.0], [2.0, 1.0]]])
+    @test compare_GO_LG_intersection(cross_tri_1, cross_tri_2, 1e-5)
+
+    # one of the cross points is a V intersection
+    V_tri_1 = inside_edge_1
+    V_tri_2 = GI.Polygon([[[2.0, 1.0], [4.0, 1.0], [3.0, 3.0], [2.0, 1.0]]])
+    @test compare_GO_LG_intersection(V_tri_1, V_tri_2, 1e-5)
+
+    # both cross points are V intersections
+    V_diamond_1 = inside_edge_1
+    V_diamond_2 = GI.Polygon([[[2.0, 1.0], [3.0, 0.0], [4.0, 1.0], [3.0, 3.0], [2.0, 1.0]]])
+    @test compare_GO_LG_intersection(V_diamond_1, V_diamond_2, 1e-5)
 end
