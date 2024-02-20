@@ -41,20 +41,20 @@ function _union(
     ::GI.PolygonTrait, poly_b,
 ) where T
     # First, I get the exteriors of the two polygons
-    ext_poly_a = GI.getexterior(poly_a)
-    ext_poly_b = GI.getexterior(poly_b)
+    ext_a = GI.getexterior(poly_a)
+    ext_b = GI.getexterior(poly_b)
     # Then, I get the union of the exteriors
-    a_list, b_list, a_idx_list, same_polygon = _build_ab_list(T, ext_poly_a, ext_poly_b)
+    a_list, b_list, a_idx_list, (all_intr, has_cross) = _build_ab_list(T, ext_a, ext_b)
     if same_polygon && GI.nhole(poly_a)==0 && GI.nhole(poly_b)==0
         return poly_a
     end
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> x ? (-1) : 1)
     # Check if one polygon totally within other and if so, return the larger polygon.
     if isempty(polys)
-        if _point_filled_curve_orientation(a_list[1].point, ext_poly_b) == point_in
-            push!(polys, GI.Polygon([ext_poly_b]))
-        elseif _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in
-            push!(polys,  GI.Polygon([ext_poly_a]))
+        if _point_filled_curve_orientation(a_list[1].point, ext_b) == point_in
+            push!(polys, GI.Polygon([ext_b]))
+        elseif _point_filled_curve_orientation(b_list[1].point, ext_a) == point_in
+            push!(polys,  GI.Polygon([ext_a]))
         else
             push!(polys, poly_a)
             push!(polys, poly_b)
@@ -68,9 +68,9 @@ function _union(
     n_b_holes = GI.nhole(poly_b)
     if GI.nhole(poly_a) != 0 || n_b_holes != 0
         new_poly = [GI.getexterior(polys[1]); collect(GI.gethole(polys[1]))]
-        current_poly = GI.Polygon([ext_poly_b])
+        current_poly = GI.Polygon([ext_b])
         for (i, hole) in enumerate(Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b))))
-            # Use ext_poly_b to not overcount overlapping holes in poly_a and in poly_b
+            # Use ext_b to not overcount overlapping holes in poly_a and in poly_b
             new_hole = difference(GI.Polygon([hole]), current_poly, T; target = GI.PolygonTrait)
             for h in new_hole
                 push!(new_poly, GI.getexterior(h))
