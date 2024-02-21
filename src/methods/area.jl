@@ -51,6 +51,8 @@ for polygons.
 
 const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
 
+@enum WallType north=1 east=2 south=3 west=4 unknown=5
+
 """
     area(geom, ::Type{T} = Float64)::T
 
@@ -168,21 +170,68 @@ Output:
 Warning:
     Assumes polygon has clockwise winding order
 """
-function calc_floe_area_in_cell(
-    coords::PolyVec{FT},
-    xmin, xmax, ymin, ymax,
-) where {FT <: AbstractFloat}
-    npoints = length(coords[1]) - 1
-    sum = FT(0)
+function _coverage(::Type{T}, poly, xmin, xmax, ymin, ymax) where T
+    cov_area = zero(T)
+    out_wall, out_point = unknown, (zero(T), zero(T))
+    unmatched_in_wall, unmatched_in_point = out_wall, out_point
+
+    x1, y1 = _tuple_point(GI.getpoint(poly, GI.npoint(poly)))
+    for p2 in GI.getpoint(poly)
+        x2, y2 = _tuple_point(p2)
+        p1_in_cell = point_in_cell(x1, y1, xmin, xmax, ymin, ymax)
+        p2_in_cell = point_in_cell(x2, y2, xmin, xmax, ymin, ymax)
+        # If edge inside rectangle, add edge area component to total and move to next edge
+        if p1_in_cell && p2_in_cell  # line segment inside cell
+            cov_area += x1 * y2 - x2 * y1
+            x1, y1 = x2, y2
+            continue
+        end
+        # If edge passes outside of rectangle, determine which edge segments are added
+        edge_area = zero(T)
+        inter1, inter2 = line_intersect_cell(T, x1, y1, x2, y2, xmin, xmax, ymin, ymax)
+        if p1_in_cell
+            out_wall, (out_x, out_y) = inter1
+            edge_area += x1 * out_y - out_x * y1
+        elseif p2_in_cell
+            in_wall, in_point = inter1
+            in_x, in_y = in_point
+            edge_area += in_x * y2 - x2 * in_y
+            if out_wall == unknown # need to match with outpoint at end
+                unmatched_in_point = in_point
+                unmatched_in_wall = in_wall
+            else # add edge areas connecting last out_point to this in_point
+                edge_area += connect_edges(  # TODO: finish updating this function
+                    out_point[1], out_point[2],
+                    in_point[1], in_point[2],
+                    out_wall, i1_idx,
+                    xmin, xmax, ymin, ymax,
+                )
+                out_wall = unknown
+            end
+        else #if there is still an intersection...
+
+
+        end
+        
+    end
+
+end
+
+point_in_cell(x, y, xmin, xmax, ymin, ymax) = xmin <= x <= xmax && ymin <= y <= ymax
+between(b, c, a) = a ≤ b ≤ c || c ≤ b ≤ a 
+
+function _coverage(::Type{T}, poly, xmin, xmax, ymin, ymax) where T
+    npoints = GI.npoint(poly)
+    area = zero(T)
     # keep track of when polygon edges leave grid cell
-    out_point::Union{Nothing, Tuple{FT, FT}} = nothing
-    out_wall = 0
+    out_wall = unknown
+    out_point::Union{Nothing, Tuple{T, T}} = nothing
     #=
     keep track of when polygon edges enter grid cell if it doesn't have
     matching outpoint from when polygon left grid cell
     =#
     unmatched_in_point = out_point
-    unmatched_in_wall = 0
+    unmatched_in_wall = unknown
     # keep track of wall intersections
     iwalls = [FT(Inf) for _ in 1:4]
     @views for i in 1:npoints
@@ -245,42 +294,25 @@ function calc_floe_area_in_cell(
                 out_wall = i2_idx
             end
         end
-        sum += edge_area
+        area += edge_area
     end
     # if unmatched in-point at beginning, close polygon with last out point
     if !isnothing(unmatched_in_point)
-        sum += connect_edges(
+        area += connect_edges(
             out_point[1], out_point[2],
             unmatched_in_point[1], unmatched_in_point[2],
             out_wall, unmatched_in_wall,
             xmin, xmax, ymin, ymax,
         )
     end
-    sum = abs(sum) / 2
+    area = abs(area) / 2
     #  if grid cell is within polygon then the area is grid cell area
-    if sum == 0 && is_point_in_poly(xmin, ymin, coords)
-        sum = abs((xmax - xmin) * (ymax - ymin))
+    if area == 0 && is_point_in_poly(xmin, ymin, coords)
+        area = abs((xmax - xmin) * (ymax - ymin))
     end
-    return sum
+    return area
 end
 
-"""
-    point_in_cell(x, y, xmin, xmax, ymin, ymax)
-
-Checks if a point (x, y) is within a grid cell defined by its maximum and
-minimum corner values in the x and y-directions.
-Inputs:
-    x       <AbstractFloat> x-coordinate of point
-    y       <AbstractFloat> y-coordinate of point
-    xmin    <AbstractFloat> minimum x-coordinate of grid cell
-    xmax    <AbstractFloat> maximum x-coordinate of grid cell
-    ymin    <AbstractFloat> minimum y-coordinate of grid cell
-    ymax    <AbstractFloat> maximum y-coordinate of grid cell
-Outputs:
-    True if (x, y) is within grid cell, false otherwise.
-"""
-point_in_cell(x, y, xmin, xmax, ymin, ymax) =
-    xmin <= x <= xmax && ymin <= y <= ymax
 
 """
     which_cell_wall(x, y, xmin, xmax, ymin, ymax)
@@ -332,6 +364,53 @@ Outputs:
     Nothing. Updates iwalls with intersection values. Any indices with Inf
     values don't have an intersection point.
 """
+function line_intersect_cell(::Type{T}, x1, y1, x2, y2, xmin, xmax, ymin, ymax) where T
+    Δx, Δy = x2 - x1, y2 - y1
+    inter1 = (unknown, (zero(T), zero(T)))
+    inter2 = inter1
+    if Δx == 0
+        if xmin ≤ x1 ≤ xmax
+            inter1 = between(ymax, y1, y2) ? (north, (x1, ymax)) : inter1
+            inter2 = between(ymin, y1, y2) ? (south, (x1, ymin)) : inter2
+        end
+    elseif Δy == 0
+        if ymin ≤ y1 ≤ ymax
+            inter1 = between(xmax, x1, x2) ? (east, (xmax, y1)) : inter1
+            inter2 = between(xmin, x1, x2) ? (west, (xmin, y1)) : inter2
+        end
+    else
+        m = Δy / Δx
+        b = y1 - m * x1
+        # Calculate potential intersections
+        xn = (ymax - b) / m
+        if xmin ≤ xn ≤ xmax && between(xn, x1, x2) && between(ymax, y1, y2)
+            ninter += 1
+            inter1 = (north, (xn, ymax))
+        end
+        xs = (ymin - b) / m
+        if xmin ≤ xs ≤ xmax && between(xs, x1, x2) && between(ymin, y1, y2)
+            ninter += 1
+            new_intr = (south, (xs, ymin))
+            (inter1[1] == unknown) ? (inter1 = new_intr) : (inter2 = new_intr)
+        end
+        ye =  m * xmax + b
+        if ymin ≤ ye ≤ ymax && between(ye, y1, y2) && between(xmax, x1, x2)
+            new_intr = (east, (xmax, ye))
+            (inter1[1] == unknown) ? (inter1 = new_intr) : (inter2 = new_intr)
+        end
+        yw = m * xmin + b
+        if ymin ≤ yw ≤ ymax && between(yw, y1, y2) && between(xmin, x1, x2)  # west
+            new_intr = (west, (xmin, yw))
+            (inter1[1] == unknown) ? (inter1 = new_intr) : (inter2 = new_intr)
+        end
+    end
+    if inter1[1] == unknown
+        inter1, inter2 = inter2, inter1
+    end
+    return inter1, inter2
+end
+
+
 function line_intersect_cell!(
     x1::FT, y1, x2, y2,
     xmin, xmax, ymin, ymax, iwalls,
@@ -433,17 +512,20 @@ Inputs:
     y2      <Number> y-coordinate of second point
     wall    <Int> wall index (1-4)
 """
-function is_clockwise_from(x1, y1, x2, y2, wall)
-    if wall == 1  # north
-        return x2 > x1
-    elseif wall == 2  # east
-        return y2 < y1
-    elseif wall == 3  # south
-        return x2 < x1
-    elseif wall == 4  # west
-        return y2 > y1
-    end
-end
+# function is_clockwise_from(x1, y1, x2, y2, wall)
+#     if wall == 1  # north
+#         return x2 > x1
+#     elseif wall == 2  # east
+#         return y2 < y1
+#     elseif wall == 3  # south
+#         return x2 < x1
+#     elseif wall == 4  # west
+#         return y2 > y1
+#     end
+# end
+
+is_clockwise_from(x1, y1, x2, y2, wall) = (wall == north && x2 > x1) ||
+    (wall == east && y2 < y1) || (wall == south && x2 < x1) || (wall == west && y2 > y1)
 
 """
     full_edge_area(xmin, xmax, ymin, ymax, wall)
@@ -458,17 +540,16 @@ Inputs:
 Output:
     Entire edge area component using the shoelace formula
 """
-function full_edge_area(xmin, xmax, ymin, ymax, wall)
-    if wall == 1
-        return ymax * (xmin - xmax)
-    elseif wall == 2
-        return xmax * (ymin - ymax)
-    elseif wall == 3
-        return ymin * (xmax - xmin)
+full_edge_area(xmin, xmax, ymin, ymax, wall) =
+    if wall == north
+        ymax * (xmin - xmax)
+    elseif wall == east
+        xmax * (ymin - ymax)
+    elseif wall == south
+        ymin * (xmax - xmin)
     else
-        return xmin * (ymax - ymin)
+        xmin * (ymax - ymin)
     end
-end
 
 """
     partial_edge_in(x2, y2, xmin, xmax, ymin, ymax, wall)
@@ -485,17 +566,22 @@ Output:
     Edge area component from the corner of the wall to the given point using
     the shoelace formula
 """
-function partial_edge_in(x2, y2, xmin, xmax, ymin, ymax, wall)
-    # from the corner to the point
-    if wall == 1
-        return xmin * y2 - x2 * ymax
-    elseif wall == 2
-        return xmax * y2 - x2 * ymax
-    elseif wall == 3
-        return xmax * y2 - x2 * ymin
-    else
-        return xmin * y2 - x2 * ymin
-    end
+# function partial_edge_in(x2, y2, xmin, xmax, ymin, ymax, wall)
+#     # from the corner to the point
+#     if wall == 1
+#         return xmin * y2 - x2 * ymax
+#     elseif wall == 2
+#         return xmax * y2 - x2 * ymax
+#     elseif wall == 3
+#         return xmax * y2 - x2 * ymin
+#     else
+#         return xmin * y2 - x2 * ymin
+#     end
+# end
+function partial_edge_out(x1, y1, xmin, xmax, ymin, ymax, wall)
+    x_wall = (wall == north || wall == west) ? xmin : xmax
+    y_wall = (wall == north || wall == east) ? ymax : ymin
+    return  x_wall * y2 - x2 * y_wall
 end
 
 """
@@ -513,17 +599,23 @@ Output:
     Edge area component from the point to the next corner of the wall using the
     shoelace formula
 """
+# function partial_edge_out(x1, y1, xmin, xmax, ymin, ymax, wall)
+#     # from the corner to the point
+#     if wall == 1
+#         return x1 * ymax - xmax * y1
+#     elseif wall == 2
+#         return x1 * ymin - xmax * y1
+#     elseif wall == 3
+#         return x1 * ymin - xmin * y1
+#     else
+#         return x1 * ymax - xmin * y1
+#     end
+# end
+
 function partial_edge_out(x1, y1, xmin, xmax, ymin, ymax, wall)
-    # from the corner to the point
-    if wall == 1
-        return x1 * ymax - xmax * y1
-    elseif wall == 2
-        return x1 * ymin - xmax * y1
-    elseif wall == 3
-        return x1 * ymin - xmin * y1
-    else
-        return x1 * ymax - xmin * y1
-    end
+    x_wall = (wall == north || wall == east) ? xmax : xmin
+    y_wall = (wall == north || wall == west) ? ymax : ymin
+    return x1 * y_wall - x_wall * y1
 end
 
 """
@@ -546,7 +638,7 @@ Outputs:
     Area component of shoelace formula coming from the distance between point 1
     and point 2 along grid cell walls
 """
-function connect_edges(x1::FT, y1, x2, y2, wall1, wall2,
+function connect_edges(x1::FT, y1, x2, y2, wall1, wall2,  # TODO: Finish updating! 
     xmin, xmax, ymin, ymax,
 ) where {FT}
     connect_area = FT(0)

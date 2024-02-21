@@ -103,7 +103,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
 end
 
 # Add value x at index i to given array - if list isn't long enough, push value to array
-function _add!(arr, i, x, l = length(arr))
+function _add!(arr::T, i, x, l = length(arr)) where {T <: Vector{<:PolyNode}}
     if i <= l
         arr[i] = x
     else
