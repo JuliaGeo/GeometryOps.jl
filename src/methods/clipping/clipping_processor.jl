@@ -419,6 +419,37 @@ _get_poly_type(::Type{T}) where T =
     GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
 
 #=
+    _find_non_cross_orientation(a_list, b_list, a_poly, b_poly)
+
+For polygns with no crossing intersection points, either one polygon is inside of another,
+or they are seperate polygons with no intersection (other than an edge or point).
+
+Return two booleans that represent if a is inside b (potentially with shared edges / points)
+and visa versa if b is inside of a.
+=#
+function _find_non_cross_orientation(a_list, b_list, a_poly, b_poly)
+    non_intr_a_idx = findfirst(x -> !x.inter, a_list)
+    non_intr_b_idx = findfirst(x -> !x.inter, b_list)
+    a_pt_orient = isnothing(non_intr_a_idx) ? point_on :
+        _point_filled_curve_orientation(a_list[non_intr_a_idx].point, b_poly)
+    b_pt_orient = isnothing(non_intr_b_idx) ? point_on :
+        _point_filled_curve_orientation(b_list[non_intr_b_idx].point, a_poly)
+    a_in_b = a_pt_orient != point_out && b_pt_orient != point_in  # a inside b
+    b_in_a = b_pt_orient != point_out && a_pt_orient != point_in
+    return a_in_b, b_in_a
+end
+
+function share_edge_warn(list, warn_str)
+    shared_edge = false
+    prev_pt_inter = false
+    for pt in list
+        shared_edge = prev_pt_inter && pt.inter
+        shared_edge && break
+        prev_pt_inter = pt.inter
+    end
+    shared_edge && @warn warn_str
+end
+#=
     _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator)
 
 The holes specified by the hole iterator are added to the polygons in the return_polys list.

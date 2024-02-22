@@ -48,12 +48,14 @@ function _union(
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> x ? (-1) : 1)
     
     # Check if one polygon totally within other and if so, return the larger polygon.
-    if isempty(polys)
-        if _point_filled_curve_orientation(a_list[1].point, ext_b) == point_in
-            push!(polys, GI.Polygon([ext_b]))
-        elseif _point_filled_curve_orientation(b_list[1].point, ext_a) == point_in
-            push!(polys,  GI.Polygon([ext_a]))
+    if isempty(polys) # no crossing points, determine if either poly is inside the other
+        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
+        if a_in_b
+            push!(polys, GI.Polygon([tuples(ext_b)]))
+        elseif b_in_a
+            push!(polys,  GI.Polygon([tuples(ext_a)]))
         else
+            share_edge_warn(a_list, "Edge case: polygons share edge but can't be combined.")
             push!(polys, poly_a)
             push!(polys, poly_b)
             return polys

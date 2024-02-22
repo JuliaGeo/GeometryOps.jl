@@ -48,16 +48,15 @@ function _difference(
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> (x ⊻ y) ? 1 : (-1))
     # if no crossing points, determine if either poly is inside of the other
     if isempty(polys)
-        non_intr_a_idx = findfirst(x - > !x.inter, a_list)
-        non_intr_b_idx = findfirst(x - > !x.inter, b_list)
+        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
         # add case for if they polygons are the same (all intersection points!)
         # add a find_first check to find first non-inter poly!
-        if _point_filled_curve_orientation(b_list[1].point, ext_a) == point_in
-            poly_a_b_hole = GI.Polygon([ext_a, ext_b])
+        if b_in_a && !a_in_b  # b in a and can't be the same polygon
+            share_edge_warn(a_list, "Edge case: polygons share edge but one is hole of the other.")
+            poly_a_b_hole = GI.Polygon([tuples(ext_a), tuples(ext_b)])
             push!(polys, poly_a_b_hole)
-        elseif _point_filled_curve_orientation(a_list[1].point, ext_b) != point_in
-            # Two polygons don't intersect and are not contained in one another
-            push!(polys, GI.Polygon([ext_a]))
+        elseif !b_in_a && !a_in_b # polygons don't intersect
+            push!(polys, GI.Polygon([tuples(ext_a)]))
         end
     end
 

@@ -7,10 +7,17 @@
 function compare_GO_LG_union(p1, p2, ϵ)
     GO_union = GO.union(p1,p2; target = GI.PolygonTrait)
     LG_union = LG.union(p1,p2)
+    if LG_union isa LG.GeometryCollection
+        poly_list = LG.Polygon[]
+        for g in GI.getgeom(LG_union)
+            g isa LG.Polygon && push!(poly_list, g)
+        end
+        LG_union = LG.MultiPolygon(poly_list)
+    end
     if isempty(GO_union) && (LG.isEmpty(LG_union) || LG.area(LG_union) == 0)
         return true
     end
-
+    local GO_union_poly
     if length(GO_union)==1
         GO_union_poly = GO_union[1]
     else

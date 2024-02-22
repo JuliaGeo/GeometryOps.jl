@@ -7,10 +7,17 @@
 function compare_GO_LG_intersection(p1, p2, ϵ)
     GO_intersection = GO.intersection(p1,p2; target = GI.PolygonTrait)
     LG_intersection = LG.intersection(p1,p2)
+    if LG_intersection isa LG.GeometryCollection
+       poly_list = LG.Polygon[]
+       for g in GI.getgeom(LG_intersection)
+            g isa LG.Polygon && push!(poly_list, g)
+       end
+       LG_intersection = LG.MultiPolygon(poly_list)
+    end
     if isempty(GO_intersection) && (LG.isEmpty(LG_intersection) || LG.area(LG_intersection) == 0)
         return true
     end
-
+    local GO_intersection_poly
     if length(GO_intersection)==1
         GO_intersection_poly = GO_intersection[1]
     else

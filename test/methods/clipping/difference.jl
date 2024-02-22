@@ -7,10 +7,17 @@
 function compare_GO_LG_difference(p1, p2, ϵ)
     GO_difference = GO.difference(p1,p2; target = GI.PolygonTrait)
     LG_difference = LG.difference(p1,p2)
+    if LG_difference isa LG.GeometryCollection
+        poly_list = LG.Polygon[]
+        for g in GI.getgeom(LG_difference)
+            g isa LG.Polygon && push!(poly_list, g)
+        end
+        LG_difference = LG.MultiPolygon(poly_list)
+    end
     if isempty(GO_difference) && (LG.isEmpty(LG_difference) || LG.area(LG_difference) == 0)
         return true
     end
-
+    local GO_difference_poly
     if length(GO_difference)==1
         GO_difference_poly = GO_difference[1]
     else
