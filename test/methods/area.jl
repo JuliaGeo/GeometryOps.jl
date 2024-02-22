@@ -86,7 +86,10 @@ a4 = LG.area(p4)
 
 @testset "Coverage" begin
     cell_extremes = (0.0, 20.0, 0.0, 20.0)
+    cell_poly = GI.Polygon([[(0.0, 0.0), (0.0, 20.0), (20.0, 20.0), (20.0, 0.0), (0.0, 0.0)]])
     cell_area = 400.0
+
+    # points, lines, curves
 
     # polygon is the same as the cell
     p1 = GI.Polygon([[(0.0, 0.0), (0.0, 20.0), (20.0, 20.0), (20.0, 0.0), (0.0, 0.0)]])
@@ -102,12 +105,23 @@ a4 = LG.area(p4)
     @test GO.coverage(p4, cell_extremes...) == 150.0
     p5 = GI.Polygon([[(5.0, 5.0), (5.0, 25.0), (25.0, 25.0), (25.0, 5.0), (5.0, 5.0)]])
     @test GO.coverage(p5, cell_extremes...) == 225.0
-
+    # polygon exits cell through multiple edges (north and east)
     p6 = GI.Polygon([[(20.8826, 6.4239), (15.9663, 2.3014), (8.6078, 2.0995), (2.6849, 6.4088),
         (0.8449, 12.7452), (3.0813, 19.1654), (9.1906, 23.2520), (15.5835, 22.9101),
         (20.9143, 18.5933), (20.8826, 6.4239)]])
+    @test GO.coverage(p6, cell_extremes...) ≈ GO.area(GO.intersection(p6, cell_poly; target = GI.PolygonTrait)[1])
+    # polygon exits cell through multiple edges (west and east)
+    p7 = GI.Polygon([[(-5.0, 10.0), (-5.0, 25.0), (25.0, 25.0), (25.0, 10.0), (-5.0, 10.0)]])
+    @test GO.coverage(p7, cell_extremes...) == 200.0
+    # non-convex polygon --> NOTE: Algorithm doesn't work for polygons split into multiple pieces --> check if connecting edges are in polygon!!
+    p8 =  GI.Polygon([[(-10.0, 15.0), (10.0, 15.0), (10.0, 12.0), (-5.0, 12.0), (10.0, 9.0), (10.0, 6.0), (-10.0, 6.0), (-10.0, 15.0)]])
+    @test GO.coverage(p8, cell_extremes...) == 60.0
+    # counter-clockwise polygon
 
-    p7 = GI.Polygon([[(13.84651, 13.9485), (7.2815, -4.1905), (-7.7811, 6.2478), (13.84651, 13.9485)]])
+    # polygon with a hole
+
+    # multipolygon
+    
 
     function test_rand_polys(n)
         xmin = 0.0

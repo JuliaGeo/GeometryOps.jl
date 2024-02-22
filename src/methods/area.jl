@@ -205,6 +205,7 @@ function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax) where T
     p1 = _tuple_point(GI.getpoint(ring, ring_cw ? GI.npoint(ring) : 1))
     for p in (ring_cw ? GI.getpoint(ring) : reverse(GI.getpoint(ring)))
         p2 = _tuple_point(p)
+        @show p1, p2
         # Determine if edge points are within the cell
         p1_in_cell = _point_in_cell(p1, xmin, xmax, ymin, ymax)
         p2_in_cell = _point_in_cell(p2, xmin, xmax, ymin, ymax)
@@ -214,6 +215,7 @@ function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax) where T
             p1 = p2
             continue
         end
+        @show p1_in_cell, p2_in_cell
         # If edge passes outside of rectangle, determine which edge segments are added
         inter1, inter2 = _line_intersect_cell(T, p1, p2, xmin, xmax, ymin, ymax)
         # Endpoints of segment within the cell and wall they are on if known
@@ -226,26 +228,32 @@ function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax) where T
                 distance(inter1[2], p1) < distance(inter2[2], p1) ?
                     (inter1, inter2) : (inter2, inter1)
             end
+        @show in_wall, out_wall
+        @show in_point, out_point
         # Add edge component
         cov_area += _area_component(in_point, out_point)
         # Connect intersection along cell walls
         if in_wall != UNKNOWN
             if unmatched_out_wall == UNKNOWN
+                println("A")
                 unmatched_in_point = in_point
                 unmatched_in_wall = in_wall
             else
+                println("B")
                 cov_area += connect_edges(T, unmatched_out_point, in_point,
                     unmatched_out_wall, in_wall, xmin, xmax, ymin, ymax)
                 unmatched_out_wall = out_wall
             end
         end
         if out_wall != UNKNOWN
+            println("C")
             unmatched_out_wall, unmatched_out_point = out_wall, out_point
         end
         p1 = p2
     end
     # if unmatched in-point at beginning, close polygon with last out point
     if unmatched_in_wall != UNKNOWN
+        println("D")
         cov_area += connect_edges(T, unmatched_out_point, unmatched_in_point,
             unmatched_out_wall, unmatched_in_wall, xmin, xmax, ymin, ymax)
     end
