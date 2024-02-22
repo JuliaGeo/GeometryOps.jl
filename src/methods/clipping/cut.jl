@@ -40,6 +40,8 @@ Return given geom cut by given line as a list of geometries of the same type as 
 geom. Return the original geometry as only list element if none are found. Line must cut
 fully through given geometry or the original geometry will be returned.
 
+Note: This currently doesn't work for degenerate cases there line crosses through vertices.
+
 ## Example 
 
 ```jldoctest
@@ -70,7 +72,7 @@ function _cut(::Type{T}, ::GI.PolygonTrait, poly, ::GI.LineTrait, line) where T
         return [tuples(poly)]
     end
     # Cut polygon by line
-    cut_coords = _cut(T, ext_poly, poly_list, intr_list, n_intr_pts)
+    cut_coords = _cut(T, ext_poly, line, poly_list, intr_list, n_intr_pts)
     # Close coords and create polygons
     for c in cut_coords
         push!(c, c[1])
@@ -94,10 +96,10 @@ end
 of cut geometry in Vector{Vector{Tuple}} format. 
 
 Note: degenerate cases where intersection points are vertices do not work right now. =#
-function _cut(::Type{T}, geom, geom_list, intr_list, n_intr_pts) where T
+function _cut(::Type{T}, geom, line, geom_list, intr_list, n_intr_pts) where T
     # Sort and catagorize the intersection points
     sort!(intr_list, by = x -> geom_list[x].fracs[2])
-    _flag_ent_exit!(geom, geom_list)
+    _flag_ent_exit!(GI.LineTrait(), line, geom_list)
     # Add first point to output list
     return_coords = [[geom_list[1].point]]
     cross_backs = [(T(Inf),T(Inf))]

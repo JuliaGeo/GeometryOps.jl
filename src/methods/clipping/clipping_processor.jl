@@ -31,8 +31,8 @@ function _build_ab_list(::Type{T}, poly_a, poly_b) where T
     _classify_crossing!(T, a_list, b_list)
 
     # Flag the entry and exits
-    _flag_ent_exit!(poly_b, a_list)
-    _flag_ent_exit!(poly_a, b_list)
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list)
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list)
 
     return a_list, b_list, a_idx_list
 end
@@ -300,16 +300,16 @@ function _signed_area_triangle(P, Q, R)
 end
 
 #=
-    _flag_ent_exit!(poly_b, a_list)
+    _flag_ent_exit!(::GI.LinearRingTrait, poly_b, a_list)
 
 This function flags all the intersection points as either an 'entry' or 'exit' point in
 relation to the given polygon. Returns true if there are crossing points to classify, else
-returns false.
+returns false. Used for clipping polygons by other polygons.
 =#
-function _flag_ent_exit!(poly, pt_list)
+function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list)
     # Find starting index if there is one
     start_idx = findfirst(x -> x.crossing, pt_list)
-    isnothing(start_idx) && return false
+    isnothing(start_idx) && return
     # Determine if non-overlapping line midpoint is inside or outside of polygon
     npts = length(pt_list)
     next_idx = start_idx < npts ? (start_idx + 1) : 1
@@ -318,7 +318,30 @@ function _flag_ent_exit!(poly, pt_list)
     # Loop over points and mark entry and exit status
     for ii in Iterators.flatten((next_idx:npts, 1:start_idx))
         curr_pt = pt_list[ii]
-        if curr_pt.inter && curr_pt.crossing
+        if curr_pt.crossing
+            pt_list[ii] = PolyNode(;
+                point = curr_pt.point, inter = curr_pt.inter, neighbor = curr_pt.neighbor,
+                ent_exit = status, crossing = curr_pt.crossing, fracs = curr_pt.fracs)
+            status = !status
+        end
+    end
+    return
+end
+
+#=
+    _flag_ent_exit!(::GI.LineTrait, line, pt_list)
+
+This function flags all the intersection points as either an 'entry' or 'exit' point in
+relation to the given line. Returns true if there are crossing points to classify, else
+returns false. Used for cutting polygons by lines.
+
+Assumes that the first point is outside of the polygon and not on an edge.
+=#
+function _flag_ent_exit!(::GI.LineTrait, poly, pt_list)
+    status = !_point_filled_curve_orientation(pt_list[1].point, poly; in = true, on = false, out = false)
+    # Loop over points and mark entry and exit status
+    for (ii, curr_pt) in enumerate(pt_list)
+        if curr_pt.crossing
             pt_list[ii] = PolyNode(;
                 point = curr_pt.point, inter = curr_pt.inter, neighbor = curr_pt.neighbor,
                 ent_exit = status, crossing = curr_pt.crossing, fracs = curr_pt.fracs)
@@ -386,7 +409,7 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
                 # Get current node and add to pt_list
                 curr = curr_list[idx]
                 push!(pt_list, curr.point)
-                if curr.inter && curr.crossing
+                if curr.crossing
                     # Keep track of processed intersection points
                     curr_not_start = curr != start_pt && curr != b_list[start_pt.neighbor]
                     if curr_not_start
