@@ -1,7 +1,3 @@
-
-import GeoInterface as GI
-import GeometryOps as GO
-using Test
 # Test of polygon clipping
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
 p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
@@ -131,8 +127,6 @@ function test_clipping(GO_f, LG_f, f_name)
     end
 end
 
-# @testset "Intersection" begin test_clipping(GO.intersection, LG.intersection, "intersection") end
-# @testset "Union" begin test_clipping(GO.union, LG.union, "union") end
-# @testset "Difference" begin test_clipping(GO.difference, LG.difference, "difference") end
-
-GO.intersection(p40, p41; target = GI.PolygonTrait)
+@testset "Intersection" begin test_clipping(GO.intersection, LG.intersection, "intersection") end
+@testset "Union" begin test_clipping(GO.union, LG.union, "union") end
+@testset "Difference" begin test_clipping(GO.difference, LG.difference, "difference") end
