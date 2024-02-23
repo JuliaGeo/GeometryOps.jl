@@ -56,8 +56,8 @@ function _union(
             push!(polys,  GI.Polygon([tuples(ext_a)]))
         else
             share_edge_warn(a_list, "Edge case: polygons share edge but can't be combined.")
-            push!(polys, poly_a)
-            push!(polys, poly_b)
+            push!(polys, tuples(poly_a))
+            push!(polys, tuples(poly_b))
             return polys
         end
     else

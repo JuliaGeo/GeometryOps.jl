@@ -28,6 +28,7 @@ const GO = GeometryOps
     @testset "Difference" begin include("methods/clipping/difference.jl") end
     @testset "Intersection" begin include("methods/clipping/intersection.jl") end
     @testset "Union" begin include("methods/clipping/union.jl") end
+    @testset "Clipping" begin include("methods/clipping/clipping_test_utils.jl") end
     # # Transformations
     # @testset "Embed Extent" begin include("transformations/extent.jl") end
     # @testset "Reproject" begin include("transformations/reproject.jl") end

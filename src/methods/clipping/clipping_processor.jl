@@ -488,9 +488,11 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
             hole_poly = GI.Polygon([hole])
             # loop through all pieces of original polygon (new pieces added to end of list)
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
+                @show j
                 if !isnothing(return_polys[j])
                     new_polys = difference(return_polys[j], hole_poly, T; target = GI.PolygonTrait)
                     n_new_polys = length(new_polys)
+                    @show n_new_polys
                     if n_new_polys == 0  # hole covered whole polygon
                         return_polys[j] = nothing
                     else
