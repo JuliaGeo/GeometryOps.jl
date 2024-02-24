@@ -441,6 +441,8 @@ end
 _get_poly_type(::Type{T}) where T =
     GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
 
+_get_ring_type(::Type{T}) where T = GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}
+
 #=
     _find_non_cross_orientation(a_list, b_list, a_poly, b_poly)
 
@@ -481,6 +483,7 @@ polygons, they are removed from the list
 =#
 function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
     n_polys = length(return_polys)
+    # hole_storage = _get_ring_type(::Type{T})(undef, maximum(GI.nhole, return_polys))
     # Remove set of holes from all polygons
     for i in 1:n_polys
         n_new_per_poly = 0
@@ -488,11 +491,12 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
             hole_poly = GI.Polygon([hole])
             # loop through all pieces of original polygon (new pieces added to end of list)
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
-                @show j
                 if !isnothing(return_polys[j])
+                    # j_ext_poly = GI.Polygon(GI.getexterior(return_polys[j]))
+                    # j_holes = collect(GI.gethole(return_polys[j]))
+
                     new_polys = difference(return_polys[j], hole_poly, T; target = GI.PolygonTrait)
                     n_new_polys = length(new_polys)
-                    @show n_new_polys
                     if n_new_polys == 0  # hole covered whole polygon
                         return_polys[j] = nothing
                     else
@@ -510,4 +514,15 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
     # Remove all polygon that were marked for removal
     filter!(!isnothing, return_polys)
     return
+end
+
+function _combine_holes(hole, interior_rings)
+    combined_holes = [GI.Polygon(hole)]
+    for ring in interior_rings
+        r = LG.Polygon(r)
+        for c in combined_holes
+            new_holes = union(r, c)
+           
+        end
+    end
 end

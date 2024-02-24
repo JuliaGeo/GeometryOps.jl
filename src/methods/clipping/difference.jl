@@ -56,7 +56,8 @@ function _difference(
             poly_a_b_hole = GI.Polygon([tuples(ext_a), tuples(ext_b)])
             push!(polys, poly_a_b_hole)
         elseif !b_in_a && !a_in_b # polygons don't intersect
-            push!(polys, GI.Polygon([tuples(ext_a)]))
+            push!(polys, tuples(poly_a))
+            return polys
         end
     end
 
