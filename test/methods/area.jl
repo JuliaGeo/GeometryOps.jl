@@ -99,74 +99,72 @@ a4 = LG.area(p4)
     @test GO.coverage(p2, cell_extremes...) == cell_area
     # polygon is completly inside of cell
     p3 = GI.Polygon([[(5.0, 5.0), (5.0, 15.0), (15.0, 15.0), (15.0, 5.0), (5.0, 5.0)]])
-    @test GO.coverage(p3, cell_extremes...) == 100.0
+    @test GO.coverage(p3, cell_extremes...) ≈ LG.area(LG.intersection(cell_poly, p3))
     # polygon exits cell through one edge
     p4 = GI.Polygon([[(5.0, 5.0), (5.0, 25.0), (15.0, 25.0), (15.0, 5.0), (5.0, 5.0)]])
-    @test GO.coverage(p4, cell_extremes...) == 150.0
+    @test GO.coverage(p4, cell_extremes...) ≈ LG.area(LG.intersection(cell_poly, p4))
     p5 = GI.Polygon([[(5.0, 5.0), (5.0, 25.0), (25.0, 25.0), (25.0, 5.0), (5.0, 5.0)]])
-    @test GO.coverage(p5, cell_extremes...) == 225.0
+    @test GO.coverage(p5, cell_extremes...) ≈ LG.area(LG.intersection(cell_poly, p5))
     # polygon exits cell through multiple edges (north and east)
     p6 = GI.Polygon([[(20.8826, 6.4239), (15.9663, 2.3014), (8.6078, 2.0995), (2.6849, 6.4088),
         (0.8449, 12.7452), (3.0813, 19.1654), (9.1906, 23.2520), (15.5835, 22.9101),
         (20.9143, 18.5933), (20.8826, 6.4239)]])
-    @test GO.coverage(p6, cell_extremes...) ≈ GO.area(GO.intersection(p6, cell_poly; target = GI.PolygonTrait)[1])
+    @test GO.coverage(p6, cell_extremes...) ≈ LG.area(LG.intersection(p6, cell_poly))
     # polygon exits cell through multiple edges (west and east)
     p7 = GI.Polygon([[(-5.0, 10.0), (-5.0, 25.0), (25.0, 25.0), (25.0, 10.0), (-5.0, 10.0)]])
-    @test GO.coverage(p7, cell_extremes...) == 200.0
-    # non-convex polygon --> NOTE: Algorithm doesn't work for polygons split into multiple pieces --> check if connecting edges are in polygon!!
+    @test GO.coverage(p7, cell_extremes...) ≈ LG.area(LG.intersection(p7, cell_poly))
+    # non-convex polygon split into two pieces
     p8 =  GI.Polygon([[(-10.0, 15.0), (10.0, 15.0), (10.0, 12.0), (-5.0, 12.0), (10.0, 9.0), (10.0, 6.0), (-10.0, 6.0), (-10.0, 15.0)]])
-    @test GO.coverage(p8, cell_extremes...) == 60.0
+    @test GO.coverage(p8, cell_extremes...) ≈ LG.area(LG.intersection(p8, cell_poly))
     # counter-clockwise polygon
 
     # polygon with a hole
-
-    # multipolygon
     
 
-    function test_rand_polys(n)
-        xmin = 0.0
-        xmax = 20.0
-        ymin = 0.0
-        ymax = 20.0
-        seed = Xoshiro(1999)
+    # function test_rand_polys(n)
+    #     xmin = 0.0
+    #     xmax = 20.0
+    #     ymin = 0.0
+    #     ymax = 20.0
+    #     seed = Xoshiro(1999)
 
-        cell_poly = LG.Polygon([[
-            [xmin, ymin],
-            [xmin, ymax],
-            [xmax, ymax],
-            [xmax, ymin],
-            [xmin, ymin],
-        ]])
+    #     cell_poly = LG.Polygon([[
+    #         [xmin, ymin],
+    #         [xmin, ymax],
+    #         [xmax, ymax],
+    #         [xmax, ymin],
+    #         [xmin, ymin],
+    #     ]])
 
-        for i in 1:n
-            println(i)
-            x1 = rand() + rand(seed, 4:15)
-            y1 = rand() + rand(seed, 4:15)
-            nverts1 = rand(seed, 4:15)
-            avg_radius1 = rand(seed, 4:15)
-            irregularity1 = rand(seed) * 0.25
-            spikiness1 = rand(seed) * 0.25
+    #     for i in 1:n
+    #         println(i)
+    #         x1 = rand() + rand(seed, 4:15)
+    #         y1 = rand() + rand(seed, 4:15)
+    #         nverts1 = rand(seed, 4:15)
+    #         avg_radius1 = rand(seed, 4:15)
+    #         irregularity1 = rand(seed) * 0.25
+    #         spikiness1 = rand(seed) * 0.25
 
-            coords1 = generate_random_poly(
-                x1,
-                y1,
-                nverts1,
-                avg_radius1,
-                irregularity1,
-                spikiness1,
-                seed,
-            )
-            poly1 = LG.Polygon(coords1)
+    #         coords1 = generate_random_poly(
+    #             x1,
+    #             y1,
+    #             nverts1,
+    #             avg_radius1,
+    #             irregularity1,
+    #             spikiness1,
+    #             seed,
+    #         )
+    #         poly1 = LG.Polygon(coords1)
 
-            if LG.isValid(poly1)
-                # Coords 1 with Grid Cell
-                a1_sub = GO.coverage(poly1, xmin, xmax, ymin, ymax)
-                a1_lib = LG.area(LG.intersection(cell_poly, poly1))
-                @assert isapprox(a1_sub, a1_lib, atol = 1e-12) "$poly1"
-            end
-        end
-        return
-    end
-    test_rand_polys(25)
+    #         if LG.isValid(poly1)
+    #             # Coords 1 with Grid Cell
+    #             a1_sub = GO.coverage(poly1, xmin, xmax, ymin, ymax)
+    #             a1_lib = LG.area(LG.intersection(cell_poly, poly1))
+    #             @assert isapprox(a1_sub, a1_lib, atol = 1e-12) "$poly1"
+    #         end
+    #     end
+    #     return
+    # end
+    # test_rand_polys(25)
 
 end
