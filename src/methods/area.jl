@@ -275,7 +275,7 @@ function _coverage(::Type{T}, ring, cell_extremes...) where T
     return cov_area
 end
 
-_point_in_cell((x, y), xmin, xmax, ymin, ymax) = xmin <= x <= xmax && ymin <= y <= ymax
+_point_in_cell(p, xmin, xmax, ymin, ymax) = xmin <= GI.x(p) <= xmax && ymin <= GI.y(p) <= ymax
 
 _between(b, c, a) = a ≤ b ≤ c || c ≤ b ≤ a 
 
