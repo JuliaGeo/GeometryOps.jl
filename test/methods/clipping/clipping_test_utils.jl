@@ -64,6 +64,9 @@ p38 = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0)], 
 p39 = GI.Polygon([[(5.0, 0.0), (8.0, 0.0), (8.0, 3.0), (5.0, 3.0), (5.0, 0.0)], [(6.0, 1.0), (7.0, 1.0), (7.0, 2.0), (7.0, 1.0), (6.0, 1.0)]])
 p40 = GI.Polygon([[(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0), (0.0, 0.0)], [(5.0, 5.0), (7.0, 5.0), (7.0, 7.0), (5.0, 7.0), (5.0, 5.0)]])
 p41 = GI.Polygon([[(3.0, -1.0), (10.0, -1.0), (10.0, 9.0), (3.0, 9.0), (3.0, -1.0)], [(4.0, 3.0), (5.0, 3.0), (5.0, 4.0), (4.0, 4.0), (4.0, 3.0)], [(6.0, 1.0), (7.0, 1.0), (7.0, 2.0), (6.0, 2.0), (6.0, 1.0)]])
+p42 = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)], [(1.0, 1.0), (3.0, 1.0), (3.0, 1.5), (1.0, 1.5), (1.0, 1.0)], [(1.0, 2.5), (3.0, 2.5), (3.0, 3.0), (1.0, 3.0), (1.0, 2.5)]])
+p43 = GI.Polygon([[(2.0, -1.0), (5.0, -1.0), (5.0, 5.0), (2.0, 5.0), (2.0, -1.0)], [(3.5, 4.0), (4.5, 4.0), (4.5, 4.5), (3.5, 4.5), (3.5, 4.0)], [(3.5, 3.0), (4.5, 3.0), (4.5, 3.5), (3.5, 3.5), (3.5, 3.0)], [(3.5, 2.0), (4.5, 2.0), (4.5, 2.5), (3.5, 2.5), (3.5, 2.0)]])
+
 
 test_pairs = [
     (p1, p1, "p1", "p1", "Same polygon"),
@@ -80,7 +83,9 @@ test_pairs = [
     (p17, p18, "p17", "p18", "First polygon with a hole (hole completly in second polygon), second without a hole"),
     (p18, p17, "p18", "p17", "First polygon with no hole, second with a hole (hole completly in first polygon)"),
     (p19, p20, "p19", "p20", "First polygon with a hole (hole not completly in second polygon), second without a hole"),
+    (p42, p20, "p42", "p20", "First polygon with two holes (holes not completly in second polygon), second without a hole"),
     (p20, p19, "p20", "p19", "First polygon with no hole, second with a hole (hole not completly in first polygon)"),
+    (p20, p42, "p20", "p42", "First polygon with no holes, second with two holes (holes not completly in second polygon)"),
     (p21, p22, "p21", "p22", "Polygons form cross, splitting each other"),
     (p23, p24, "p23", "p24", "Polygons are both donuts with intersecting holes"),
     (p25, p26, "p25", "p26", "Polygons both have two holes that intersect in various ways"),
@@ -93,6 +98,9 @@ test_pairs = [
     (p33, p37, "p33", "p37", "Polygons are completly disjoint (no holes)"),
     (p38, p39, "p38", "p39", "Polygons are completly disjoint (both have one hole)"),
     (p40, p41, "p40", "p41", "Two overlapping polygons with three total holes in overlap region"),
+    (p42, p43, "p42", "p43", "First polygon 2 holes, second polygon 3 holes. Holes do not overlap"),
+    (p43, p42, "p43", "p42", "First polygon 3 holes, second polygon 2 holes. Holes do not overlap")
+
 ]
 const ϵ = 1e-10
 function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)

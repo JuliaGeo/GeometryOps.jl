@@ -66,18 +66,23 @@ function _union(
     end
 
     n_b_holes = GI.nhole(poly_b)
+    n_a_holes = GI.nhole(poly_a)
     if GI.nhole(poly_a) != 0 || n_b_holes != 0
         new_poly = [GI.getexterior(polys[1]); collect(GI.gethole(polys[1]))]
         current_poly = GI.Polygon([ext_b])
         for (i, hole) in enumerate(Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b))))
+            if i == n_a_holes + 1
+                current_poly = poly_a
+            end
             # Use ext_b to not overcount overlapping holes in poly_a and in poly_b
             new_hole = difference(GI.Polygon([hole]), current_poly, T; target = GI.PolygonTrait)
+            display(new_hole)
             for h in new_hole
                 push!(new_poly, GI.getexterior(h))
             end
-            if i == n_b_holes
-                current_poly = poly_a
-            end
+            # if i == n_b_holes
+            #     current_poly = poly_a
+            # end
         end
         polys[1] = GI.Polygon(new_poly)
     end
