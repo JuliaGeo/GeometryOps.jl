@@ -1,4 +1,4 @@
-# #  Union Polygon Clipping
+# # Union Polygon Clipping
 export union
 
 """

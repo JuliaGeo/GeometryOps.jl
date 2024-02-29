@@ -2,7 +2,7 @@ using Test, GeometryOps
 import GeoInterface as GI
 import GeometryOps as GO
 
-@testset "booleans" begin
+@testset "Orientation" begin
     line1 = GI.LineString([[9.170356, 45.477985], [9.164434, 45.482551], [9.166644, 45.484003]])
     line2 = GI.LineString([[9.169356, 45.477985], [9.163434, 45.482551], [9.165644, 45.484003]])
     line3 = GI.LineString([

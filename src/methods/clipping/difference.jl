@@ -1,4 +1,4 @@
-# #  Difference Polygon Clipping
+# # Difference Polygon Clipping
 export difference
 
 

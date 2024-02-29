@@ -1,4 +1,4 @@
-# #  Intersection
+# # Geometry Intersection
 export intersection, intersection_points
 
 

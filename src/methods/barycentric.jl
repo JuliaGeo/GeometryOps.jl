@@ -129,7 +129,6 @@ The rest of the methods will be implemented in terms of these, and have efficien
 """
 abstract type AbstractBarycentricCoordinateMethod end
 
-
 Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
     @boundscheck @assert length(λs) == length(polypoints)
     @boundscheck @assert length(polypoints) >= 3
@@ -138,12 +137,47 @@ Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{<: Real},
 end
 Base.@propagate_inbounds barycentric_coordinates!(λs::Vector{<: Real}, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real} = barycentric_coordinates!(λs, MeanValue(), polypoints, point)
 
+# This is the GeoInterface-compatible method.
+"""
+    barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polygon, point)
+
+Loads the barycentric coordinates of `point` in `polygon` into `λs` using the barycentric coordinate method `method`.
+
+`λs` must be of the length of the polygon plus its holes.
+
+!!! tip
+    Use this method to avoid excess allocations when you need to calculate barycentric coordinates for many points.
+"""
+Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polygon, point) 
+    @assert GeoInterface.trait(polygon) isa GeoInterface.PolygonTrait
+    @assert GeoInterface.trait(point) isa GeoInterface.PointTrait
+    passable_polygon = GeoInterface.convert(GeometryBasics, polygon)
+    @assert passable_polygon isa GeometryBasics.Polygon "The polygon was converted to a $(typeof(passable_polygon)), which is not a `GeometryBasics.Polygon`."
+    passable_point = GeoInterface.convert(GeometryBasics, point)
+    return barycentric_coordinates!(λs, method, passable_polygon, Point2(passable_point))
+end
+
 Base.@propagate_inbounds function barycentric_coordinates(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
     λs = zeros(promote_type(T1, T2), length(polypoints))
     barycentric_coordinates!(λs, method, polypoints, point)
     return λs
 end
 Base.@propagate_inbounds barycentric_coordinates(polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real} = barycentric_coordinates(MeanValue(), polypoints, point)
+
+# This is the GeoInterface-compatible method.
+"""
+    barycentric_coordinates(method = MeanValue(), polygon, point)
+
+Returns the barycentric coordinates of `point` in `polygon` using the barycentric coordinate method `method`.
+"""
+Base.@propagate_inbounds function barycentric_coordinates(method::AbstractBarycentricCoordinateMethod, polygon, point)
+    @assert GeoInterface.trait(polygon) isa GeoInterface.PolygonTrait
+    @assert GeoInterface.trait(point) isa GeoInterface.PointTrait
+    passable_polygon = GeoInterface.convert(GeometryBasics, polygon)
+    @assert passable_polygon isa GeometryBasics.Polygon "The polygon was converted to a $(typeof(passable_polygon)), which is not a `GeometryBasics.Polygon`."
+    passable_point = GeoInterface.convert(GeometryBasics, point)
+    return barycentric_coordinates(method, passable_polygon, Point2(passable_point))
+end
 
 Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 <: Real, T2 <: Real, V}
     @boundscheck @assert length(values) == length(polypoints)
@@ -193,6 +227,19 @@ end
 Base.@propagate_inbounds barycentric_interpolate(polygon::Polygon{3, T1}, point::Point{2, T2}) where {T1 <: Real, T2 <: Real} = barycentric_interpolate(MeanValue(), polygon, point)
 
 # This method is the one which supports GeoInterface.
+"""
+    barycentric_interpolate(method = MeanValue(), polygon, values::AbstractVector{V}, point)
+
+Returns the interpolated value at `point` within `polygon` using the barycentric coordinate method `method`.  
+`values` are the per-point values for the polygon which are to be interpolated.
+
+Returns an object of type `V`.
+
+!!! warning
+    Barycentric interpolation is currently defined only for 2-dimensional polygons.  
+    If you pass a 3-D polygon in, the Z coordinate will be used as per-vertex value to be interpolated
+    (the M coordinate in GIS parlance).
+"""
 Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polygon, values::AbstractVector{V}, point) where V
     @assert GeoInterface.trait(polygon) isa GeoInterface.PolygonTrait
     @assert GeoInterface.trait(point) isa GeoInterface.PointTrait

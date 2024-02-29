@@ -10,7 +10,7 @@ as Matlab's [`cutpolygon`](https://www.mathworks.com/matlabcentral/fileexchange/
 function.
 
 To provide an example, consider the following polygon and line:
-```julia
+```@example cut
 import GeoInterface as GI, GeometryOps as GO
 using CairoMakie
 using Makie
@@ -19,8 +19,8 @@ poly = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.
 line = GI.Line([(5.0, -5.0), (5.0, 15.0)])
 cut_polys = GO.cut(poly, line)
 
-f, a, p1 = Makie.poly(collect(GI.getpoint(cut_polys[1])); color = :blue)
-Makie.poly!(collect(GI.getpoint(cut_polys[2])); color = :orange)
+f, a, p1 = Makie.poly(collect(GI.getpoint(cut_polys[1])); color = (:blue, 0.5))
+Makie.poly!(collect(GI.getpoint(cut_polys[2])); color = (:orange, 0.5))
 Makie.lines!(GI.getpoint(line); color = :black)
 f
 ```
