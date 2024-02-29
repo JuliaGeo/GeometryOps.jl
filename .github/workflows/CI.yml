@@ -48,8 +48,6 @@ jobs:
         with:
           version: '1'
       - uses: julia-actions/julia-buildpkg@v1
-      - name: Add experimental versions of packages
-        run: julia --project=docs -e 'using Pkg; Pkg.pkg"add DocumenterVitepress#as/dont_transmit_file_flags"'
       - uses: julia-actions/julia-docdeploy@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
