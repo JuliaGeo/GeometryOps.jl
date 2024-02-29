@@ -46,45 +46,30 @@ function _union(
     # Then, I get the union of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> x ? (-1) : 1)
-    
+    n_pieces = length(polys)
     # Check if one polygon totally within other and if so, return the larger polygon.
-    if isempty(polys) # no crossing points, determine if either poly is inside the other
+    if n_pieces == 0 # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
         if a_in_b
             push!(polys, GI.Polygon([tuples(ext_b)]))
         elseif b_in_a
             push!(polys,  GI.Polygon([tuples(ext_a)]))
         else
-            share_edge_warn(a_list, "Edge case: polygons share edge but can't be combined.")
+            share_edge_warn(a_list, "Edge case: polygons share edge but can't be combined.") # will get taken care of with "glued edges"
             push!(polys, tuples(poly_a))
             push!(polys, tuples(poly_b))
             return polys
         end
-    else
+    elseif n_pieces > 1
         sort!(polys, by = area, rev = true)
-        polys = [GI.Polygon([GI.getexterior(p) for p in polys])]
     end
-
-    n_b_holes = GI.nhole(poly_b)
-    n_a_holes = GI.nhole(poly_a)
-    if GI.nhole(poly_a) != 0 || n_b_holes != 0
-        new_poly = [GI.getexterior(polys[1]); collect(GI.gethole(polys[1]))]
-        current_poly = GI.Polygon([ext_b])
-        for (i, hole) in enumerate(Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b))))
-            if i == n_a_holes + 1
-                current_poly = poly_a
-            end
-            # Use ext_b to not overcount overlapping holes in poly_a and in poly_b
-            new_hole = difference(GI.Polygon([hole]), current_poly, T; target = GI.PolygonTrait)
-            display(new_hole)
-            for h in new_hole
-                push!(new_poly, GI.getexterior(h))
-            end
-            # if i == n_b_holes
-            #     current_poly = poly_a
-            # end
-        end
-        polys[1] = GI.Polygon(new_poly)
+    # the first element is the exterior, the rest are holes
+    new_holes = @views (GI.getexterior(p) for p in polys[2:end])
+    polys = polys[1:1]
+    # Add holes back in for there are any
+    if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0 || n_pieces > 1
+        hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b), new_holes))
+        _add_holes_to_polys!(T, polys[1:1], hole_iterator)
     end
     return polys
 end
