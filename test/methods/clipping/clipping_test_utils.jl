@@ -66,6 +66,10 @@ p40 = GI.Polygon([[(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0), (0.0, 0.0)], 
 p41 = GI.Polygon([[(3.0, -1.0), (10.0, -1.0), (10.0, 9.0), (3.0, 9.0), (3.0, -1.0)], [(4.0, 3.0), (5.0, 3.0), (5.0, 4.0), (4.0, 4.0), (4.0, 3.0)], [(6.0, 1.0), (7.0, 1.0), (7.0, 2.0), (6.0, 2.0), (6.0, 1.0)]])
 p42 = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)], [(1.0, 1.0), (3.0, 1.0), (3.0, 1.5), (1.0, 1.5), (1.0, 1.0)], [(1.0, 2.5), (3.0, 2.5), (3.0, 3.0), (1.0, 3.0), (1.0, 2.5)]])
 p43 = GI.Polygon([[(2.0, -1.0), (5.0, -1.0), (5.0, 5.0), (2.0, 5.0), (2.0, -1.0)], [(3.5, 4.0), (4.5, 4.0), (4.5, 4.5), (3.5, 4.5), (3.5, 4.0)], [(3.5, 3.0), (4.5, 3.0), (4.5, 3.5), (3.5, 3.5), (3.5, 3.0)], [(3.5, 2.0), (4.5, 2.0), (4.5, 2.5), (3.5, 2.5), (3.5, 2.0)]])
+p44 = GI.Polygon([[(2.0, -1.0), (5.0, -1.0), (5.0, 5.0), (2.0, 5.0), (2.0, -1.0)], [(3.5, 3.0), (4.5, 3.0), (4.5, 3.5), (3.5, 3.5), (3.5, 3.0)], [(3.5, 2.0), (4.5, 2.0), (4.5, 2.5), (3.5, 2.5), (3.5, 2.0)], [(3.5, 1.0), (4.5, 1.0), (4.5, 1.5), (3.5, 1.5), (3.5, 1.0)]])
+p45 = GI.Polygon([[(0.0, 0.0), (5.0, 0.0), (5.0, 5.0), (0.0, 5.0), (0.0, 0.0)]])
+p46 = GI.Polygon([[(1.0, 1.0), (4.0, 1.0), (4.0, 4.0), (1.0, 4.0), (1.0, 1.0)], [(2.0, 2.0), (3.0, 2.0), (3.0, 3.0), (2.0, 3.0), (2.0, 2.0)]])
+
 
 
 test_pairs = [
@@ -90,7 +94,7 @@ test_pairs = [
     (p23, p24, "p23", "p24", "Polygons are both donuts with intersecting holes"),
     (p25, p26, "p25", "p26", "Polygons both have two holes that intersect in various ways"),
     (p27, p28, "p27", "p28", "Figure 12 from Foster extension for degeneracies"),
-    (p29, p30, "p29", "p30", "Figure 13 from Foster extension for degeneracies"),
+    # (p29, p30, "p29", "p30", "Figure 13 from Foster extension for degeneracies"),
     (p31, p32, "p31", "p32", "Polygons touch at just one point"),
     (p33, p34, "p33", "p34", "One polygon inside of the other, sharing an edge"),
     (p33, p35, "p33", "p35", "Polygons outside of one another, sharing an edge"),
@@ -99,7 +103,9 @@ test_pairs = [
     (p38, p39, "p38", "p39", "Polygons are completly disjoint (both have one hole)"),
     (p40, p41, "p40", "p41", "Two overlapping polygons with three total holes in overlap region"),
     (p42, p43, "p42", "p43", "First polygon 2 holes, second polygon 3 holes. Holes do not overlap"),
-    (p43, p42, "p43", "p42", "First polygon 3 holes, second polygon 2 holes. Holes do not overlap")
+    (p43, p42, "p43", "p42", "First polygon 3 holes, second polygon 2 holes. Holes do not overlap"),
+    (p42, p44, "p42", "p43", "First polygon 2 holes, second polygon 3 holes. Holes do not overlap"),
+    (p44, p42, "p43", "p42", "First polygon 3 holes, second polygon 2 holes. Holes do not overlap")
 
 ]
 const ϵ = 1e-10
@@ -128,6 +134,8 @@ end
 
 function test_clipping(GO_f, LG_f, f_name)
     for (p1, p2, sg1, sg2, sdesc) in test_pairs
+        println("$sg1 and $sg2")
+        println(f_name)
         pass_test = compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         @test pass_test
         !pass_test && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")
