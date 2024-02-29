@@ -139,12 +139,14 @@ end
 
     return slope1 === slope2
 end
+```
+=#
+
+# This is actual code:
 
 _isparallel(((ax, ay), (bx, by)), ((cx, cy), (dx, dy))) = 
     _isparallel(bx - ax, by - ay, dx - cx, dy - cy)
 
 _isparallel(Δx1, Δy1, Δx2, Δy2) = (Δx1 * Δy2 == Δy1 * Δx2)  
 
-```
-=#
 
