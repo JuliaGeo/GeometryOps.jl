@@ -88,6 +88,7 @@ function _to_edges!(edges::Vector, ::GI.AbstractCurveTrait, geom, n)
 end
 
 _tuple_point(p) = GI.x(p), GI.y(p)
+_tuple_point(p, ::Type{T}) where T = T(GI.x(p)), T(GI.y(p))
 
 function to_extent(edges::Vector{Edge})
     x, y = extrema(first, edges)
