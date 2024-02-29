@@ -5,7 +5,7 @@ export polygonize
 
 # The main entry point is the [`polygonize`](@ref) function.
 
-# ```@doc
+# ```@docs
 # polygonize
 # ```
 

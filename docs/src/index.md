@@ -27,4 +27,3 @@ Functionally, it's similar to `map` in the way you apply it to geometries.
 
 Write a comment about GeoInterface.Wrapper and why it helps in type stability to guarantee a particular return type.
 
-### 
