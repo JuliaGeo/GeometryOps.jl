@@ -43,7 +43,7 @@ export polygonize
 
 # Finally, let's plot the Makie contour lines on top, to see how well the polygonization worked:
 # ```@example polygonize
-# contour!(a, zs; labels = true, levels = [0.8, 3.2], label = "Contour lines")
+# contour!(a, xs, ys, zs; labels = true, levels = [0.8, 3.2], label = "Contour lines")
 # f
 # ```
 
@@ -69,7 +69,8 @@ function polygonize(xs, ys, A::AbstractMatrix; minpoints=10)
     contours = Iterators.map(get_contours(A)) do contour
         poly = map(contour) do xy
             x, y = Tuple(xy)
-            Point2f(x + first(xs) - 1, y + first(ys) - 1)
+            Point2f(xs[x], ys[y])
+            # Point2f(x + first(xs) - 1, y + first(ys) - 1)
         end
     end
     ## If we filter off the minimum points, then it's a hair more efficient
