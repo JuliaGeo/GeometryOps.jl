@@ -441,8 +441,6 @@ end
 _get_poly_type(::Type{T}) where T =
     GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
 
-_get_ring_type(::Type{T}) where T = GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}
-
 #=
     _find_non_cross_orientation(a_list, b_list, a_poly, b_poly)
 
@@ -455,15 +453,20 @@ and visa versa if b is inside of a.
 function _find_non_cross_orientation(a_list, b_list, a_poly, b_poly)
     non_intr_a_idx = findfirst(x -> !x.inter, a_list)
     non_intr_b_idx = findfirst(x -> !x.inter, b_list)
+    #= Determine if non-intersection point is in or outside of polygon - if there isn't A
+    non-intersection point, then all points are on the polygon edge =#
     a_pt_orient = isnothing(non_intr_a_idx) ? point_on :
         _point_filled_curve_orientation(a_list[non_intr_a_idx].point, b_poly)
     b_pt_orient = isnothing(non_intr_b_idx) ? point_on :
         _point_filled_curve_orientation(b_list[non_intr_b_idx].point, a_poly)
-    a_in_b = a_pt_orient != point_out && b_pt_orient != point_in  # a inside b
+    a_in_b = a_pt_orient != point_out && b_pt_orient != point_in
     b_in_a = b_pt_orient != point_out && a_pt_orient != point_in
     return a_in_b, b_in_a
 end
 
+#= Determines if polygons share an edge (in the case where polygons are inside or outside
+of one another and only commected by single points or edges) - if they share an edge,
+print error message. =#
 function share_edge_warn(list, warn_str)
     shared_edge = false
     prev_pt_inter = false
@@ -474,6 +477,7 @@ function share_edge_warn(list, warn_str)
     end
     shared_edge && @warn warn_str
 end
+
 #=
     _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator)
 
@@ -483,29 +487,35 @@ polygons, they are removed from the list
 =#
 function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
     n_polys = length(return_polys)
-    # hole_storage = _get_ring_type(::Type{T})(undef, maximum(GI.nhole, return_polys))
     # Remove set of holes from all polygons
     for i in 1:n_polys
         n_new_per_poly = 0
-        for hole in hole_iterator  # loop through all holes
-            hole_poly = GI.Polygon([hole])
+        for curr_hole in hole_iterator # loop through all holes
             # loop through all pieces of original polygon (new pieces added to end of list)
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
-                if !isnothing(return_polys[j])
-                    # j_ext_poly = GI.Polygon(GI.getexterior(return_polys[j]))
-                    # j_holes = collect(GI.gethole(return_polys[j]))
-
-                    new_polys = difference(return_polys[j], hole_poly, T; target = GI.PolygonTrait)
-                    n_new_polys = length(new_polys)
-                    if n_new_polys == 0  # hole covered whole polygon
-                        return_polys[j] = nothing
-                    else
-                        return_polys[j] = new_polys[1]  # replace original
-                        if n_new_polys > 1  # add any extra pieces
+                curr_poly = return_polys[j]
+                isnothing(curr_poly) && continue
+                n_existing_holes = GI.nhole(curr_poly)
+                curr_poly_ext = n_existing_holes > 0 ? GI.Polygon([GI.getexterior(curr_poly)]) : curr_poly
+                in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; closed_line = true)
+                if in_ext  # hole is at least partially within the polygon's exterior
+                    new_hole, new_hole_poly, n_new_pieces = _combine_holes!(T, curr_hole, curr_poly, return_polys)
+                    n_new_per_poly += n_new_pieces
+                    if !on_ext && !out_ext  # hole is completly within exterior
+                        push!(curr_poly.geom, new_hole)
+                    else  # hole is partially within and outside of polygon's exterior
+                        new_polys = difference(curr_poly_ext, new_hole_poly, T; target = GI.PolygonTrait)
+                        n_new_polys = length(new_polys) - 1
+                        # replace original -> can't have a hole
+                        curr_poly.geom[1] = GI.getexterior(new_polys[1])
+                        if n_new_polys > 0  # add any extra pieces
                             append!(return_polys, @view new_polys[2:end])
-                            n_new_per_poly += n_new_polys - 1
+                            n_new_per_poly += n_new_polys
                         end
                     end
+                # polygon is completly within hole
+                elseif coveredby(curr_poly_ext, GI.Polygon([curr_hole]))
+                    return_polys[j] = nothing
                 end
             end
         end
@@ -516,13 +526,51 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
     return
 end
 
-function _combine_holes(hole, interior_rings)
-    combined_holes = [GI.Polygon(hole)]
-    for ring in interior_rings
-        r = LG.Polygon(r)
-        for c in combined_holes
-            new_holes = union(r, c)
-           
+#=
+    _combine_holes!(::Type{T}, new_hole, curr_poly, return_polys)
+
+The new hole is combined with any existing holes in curr_poly. The holes can be combined
+into a larger hole if they are intersecting. If this happens, then the new, combined hole is
+returned with the orignal holes making up the new hole removed from curr_poly. Additionally,
+if the combined holes form a ring, the interior is added to the return_polys as a new
+polygon piece. Additionally, holes leftover after combination will be checked for it they
+are in the "main" polygon or in one of these new pieces and moved accordingly. 
+
+If the holes don't touch or curr_poly has no holes, then new_hole is returned without any
+changes.
+=#
+function _combine_holes!(::Type{T}, new_hole, curr_poly, return_polys) where T
+    n_new_polys = 0
+    remove_idx = Int[]
+    new_hole_poly = GI.Polygon([new_hole])
+    # Combine any existing holes in curr_poly with new hole
+    for (k, old_hole) in enumerate(GI.gethole(curr_poly))
+        old_hole_poly = GI.Polygon([old_hole])
+        if intersects(new_hole_poly, old_hole_poly)
+            # If the holes intersect, combine them into a bigger hole
+            hole_union = union(new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait)[1]
+            push!(remove_idx, k + 1)
+            new_hole = GI.getexterior(hole_union)
+            new_hole_poly = GI.Polygon([new_hole])
+            n_pieces = GI.nhole(hole_union)
+            if n_pieces > 0  # if the hole has a hole, then this is a new polygon piece! 
+                append!(return_polys, [GI.Polygon([h]) for h in GI.gethole(hole_union)])
+                n_new_polys += n_pieces
+            end
         end
     end
+    # Remove redundant holes
+    deleteat!(curr_poly.geom, remove_idx)
+    empty!(remove_idx)
+    # If new polygon pieces created, make sure remaining holes are in the correct piece
+    @views for piece in return_polys[end - n_new_polys + 1:end]
+        for (k, old_hole) in enumerate(GI.gethole(curr_poly))
+            if !(k in remove_idx) && within(old_hole, piece)
+                push!(remove_idx, k + 1)
+                push!(piece.geom, old_hole)
+            end
+        end
+    end
+    deleteat!(curr_poly.geom, remove_idx)
+    return new_hole, new_hole_poly, n_new_polys
 end
