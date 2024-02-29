@@ -13,7 +13,7 @@ const LG = LibGEOS
 const GO = GeometryOps
 
 @testset "GeometryOps.jl" begin
-    # @testset "Primitives" begin include("primitives.jl") end
+    @testset "Primitives" begin include("primitives.jl") end
     # # # Methods
     @testset "Angles" begin include("methods/angles.jl") end
     @testset "Area" begin include("methods/area.jl") end
