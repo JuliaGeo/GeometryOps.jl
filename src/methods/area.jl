@@ -172,20 +172,20 @@ Output:
 Warning:
     Assumes polygon has clockwise winding order
 """
-coverage(geom, xmin, xmax, ymin, ymax, ::Type{T} = Float64) where T =
-    _coverage(T, GI.trait(geom), geom, xmin, xmax, ymin, ymax)
+coverage(geom, xmin, xmax, ymin, ymax, ::Type{T} = Float64) where T <: AbstractFloat =
+    _coverage(T, GI.trait(geom), geom, T(xmin), T(xmax), T(ymin), T(ymax))
 
 # Points, MultiPoints, Curves, MultiCurves
-_coverage(::Type{T}, ::GI.AbstractGeometryTrait, geom, cell_extremes...) where T = zero(T)
+_coverage(::Type{T}, ::GI.AbstractGeometryTrait, geom, xmin, xmax, ymin, ymax) where T = zero(T)
 
 # Polygons
-function _coverage(::Type{T}, ::GI.PolygonTrait, poly, cell_extremes...) where T
+function _coverage(::Type{T}, ::GI.PolygonTrait, poly, xmin, xmax, ymin, ymax) where T
     GI.isempty(poly) && return zero(T)
-    cov_area = _coverage(T, GI.getexterior(poly), cell_extremes...)
+    cov_area = _coverage(T, GI.getexterior(poly), xmin, xmax, ymin, ymax)
     cov_area == 0 && return cov_area
     # Remove hole areas from total
     for hole in GI.gethole(poly)
-        cov_area -= _coverage(T, hole, cell_extremes...)
+        cov_area -= _coverage(T, hole, xmin, xmax, ymin, ymax)
     end
     # Winding of exterior ring determines sign
     return cov_area
@@ -196,15 +196,13 @@ Helper functions:
 
 ...
 =#
-function _coverage(::Type{T}, ring, cell_extremes...) where T
+function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax) where T
     cov_area = zero(T)
-    # unmatched_first_wall, unmatched_first_point =UNKNOWN, (zero(T), zero(T))
-    # unmatched_curr_wall, unmatched_curr_point = unmatched_first_wall, unmatched_first_point
     # connect_edges = false
     unmatched_out_wall, unmatched_out_point = UNKNOWN, (zero(T), zero(T))
     unmatched_in_wall, unmatched_in_point = unmatched_out_wall, unmatched_out_point
     # Loop over edges of polygon
-    start_idx = findfirst(p -> !_point_in_cell(p, cell_extremes...), GI.getpoint(ring))
+    start_idx = findfirst(p -> !_point_in_cell(p, xmin, xmax, ymin, ymax), GI.getpoint(ring))
     start_idx = isnothing(start_idx) ? 1 : start_idx
     ring_cw = isclockwise(ring)
     p1 = _tuple_point(GI.getpoint(ring, start_idx))
@@ -213,8 +211,8 @@ function _coverage(::Type{T}, ring, cell_extremes...) where T
     for i in point_idx
         p2 = _tuple_point(GI.getpoint(ring, i))
         # Determine if edge points are within the cell
-        p1_in_cell = _point_in_cell(p1, cell_extremes...)
-        p2_in_cell = _point_in_cell(p2, cell_extremes...)
+        p1_in_cell = _point_in_cell(p1, xmin, xmax, ymin, ymax)
+        p2_in_cell = _point_in_cell(p2, xmin, xmax, ymin, ymax)
         # If entire line segment is inside cell
         if p1_in_cell && p2_in_cell
             cov_area += _area_component(p1, p2)
@@ -222,7 +220,7 @@ function _coverage(::Type{T}, ring, cell_extremes...) where T
             continue
         end
         # If edge passes outside of rectangle, determine which edge segments are added
-        inter1, inter2 = _line_intersect_cell(T, p1, p2, cell_extremes...)
+        inter1, inter2 = _line_intersect_cell(T, p1, p2, xmin, xmax, ymin, ymax)
         # Endpoints of segment within the cell and wall they are on if known
         (start_wall, start_point), (end_wall, end_point) =
             if p1_in_cell
@@ -230,7 +228,7 @@ function _coverage(::Type{T}, ring, cell_extremes...) where T
             elseif p2_in_cell
                 (inter1, (UNKNOWN, p2))
             else
-                distance(inter1[2], p1) < distance(inter2[2], p1) ?
+                distance(inter1[2], p1, T) < distance(inter2[2], p1, T) ?
                     (inter1, inter2) : (inter2, inter1)
             end
         # Add edge component
@@ -242,13 +240,13 @@ function _coverage(::Type{T}, ring, cell_extremes...) where T
                 unmatched_in_wall = start_wall
             else
                 check_point = find_point_on_cell(unmatched_out_point, start_point,
-                    unmatched_out_wall, start_wall, cell_extremes...)
+                    unmatched_out_wall, start_wall,xmin, xmax, ymin, ymax)
                 if _point_filled_curve_orientation(check_point, ring; in = true, on = false, out = false)
                     cov_area += connect_edges(T, unmatched_out_point, start_point,
-                        unmatched_out_wall, start_wall, cell_extremes...)
+                        unmatched_out_wall, start_wall,xmin, xmax, ymin, ymax)
                 else
                     cov_area += connect_edges(T, unmatched_out_point, unmatched_in_point,
-                        unmatched_out_wall, unmatched_in_wall, cell_extremes...)
+                        unmatched_out_wall, unmatched_in_wall,xmin, xmax, ymin, ymax)
                     unmatched_out_wall == UNKNOWN
                 end
                 # unmatched_out_wall = end_wall
@@ -262,12 +260,11 @@ function _coverage(::Type{T}, ring, cell_extremes...) where T
     # if unmatched in-point at beginning, close polygon with last out point
     if unmatched_in_wall != UNKNOWN
         cov_area += connect_edges(T, unmatched_out_point, unmatched_in_point,
-            unmatched_out_wall, unmatched_in_wall, cell_extremes...)
+            unmatched_out_wall, unmatched_in_wall,xmin, xmax, ymin, ymax)
     end
     cov_area = abs(cov_area) / 2
     #  if grid cell is within polygon then the area is grid cell area
     if cov_area == 0
-        xmin, xmax, ymin, ymax = cell_extremes
         if _point_filled_curve_orientation((xmin, ymin), ring; in = true, on = true, out = false)
             cov_area = abs((xmax - xmin) * (ymax - ymin))
         end
@@ -324,31 +321,31 @@ function _line_intersect_cell(::Type{T}, (x1, y1), (x2, y2), xmin, xmax, ymin, y
 end
 
 #=
-    connect_edges(x1, y1, x2, y2, wall1, wall2, cell_extremes...)
+    connect_edges(x1, y1, x2, y2, wall1, wall2, xmin, xmax, ymin, ymax)
 
     Area component of shoelace formula coming from the distance between point 1
     and point 2 along grid cell walls
 =#
-function connect_edges(::Type{T}, p1, p2, wall1, wall2, cell_extremes...) where {T}
+function connect_edges(::Type{T}, p1, p2, wall1, wall2, xmin, xmax, ymin, ymax) where {T}
     connect_area = zero(T)
     if wall1 == wall2 && _is_clockwise_from(p1, p2, wall1)
         connect_area += _area_component(p1, p2)
     else
         # From the point to the corner of wall 1
-        connect_area += _partial_edge_out(p1, cell_extremes..., wall1)
+        connect_area += _partial_edge_out(p1, xmin, xmax, ymin, ymax, wall1)
         # Any intermediate walls (full length)
         next_wall, last_wall = wall1 + 1, wall2 - 1
         if wall2 > wall1
             for wall in next_wall:last_wall
-                connect_area += _full_edge_area(cell_extremes..., wall)
+                connect_area += _full_edge_area(xmin, xmax, ymin, ymax, wall)
             end
         else
             for wall in Iterators.flatten((next_wall:WEST, NORTH:last_wall))
-                connect_area += _full_edge_area(cell_extremes..., wall)
+                connect_area += _full_edge_area(xmin, xmax, ymin, ymax, wall)
             end
         end
         # From the corner of wall 2 to the point
-        connect_area += _partial_edge_in(p2, cell_extremes..., wall2)
+        connect_area += _partial_edge_in(p2, xmin, xmax, ymin, ymax, wall2)
     end
     return connect_area
 end
