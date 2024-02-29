@@ -70,7 +70,6 @@ function polygonize(xs, ys, A::AbstractMatrix; minpoints=10)
         poly = map(contour) do xy
             x, y = Tuple(xy)
             Point2f(xs[x], ys[y])
-            # Point2f(x + first(xs) - 1, y + first(ys) - 1)
         end
     end
     ## If we filter off the minimum points, then it's a hair more efficient
