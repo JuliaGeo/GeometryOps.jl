@@ -50,7 +50,7 @@ makedocs(;
         repo = "github.com/asinghvi17/GeometryOps.jl",
     ),
     pages=[
-        "Home" => "index.md",
+        "Introduction" => "introduction.md",
         "API Reference" => "api.md",
         "Source code" => literate_pages,
     ],
