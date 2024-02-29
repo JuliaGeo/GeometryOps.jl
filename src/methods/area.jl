@@ -5,11 +5,12 @@ export area, signed_area, coverage
 #=
 ## What is area? What is signed area? What is coverage?
 
-Area is the amount of space occupied by a two-dimensional figure. It is always
-a positive value. Signed area is simply the integral over the exterior path of
-a polygon, minus the sum of integrals over its interior holes. It is signed such
-that a clockwise path has a positive area, and a counterclockwise path has a
-negative area. The area is the absolute value of the signed area.
+Area is the amount of space occupied by a two-dimensional figure. It is always a positive
+value. Signed area is simply the integral over the exterior path of a polygon, minus the sum
+of integrals over its interior holes. It is signed such that a clockwise path has a positive
+area, and a counterclockwise path has a negative area. The area is the absolute value of the
+signed area. Coverage, on the other hand, is the amount of geometry area within a bounding
+box defined by the minimum and maximum x and y-coordiantes of that bounding box.
 
 To provide an example, consider this rectangle:
 ```@example rect
@@ -36,21 +37,21 @@ GO.signed_area(rect)  # -1.0
 
 ## Implementation
 
-This is the GeoInterface-compatible implementation. First, we implement a
-wrapper method that dispatches to the correct implementation based on the
-geometry trait. This is also used in the implementation, since it's a lot less
-work!
+This is the GeoInterface-compatible implementation. First, we implement a wrapper method
+that dispatches to the correct implementation based on the geometry trait. This is also used
+in the implementation, since it's a lot less work!
 
-Note that area (and signed area) are zero for all points and curves, even
-if the curves are closed like with a linear ring. Also note that signed area
-really only makes sense for polygons, given with a multipolygon can have several
-polygons each with a different orientation and thus the absolute value of the
-signed area might not be the area. This is why signed area is only implemented
-for polygons.
+Note that area, signed area, and coverage are zero for all points and curves, even if the
+curves are closed like with a linear ring. Also note that signed area really only makes
+sense for polygons, given with a multipolygon can have several polygons each with a
+different orientation and thus the absolute value of the signed area might not be the area.
+This is why signed area is only implemented for polygons.
 =#
 
+# Targets for applys functions
 const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
 
+# Wall types for coverage
 const UNKNOWN, NORTH, EAST, SOUTH, WEST = 0:4
 """
     area(geom, [T = Float64])::T
