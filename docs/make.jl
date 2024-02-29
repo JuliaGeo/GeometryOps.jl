@@ -1,5 +1,5 @@
 using GeometryOps
-using Documenter
+using Documenter, DocumenterVitepress
 using Literate
 using Makie, CairoMakie
 CairoMakie.activate!(px_per_unit = 2, type = "svg", inline = true) # TODO: make this svg
@@ -30,7 +30,7 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
             # convert the source file to Markdown
             Literate.markdown(joinpath(root_path, file), output_dir; documenter = false)
             # TODO: make this respect nesting somehow!
-            push!(literate_pages, joinpath("source", relpath(root_path, source_path), splitext(file)[1] * ".md"))
+            push!(literate_pages, joinpath("source", relpath(root_path, source_path), splitext(file)[1] * ".md") |> normpath)
         end
     end
 end
@@ -40,11 +40,14 @@ makedocs(;
     authors="Anshul Singhvi <anshulsinghvi@gmail.com> and contributors",
     repo="https://github.com/asinghvi17/GeometryOps.jl/blob/{commit}{path}#{line}",
     sitename="GeometryOps.jl",
-    format=Documenter.HTML(;
-        prettyurls=get(ENV, "CI", "false") == "true",
-        canonical="https://asinghvi17.github.io/GeometryOps.jl",
-        edit_link="main",
-        assets=String[],
+    # format=Documenter.HTML(;
+    #     prettyurls=get(ENV, "CI", "false") == "true",
+    #     canonical="https://asinghvi17.github.io/GeometryOps.jl",
+    #     edit_link="main",
+    #     assets=String[],
+    # ),
+    format = DocumenterVitepress.MarkdownVitepress(
+        repo = "github.com/asinghvi17/GeometryOps.jl",
     ),
     pages=[
         "Home" => "index.md",
