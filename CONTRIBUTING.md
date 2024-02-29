@@ -9,6 +9,7 @@ Thank you for your interest in contributing to GeometryOps.jl! Here are some gui
     - Please add an example in the comments at the top of each file. This should illustrate how to use the functionality provided by the file.  We've found that these examples are incredibly helpful for understanding the code.
     - Visual examples using plots (we use Makie in this library) are always helpful, and should go at the top of the file.  Each file should have a 
 - If you are confused, take a look at e.g. `src/methods/distance.jl` or `src/methods/area.jl`, and follow their structure as templates.
+- Only functions which the user should access and which promise stability should be exported and documented.  By convention, internal functions begin with `_` and generally do not have docstrings (though they should have comments on top in place of that).
 
 ## Tests
 
