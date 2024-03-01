@@ -1,4 +1,4 @@
-## GeometryOps.jl
+<img width="400" alt="GeometryOps.jl" src="https://github.com/asinghvi17/GeometryOps.jl/assets/32143268/1bfef07f-a0ef-4351-a643-2049c27b8261">
 
 ![Lifecycle:Experimental](https://img.shields.io/badge/Lifecycle-Experimental-339999)
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://asinghvi17.github.io/GeometryOps.jl/stable/)
