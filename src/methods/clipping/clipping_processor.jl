@@ -1,6 +1,7 @@
 # # Polygon clipping helpers
 # This file contains the shared helper functions for the polygon clipping functionalities.
 
+# This enum defines which side of an edge a point is on
 @enum PointEdgeSide left=1 right=2 unknown=3
 
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is

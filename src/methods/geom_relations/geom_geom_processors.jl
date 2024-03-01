@@ -507,8 +507,8 @@ function _point_filled_curve_orientation(
     n -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, n)) ? 1 : 0
     k = 0  # counter for ray crossings
     p_start = GI.getpoint(curve, n)
-    @inbounds for i in 1:n
-        p_end = GI.getpoint(curve, i)
+    for (i, p_end) in enumerate(GI.getpoint(curve))
+        i > n && break
         v1 = GI.y(p_start) - y
         v2 = GI.y(p_end) - y
         if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
@@ -671,7 +671,10 @@ function _line_filled_curve_interactions(
                             curve
                         )
                         npoints = length(ipoints)  # since hinge, at least one
-                        sort!(ipoints, by = p -> _euclid_distance(Float64, p, l_start))
+                        dist_from_lstart = let l_start = l_start
+                            x -> _euclid_distance(Float64, x, l_start)
+                        end
+                        sort!(ipoints, by = dist_from_lstart)
                         p_start = _tuple_point(l_start)
                         for i in 1:(npoints + 1)
                             p_end = i ≤ npoints ?
