@@ -12,6 +12,8 @@ Proj = "c94c279d-25a6-4763-9509-64d165bea63e"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
+ExactPredicates = "2"
+GeoInterface = "1.2"
 GeometryBasics = "0.4.7"
 Proj = "1"
 julia = "1.3"
