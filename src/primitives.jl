@@ -116,7 +116,8 @@ end
         # `collect` first so we can use threads
         _apply(f, Target, collect(iterable); threaded, kw...)
     else
-        map(x -> _apply(f, Target, x; kw...), iterable)
+        apply_to_iterable(x) = _apply(f, Target, x; kw...)
+        map(apply_to_iterable, iterable)
     end
 end
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
@@ -124,11 +125,11 @@ end
 @inline function _apply(f::F, ::Type{Target}, ::GI.FeatureCollectionTrait, fc;
     crs=GI.crs(fc), calc_extent=_False(), threaded
 ) where {F,Target}
+
     # Run _apply on all `features` in the feature collection, possibly threaded
-    features = _maptasks(1:GI.nfeature(fc), threaded) do i
-        feature = GI.getfeature(fc, i)
-        _apply(f, Target, feature; crs, calc_extent, threaded=_False())::GI.Feature
-    end
+    apply_to_feature(i) =
+        _apply(f, Target, GI.getfeature(fc, i); crs, calc_extent, threaded=_False())::GI.Feature
+    features = _maptasks(apply_to_feaature, 1:GI.nfeature(fc), threaded)
     if calc_extent isa _True
         # Calculate the extent of the features
         extent = mapreduce(GI.extent, Extents.union, features)
@@ -167,16 +168,16 @@ end
     # TODO handle zero length
     apply_to_geom(i) = _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent, threaded=_False())
     geoms = _maptasks(apply_to_geom, 1:GI.ngeom(geom), threaded)
-    # if calc_extent isa _True
+    if calc_extent isa _True
         # Calculate the extent of the sub geometries
-        # extent = mapreduce(GI.extent, Extents.union, geoms)
+        extent = mapreduce(GI.extent, Extents.union, geoms)
         # Return a new geometry of the same trait as `geom`,
         # holding tnew `geoms` with `crs` and calcualted extent
-        # return rebuild(geom, geoms; crs, extent)
-    # else
+        return rebuild(geom, geoms; crs, extent)
+    else
         # Return a new geometryof the same trait as `geom`, holding the new `geoms` with `crs`
         return rebuild(geom, geoms; crs)
-    # end
+    end
 end
 # Fail loudly if we hit PointTrait without running `f`
 # (after PointTrait there is no further to dig with `_apply`)
@@ -215,35 +216,31 @@ _applyreduce(f, op, target, geom; threaded, init) =
     _applyreduce(f, op, target, GI.trait(geom), geom; threaded, init)
 # Maybe use threads recucing over arrays
 function _applyreduce(f, op, target::Type, ::Nothing, A::AbstractArray; threaded, init)
-    _mapreducetasks(op, eachindex(A), threaded; init) do i
-        _applyreduce(f, op, target, A[i]; threaded=_False(), init)
-    end
+    applyreduce_array(i) = _applyreduce(f, op, target, A[i]; threaded=_False(), init)
+    _mapreducetasks(applyreduce_array, op, eachindex(A), threaded; init)
 end
 # Try to applyreduce over iterables
 function _applyreduce(f, op, target::Type, ::Nothing, iterable; threaded, init)
+    applyreduce_iterable(i) = _applyreduce(f, op, target, x; threaded=_False(), init)
     if threaded # Try to `collect` and reduce over the vector with threads
         _applyreduce(f, op, target, collect(iterable); threaded, init)
     else
         # Try to `mapreduce` the iterable as-is
-        mapreduce(op, iterable; init) do x
-            _applyreduce(f, op, target, x; threaded=_False(), init)
-        end
+        mapreduce(applyreduce_iterable, op, iterable; init)
     end
 end
 # Maybe use threads reducing over features of feature collections
 function _applyreduce(f, op, target::Type, ::GI.FeatureCollectionTrait, fc; threaded, init)
-    _mapreducetasks(op, 1:GI.nfeature(fc), threaded; init) do i
-        _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=_False(), init)
-    end
+    applyreduce_fc(i) = _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=_False(), init)
+    _mapreducetasks(applyreduce_fc, op, 1:GI.nfeature(fc), threaded; init)
 end
 # Features just applyreduce to their geometry
 _applyreduce(f, op, target::Type, ::GI.FeatureTrait, feature; threaded, init) =
     _applyreduce(f, op, target, GI.geometry(feature); threaded, init)
 # Maybe use threads over components of nested geometries
 function _applyreduce(f, op, target::Type, trait, geom; threaded, init)
-    _mapreducetasks(op, 1:GI.ngeom(geom), threaded; init) do i
-        _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=_False(), init)
-    end
+    applyreduce_geom(i) = _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=_False(), init)
+    _mapreducetasks(applyreduce_geom, op, 1:GI.ngeom(geom), threaded; init)
 end
 # Don't thread over points it won't pay off
 function _applyreduce(
@@ -487,6 +484,6 @@ end
     # Finally we join the results into a new vector
     return mapreduce(fetch, op, tasks; init)
 end
-@inline function _mapreducetasks(f, op, taskrange, threaded::_False; init)
+@inline function _mapreducetasks(f::F, op, taskrange, threaded::_False; init) where F
     mapreduce(f, op, taskrange; init)
 end
