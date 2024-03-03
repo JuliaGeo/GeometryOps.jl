@@ -172,7 +172,7 @@ end
 end
 # Reconstruct nested geometries,
 # maybe using threads to call _apply on component geoms
-@inline function _apply(f::F, ::Type{Target}, trait::GI.AbstractGeometryTrait, geom;
+@inline function _apply(f::F, ::Type{Target}, trait, geom;
     crs=GI.crs(geom), calc_extent=_False(), threaded
 )::(GI.geointerface_geomtype(trait)) where {F,Target}
     # Map `_apply` over all sub geometries of `geom`
