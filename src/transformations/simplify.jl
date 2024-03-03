@@ -386,10 +386,9 @@ function _build_tolerances(f, points)
     real_tolerances = _flat_tolerances(f, points)
 
     tolerances = copy(real_tolerances)
-    i = collect(1:nmax)
+    i = [n for n in 1:nmax]
 
-    min_vert = argmin(tolerances)
-    this_tolerance = tolerances[min_vert]
+    this_tolerance, min_vert = findmin(tolerances)
     _remove!(tolerances, min_vert)
     deleteat!(i, min_vert)
 
@@ -491,8 +490,8 @@ function _ratio_indices(r, points, tolerances)
     return _number_indices(n, points, tolerances)
 end
 
-function _flat_tolerances(f, points)
-    result = Array{Float64}(undef, length(points))
+function _flat_tolerances(f, points)::Vector{Float64}
+    result = Vector{Float64}(undef, length(points))
     result[1] = result[end] = Inf
 
     for i in 2:length(result) - 1
@@ -501,7 +500,11 @@ function _flat_tolerances(f, points)
     return result
 end
 
-_remove!(s, i) = s[i:end-1] .= s[i+1:end]
+function _remove!(s, i) 
+    for j in i:lastindex(s)-1
+        s[j] = s[j+1]
+    end
+end
 
 # Check SimplifyAlgs inputs to make sure they are valid for below algorithms
 function _checkargs(number, ratio, tol)
