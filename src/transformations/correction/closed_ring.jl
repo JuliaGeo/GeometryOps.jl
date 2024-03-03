@@ -24,7 +24,7 @@ even though it will look correct when visualized, and indeed appears correct.
 
 ```@example closed-ring
 import GeometryOps as GO
-GeometryOps.fix(polygon, corrections = [ClosedRing()]
+GeometryOps.fix(polygon, corrections = [ClosedRing()])
 ```
 
 You can see that the last point of the ring here is equal to the first point. For a polygon with ``n`` sides, there should be ``n+1`` vertices.
