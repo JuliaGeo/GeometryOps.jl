@@ -51,5 +51,7 @@ include("transformations/reproject.jl")
 include("transformations/simplify.jl")
 include("transformations/tuples.jl")
 include("transformations/transform.jl")
+include("transformations/correction/geometry_correction.jl")
+include("transformations/correction/closed_ring.jl")
 
 end
