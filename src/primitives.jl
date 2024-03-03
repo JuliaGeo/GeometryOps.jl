@@ -135,7 +135,7 @@ end
     # Run _apply on all `features` in the feature collection, possibly threaded
     apply_to_feature(i) =
         _apply(f, Target, GI.getfeature(fc, i); crs, calc_extent, threaded=_False())::GI.Feature
-    features = _maptasks(apply_to_feaature, 1:GI.nfeature(fc), threaded)
+    features = _maptasks(apply_to_feature, 1:GI.nfeature(fc), threaded)
     if calc_extent isa _True
         # Calculate the extent of the features
         extent = mapreduce(GI.extent, Extents.union, features)
