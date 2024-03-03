@@ -89,24 +89,29 @@ flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 """
-apply(f, ::Type{Target}, geom; kw...) where Target = _apply(f, Target, geom; kw...)
+Base.@constprop :aggressive apply(f::F, ::Type{Target}, geom; threaded=false, kw...) where {F,Target} =
+    _apply(f, Target, geom; threaded=_threadtype(threaded), kw...)
+
+struct _True end
+struct _False end
+
+Base.@constprop :aggressive _threadtype(threaded) = threaded ? _True() : _False()
 
 # Call _apply again with the trait of `geom`
-_apply(f, ::Type{Target}, geom; kw...)  where Target =
+@inline _apply(f::F, ::Type{Target}, geom; kw...)  where {Target,F} =
     _apply(f, Target, GI.trait(geom), geom; kw...)
 # There is no trait and this is an AbstractArray - so just iterate over it calling _apply on the contents
-function _apply(f, ::Type{Target}, ::Nothing, A::AbstractArray; threaded=false, kw...) where Target
+@inline function _apply(f::F, ::Type{Target}, ::Nothing, A::AbstractArray; threaded, kw...) where {F,Target}
     # For an Array there is nothing else to do but map `_apply` over all values
     # _maptasks may run this level threaded if `threaded==true`,
     # but deeper `_apply` called in the closure will not be threaded
-    _maptasks(eachindex(A); threaded) do i
-        _apply(f, Target, A[i]; threaded=false, kw...)
-    end
+    apply_to_array(i) = _apply(f, Target, A[i]; threaded=_False(), kw...)
+    _maptasks(apply_to_array, eachindex(A), threaded)
 end
 # There is no trait and this is not an AbstractArray.
 # Try to call _apply over it. We can't use threading
 # as we don't know if we can can index into it. So just `map`.
-function _apply(f, ::Type{Target}, ::Nothing, iterable; threaded=false, kw...) where Target
+@inline function _apply(f::F, ::Type{Target}, ::Nothing, iterable; threaded, kw...) where {F,Target}
     if threaded
         # `collect` first so we can use threads
         _apply(f, Target, collect(iterable); threaded, kw...)
@@ -116,15 +121,15 @@ function _apply(f, ::Type{Target}, ::Nothing, iterable; threaded=false, kw...) w
 end
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
 # Maybe use threads to call _apply on componenet features
-function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc;
-    crs=GI.crs(fc), calc_extent=false, threaded=false
-) where Target
+@inline function _apply(f::F, ::Type{Target}, ::GI.FeatureCollectionTrait, fc;
+    crs=GI.crs(fc), calc_extent=_False(), threaded
+) where {F,Target}
     # Run _apply on all `features` in the feature collection, possibly threaded
-    features = _maptasks(1:GI.nfeature(fc); threaded) do i
+    features = _maptasks(1:GI.nfeature(fc), threaded) do i
         feature = GI.getfeature(fc, i)
-        _apply(f, Target, feature; crs, calc_extent, threaded=false)::GI.Feature
+        _apply(f, Target, feature; crs, calc_extent, threaded=_False())::GI.Feature
     end
-    if calc_extent
+    if calc_extent isa _True
         # Calculate the extent of the features
         extent = mapreduce(GI.extent, Extents.union, features)
         # Return a FeatureCollection with features, crs and caculated extent
@@ -135,14 +140,14 @@ function _apply(f, ::Type{Target}, ::GI.FeatureCollectionTrait, fc;
     end
 end
 # Rewrap all FeatureTrait features as GI.Feature, keeping the properties
-function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature;
-    crs=GI.crs(feature), calc_extent=false, threaded=false
-) where Target
+@inline function _apply(f::F, ::Type{Target}, ::GI.FeatureTrait, feature;
+    crs=GI.crs(feature), calc_extent=_False(), threaded
+) where {F,Target}
     # Run _apply on the contained geometry
     geometry = _apply(f, Target, GI.geometry(feature); crs, calc_extent, threaded)
     # Get the feature properties
     properties = GI.properties(feature)
-    if calc_extent
+    if calc_extent isa _True
         # Calculate the extent of the geometry
         extent = GI.extent(geometry)
         # Return a new Feature with the new geometry and calculated extent, but the oroginal properties and crs
@@ -154,29 +159,28 @@ function _apply(f, ::Type{Target}, ::GI.FeatureTrait, feature;
 end
 # Reconstruct nested geometries,
 # maybe using threads to call _apply on component geoms
-function _apply(f, ::Type{Target}, trait, geom;
-    crs=GI.crs(geom), calc_extent=false, threaded=false
-)::(GI.geointerface_geomtype(trait)) where Target
+@inline function _apply(f::F, ::Type{Target}, trait, geom;
+    crs=GI.crs(geom), calc_extent=_False(), threaded
+)::(GI.geointerface_geomtype(trait)) where {F,Target}
     # Map `_apply` over all sub geometries of `geom`
     # to create a new vector of geometries
     # TODO handle zero length
-    geoms = _maptasks(1:GI.ngeom(geom); threaded) do i
-        _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent, threaded=false)
-    end
-    if calc_extent
+    apply_to_geom(i) = _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent, threaded=_False())
+    geoms = _maptasks(apply_to_geom, 1:GI.ngeom(geom), threaded)
+    # if calc_extent isa _True
         # Calculate the extent of the sub geometries
-        extent = mapreduce(GI.extent, Extents.union, geoms)
+        # extent = mapreduce(GI.extent, Extents.union, geoms)
         # Return a new geometry of the same trait as `geom`,
         # holding tnew `geoms` with `crs` and calcualted extent
-        return rebuild(geom, geoms; crs, extent)
-    else
+        # return rebuild(geom, geoms; crs, extent)
+    # else
         # Return a new geometryof the same trait as `geom`, holding the new `geoms` with `crs`
         return rebuild(geom, geoms; crs)
-    end
+    # end
 end
 # Fail loudly if we hit PointTrait without running `f`
 # (after PointTrait there is no further to dig with `_apply`)
-_apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing, kw...) where Target =
+@inline _apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing, kw...) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 # Finally, these short methods are the main purpose of `apply`.
 # The `Trait` is a subtype of the `Target` (or identical to it)
@@ -188,7 +192,7 @@ for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString,
     GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait
 )
-    @eval _apply(f, target::Type{$T}, trait::$T, x; kw...) = f(x)
+    @eval _apply(f::F, target::Type{$T}, trait::$T, x; kw...) where F = f(x)
 end
 
 """
@@ -205,14 +209,14 @@ feature collections and nested geometries.
 function applyreduce end
 # Add dispatch argument for trait
 applyreduce(f, op, target::Type, geom; threaded=false, init=nothing) =
-    _applyreduce(f, op, target, geom; threaded, init)
+    _applyreduce(f, op, target, geom; threaded=_threadtype(threaded), init)
 
 _applyreduce(f, op, target, geom; threaded, init) =
     _applyreduce(f, op, target, GI.trait(geom), geom; threaded, init)
 # Maybe use threads recucing over arrays
 function _applyreduce(f, op, target::Type, ::Nothing, A::AbstractArray; threaded, init)
-    _mapreducetasks(op, eachindex(A); threaded, init) do i
-        _applyreduce(f, op, target, A[i]; threaded=false, init)
+    _mapreducetasks(op, eachindex(A), threaded; init) do i
+        _applyreduce(f, op, target, A[i]; threaded=_False(), init)
     end
 end
 # Try to applyreduce over iterables
@@ -222,14 +226,14 @@ function _applyreduce(f, op, target::Type, ::Nothing, iterable; threaded, init)
     else
         # Try to `mapreduce` the iterable as-is
         mapreduce(op, iterable; init) do x
-            _applyreduce(f, op, target, x; threaded=false, init)
+            _applyreduce(f, op, target, x; threaded=_False(), init)
         end
     end
 end
 # Maybe use threads reducing over features of feature collections
 function _applyreduce(f, op, target::Type, ::GI.FeatureCollectionTrait, fc; threaded, init)
-    _mapreducetasks(op, 1:GI.nfeature(fc); threaded, init) do i
-        _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=false, init)
+    _mapreducetasks(op, 1:GI.nfeature(fc), threaded; init) do i
+        _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=_False(), init)
     end
 end
 # Features just applyreduce to their geometry
@@ -237,8 +241,8 @@ _applyreduce(f, op, target::Type, ::GI.FeatureTrait, feature; threaded, init) =
     _applyreduce(f, op, target, GI.geometry(feature); threaded, init)
 # Maybe use threads over components of nested geometries
 function _applyreduce(f, op, target::Type, trait, geom; threaded, init)
-    _mapreducetasks(op, 1:GI.ngeom(geom); threaded, init) do i
-        _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=false, init)
+    _mapreducetasks(op, 1:GI.ngeom(geom), threaded; init) do i
+        _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=_False(), init)
     end
 end
 # Don't thread over points it won't pay off
@@ -246,7 +250,7 @@ function _applyreduce(
     f, op, target::Type, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom;
     threaded, init
 )
-    _applyreduce(f, op, target, GI.getgeom(geom); threaded=false, init)
+    _applyreduce(f, op, target, GI.getgeom(geom); threaded=_False(), init)
 end
 # Apply f to the target
 function _applyreduce(f, op, ::Type{Target}, ::Trait, x; kw...) where {Target<:GI.AbstractTrait,Trait<:Target} 
@@ -433,29 +437,28 @@ using Base.Threads: nthreads, @threads, @spawn
 # Threading utility, modified Mason Protters threading PSA
 # run `f` over ntasks, where f recieves an AbstractArray/range
 # of linear indices
-function _maptasks(f, taskrange; threaded=false)
-    if threaded
-        ntasks = length(taskrange)
-        # Customize this as needed.
-        # More tasks have more overhead, but better load balancing
-        tasks_per_thread = 2
-        chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
-        # partition the range into chunks
-        task_chunks = Iterators.partition(taskrange, chunk_size)
-        # Map over the chunks
-        tasks = map(task_chunks) do chunk
-            # Spawn a task to process this chunk
-            @spawn begin
-                # Where we map `f` over the chunk indices
-                map(f, chunk)
-            end
+@inline function _maptasks(f::F, taskrange, threaded::_True) where F
+    ntasks = length(taskrange)
+    # Customize this as needed.
+    # More tasks have more overhead, but better load balancing
+    tasks_per_thread = 2
+    chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
+    # partition the range into chunks
+    task_chunks = Iterators.partition(taskrange, chunk_size)
+    # Map over the chunks
+    tasks = map(task_chunks) do chunk
+        # Spawn a task to process this chunk
+        @spawn begin
+            # Where we map `f` over the chunk indices
+            map(f, chunk)
         end
-
-        # Finally we join the results into a new vector
-        return mapreduce(fetch, vcat, tasks)
-    else
-        return map(f, taskrange)
     end
+
+    # Finally we join the results into a new vector
+    return mapreduce(fetch, vcat, tasks)
+end
+@inline function _maptasks(f::F, taskrange, threaded::_False) where F
+    map(f, taskrange)
 end
 
 # Threading utility, modified Mason Protters threading PSA
@@ -464,27 +467,26 @@ end
 #
 # WARNING: this will not work for mean/median - only ops
 # where grouping is possible
-function _mapreducetasks(f, op, taskrange; threaded=false, init)
-    if threaded
-        ntasks = length(taskrange)
-        # Customize this as needed.
-        # More tasks have more overhead, but better load balancing
-        tasks_per_thread = 2
-        chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
-        # partition the range into chunks
-        task_chunks = Iterators.partition(taskrange, chunk_size)
-        # Map over the chunks
-        tasks = map(task_chunks) do chunk
-            # Spawn a task to process this chunk
-            @spawn begin
-                # Where we map `f` over the chunk indices
-                mapreduce(f, op, chunk; init)
-            end
+@inline function _mapreducetasks(f::F, op, taskrange, threaded::_True; init) where F
+    ntasks = length(taskrange)
+    # Customize this as needed.
+    # More tasks have more overhead, but better load balancing
+    tasks_per_thread = 2
+    chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
+    # partition the range into chunks
+    task_chunks = Iterators.partition(taskrange, chunk_size)
+    # Map over the chunks
+    tasks = map(task_chunks) do chunk
+        # Spawn a task to process this chunk
+        @spawn begin
+            # Where we map `f` over the chunk indices
+            mapreduce(f, op, chunk; init)
         end
-
-        # Finally we join the results into a new vector
-        return mapreduce(fetch, op, tasks; init)
-    else
-        return mapreduce(f, op, taskrange; init)
     end
+
+    # Finally we join the results into a new vector
+    return mapreduce(fetch, op, tasks; init)
+end
+@inline function _mapreducetasks(f, op, taskrange, threaded::_False; init)
+    mapreduce(f, op, taskrange; init)
 end
