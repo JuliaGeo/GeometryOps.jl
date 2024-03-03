@@ -89,19 +89,25 @@ flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
 """
-Base.@constprop :aggressive apply(f::F, ::Type{Target}, geom; threaded=false, kw...) where {F,Target} =
-    _apply(f, Target, geom; threaded=_threadtype(threaded), kw...)
+@inline function apply(
+    f::F, ::Type{Target}, geom; calc_extent=false, threaded=false, kw...
+) where {F,Target}
+    threaded = _booltype(threaded)
+    calc_extent = _booltype(calc_extent)
+    _apply(f, Target, geom; threaded, calc_extent, kw...)
+end
 
 #=
-You might note the use of this strange macro, `Base.@constprop :aggressive`.  This tells Julia that the return type of the method depends on the value of its input arguments, and allows it to specialize compilation to increase type-stability.
+We pass `threading` and `calc_extent` as types, not simple boolean values.  
 
-We are also passing the threading specification as types, not simple boolean values.  This is, again, to help compilation - with a type to hold on to, it's easier for the compiler to separate threaded and non-threaded code paths.
+This is to help compilation - with a type to hold on to, it's easier for 
+the compiler to separate threaded and non-threaded code paths.
 =#
-
 struct _True end
 struct _False end
 
-Base.@constprop :aggressive _threadtype(threaded) = threaded ? _True() : _False()
+@inline _booltype(x::Bool) = x ? _True() : _False()
+@inline _booltype(x::Union{_True,_False}) = x
 
 # Call _apply again with the trait of `geom`
 @inline _apply(f::F, ::Type{Target}, geom; kw...)  where {Target,F} =
@@ -166,7 +172,7 @@ end
 end
 # Reconstruct nested geometries,
 # maybe using threads to call _apply on component geoms
-@inline function _apply(f::F, ::Type{Target}, trait, geom;
+@inline function _apply(f::F, ::Type{Target}, trait::GI.AbstractGeometryTrait, geom;
     crs=GI.crs(geom), calc_extent=_False(), threaded
 )::(GI.geointerface_geomtype(trait)) where {F,Target}
     # Map `_apply` over all sub geometries of `geom`
@@ -174,16 +180,18 @@ end
     # TODO handle zero length
     apply_to_geom(i) = _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent, threaded=_False())
     geoms = _maptasks(apply_to_geom, 1:GI.ngeom(geom), threaded)
-    if calc_extent isa _True
-        # Calculate the extent of the sub geometries
-        extent = mapreduce(GI.extent, Extents.union, geoms)
-        # Return a new geometry of the same trait as `geom`,
-        # holding tnew `geoms` with `crs` and calcualted extent
-        return rebuild(geom, geoms; crs, extent)
-    else
-        # Return a new geometryof the same trait as `geom`, holding the new `geoms` with `crs`
-        return rebuild(geom, geoms; crs)
-    end
+    return _apply_inner(geom, geoms, crs, calc_extent)
+end
+function _apply_inner(geom, geoms, crs, calc_extent::_True)
+    # Calculate the extent of the sub geometries
+    extent = mapreduce(GI.extent, Extents.union, geoms)
+    # Return a new geometry of the same trait as `geom`,
+    # holding tnew `geoms` with `crs` and calcualted extent
+    return rebuild(geom, geoms; crs, extent)
+end
+function _apply_inner(geom, geoms, crs, calc_extent::_False)
+    # Return a new geometryof the same trait as `geom`, holding the new `geoms` with `crs`
+    return rebuild(geom, geoms; crs)
 end
 # Fail loudly if we hit PointTrait without running `f`
 # (after PointTrait there is no further to dig with `_apply`)
@@ -213,10 +221,13 @@ The order and grouping of application of `op` is not guaranteed.
 If `threaded==true` threads will be used over arrays and iterables, 
 feature collections and nested geometries.
 """
-function applyreduce end
-# Add dispatch argument for trait
-@inline applyreduce(f::F, op, ::Type{Target}, geom; threaded=false, init=nothing) where {F,Target} =
-    _applyreduce(f, op, Target, geom; threaded=_threadtype(threaded), init)
+@inline function applyreduce(
+    f::F, op, ::Type{Target}, geom; threaded=false, init=nothing
+) where {F,Target}
+    threaded = _booltype(threaded)
+    calc_extent = _booltype(calc_extent)
+    _applyreduce(f, op, Target, geom; threaded, calc_extent, init)
+end
 
 @inline _applyreduce(f::F, op, ::Type{Target}, geom; threaded, init) where {F,Target} =
     _applyreduce(f, op, Target, GI.trait(geom), geom; threaded, init)
@@ -440,7 +451,7 @@ using Base.Threads: nthreads, @threads, @spawn
 # Threading utility, modified Mason Protters threading PSA
 # run `f` over ntasks, where f recieves an AbstractArray/range
 # of linear indices
-@inline function _maptasks(f::F, taskrange, threaded::_True) where F
+@inline function _maptasks(f::F, taskrange, threaded::_True)::Vector where F
     ntasks = length(taskrange)
     # Customize this as needed.
     # More tasks have more overhead, but better load balancing
@@ -460,7 +471,11 @@ using Base.Threads: nthreads, @threads, @spawn
     # Finally we join the results into a new vector
     return mapreduce(fetch, vcat, tasks)
 end
-@inline function _maptasks(f::F, taskrange, threaded::_False) where F
+#=
+Here we use the compiler directive `@assume_effects :foldable` to force the compiler
+to lookup through the closure. This alone makes e.g. `flip` 2.5x faster!
+=#
+Base.@assume_effects :foldable @inline function _maptasks(f::F, taskrange, threaded::_False)::Vector where F
     map(f, taskrange)
 end
 
@@ -490,6 +505,6 @@ end
     # Finally we join the results into a new vector
     return mapreduce(fetch, op, tasks; init)
 end
-@inline function _mapreducetasks(f::F, op, taskrange, threaded::_False; init) where F
+Base.@assume_effects :foldable function _mapreducetasks(f::F, op, taskrange, threaded::_False; init) where F
     mapreduce(f, op, taskrange; init)
 end
