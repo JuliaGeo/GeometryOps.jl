@@ -222,7 +222,7 @@ If `threaded==true` threads will be used over arrays and iterables,
 feature collections and nested geometries.
 """
 @inline function applyreduce(
-    f::F, op, ::Type{Target}, geom; threaded=false, init=nothing
+    f::F, op, ::Type{Target}, geom; calc_extent=false, threaded=false, init=nothing
 ) where {F,Target}
     threaded = _booltype(threaded)
     calc_extent = _booltype(calc_extent)
