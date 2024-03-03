@@ -92,6 +92,12 @@ end
 Base.@constprop :aggressive apply(f::F, ::Type{Target}, geom; threaded=false, kw...) where {F,Target} =
     _apply(f, Target, geom; threaded=_threadtype(threaded), kw...)
 
+#=
+You might note the use of this strange macro, `Base.@constprop :aggressive`.  This tells Julia that the return type of the method depends on the value of its input arguments, and allows it to specialize compilation to increase type-stability.
+
+We are also passing the threading specification as types, not simple boolean values.  This is, again, to help compilation - with a type to hold on to, it's easier for the compiler to separate threaded and non-threaded code paths.
+=#
+
 struct _True end
 struct _False end
 
