@@ -172,19 +172,51 @@ for frac in exp10.(LinRange(log10(0.01), log10(1), 10))
     centroid_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.centroid($geom_lg)
 end
 
-@time BenchmarkTools.tune!(geom_method_suite)
+@time BenchmarkTools.tune!(centroid_suite)
 @time centroid_result = BenchmarkTools.run(centroid_suite)
-delete!(centroid_result, "GeometryBasics")
-plot_trials(centroid_result, "Centroid on USA")
+fig = plot_trials(centroid_result, "Centroid on USA")
+contents(fig.layout)[1].subtitle = "Natural Earth's full USA, simplified down"
 
+circle_centroid_suite = BenchmarkGroup()# geom_method_suite["centroid_circle"]
+for e in LinRange(1, 5, 10)
+    n_points = round(Int, 10^e)
+    circle = GI.Wrappers.Polygon([tuple.((cos(θ) for θ in LinRange(0, 2π, n_points)), (sin(θ) for θ in LinRange(0, 2π, n_points)))])
+    closed_circle = GO.ClosedRing()(circle)
+    lg_circle, go_circle = lg_and_go(closed_circle)
+    circle_centroid_suite["GeometryOps"][n_points] = @benchmarkable GO.centroid($go_circle)
+    circle_centroid_suite["LibGEOS"][n_points]     = @benchmarkable LG.centroid($lg_circle)
+    circle_centroid_suite["GeometryOps threaded"][n_points] = @benchmarkable GO.centroid($go_circle; threaded = GO._True())
+end
+
+@time BenchmarkTools.tune!(circle_centroid_suite)
+@time centroid_result = BenchmarkTools.run(circle_centroid_suite)
+fig = plot_trials(centroid_result, "Circle")
+contents(fig.layout)[1].subtitle = ""
+fig
+# contents(fig.layout)[1].subtitle = "Natural Earth's full USA, simplified down"
+
+n_points = 30
+circle = GI.Wrappers.Polygon([tuple.((cos(θ) for θ in LinRange(0, 2π, n_points)), (sin(θ) for θ in LinRange(0, 2π, n_points)))])
+closed_circle = GO.ClosedRing()(circle)
+lg_circle, go_circle = lg_and_go(usa_multipoly)
+const __go_c = go_circle
+function _do_profile(go_c)
+    for i in 1:10
+        GO.centroid(go_c)
+    end
+end
+
+VSCodeServer.@profview _do_profile(__go_c)
+svgfg = ProfileSVG.@profview _do_profile(__go_c)
+ProfileSVG.save(joinpath("benchmarks", "prof.svg"))
 within_suite = geom_method_suite["within"]
 for frac in exp10.(LinRange(log10(0.001), log10(1), 10))
     geom = GO.simplify(usa_multipoly; ratio = frac)
     geom_lg, geom_go = lg_and_go(geom)
     centroid = GO.centroid(geom)
     centroid_lg, centroid_go = lg_and_go(centroid)
-    within_suite[GMail]["GeometryOps"][n_total_points(geom)] = @benchmark GO.within($centroid_go, $geom_go)
-    within_suite[GMail]["LibGEOS"][n_total_points(geom)] = @benchmark LG.within($centroid_lg, $geom_lg)
+    within_suite["GeometryOps"][n_total_points(geom)] = @benchmark GO.within($centroid_go, $geom_go)
+    within_suite["LibGEOS"][n_total_points(geom)] = @benchmark LG.within($centroid_lg, $geom_lg)
 end
 
 @benchmark GO.within($(GO.centroid(usa_o_go)), $(usa_o_go))
