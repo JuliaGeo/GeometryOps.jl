@@ -73,7 +73,7 @@ end
 
 # Literatify the benchmarks
 cp(joinpath(dirname(@__DIR__), "benchmarks"), joinpath(@__DIR__, "src", "benchmarks"))
-Literate.markdown(joinpath(@__DIR__, "src", "benchmarks", "benchmarks.jl"), joinpath(@__DIR__, "src", "benchmarks"); flavor = Literate.CommonMarkFlavor())
+Literate.markdown(joinpath(@__DIR__, "src", "benchmarks", "benchmarks.jl"), joinpath(@__DIR__, "src", "benchmarks"); flavor = Literate.DocumenterFlavor())
 
 # Finally, make the docs!
 makedocs(;
