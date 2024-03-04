@@ -39,7 +39,7 @@ function results_to_numbers(result::BenchmarkTools.BenchmarkGroup, postprocess_t
     result_objects = getindex.((result,), numbers)
     # Now, we get the times, and return their medians.
     time_vectors = getproperty.(result_objects, :times)
-    return numbers, postprocess.(time_vectors)
+    return postprocess_numbers.(numbers), postprocess_times.(time_vectors)
 end
 
 """
