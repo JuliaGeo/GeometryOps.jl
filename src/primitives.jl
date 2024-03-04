@@ -106,12 +106,18 @@ We pass `threading` and `calc_extent` as types, not simple boolean values.
 
 This is to help compilation - with a type to hold on to, it's easier for 
 the compiler to separate threaded and non-threaded code paths.
-=#
-struct _True end
-struct _False end
 
-@inline _booltype(x::Bool) = x ? _True() : _False()
-@inline _booltype(x::Union{_True,_False}) = x
+Note that if we didn't include the parent abstract type, this would have been really 
+type unstable, since the compiler couldn't tell what would be returned!
+
+We had to add the type annotation on the `_booltype(::Bool)` method for this reason as well.
+=#
+abstract type BoolsAsTypes end
+struct _True <: BoolsAsTypes end
+struct _False <: BoolsAsTypes end
+
+@inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
+@inline _booltype(x::BoolsAsTypes) = x
 
 # Call _apply again with the trait of `geom`
 @inline _apply(f::F, ::Type{Target}, geom; kw...)  where {Target,F} =
@@ -228,7 +234,7 @@ feature collections and nested geometries.
 @inline function applyreduce(
     f::F, op, ::Type{Target}, geom; threaded=false, init=nothing
 ) where {F,Target}
-    threaded = _booltype(threaded)
+    threaded::BoolsAsTypes = _booltype(threaded)::BoolsAsTypes
     _applyreduce(f, op, Target, geom; threaded, init)
 end
 
