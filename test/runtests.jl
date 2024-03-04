@@ -3,6 +3,7 @@ using Test
 
 using GeometryOps.GeoInterface
 using GeometryOps.GeometryBasics
+using GeoInterface.Extents: Extents
 using ArchGDAL
 using LibGEOS
 using Random, Distributions
@@ -24,6 +25,7 @@ const GO = GeometryOps
     @testset "Distance" begin include("methods/distance.jl") end
     @testset "Equals" begin include("methods/equals.jl") end
     # # Clipping
+    @testset "Coverage" begin include("methods/clipping/coverage.jl") end
     @testset "Cut" begin include("methods/clipping/cut.jl") end
     @testset "Polygon Clipping" begin include("methods/clipping/polygon_clipping.jl") end
     # # Transformations
