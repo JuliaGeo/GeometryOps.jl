@@ -3,7 +3,7 @@
 export area, signed_area
 
 #=
-## What is coverage?
+## What is area? What is signed area?
 
 Area is the amount of space occupied by a two-dimensional figure. It is always a positive
 value. Signed area is simply the integral over the exterior path of a polygon, minus the sum
