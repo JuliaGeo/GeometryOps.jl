@@ -94,7 +94,7 @@ makedocs(;
         "Introduction" => "introduction.md",
         "API Reference" => "api.md",
         "Source code" => literate_pages,
-        "Benchmarks" => "benchmarks.md",
+        "Benchmarks" => "benchmarks/benchmarks.md",
     ],
     warnonly = true,
 )
