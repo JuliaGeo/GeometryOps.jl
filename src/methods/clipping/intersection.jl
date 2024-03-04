@@ -1,4 +1,4 @@
-# #  Intersection
+# # Geometry Intersection
 export intersection, intersection_points
 
 
@@ -50,17 +50,17 @@ function _intersection(
     ::GI.PolygonTrait, poly_b,
 ) where {T}
     # First we get the exteriors of 'poly_a' and 'poly_b'
-    ext_poly_a = GI.getexterior(poly_a)
-    ext_poly_b = GI.getexterior(poly_b)
+    ext_a = GI.getexterior(poly_a)
+    ext_b = GI.getexterior(poly_b)
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_poly_a, ext_poly_b)
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> x ? 1 : (-1))
-
-    if isempty(polys)
-        if _point_filled_curve_orientation(a_list[1].point, ext_poly_b) == point_in
-            push!(polys, GI.Polygon([ext_poly_a]))
-        elseif _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in
-            push!(polys, GI.Polygon([ext_poly_b]))
+    if isempty(polys) # no crossing points, determine if either poly is inside the other
+        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
+        if a_in_b
+            push!(polys, GI.Polygon([tuples(ext_a)]))
+        elseif b_in_a
+            push!(polys, GI.Polygon([tuples(ext_b)]))
         end
     end
     # If the original polygons had holes, take that into account.
@@ -161,14 +161,20 @@ function _intersection_point(::Type{T}, (a1, a2)::Tuple, (b1, b2)::Tuple) where 
     sx, sy = GI.x(b2) - qx, GI.y(b2) - qy
     # Intersection will be where p + tr = q + us where 0 < t, u < 1 and
     r_cross_s = rx * sy - ry * sx
-    if r_cross_s != 0
-        Δqp_x = qx - px
-        Δqp_y = qy - py
+    Δqp_x = qx - px
+    Δqp_y = qy - py
+    point, fracs = if r_cross_s != 0  # if lines aren't parallel
         t = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
         u = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
         x = px + t * rx
         y = py + t * ry
-        return (T(x), T(y)), (T(t), T(u))
+        (T(x), T(y)), (T(t), T(u))
+    elseif  sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
+        t = (Δqp_x * rx + Δqp_y * ry) / (rx^2 + ry^2)
+        u = -(Δqp_x * sx + Δqp_y * sy) / (sx^2 + sy^2)
+        nothing, (T(t), T(u))
+    else
+        nothing, nothing
     end
-    return nothing, nothing
+    return point, fracs
 end

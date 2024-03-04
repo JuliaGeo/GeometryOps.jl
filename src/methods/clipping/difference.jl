@@ -1,4 +1,4 @@
-# #  Difference Polygon Clipping
+# # Difference Polygon Clipping
 export difference
 
 
@@ -41,18 +41,23 @@ function _difference(
     ::GI.PolygonTrait, poly_b,
 ) where T
     # Get the exterior of the polygons
-    ext_poly_a = GI.getexterior(poly_a)
-    ext_poly_b = GI.getexterior(poly_b)
+    ext_a = GI.getexterior(poly_a)
+    ext_b = GI.getexterior(poly_b)
     # Find the difference of the exterior of the polygons
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_poly_a, ext_poly_b)
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> (x ⊻ y) ? 1 : (-1))
+    # if no crossing points, determine if either poly is inside of the other
     if isempty(polys)
-        if _point_filled_curve_orientation(b_list[1].point, ext_poly_a) == point_in
-            poly_a_b_hole = GI.Polygon([ext_poly_a, ext_poly_b])
+        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
+        # add case for if they polygons are the same (all intersection points!)
+        # add a find_first check to find first non-inter poly!
+        if b_in_a && !a_in_b  # b in a and can't be the same polygon
+            share_edge_warn(a_list, "Edge case: polygons share edge but one is hole of the other.")  # will get taken care of with "glued edges"
+            poly_a_b_hole = GI.Polygon([tuples(ext_a), tuples(ext_b)])
             push!(polys, poly_a_b_hole)
-        elseif _point_filled_curve_orientation(a_list[1].point, ext_poly_b) != point_in
-            # Two polygons don't intersect and are not contained in one another
-            push!(polys, GI.Polygon([ext_poly_a]))
+        elseif !b_in_a && !a_in_b # polygons don't intersect
+            push!(polys, tuples(poly_a))
+            return polys
         end
     end
 

@@ -53,18 +53,16 @@ polygon_points = Point3f[
 # First, we'll plot the polygon using Makie's rendering:
 f, a1, p1 = poly(
     polygon_points; 
-    color = last.(polygon_points), colormap = cgrad(:jet, 18; categorical = true), 
+    color = last.(polygon_points), 
+    colormap = cgrad(:jet, 18; categorical = true), 
     axis = (; 
        type = Axis, aspect = DataAspect(), title = "Makie mesh based polygon rendering", subtitle = "CairoMakie"
     ), 
     figure = (; size = (800, 400),)
 )
+hidedecorations!(a1)
 
-Makie.update_state_before_display!(f) # We have to call this explicitly, to get the axis limits correct
-# Now that we've plotted the first polygon,
-# we can render it using barycentric coordinates.
-a1_bbox = a1.finallimits[] # First we get the extent of the axis
-ext = GeometryOps.GI.Extent(NamedTuple{(:X, :Y)}(zip(minimum(a1_bbox), maximum(a1_bbox))))
+ext = GeometryOps.GI.Extent(X = (0, 0.5), Y = (0, 0.42))
 
 a2 = Axis(
         f[1, 2], 
@@ -72,20 +70,19 @@ a2 = Axis(
         title = "Barycentric coordinate based polygon rendering", subtitle = "GeometryOps",
         limits = (ext.X, ext.Y)
     )
+hidedecorations!(a2)
+
 p2box = poly!( # Now, we plot a cropping rectangle around the axis so we only show the polygon
     a2, 
     GeometryOps.GeometryBasics.Polygon( # This is a rectangle with an internal hole shaped like the polygon.
-        Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], 
-        [reverse(Point2f.(polygon_points))]
-    ); 
-    color = :white, xautolimits = false, yautolimits = false
+        Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], # exterior 
+        [reverse(Point2f.(polygon_points))] # hole
+    ); color = :white, xautolimits = false, yautolimits = false
 )
-hidedecorations!(a1)
-hidedecorations!(a2)
 cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
 # Finally, we perform barycentric interpolation on a grid,
-xrange = LinRange(ext.X..., size(a2.scene)[1] * 4) # 2 rendered pixels per "physical" pixel
-yrange = LinRange(ext.Y..., size(a2.scene)[2] * 4) # 2 rendered pixels per "physical" pixel
+xrange = LinRange(ext.X..., 400)
+yrange = LinRange(ext.Y..., 400)
 @time mean_values = barycentric_interpolate.(
     (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
     (Point2f.(polygon_points),), # The polygon points as `Point2f`
@@ -93,14 +90,9 @@ yrange = LinRange(ext.Y..., size(a2.scene)[2] * 4) # 2 rendered pixels per "phys
     Point2f.(xrange, yrange')    # The points at which to interpolate
 )
 # and render!
-hm = heatmap!(
-    a2, xrange, yrange, mean_values;
-    colormap = p1.colormap, # Use the same colormap as the original polygon plot
-    colorrange = p1.plots[1].colorrange[], # Access the rendered mesh plot's colorrange directly
-    xautolimits = false, yautolimits = false
-)
+hm = heatmap!(a2, xrange, yrange, mean_values; colormap = p1.colormap, colorrange = p1.plots[1].colorrange[], xautolimits = false, yautolimits = false)
 translate!(hm, 0, 0, -1) # translate the heatmap behind the cropping polygon!
-f
+f # finally, display the figure
 ```
 
 ## Barycentric-coordinate API
@@ -129,7 +121,6 @@ The rest of the methods will be implemented in terms of these, and have efficien
 """
 abstract type AbstractBarycentricCoordinateMethod end
 
-
 Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
     @boundscheck @assert length(λs) == length(polypoints)
     @boundscheck @assert length(polypoints) >= 3
@@ -138,12 +129,47 @@ Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{<: Real},
 end
 Base.@propagate_inbounds barycentric_coordinates!(λs::Vector{<: Real}, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real} = barycentric_coordinates!(λs, MeanValue(), polypoints, point)
 
+# This is the GeoInterface-compatible method.
+"""
+    barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polygon, point)
+
+Loads the barycentric coordinates of `point` in `polygon` into `λs` using the barycentric coordinate method `method`.
+
+`λs` must be of the length of the polygon plus its holes.
+
+!!! tip
+    Use this method to avoid excess allocations when you need to calculate barycentric coordinates for many points.
+"""
+Base.@propagate_inbounds function barycentric_coordinates!(λs::Vector{<: Real}, method::AbstractBarycentricCoordinateMethod, polygon, point) 
+    @assert GeoInterface.trait(polygon) isa GeoInterface.PolygonTrait
+    @assert GeoInterface.trait(point) isa GeoInterface.PointTrait
+    passable_polygon = GeoInterface.convert(GeometryBasics, polygon)
+    @assert passable_polygon isa GeometryBasics.Polygon "The polygon was converted to a $(typeof(passable_polygon)), which is not a `GeometryBasics.Polygon`."
+    passable_point = GeoInterface.convert(GeometryBasics, point)
+    return barycentric_coordinates!(λs, method, passable_polygon, Point2(passable_point))
+end
+
 Base.@propagate_inbounds function barycentric_coordinates(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real}
     λs = zeros(promote_type(T1, T2), length(polypoints))
     barycentric_coordinates!(λs, method, polypoints, point)
     return λs
 end
 Base.@propagate_inbounds barycentric_coordinates(polypoints::AbstractVector{<: Point{N1, T1}}, point::Point{N2, T2}) where {N1, N2, T1 <: Real, T2 <: Real} = barycentric_coordinates(MeanValue(), polypoints, point)
+
+# This is the GeoInterface-compatible method.
+"""
+    barycentric_coordinates(method = MeanValue(), polygon, point)
+
+Returns the barycentric coordinates of `point` in `polygon` using the barycentric coordinate method `method`.
+"""
+Base.@propagate_inbounds function barycentric_coordinates(method::AbstractBarycentricCoordinateMethod, polygon, point)
+    @assert GeoInterface.trait(polygon) isa GeoInterface.PolygonTrait
+    @assert GeoInterface.trait(point) isa GeoInterface.PointTrait
+    passable_polygon = GeoInterface.convert(GeometryBasics, polygon)
+    @assert passable_polygon isa GeometryBasics.Polygon "The polygon was converted to a $(typeof(passable_polygon)), which is not a `GeometryBasics.Polygon`."
+    passable_point = GeoInterface.convert(GeometryBasics, point)
+    return barycentric_coordinates(method, passable_polygon, Point2(passable_point))
+end
 
 Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polypoints::AbstractVector{<: Point{N, T1}}, values::AbstractVector{V}, point::Point{N, T2}) where {N, T1 <: Real, T2 <: Real, V}
     @boundscheck @assert length(values) == length(polypoints)
@@ -193,6 +219,19 @@ end
 Base.@propagate_inbounds barycentric_interpolate(polygon::Polygon{3, T1}, point::Point{2, T2}) where {T1 <: Real, T2 <: Real} = barycentric_interpolate(MeanValue(), polygon, point)
 
 # This method is the one which supports GeoInterface.
+"""
+    barycentric_interpolate(method = MeanValue(), polygon, values::AbstractVector{V}, point)
+
+Returns the interpolated value at `point` within `polygon` using the barycentric coordinate method `method`.  
+`values` are the per-point values for the polygon which are to be interpolated.
+
+Returns an object of type `V`.
+
+!!! warning
+    Barycentric interpolation is currently defined only for 2-dimensional polygons.  
+    If you pass a 3-D polygon in, the Z coordinate will be used as per-vertex value to be interpolated
+    (the M coordinate in GIS parlance).
+"""
 Base.@propagate_inbounds function barycentric_interpolate(method::AbstractBarycentricCoordinateMethod, polygon, values::AbstractVector{V}, point) where V
     @assert GeoInterface.trait(polygon) isa GeoInterface.PolygonTrait
     @assert GeoInterface.trait(point) isa GeoInterface.PointTrait
