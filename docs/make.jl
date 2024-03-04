@@ -71,6 +71,10 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
     # TODO: We should probably fix the above in `process_literate_recursive!`.
 end
 
+# Literatify the benchmarks
+cp(joinpath(@__DIR__ |> dirname, "benchmarks"), joinpath(@__DIR__, "src", "benchmarks"))
+Literate.markdown(joinpath(@__DIR__, "src", "benchmarks", "benchmarks.jl"), joinpath(@__DIR__, "src", "benchmarks"); flavor = Literate.CommonMarkFlavor())
+
 # Finally, make the docs!
 makedocs(;
     modules=[GeometryOps],
@@ -90,6 +94,7 @@ makedocs(;
         "Introduction" => "introduction.md",
         "API Reference" => "api.md",
         "Source code" => literate_pages,
+        "Benchmarks" => "benchmarks.md",
     ],
     warnonly = true,
 )
