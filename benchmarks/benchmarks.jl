@@ -26,7 +26,7 @@ include(joinpath(@__DIR__, "utils.jl"))
 # #### Good old USA
 
 fc = GeoJSON.read(read(download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_admin_0_countries.geojson")))
-usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)]
+usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)] |> x -> GI.convert(LibGEOS, x) |> LibGEOS.makeValid |> GO.tuples
 areas = [GO.area(p) for p in GI.getgeom(usa_multipoly)]
 usa_poly = GI.getgeom(usa_multipoly, findmax(areas)[2])
 center_of_the_world = GO.centroid(usa_poly)
@@ -35,7 +35,7 @@ usa_poly_reflected = GO.apply(GI.PointTrait, usa_poly) do point
     return (-(x - GI.x(center_of_the_world)) + GI.x(center_of_the_world), y)
 end
 
-f, a, p = poly(usa_poly; color = Makie.wong_colors(0.5)[1], label = "Straight", axis = (; title = "Good old U.S.A.", aspect = DataAspect()))
+f, a, p = poly(usa_poly; color = Makie.wong_colors(0.5)[1], label = "Original", axis = (; title = "Good old U.S.A.", aspect = DataAspect()))
 poly!(usa_poly_reflected; color = Makie.wong_colors(0.5)[2], label = "Reversed")
 Legend(f[2, 1], a; valign = 0, orientation = :horizontal)
 f
@@ -220,32 +220,52 @@ end
 
 ProfileView.@profview _do_profile(___go_c)
 
-
+# ## Within
 
 within_suite = BenchmarkGroup()# geom_method_suite["within"]
 for frac in exp10.(LinRange(log10(0.1), log10(1), 10))
     geom = GO.simplify(usa_multipoly; ratio = frac)
-    geom_lg, geom_go = lg_and_go(geom)
-    geom_lg = LibGEOS.makeValid(geom_lg)
-    centroid = GO.centroid(geom)
+    geom_valid = LibGEOS.makeValid(GI.convert(LibGEOS, geom));
+    geom_lg, geom_go = lg_and_go(geom_valid);
+    centroid = GO.centroid(geom_go)
+    @test GI.x(GO.centroid(geom_go)) ≈ GI.x(LG.centroid(geom_lg))
+    @test GI.y(GO.centroid(geom_go)) ≈ GI.y(LG.centroid(geom_lg))
     centroid_lg, centroid_go = lg_and_go(centroid)
-    within_suite["GeometryOps"][n_total_points(geom)] = @benchmarkable GO.within($centroid_go, $geom_go)
-    within_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.within($centroid_lg, $geom_lg)
-    within_suite["GeometryOps threaded"][n_total_points(geom)] = @benchmarkable GO.within($centroid_go, $geom_go)
+    # within_suite["GeometryOps"][n_total_points(geom)] = @benchmarkable GO.within($centroid_go, $geom_go)
+    # within_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.within($centroid_lg, $geom_lg)
+    @test GO.within(centroid_go, geom_go) == LG.within(centroid_lg, geom_lg)
 end
 
 @time BenchmarkTools.tune!(within_suite)
 @time within_result = BenchmarkTools.run(within_suite)
 fig = plot_trials(within_result, "Within")
-contents(fig.layout)[1].subtitle = "" #"Natural Earth's full USA, simplified down"
+contents(fig.layout)[1].subtitle = "Test that centroid is within multipoly"
 fig
 
-@benchmark GO.within($(GO.centroid(usa_o_go)), $(usa_o_go))
-@benchmark LG.within($(LG.centroid(usa_o_lg)), $(usa_o_lg))
 
-polys = randperm()
+# ## Overlaps
 
-# ## Within
+
+overlaps_suite = BenchmarkGroup()# geom_method_suite["overlaps"]
+for frac in exp10.(LinRange(log10(0.1), log10(1), 10))
+    geom = GO.simplify(usa_multipoly; ratio = frac)
+    geom_valid = LibGEOS.makeValid(GI.convert(LibGEOS, geom)) |> GO.tuples;
+    geom_reflected =  GO.apply(GI.PointTrait, geom_valid) do point
+        x, y = GI.x(point), GI.y(point)
+        return (-(x - GI.x(center_of_the_world)) + GI.x(center_of_the_world), y)
+    end
+    geom_lg_orig, geom_go_orig = lg_and_go(geom_valid);
+    geom_lg_refl, geom_go_refl = lg_and_go(geom_reflected);
+    overlaps_suite["GeometryOps"][n_total_points(geom_valid)] = @benchmarkable GO.overlaps($geom_go_orig, $geom_go_refl)
+    overlaps_suite["LibGEOS"][n_total_points(geom_valid)] = @benchmarkable LG.overlaps($geom_lg_orig, $geom_lg_refl)
+    @test GO.overlaps(geom_go_orig, geom_go_refl) == LG.overlaps(geom_lg_orig, geom_lg_refl)
+end
+
+@time BenchmarkTools.tune!(overlaps_suite)
+@time overlaps_result = BenchmarkTools.run(overlaps_suite)
+fig = plot_trials(overlaps_result, "overlaps")
+contents(fig.layout)[1].subtitle = "Test that centroid is overlaps multipoly"
+fig
 
 # We have to test this with multiple geometries,
 # which means 
