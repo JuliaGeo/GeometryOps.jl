@@ -56,11 +56,11 @@ for n_points in n_points_values
 end
 
 BenchmarkTools.tune!(circle_area_suite)
-circle_area_result = BenchmarkTools.run(circle_area_suite)
+@time circle_area_result = BenchmarkTools.run(circle_area_suite)
 
 # We now have the benchmark results, and we can visualize them.
 
-plot_results(circle_area_result, "Area")
+plot_trials(circle_area_result, "Area")
 
 # ## Difference, intersection, union
 

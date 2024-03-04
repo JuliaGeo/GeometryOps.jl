@@ -32,6 +32,7 @@ You can see that the last point of the ring here is equal to the first point. Fo
 =#
 
 # ## Implementation
+
 """
     ClosedRing() <: GeometryCorrection
 

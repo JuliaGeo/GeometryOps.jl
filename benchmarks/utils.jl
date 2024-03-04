@@ -1,4 +1,4 @@
-using Printf, Statistics
+using Printf, Statistics, MakieThemes
 
 function _prettytime(t::Real)
     if t < 1e3
@@ -23,7 +23,7 @@ This function takes a `BenchmarkTools.BenchmarkGroup` and returns the numbers an
 The `postprocess` function is applied to the times vector, and by default it's `Statistics.median`.
 
 """
-function results_to_numbers(result::BenchmarkTools.BenchmarkGroup, postprocess = Statistics.median)
+function results_to_numbers(result::BenchmarkTools.BenchmarkGroup, postprocess_times = Statistics.median, postprocess_numbers = identity)
     # First, we extract the keys from the result.  
     # It's assumed that there is only one key per result, and that it's a number.
     numbers = identity.(collect(keys(result)))
@@ -47,29 +47,52 @@ end
 
 This function takes `result::BenchmarkTools.BenchmarkGroup` and plots the trials.  It returns the figure.
 """
-plot_trials(result::BenchmarkTools.BenchmarkGroup, title_str; theme = MakieThemes.bbc()) = plot_trials(result["LibGEOS"], result["GeometryBasics"], title_str)
+function plot_trials(
+        results, 
+        title_str_part; 
+        theme = MakieThemes.bbc(),
+        legend_position = (1, 1, TopRight()),
+        legend_orientation = :horizontal,
+        legend_halign = 1.0,
+        legend_valign = -0.25,
+    )
 
-function plot_trials(libgeos_results, geometryops_results, title_str_part; theme = MakieThemes.bbc())
-
-    x_libgeos, y_libgeos = results_to_numbers(libgeos_results)
-    x_geometryops, y_geometryops = results_to_numbers(geometryops_results)
+    xs, ys, labels = [], [], []
+    for label in keys(results)
+        current_result = results[label]
+        if isempty(current_result)
+            @warn "ResultSet with key $label is empty, skipping."
+            continue
+        end
+        x, y = results_to_numbers(current_result)
+        push!(xs, x)
+        push!(ys, y)
+        push!(labels, label)
+    end
 
     return Makie.with_theme(theme) do
-        f, a, p1 = scatterlines(x_libgeos, y_libgeos; label = "LibGEOS", axis = (; xscale = log10, yscale = log10, ytickformat = _prettytime))
-        p2 = scatterlines!(a, x_geometryops, y_geometryops; label = "GeometryOps")
-        leg = Legend(f[1, 1, TopRight()], a; tellwidth = false, tellheight = false, halign = 1.0, valign = -0.25, orientation = :horizontal)
-        for plot in (p1, p2)
-            plot.plots[1].alpha[] = 0.1
-        end 
-        a.title = "$title_str_part"
-        a.xlabel = "Number of points"
-        a.ylabel = "Time to calculate"
+        fig = Figure()
+        ax = Axis(
+            fig[1, 1];
+            title = title_str_part, subtitle = "Tested on a regular circle",
+            xlabel = "Number of points", ylabel = "Time to calculate",
+            xscale = log10, yscale = log10, ytickformat = _prettytime,
+        ) 
+        plots = [scatterlines!(ax, x, y; label = label) for (x, y, label) in zip(xs, ys, labels)]
+        setproperty!.(getindex.(getproperty.(plots, :plots), 1), :alpha, 0.1)
+        leg = Legend(
+            f[legend_position], ax; 
+            tellwidth = length(legend_position) == 3, 
+            tellheight = length(legend_position) == 3, 
+            halign = legend_halign, 
+            valign = legend_valign, 
+            orientation = legend_orientation
+        )
         a.xticksvisible[] = true
         a.xtickcolor[] = a.xgridcolor[]
         a.xticklabelsvisible[] = true
         a.yticks[] = Makie.LogTicks(Makie.WilkinsonTicks(7; k_min = 4))
         a.ygridwidth[] = 0.75
-        a.subtitle = "Tested on a regular circle"
         return f
     end
 end

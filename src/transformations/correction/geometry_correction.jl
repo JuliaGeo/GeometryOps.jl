@@ -15,7 +15,7 @@ All `GeometryCorrection`s are callable structs which, when called, apply the cor
 
 See below for the full interface specification.
 
-```@docs
+```@docs; canonical = false
 GeometryOps.GeometryCorrection
 ```
 
@@ -60,7 +60,7 @@ end
 # ## Available corrections
 
 #=
-```@autodocs
+```@autodocs; canonical = false
 Modules = [GeometryOps]
 Filter = t -> typeof(t) === DataType && t <: GeometryOps.GeometryCorrection
 ```
