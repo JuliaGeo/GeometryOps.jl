@@ -24,7 +24,7 @@ even though it will look correct when visualized, and indeed appears correct.
 
 ```@example closed-ring
 import GeometryOps as GO
-GeometryOps.fix(polygon, corrections = [ClosedRing()])
+GO.fix(polygon, corrections = [GO.ClosedRing()])
 ```
 
 You can see that the last point of the ring here is equal to the first point. For a polygon with ``n`` sides, there should be ``n+1`` vertices.
@@ -46,18 +46,20 @@ struct ClosedRing <: GeometryCorrection end
 application_level(::ClosedRing) = GI.PolygonTrait
 
 function (::ClosedRing)(::GI.PolygonTrait, polygon)
-    exterior = _close_linear_ring!(collect(GI.getpoint(GI.getexterior(polygon))))
+    exterior = _close_linear_ring(GI.getexterior(polygon))
 
     holes = map(GI.gethole(polygon)) do hole
-        _close_linear_ring!(collect(GI.getpoint(hole)))
+        _close_linear_ring(hole) # TODO: make this more efficient, or use tuples!
     end
 
     return GI.Wrappers.Polygon([exterior, holes...])
 end
 
-function _close_linear_ring!(points)
-    if points[begin] != points[end]
-        push!(points, points[begin])
+function _close_linear_ring(ring)
+    if GI.getpoint(ring, 1) == GI.getpoint(ring, GI.npoint(ring))
+        # the ring is closed, all hail the ring
+        return ring
+    else
+        return GI.Wrappers.LinearRing([tuples.(GI.getpoint(ring))..., tuples(GI.getpoint(ring, 1))])
     end
-    return GI.Wrappers.LinearRing(points)
 end

@@ -16,7 +16,7 @@ All `GeometryCorrection`s are callable structs which, when called, apply the cor
 See below for the full interface specification.
 
 ```@docs
-GeometryCorrection
+GeometryOps.GeometryCorrection
 ```
 
 Any geometry correction must implement the interface as given above. 
@@ -47,11 +47,12 @@ application_level(gc::GeometryCorrection) = error("Not implemented yet for $(gc)
 function fix(geometry; corrections = GeometryCorrection[ClosedRing(),], kwargs...)
     traits = application_level.(corrections)
     final_geometry = geometry
-    for trait in (GI.PointTrait(), GI.MultiPointTrait(), GI.LineStringTrait(), GI.LinearRingTrait(), GI.MultiLineStringTrait(), GI.PolygonTrait(), GI.MultiPolygonTrait())
-        available_corrections = findall(x -> x isa trait, traits)
+    for Trait in (GI.PointTrait, GI.MultiPointTrait, GI.LineStringTrait, GI.LinearRingTrait, GI.MultiLineStringTrait, GI.PolygonTrait, GI.MultiPolygonTrait)
+        available_corrections = findall(x -> x == Trait, traits)
         isempty(available_corrections) && continue
-        net_function = ∘(corrections[available_corrections]...)
-        final_geometry = apply(net_function, trait, final_geometry; kwargs...)
+        println("Correcting for $(Trait)")
+        net_function = reduce(∘, corrections[available_corrections])
+        final_geometry = apply(net_function, Trait, final_geometry; kwargs...)
     end
     return final_geometry
 end
@@ -60,7 +61,7 @@ end
 
 #=
 ```@autodocs
-Module = [GeometryBasics]
+Modules = [GeometryOps]
 Filter = t -> typeof(t) === DataType && t <: GeometryOps.GeometryCorrection
 ```
 =#
