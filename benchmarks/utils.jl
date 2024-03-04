@@ -81,18 +81,18 @@ function plot_trials(
         plots = [scatterlines!(ax, x, y; label = label) for (x, y, label) in zip(xs, ys, labels)]
         setproperty!.(getindex.(getproperty.(plots, :plots), 1), :alpha, 0.1)
         leg = Legend(
-            f[legend_position], ax; 
-            tellwidth = length(legend_position) == 3, 
-            tellheight = length(legend_position) == 3, 
+            fig[legend_position...], ax; 
+            tellwidth = length(legend_position) != 3, 
+            tellheight = length(legend_position) != 3, 
             halign = legend_halign, 
             valign = legend_valign, 
             orientation = legend_orientation
         )
-        a.xticksvisible[] = true
-        a.xtickcolor[] = a.xgridcolor[]
-        a.xticklabelsvisible[] = true
-        a.yticks[] = Makie.LogTicks(Makie.WilkinsonTicks(7; k_min = 4))
-        a.ygridwidth[] = 0.75
-        return f
+        ax.xticksvisible[] = true
+        ax.xtickcolor[] = a.xgridcolor[]
+        ax.xticklabelsvisible[] = true
+        ax.yticks[] = Makie.LogTicks(Makie.WilkinsonTicks(7; k_min = 4))
+        ax.ygridwidth[] = 0.75
+        return fig
     end
 end

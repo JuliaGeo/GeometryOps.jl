@@ -89,7 +89,7 @@ for n_points in n_points_values
     circle_union_suite["LibGEOS"][n_points]     = @benchmarkable LG.union($lg_circle_left, $lg_circle_right)
 end
 
-BenchmarkTools.tune!(circle_suite)
+@time BenchmarkTools.tune!(circle_suite)
 @time circle_result = BenchmarkTools.run(circle_suite; seconds = 3)
 
 # Now, we plot!
@@ -142,11 +142,57 @@ println()
 # and finally the difference:
 printstyled("LibGEOS"; color = :red, bold = true)
 println()
-lg_diff = LG.difference(usa_o_lg, usa_r_lg)
+@benchmark lg_diff = LG.difference(usa_o_lg, usa_r_lg)
 printstyled("GeometryOps"; color = :blue, bold = true)
 println()
-go_diff = GO.difference(usa_o_go, usa_r_go; target = GI.PolygonTrait)
+@benchmark go_diff = GO.difference(usa_o_go, usa_r_go; target = GI.PolygonTrait)
 
 # You can see clearly that GeometryOps is currently losing out to LibGEOS.  Our algorithms aren't optimized for large polygons and we're paying the price for that.
 
 # It's heartening that the polygon complexity isn't making too much of a difference; the difference in performance is mostly due to the number of vertices, as we can see from the circle benchmarks as well.
+
+# # OGC functions
+
+# We'll test the OGC functions using some constructed geometries, as well as some loaded ones.
+
+# In order to do this, we must understand the length of the geometry, so we first get the number of points:
+_absolute_unit(args...) = 1
+n_total_points(geom) = GO.applyreduce(_absolute_unit, +,  GI.PointTrait, geom; init = 0)
+n_total_points(usa_multipoly)
+
+GO.simplify(usa_multipoly; ratio = 0.1) |> poly |> n_total_points
+
+geom_method_suite = BenchmarkGroup()
+
+centroid_suite = geom_method_suite["centroid"]
+for frac in exp10.(LinRange(log10(0.01), log10(1), 10))
+    geom = GO.simplify(usa_multipoly; ratio = frac)
+    geom_lg, geom_go = lg_and_go(geom)
+    centroid_suite["GeometryOps"][n_total_points(geom)] = @benchmarkable GO.centroid($geom_go)
+    centroid_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.centroid($geom_lg)
+end
+
+@time BenchmarkTools.tune!(geom_method_suite)
+@time centroid_result = BenchmarkTools.run(centroid_suite)
+delete!(centroid_result, "GeometryBasics")
+plot_trials(centroid_result, "Centroid on USA")
+
+within_suite = geom_method_suite["within"]
+for frac in exp10.(LinRange(log10(0.001), log10(1), 10))
+    geom = GO.simplify(usa_multipoly; ratio = frac)
+    geom_lg, geom_go = lg_and_go(geom)
+    centroid = GO.centroid(geom)
+    centroid_lg, centroid_go = lg_and_go(centroid)
+    within_suite[GMail]["GeometryOps"][n_total_points(geom)] = @benchmark GO.within($centroid_go, $geom_go)
+    within_suite[GMail]["LibGEOS"][n_total_points(geom)] = @benchmark LG.within($centroid_lg, $geom_lg)
+end
+
+@benchmark GO.within($(GO.centroid(usa_o_go)), $(usa_o_go))
+@benchmark LG.within($(LG.centroid(usa_o_lg)), $(usa_o_lg))
+
+polys = randperm()
+
+# ## Within
+
+# We have to test this with multiple geometries,
+# which means 
