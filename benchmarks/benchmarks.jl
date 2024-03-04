@@ -21,11 +21,35 @@ GeoInterfaceMakie.@enable GeoInterface.Wrappers.WrapperGeometry
 # We include some basic plotting utilities here!
 include(joinpath(@__DIR__, "utils.jl"))
 
+# We also fetch our data early on, just so it doesn't get lost.
+
+# #### Good old USA
+
+fc = GeoJSON.read(read(download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_admin_0_countries.geojson")))
+usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)]
+areas = [GO.area(p) for p in GI.getgeom(usa_multipoly)]
+usa_poly = GI.getgeom(usa_multipoly, findmax(areas)[2])
+center_of_the_world = GO.centroid(usa_poly)
+usa_poly_reflected = GO.apply(GI.PointTrait, usa_poly) do point
+    x, y = GI.x(point), GI.y(point)
+    return (-(x - GI.x(center_of_the_world)) + GI.x(center_of_the_world), y)
+end
+
+f, a, p = poly(usa_poly; color = Makie.wong_colors(0.5)[1], label = "Straight", axis = (; title = "Good old U.S.A.", aspect = DataAspect()))
+poly!(usa_poly_reflected; color = Makie.wong_colors(0.5)[2], label = "Reversed")
+Legend(f[2, 1], a; valign = 0, orientation = :horizontal)
+f
+
 # We set up a benchmark suite in order to understand exactly what will happen:
 suite = BenchmarkGroup()
 
 # In order to make this fair, we will each package's native representation as input to their benchmarks.
 lg_and_go(geometry) = (GI.convert(LibGEOS, geometry), GO.tuples(geometry))
+
+# and in order to assess how hard a problem was, we must know the number of points in the geometry.
+_absolute_unit(args...) = 1
+n_total_points(geom) = GO.applyreduce(_absolute_unit, +,  GI.PointTrait, geom; init = 0)
+
 
 # # Polygon benchmarks
 
@@ -103,23 +127,6 @@ plot_trials(circle_result["intersection"], "Intersection")
 # ### Union
 plot_trials(circle_result["union"], "Union")
 
-
-# ## Good old USA
-fc = GeoJSON.read(read(download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_admin_0_countries.geojson")))
-usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)]
-areas = [GO.area(p) for p in GI.getgeom(usa_multipoly)]
-usa_poly = GI.getgeom(usa_multipoly, findmax(areas)[2])
-center_of_the_world = GO.centroid(usa_poly)
-usa_poly_reflected = GO.apply(GI.PointTrait, usa_poly) do point
-    x, y = GI.x(point), GI.y(point)
-    return (-(x - GI.x(center_of_the_world)) + GI.x(center_of_the_world), y)
-end
-
-f, a, p = poly(usa_poly; color = Makie.wong_colors(0.5)[1], label = "Straight", axis = (; title = "Good old U.S.A.", aspect = DataAspect()))
-poly!(usa_poly_reflected; color = Makie.wong_colors(0.5)[2], label = "Reversed")
-Legend(f[2, 1], a; valign = 0, orientation = :horizontal)
-f
-
 usa_o_lg, usa_o_go = lg_and_go(usa_poly)
 usa_r_lg, usa_r_go = lg_and_go(usa_poly_reflected)
 
@@ -156,29 +163,34 @@ println()
 # We'll test the OGC functions using some constructed geometries, as well as some loaded ones.
 
 # In order to do this, we must understand the length of the geometry, so we first get the number of points:
-_absolute_unit(args...) = 1
-n_total_points(geom) = GO.applyreduce(_absolute_unit, +,  GI.PointTrait, geom; init = 0)
 n_total_points(usa_multipoly)
 
 GO.simplify(usa_multipoly; ratio = 0.1) |> poly |> n_total_points
 
 geom_method_suite = BenchmarkGroup()
 
-centroid_suite = geom_method_suite["centroid"]
-for frac in exp10.(LinRange(log10(0.01), log10(1), 10))
+centroid_suite = BenchmarkGroup() # geom_method_suite["centroid"]
+for frac in exp10.(LinRange(log10(0.01), log10(0.6), 6))
     geom = GO.simplify(usa_multipoly; ratio = frac)
     geom_lg, geom_go = lg_and_go(geom)
     centroid_suite["GeometryOps"][n_total_points(geom)] = @benchmarkable GO.centroid($geom_go)
     centroid_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.centroid($geom_lg)
+    centroid_suite["GeometryOps threaded"][n_total_points(geom)] = @benchmarkable GO.centroid($geom_go; threaded = GO._True())
 end
+
+const var"hello there my old friend" = GO.simplify(usa_multipoly; ratio = 0.01)
+ProfileView.@profview GO.centroid(var"hello there my old friend")
 
 @time BenchmarkTools.tune!(centroid_suite)
 @time centroid_result = BenchmarkTools.run(centroid_suite)
 fig = plot_trials(centroid_result, "Centroid on USA")
-contents(fig.layout)[1].subtitle = "Natural Earth's full USA, simplified down"
+contents(fig.layout)[1].subtitle = "" #"Natural Earth's full USA, simplified down"
+fig
+
+# Now, to understand the dynamics on a per-vertex basis, we will test the centroid of a circle.
 
 circle_centroid_suite = BenchmarkGroup()# geom_method_suite["centroid_circle"]
-for e in LinRange(1, 5, 10)
+for e in LinRange(1, 3, 10)
     n_points = round(Int, 10^e)
     circle = GI.Wrappers.Polygon([tuple.((cos(θ) for θ in LinRange(0, 2π, n_points)), (sin(θ) for θ in LinRange(0, 2π, n_points)))])
     closed_circle = GO.ClosedRing()(circle)
@@ -195,29 +207,38 @@ contents(fig.layout)[1].subtitle = ""
 fig
 # contents(fig.layout)[1].subtitle = "Natural Earth's full USA, simplified down"
 
-n_points = 30
+n_points = 3000
 circle = GI.Wrappers.Polygon([tuple.((cos(θ) for θ in LinRange(0, 2π, n_points)), (sin(θ) for θ in LinRange(0, 2π, n_points)))])
 closed_circle = GO.ClosedRing()(circle)
-lg_circle, go_circle = lg_and_go(usa_multipoly)
-const __go_c = go_circle
+lg_circle, go_circle = lg_and_go(closed_circle);
+const ___go_c = go_circle
 function _do_profile(go_c)
-    for i in 1:10
+    for _ in 1:100
         GO.centroid(go_c)
     end
 end
 
-VSCodeServer.@profview _do_profile(__go_c)
-svgfg = ProfileSVG.@profview _do_profile(__go_c)
-ProfileSVG.save(joinpath("benchmarks", "prof.svg"))
-within_suite = geom_method_suite["within"]
-for frac in exp10.(LinRange(log10(0.001), log10(1), 10))
+ProfileView.@profview _do_profile(___go_c)
+
+
+
+within_suite = BenchmarkGroup()# geom_method_suite["within"]
+for frac in exp10.(LinRange(log10(0.1), log10(1), 10))
     geom = GO.simplify(usa_multipoly; ratio = frac)
     geom_lg, geom_go = lg_and_go(geom)
+    geom_lg = LibGEOS.makeValid(geom_lg)
     centroid = GO.centroid(geom)
     centroid_lg, centroid_go = lg_and_go(centroid)
-    within_suite["GeometryOps"][n_total_points(geom)] = @benchmark GO.within($centroid_go, $geom_go)
-    within_suite["LibGEOS"][n_total_points(geom)] = @benchmark LG.within($centroid_lg, $geom_lg)
+    within_suite["GeometryOps"][n_total_points(geom)] = @benchmarkable GO.within($centroid_go, $geom_go)
+    within_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.within($centroid_lg, $geom_lg)
+    within_suite["GeometryOps threaded"][n_total_points(geom)] = @benchmarkable GO.within($centroid_go, $geom_go)
 end
+
+@time BenchmarkTools.tune!(within_suite)
+@time within_result = BenchmarkTools.run(within_suite)
+fig = plot_trials(within_result, "Within")
+contents(fig.layout)[1].subtitle = "" #"Natural Earth's full USA, simplified down"
+fig
 
 @benchmark GO.within($(GO.centroid(usa_o_go)), $(usa_o_go))
 @benchmark LG.within($(LG.centroid(usa_o_lg)), $(usa_o_lg))

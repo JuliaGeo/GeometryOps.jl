@@ -89,7 +89,7 @@ function plot_trials(
             orientation = legend_orientation
         )
         ax.xticksvisible[] = true
-        ax.xtickcolor[] = a.xgridcolor[]
+        ax.xtickcolor[] = ax.xgridcolor[]
         ax.xticklabelsvisible[] = true
         ax.yticks[] = Makie.LogTicks(Makie.WilkinsonTicks(7; k_min = 4))
         ax.ygridwidth[] = 0.75
