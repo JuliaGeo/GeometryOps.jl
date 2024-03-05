@@ -1,6 +1,13 @@
 # # Geometry Intersection
 export intersection, intersection_points
 
+"""
+    Enum LineOrientation
+Enum for the orientation of a line with respect to a curve. A line can be
+`line_cross` (crossing over the curve), `line_hinge` (crossing the endpoint of the curve),
+`line_over` (colinear with the curve), or `line_out` (not interacting with the curve).
+"""
+@enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
 """
     intersection(geom_a, geom_b, [T::Type]; target::Type)
@@ -153,28 +160,54 @@ Calculation derivation can be found here:
     https://stackoverflow.com/questions/563198/
 =#
 function _intersection_point(::Type{T}, (a1, a2)::Tuple, (b1, b2)::Tuple) where T
+    # Return line orientation and 2 intersection points + fractions (nothing if don't exist)
+    line_orient = line_out
+    intr1::Union{Nothing, Tuple{TuplePoint{T}, TuplePoint{T}}} = nothing
+    intr2 = intr1
     # First line runs from p to p + r
     px, py = GI.x(a1), GI.y(a1)
     rx, ry = GI.x(a2) - px, GI.y(a2) - py
     # Second line runs from q to q + s 
     qx, qy = GI.x(b1), GI.y(b1)
     sx, sy = GI.x(b2) - qx, GI.y(b2) - qy
-    # Intersection will be where p + tr = q + us where 0 < t, u < 1 and
+    # Intersections will be where p + αr = q + βs where 0 < α, β < 1 and
     r_cross_s = rx * sy - ry * sx
     Δqp_x = qx - px
     Δqp_y = qy - py
-    point, fracs = if r_cross_s != 0  # if lines aren't parallel
-        t = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
-        u = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
-        x = px + t * rx
-        y = py + t * ry
-        (T(x), T(y)), (T(t), T(u))
-    elseif  sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
-        t = (Δqp_x * rx + Δqp_y * ry) / (rx^2 + ry^2)
-        u = -(Δqp_x * sx + Δqp_y * sy) / (sx^2 + sy^2)
-        nothing, (T(t), T(u))
-    else
-        nothing, nothing
+    if r_cross_s != 0  # if lines aren't parallel
+        α = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
+        β = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
+        x = px + α * rx
+        y = py + α * ry
+        if 0 ≤ α ≤ 1 && 0 ≤ β ≤ 1
+            intr1 = (T(x), T(y)), (T(α), T(β))
+            line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
+        end
+    elseif sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
+        # Determine overlap fractions
+        r_dot_r = (rx^2 + ry^2)
+        s_dot_s = (sx^2 + sy^2)
+        r_dot_s = rx * sx + ry * sy
+        b1_α = (Δqp_x * rx + Δqp_y * ry) / r_dot_r
+        b2_α = b1_α + r_dot_s / r_dot_r
+        a1_β = -(Δqp_x * sx + Δqp_y * sy) / s_dot_s
+        a2_β = a1_β + r_dot_s / s_dot_s
+        # Determine which endpoints start and end the overlapping region
+        intr3, intr4 = intr1, intr1
+        intr1 = 0 ≤ a1_β ≤ 1 ? (T.(a1), (zero(T), T(a1_β))) : intr1
+        intr2 = 0 ≤ a2_β ≤ 1 ?  (T.(a2), (one(T), T(a2_β))) : intr2
+        intr3 = 0 < b1_α < 1 ? (T.(b1), (T(b1_α), zero(T))) : intr3
+        intr4 = 0 < b2_α < 1 ? (T.(b2), (T(b2_α), one(T))) : intr4
+        intrs = filter(!isnothing, (intr1, intr2, intr3, intr4))
+        n_intrs = length(intrs)
+        if n_intrs == 1
+            intr1 = first(intrs)
+            intr2 = nothing
+            line_orient = line_hinge
+        elseif n_intrs > 1
+            intr1, intr2 = intrs
+            line_orient = line_over
+        end
     end
-    return point, fracs
+    return line_orient, intr1, intr2
 end

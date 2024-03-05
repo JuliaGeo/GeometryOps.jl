@@ -95,8 +95,8 @@ function to_extent(edges::Vector{Edge})
     Extents.Extent(X=x, Y=y)
 end
 
-function to_points(x)
-    points = Vector{TuplePoint}(undef, _npoint(x))
+function to_points(x, ::Type{T} = Float64) where T
+    points = Vector{TuplePoint{T}}(undef, _npoint(x))
     _to_points!(points, x, 1)
     return points
 end
