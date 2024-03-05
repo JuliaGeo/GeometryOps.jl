@@ -1,3 +1,5 @@
+using Random, Distributions
+
 """
     generate_random_poly(
         x,

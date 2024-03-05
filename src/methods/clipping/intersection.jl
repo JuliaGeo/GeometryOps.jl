@@ -7,7 +7,7 @@ export intersection, intersection_points
 
 Return the intersection between two geometries as a list of geometries. Return an empty list
 if none are found. The type of the list will be constrained as much as possible given the
-input geometries. Furthermore, the user can provide a `taget` type as a keyword argument and
+input geometries. Furthermore, the user can provide a `target` type as a keyword argument and
 a list of target geometries found in the intersection will be returned. The user can also
 provide a float type that they would like the points of returned geometries to be. 
 
