@@ -5,11 +5,11 @@ export area, signed_area
 #=
 ## What is area? What is signed area?
 
-Area is the amount of space occupied by a two-dimensional figure. It is always
-a positive value. Signed area is simply the integral over the exterior path of
-a polygon, minus the sum of integrals over its interior holes. It is signed such
-that a clockwise path has a positive area, and a counterclockwise path has a
-negative area. The area is the absolute value of the signed area.
+Area is the amount of space occupied by a two-dimensional figure. It is always a positive
+value. Signed area is simply the integral over the exterior path of a polygon, minus the sum
+of integrals over its interior holes. It is signed such that a clockwise path has a positive
+area, and a counterclockwise path has a negative area. The area is the absolute value of the
+signed area.
 
 To provide an example, consider this rectangle:
 ```@example rect
@@ -36,23 +36,22 @@ GO.signed_area(rect)  # -1.0
 
 ## Implementation
 
-This is the GeoInterface-compatible implementation. First, we implement a
-wrapper method that dispatches to the correct implementation based on the
-geometry trait. This is also used in the implementation, since it's a lot less
-work!
+This is the GeoInterface-compatible implementation. First, we implement a wrapper method
+that dispatches to the correct implementation based on the geometry trait. This is also used
+in the implementation, since it's a lot less work!
 
-Note that area (and signed area) are zero for all points and curves, even
-if the curves are closed like with a linear ring. Also note that signed area
-really only makes sense for polygons, given with a multipolygon can have several
-polygons each with a different orientation and thus the absolute value of the
-signed area might not be the area. This is why signed area is only implemented
-for polygons.
+Note that area and signed area are zero for all points and curves, even if the
+curves are closed like with a linear ring. Also note that signed area really only makes
+sense for polygons, given with a multipolygon can have several polygons each with a
+different orientation and thus the absolute value of the signed area might not be the area.
+This is why signed area is only implemented for polygons.
 =#
 
+# Targets for applys functions
 const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
 
 """
-    area(geom, ::Type{T} = Float64)::T
+    area(geom, [T = Float64])::T
 
 Returns the area of a geometry or collection of geometries. 
 This is computed slightly differently for different geometries:
@@ -73,9 +72,8 @@ function area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloa
     end
 end
 
-
 """
-    signed_area(geom, ::Type{T} = Float64)::T
+    signed_area(geom, [T = Float64])::T
 
 Returns the signed area of a single geometry, based on winding order. 
 This is computed slighly differently for different geometries:
@@ -116,14 +114,13 @@ function _signed_area(::Type{T}, ::GI.PolygonTrait, poly) where T
     return area * sign(s_area)
 end
 
-#=
-Helper function:
+# One term of the shoelace area formula
+_area_component(p1, p2) = GI.x(p1) * GI.y(p2) - GI.y(p1) * GI.x(p2)
 
-Calculates the signed area of a given curve. This is equivalent to integrating
+#= Calculates the signed area of a given curve. This is equivalent to integrating
 to find the area under the curve. Even if curve isn't explicitly closed by
 repeating the first point at the end of the coordinates, curve is still assumed
-to be closed.
-=#
+to be closed. =#
 function _signed_area(::Type{T}, geom) where T
     area = zero(T)
     np = GI.npoint(geom)
@@ -142,12 +139,12 @@ function _signed_area(::Type{T}, geom) where T
             continue
         end
         # Accumulate the area into `area`
-        area += GI.x(p1) * GI.y(p2) - GI.y(p1) * GI.x(p2)
+        area += _area_component(p1, p2)
         p1 = p2
     end
     # Complete the last edge.
     # If the first and last where the same this will be zero
     p2 = pfirst
-    area += GI.x(p1) * GI.y(p2) - GI.y(p1) * GI.x(p2)
+    area += _area_component(p1, p2)
     return T(area / 2)
 end
