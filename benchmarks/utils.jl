@@ -82,8 +82,8 @@ function plot_trials(
         setproperty!.(getindex.(getproperty.(plots, :plots), 1), :alpha, 0.1)
         leg = Legend(
             fig[legend_position...], ax; 
-            tellwidth = length(legend_position) != 3, 
-            tellheight = length(legend_position) != 3, 
+            tellwidth = length(legend_position) != 3 && legend_orientation == :vertical, 
+            tellheight = length(legend_position) != 3 && legend_orientation == :horizontal, 
             halign = legend_halign, 
             valign = legend_valign, 
             orientation = legend_orientation

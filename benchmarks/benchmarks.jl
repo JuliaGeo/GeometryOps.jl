@@ -40,9 +40,6 @@ poly!(usa_poly_reflected; color = Makie.wong_colors(0.5)[2], label = "Reversed")
 Legend(f[2, 1], a; valign = 0, orientation = :horizontal)
 f
 
-# We set up a benchmark suite in order to understand exactly what will happen:
-suite = BenchmarkGroup()
-
 # In order to make this fair, we will each package's native representation as input to their benchmarks.
 lg_and_go(geometry) = (GI.convert(LibGEOS, geometry), GO.tuples(geometry))
 
@@ -50,6 +47,8 @@ lg_and_go(geometry) = (GI.convert(LibGEOS, geometry), GO.tuples(geometry))
 _absolute_unit(args...) = 1
 n_total_points(geom) = GO.applyreduce(_absolute_unit, +,  GI.PointTrait, geom; init = 0)
 
+# We set up a benchmark suite in order to understand exactly what will happen:
+suite = BenchmarkGroup()
 
 # # Polygon benchmarks
 
@@ -231,8 +230,8 @@ for frac in exp10.(LinRange(log10(0.1), log10(1), 10))
     @test GI.x(GO.centroid(geom_go)) ≈ GI.x(LG.centroid(geom_lg))
     @test GI.y(GO.centroid(geom_go)) ≈ GI.y(LG.centroid(geom_lg))
     centroid_lg, centroid_go = lg_and_go(centroid)
-    # within_suite["GeometryOps"][n_total_points(geom)] = @benchmarkable GO.within($centroid_go, $geom_go)
-    # within_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.within($centroid_lg, $geom_lg)
+    within_suite["GeometryOps"][n_total_points(geom)] = @benchmarkable GO.within($centroid_go, $geom_go)
+    within_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.within($centroid_lg, $geom_lg)
     @test GO.within(centroid_go, geom_go) == LG.within(centroid_lg, geom_lg)
 end
 
@@ -264,8 +263,71 @@ end
 @time BenchmarkTools.tune!(overlaps_suite)
 @time overlaps_result = BenchmarkTools.run(overlaps_suite)
 fig = plot_trials(overlaps_result, "overlaps")
-contents(fig.layout)[1].subtitle = "Test that centroid is overlaps multipoly"
+contents(fig.layout)[1].subtitle = "Test that multipoly overlaps its reflected self"
 fig
 
+
+geom = usa_multipoly
+geom_valid = LibGEOS.makeValid(GI.convert(LibGEOS, geom)) |> GO.tuples;
+geom_reflected =  GO.apply(GI.PointTrait, geom_valid) do point
+    x, y = GI.x(point), GI.y(point)
+    return (-(x - GI.x(center_of_the_world)) + GI.x(center_of_the_world), y)
+end
+
+function _do_things(geom_valid, geom_reflected)
+    for i in 1:3
+        GO.overlaps(geom_valid, geom_reflected)
+    end
+end
+
+ProfileView.@profview _do_things(geom_valid, geom_reflected)
+
+# ## Simplification
+
+# We'll test polygons and multipolygons for this, since they're the easiest to obtain,
+# but from the GeometryOps end the performance is about the same.
+
+simplify_suite = BenchmarkGroup()# geom_method_suite["simplify"]
+multipoly_suite = simplify_suite["multipoly"]
+for frac in exp10.(LinRange(log10(0.3), log10(1), 6))
+    geom = GO.simplify(usa_multipoly; ratio = frac)
+    geom_lg, geom_go = lg_and_go(geom)
+    _tol = 0.001
+    multipoly_suite["GO-DP"][n_total_points(geom)] = @benchmarkable GO.simplify($geom_go; tol = $_tol)
+    # multipoly_suite["GO-VW"][n_total_points(geom)] = @benchmarkable GO.simplify($(GO.VisvalingamWhyatt(; tol = $_tol)), $geom_go)
+    multipoly_suite["GO-RD"][n_total_points(geom)] = @benchmarkable GO.simplify($(GO.RadialDistance(; tol = _tol)), $geom_go)
+    multipoly_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.simplify($geom_lg, $_tol)
+    println("""
+    For $(n_total_points(geom)) points, the algorithms generated polygons with the following number of vertices:
+    GO-DP : $(n_total_points( GO.simplify(geom_go; tol = _tol)))
+    GO-RD : $(n_total_points( GO.simplify((GO.RadialDistance(; tol = _tol)), geom_go)))
+    LGeos : $(n_total_points( LG.simplify(geom_lg, _tol)))
+    """)
+    # GO-VW : $(n_total_points( GO.simplify((GO.VisvalingamWhyatt(; tol = _tol)), geom_go)))
+    println()
+end
+singlepoly_suite = simplify_suite["singlepoly"]
+for n_verts in round.(Int, exp10.(LinRange(log10(10), log10(10_000), 10)))
+    geom = GI.Wrappers.Polygon(generate_random_poly(0, 0, n_verts, 2, 0.2, 0.3))
+    geom_lg, geom_go = lg_and_go(LG.makeValid(GI.convert(LG, geom)))
+    singlepoly_suite["GO-DP"][n_total_points(geom)] = @benchmarkable GO.simplify($geom_go; tol = 0.1)
+    singlepoly_suite["GO-VW"][n_total_points(geom)] = @benchmarkable GO.simplify($(GO.VisvalingamWhyatt(; tol = 0.1)), $geom_go)
+    singlepoly_suite["GO-RD"][n_total_points(geom)] = @benchmarkable GO.simplify($(GO.RadialDistance(; tol = 0.1)), $geom_go)
+    singlepoly_suite["LibGEOS"][n_total_points(geom)] = @benchmarkable LG.simplify($geom_lg, 0.1)
+end
+
+@time BenchmarkTools.tune!(simplify_suite["singlepoly"]; verbose = true)
+@time simplify_result = BenchmarkTools.run(simplify_suite["singlepoly"])
+
+fig = plot_trials(simplify_result, "Simplify singlepoly"; legend_position = (1, 2), legend_orientation = :vertical, legend_valign = 0.5)
+contents(fig.layout)[1].subtitle = "Tested on a random spiky polygon"
+fig
+
+@time BenchmarkTools.tune!(simplify_suite["multipoly"]; verbose = true)
+@time simplify_result = BenchmarkTools.run(simplify_suite["multipoly"])
+
+fig = plot_trials(simplify_result, "Simplify multipoly"; legend_position = (1, 2), legend_orientation = :vertical, legend_valign = 0.5)
+contents(fig.layout)[1].subtitle = "Tested on the USA multipolygon"
+fig
 # We have to test this with multiple geometries,
 # which means 
