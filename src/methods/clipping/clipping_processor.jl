@@ -79,14 +79,10 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                 b_pt1 = b_pt2
                 continue
             end
-            # int_pt, fracs = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
+            # Determine if edges intersect and how they intersect
             line_orient, intr1, intr2 = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
-            if line_orient != line_out #!isnothing(fracs)
-                # α, β = fracs
-                # collinear = isnothing(int_pt)
-                # if no intersection point, skip this edge
-                if line_orient == line_cross #!collinear && 0 < α < 1 && 0 < β < 1
-                    # Intersection point that isn't a vertex
+            if line_orient != line_out  # edges intersect
+                if line_orient == line_cross  # Intersection point that isn't a vertex
                     int_pt, fracs = intr1
                     new_intr = PolyNode{T}(;
                         point = int_pt, inter = true, neighbor = j - 1,
@@ -111,8 +107,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                             add_b1, b1_α = true, α2
                         end
                     end
-                    if add_a1 #(0 < β < 1 && (collinear || α == 0)) || (α == β == 0)
-                        # a_pt1 is an intersection point
+                    if add_a1
                         n_b_intrs += a1_β == 0 ? 0 : 1
                         a_list[prev_counter] = PolyNode{T}(;
                             point = a_pt1, inter = true, neighbor = j - 1,
@@ -120,8 +115,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                         )
                         push!(a_idx_list, prev_counter)
                     end
-                    if add_b1 #(0 < α < 1 && (collinear || β == 0))
-                        # b_pt1 is an intersection point
+                    if add_b1
                         new_intr = PolyNode{T}(;
                             point = b_pt1, inter = true, neighbor = j - 1,
                             fracs = (b1_α, zero(T)),
@@ -404,8 +398,6 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
         # Find first unprocessed intersecting point in subject polygon
         processed_pts += 1
         first_idx = findnext(x -> x != 0, a_idx_list, processed_pts)
-        isnothing(first_idx) && @show processed_pts, n_cross_pts
-        isnothing(first_idx) && break
         idx = a_idx_list[first_idx]
         a_idx_list[first_idx] = 0
         start_pt = a_list[idx]

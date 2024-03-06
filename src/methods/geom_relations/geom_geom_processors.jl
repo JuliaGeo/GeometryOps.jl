@@ -12,15 +12,6 @@ Enum for the orientation of a point with respect to a curve. A point can be
 """
 @enum PointOrientation point_in=1 point_on=2 point_out=3
 
-# """
-#     Enum LineOrientation
-# Enum for the orientation of a line with respect to a curve. A line can be
-# `line_cross` (crossing over the curve), `line_hinge` (crossing the endpoint of the curve),
-# `line_over` (colinear with the curve), or `line_out` (not interacting with the curve).
-# """
-# @enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
-
-
 #=
 Determines if a point meets the given checks with respect to a curve.
 
@@ -165,8 +156,6 @@ function _line_curve_process(
                 elseif seg_val == line_hinge  # could cross or overlap
                     # Determine location of intersection point on each segment
                     (_, (α, β)) = intr1
-                    # (α, β) = _find_intersect_fracs(l_start, l_end, c_start, c_end)
-                    # @assert α == α1 && β == β1 "$l_start, $l_end, $c_start, $c_end"
                     if ( # Don't consider edges of curves as they can't cross
                         (!closed_line && ((α == 0 && i == 2) || (α == 1 && i == nl))) ||
                         (!closed_curve && ((β == 0 && j == 2) || (β == 1 && j == nc)))
@@ -223,31 +212,6 @@ function _find_new_seg(i, ls, le, cs, ce)
     end
     return i, ls, break_off
 end
-
-#= Find where line and curve segments intersect by fraction of length. α is the fraction of
-the line (ls to le) and β is the traction of the curve (cs to ce). All inputs are tuples. =#
-# function _find_intersect_fracs(ls, le, cs, ce)
-#     line_orient, intr1, intr2 = _intersection_point(
-#         Float64,
-#         (ls, le),
-#         (cs, ce)
-#     )
-
-#     (α, β) = if !isnothing(point)
-#         fracs
-#     else  # line and curve segments are parallel
-#         if equals(ls, cs)
-#             (0, 0)
-#         elseif equals(ls, ce)
-#             (0, 1)
-#         elseif equals(le, cs)
-#             (1, 0)
-#         else  # equals(l_end, c_end)
-#             (1, 1)
-#         end
-#     end
-#     return α, β
-# end
 
 #= Find next set of segments needed to determine if given hinge segments cross or not.=#
 function _find_hinge_next_segments(α, β, ls, le, cs, ce, i, line, j, curve) 

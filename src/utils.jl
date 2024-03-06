@@ -56,8 +56,8 @@ end
 Convert any geometry or collection of geometries into a flat 
 vector of `Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}` edges.
 """
-function to_edges(x)
-    edges = Vector{Edge}(undef, _nedge(x))
+function to_edges(x, ::Type{T} = Float64) where T
+    edges = Vector{Edge{T}}(undef, _nedge(x))
     _to_edges!(edges, x, 1)
     return edges
 end
@@ -114,14 +114,10 @@ function _to_points!(points::Vector, ::AbstractGeometryTrait, fc, n)
     end
 end
 function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}, geom, n)
-    p1 = GI.getpoint(geom, 1) 
-    p1x, p1y = GI.x(p1), GI.y(p1)
-    for i in 2:GI.npoint(geom)
-        p2 = GI.getpoint(geom, i)
-        p2x, p2y = GI.x(p2), GI.y(p2)
-        points[n] = (p1x, p1y), (p2x, p2y)
-        p1 = p2
+    n = 0
+    for p in GI.getpoint(geom)
         n += 1
+        points[n] = _tuple_point(p)
     end
     return n
 end
