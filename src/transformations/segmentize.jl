@@ -66,7 +66,7 @@ provided in lat/lon coordinates then the `max_distance` will be in degrees of ar
 `max_distance` will be in meters.
 """
 Base.@kwdef struct LinearSegments <: SegmentizeMethod 
-    max_distance::Real
+    max_distance::Float64
 end
 """
     GeodesicSegments(; max_distance::Real, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563)
@@ -88,7 +88,7 @@ This method uses the Proj/GeographicLib API for geodesic calculations.
 """
 struct GeodesicSegments <: SegmentizeMethod 
     geodesic::Proj.geod_geodesic
-    max_distance::Real
+    max_distance::Float64
 end
 
 function GeodesicSegments(; max_distance, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563, geodesic::Proj.geod_geodesic = Proj.geod_geodesic(equatorial_radius, flattening))
@@ -181,37 +181,46 @@ end
 ```julia
 
 using BenchmarkTools
-rectangle = GI.Wrappers.Polygon([[(0.0, 50.0), (7.071, 57.07), (0, 64.14), (-7.07, 57.07), (0.0, 50.0)]])
-lg_rectangle = GI.convert(LG, rectangle)
-init_lin = 0.01
-init_geo = 1000
 
+import GeometryOps as GO, LibGEOS as LG, GeoInterface as GI
+
+rectangle = GI.Wrappers.Polygon([[(0.0, 50.0), (7.071, 57.07), (0.0, 64.14), (-7.07, 57.07), (0.0, 50.0)]])
+lg_rectangle = GI.convert(LG, rectangle)
+# These are initial distances, which yield similar numbers of points 
+# in the final geometry.
+init_lin = 0.01
+init_geo = 900
+
+# LibGEOS.jl doesn't offer this function
 function densify(obj::LG.Geometry, tol::Real, context::LG.GEOSContext = LG.get_context(obj))
     result = LG.GEOSDensify_r(context, obj, tol)
     if result == C_NULL
-        error("LibGEOS: Error in GEOSSimplify")
+        error("LibGEOS: Error in GEOSDensify")
     end
     LG.geomFromGEOS(result, context)
 end
 
 simplify_suite = BenchmarkGroup()
-for scalefactor in exp10.(LinRange(log10(0.1), log10(10), 10))
+for scalefactor in exp10.(LinRange(log10(0.1), log10(10), 5))
     lin_dist = init_lin * scalefactor
     geo_dist = init_geo * scalefactor
 
-    approx_npoints = n_total_points(GO.segmentize(rectangle; max_distance = lin_dist))
+    npoints_linear = GI.npoint(GO.segmentize(rectangle; max_distance = lin_dist))
+    npoints_geodesic = GO.segmentize(GO.GeodesicSegments(; max_distance = geo_dist), rectangle) |> GI.npoint
+    npoints_libgeos = GI.npoint(densify(lg_rectangle, lin_dist))
     
-    simplify_suite["Linear"][approx_npoints] = @benchmarkable GO.segmentize(GO.LinearSegments(; max_distance = $lin_dist), $rectangle)
-    simplify_suite["Geodesic"][approx_npoints] = @benchmarkable GO.segmentize(GO.GeodesicSegments(; max_distance = $geo_dist), $rectangle)
-    simplify_suite["LibGEOS"][approx_npoints] = @benchmarkable densify($lg_rectangle, $lin_dist)
-    println("For scalefactor=$(round(scalefactor; digits = 3)), GO had $(approx_npoints), LG had $(n_total_points(densify(lg_rectangle, lin_dist))).")
+    simplify_suite["Linear"][npoints_linear] = @benchmarkable GO.segmentize(GO.LinearSegments(; max_distance = $lin_dist), $rectangle)
+    simplify_suite["Geodesic"][npoints_geodesic] = @benchmarkable GO.segmentize(GO.GeodesicSegments(; max_distance = $geo_dist), $rectangle)
+    simplify_suite["LibGEOS"][npoints_libgeos] = @benchmarkable densify($lg_rectangle, $lin_dist)
+    
 end
 
 @time tune!(simplify_suite)
 @time simplify_results = run(simplify_suite)
 
-plot_trials(simplify_results, "Segmentize")
-
+f = plot_trials(simplify_results, "Segmentize")
+contents(f.layout)[1].subtitle = "Tested on a rotated rectangle"
+f
 ```
 
 =#
