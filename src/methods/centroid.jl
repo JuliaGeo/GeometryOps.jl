@@ -165,11 +165,13 @@ function _centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}) where T
     return (xcentroid, ycentroid), area
 end
 
-# The `op` argument for _applyreduce and point / area
-# It combines two (point, area) tuples into one, taking
-# the average of the centroid points weighted by the
-# area of the geom they are from.
-function _combine_centroid_and_area(((x1, y1), area1)#=::Tuple{Tuple{<: Real, <: Real}, <: Real}=#, ((x2, y2), area2)#=::Tuple{Tuple{<: Real, <: Real}, <: Real}=#) # ::Tuple{Tuple{<: Real, <: Real}, <: Real}
+#=
+The `op` argument for _applyreduce and point / area
+It combines two (point, area) tuples into one, taking
+the average of the centroid points weighted by the
+area of the geom they are from.
+=#
+function _combine_centroid_and_area(((x1, y1), area1), ((x2, y2), area2))
     area = area1 + area2
     x = (x1 * area1 + x2 * area2) / area
     y = (y1 * area1 + y2 * area2) / area

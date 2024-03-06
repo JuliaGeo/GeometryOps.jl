@@ -34,4 +34,8 @@ const GO = GeometryOps
     @testset "Flip" begin include("transformations/flip.jl") end
     @testset "Simplify" begin include("transformations/simplify.jl") end
     @testset "Transform" begin include("transformations/transform.jl") end
+    @testset "Geometry correction" begin 
+        include("transformations/correction/geometry_correction.jl")
+        include("transformations/correction/closed_ring.jl") 
+    end
 end
