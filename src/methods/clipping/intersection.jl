@@ -125,13 +125,14 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
     if npoints_a > 0 && npoints_b > 0
         # Loop over pairs of edges and add any intersection points to results
         for i in eachindex(edges_a), j in eachindex(edges_b)
-            point, fracs = _intersection_point(T, edges_a[i], edges_b[j])
-            if !isnothing(point)
+            line_orient, intr1, _ = _intersection_point(T, edges_a[i], edges_b[j])
+            # TODO: Add in degenerate intersection points when line_over
+            if line_orient == line_cross || line_orient == line_hinge
                 #=
                 Determine if point is on edge (all edge endpoints excluded
                 except for the last edge for an open geometry)
                 =#
-                α, β = fracs
+                point, (α, β) = intr1
                 on_a_edge = (!a_closed && i == npoints_a && 0 <= α <= 1) ||
                     (0 <= α < 1)
                 on_b_edge = (!b_closed && j == npoints_b && 0 <= β <= 1) ||
@@ -162,7 +163,7 @@ Calculation derivation can be found here:
 function _intersection_point(::Type{T}, (a1, a2)::Tuple, (b1, b2)::Tuple) where T
     # Return line orientation and 2 intersection points + fractions (nothing if don't exist)
     line_orient = line_out
-    intr1::Union{Nothing, Tuple{TuplePoint{T}, TuplePoint{T}}} = nothing
+    intr1 = ((zero(T), zero(T)), (zero(T), zero(T)))
     intr2 = intr1
     # First line runs from p to p + r
     px, py = GI.x(a1), GI.y(a1)
@@ -193,19 +194,32 @@ function _intersection_point(::Type{T}, (a1, a2)::Tuple, (b1, b2)::Tuple) where 
         a1_β = -(Δqp_x * sx + Δqp_y * sy) / s_dot_s
         a2_β = a1_β + r_dot_s / s_dot_s
         # Determine which endpoints start and end the overlapping region
-        intr3, intr4 = intr1, intr1
-        intr1 = 0 ≤ a1_β ≤ 1 ? (T.(a1), (zero(T), T(a1_β))) : intr1
-        intr2 = 0 ≤ a2_β ≤ 1 ?  (T.(a2), (one(T), T(a2_β))) : intr2
-        intr3 = 0 < b1_α < 1 ? (T.(b1), (T(b1_α), zero(T))) : intr3
-        intr4 = 0 < b2_α < 1 ? (T.(b2), (T(b2_α), one(T))) : intr4
-        intrs = filter(!isnothing, (intr1, intr2, intr3, intr4))
-        n_intrs = length(intrs)
+        n_intrs = 0
+        if 0 ≤ a1_β ≤ 1
+            n_intrs += 1
+            intr1 = (T.(a1), (zero(T), T(a1_β)))
+        end
+        if 0 ≤ a2_β ≤ 1
+            n_intrs += 1
+            new_intr = (T.(a2), (one(T), T(a2_β)))
+            n_intrs == 1 && (intr1 = new_intr)
+            n_intrs == 2 && (intr2 = new_intr)
+        end
+        if 0 < b1_α < 1 
+            n_intrs += 1
+            new_intr = (T.(b1), (T(b1_α), zero(T)))
+            n_intrs == 1 && (intr1 = new_intr)
+            n_intrs == 2 && (intr2 = new_intr)
+        end
+        if 0 < b2_α < 1
+            n_intrs += 1
+            new_intr = (T.(b2), (T(b2_α), one(T)))
+            n_intrs == 1 && (intr1 = new_intr)
+            n_intrs == 2 && (intr2 = new_intr)
+        end
         if n_intrs == 1
-            intr1 = first(intrs)
-            intr2 = nothing
             line_orient = line_hinge
-        elseif n_intrs > 1
-            intr1, intr2 = intrs
+        elseif n_intrs == 2
             line_orient = line_over
         end
     end

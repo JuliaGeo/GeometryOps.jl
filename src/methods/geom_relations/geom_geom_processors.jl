@@ -146,7 +146,7 @@ function _line_curve_process(
         for j in (closed_curve ? 1 : 2):nc
             c_end = _tuple_point(GI.getpoint(curve, j))
             # Check if line and curve segments meet
-            seg_val = _segment_segment_orientation((l_start, l_end), (c_start, c_end))
+            seg_val, intr1, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end))
             # If segments are co-linear
             if seg_val == line_over
                 !over_allow && return false
@@ -164,7 +164,9 @@ function _line_curve_process(
                     in_req_met = true
                 elseif seg_val == line_hinge  # could cross or overlap
                     # Determine location of intersection point on each segment
-                    (α, β) = _find_intersect_fracs(l_start, l_end, c_start, c_end)
+                    (_, (α, β)) = intr1
+                    # (α, β) = _find_intersect_fracs(l_start, l_end, c_start, c_end)
+                    # @assert α == α1 && β == β1 "$l_start, $l_end, $c_start, $c_end"
                     if ( # Don't consider edges of curves as they can't cross
                         (!closed_line && ((α == 0 && i == 2) || (α == 1 && i == nl))) ||
                         (!closed_curve && ((β == 0 && j == 2) || (β == 1 && j == nc)))
@@ -180,7 +182,8 @@ function _line_curve_process(
                                 α, β, l_start, l_end, c_start, c_end,
                                 i, line, j, curve,
                             )
-                            if _segment_segment_orientation(l, c) == line_hinge
+                            next_val, _, _ = _intersection_point(Float64, l, c)
+                            if next_val == line_hinge
                                 !cross_allow && return false
                             else
                                 !over_allow && return false
@@ -223,27 +226,28 @@ end
 
 #= Find where line and curve segments intersect by fraction of length. α is the fraction of
 the line (ls to le) and β is the traction of the curve (cs to ce). All inputs are tuples. =#
-function _find_intersect_fracs(ls, le, cs, ce)
-    point, fracs = _intersection_point(
-        Float64,
-        (ls, le),
-        (cs, ce)
-    )
-    (α, β) = if !isnothing(point)
-        fracs
-    else  # line and curve segments are parallel
-        if equals(ls, cs)
-            (0, 0)
-        elseif equals(ls, ce)
-            (0, 1)
-        elseif equals(le, cs)
-            (1, 0)
-        else  # equals(l_end, c_end)
-            (1, 1)
-        end
-    end
-    return α, β
-end
+# function _find_intersect_fracs(ls, le, cs, ce)
+#     line_orient, intr1, intr2 = _intersection_point(
+#         Float64,
+#         (ls, le),
+#         (cs, ce)
+#     )
+
+#     (α, β) = if !isnothing(point)
+#         fracs
+#     else  # line and curve segments are parallel
+#         if equals(ls, cs)
+#             (0, 0)
+#         elseif equals(ls, ce)
+#             (0, 1)
+#         elseif equals(le, cs)
+#             (1, 0)
+#         else  # equals(l_end, c_end)
+#             (1, 1)
+#         end
+#     end
+#     return α, β
+# end
 
 #= Find next set of segments needed to determine if given hinge segments cross or not.=#
 function _find_hinge_next_segments(α, β, ls, le, cs, ce, i, line, j, curve) 
@@ -636,10 +640,7 @@ function _line_filled_curve_interactions(
         for j in 1:nc
             c_end = _tuple_point(GI.getpoint(curve, j))
             # Check if two line and curve segments meet
-            seg_val = _segment_segment_orientation(
-                (l_start, l_end),
-                (c_start, c_end),
-            )
+            seg_val, _, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end))
             if seg_val != line_out
                 # If line and curve meet, then at least one point is on boundary
                 on_curve = true
