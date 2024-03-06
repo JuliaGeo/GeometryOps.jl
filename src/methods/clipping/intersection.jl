@@ -146,21 +146,25 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
     return result
 end
 
-#= Calculates the intersection point between two lines if it exists, and as if the line
-extended to infinity, and the fractional component of each line from the initial end point
-to the intersection point.
-Inputs:
-    (a1, a2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} first line
-    (b1, b2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} second line
-Outputs:
-    (x, y)::Tuple{::Real, ::Real} intersection point
-    (t, u)::Tuple{::Real, ::Real} fractional length of lines to intersection
-    Both are ::Nothing if point doesn't exist!
+#= Calculates the intersection points between two lines if they exists and the fractional
+component of each line from the initial end point to the intersection point where α is the
+fraction along (a1, a2) and β is the fraction along (b1, b2).
 
-Calculation derivation can be found here:
-    https://stackoverflow.com/questions/563198/
-=#
-function _intersection_point(::Type{T}, (a1, a2)::Tuple, (b1, b2)::Tuple) where T
+Note that the first return is the type of intersection (line_cross, line_hinge, line_over,
+or line_out). The type of intersection determines how many intersection points there are.
+If the intersection is line_out, then there are no intersection points and the two
+intersections aren't valid and shouldn't be used. If the intersection is line_cross or
+line_hinge then the lines meet at one point and the first intersection is valid, while the
+second isn't. Finally, if the intersection is line_over, then both points are valid and they
+are the two points that define the endpoints of the overlapping region between the two
+lines.
+
+Also note again that each intersection is a tuple of two tuples. The first is the
+intersection point (x,y) while the second is the ratio along the initial lines (α, β) for
+that point. 
+
+Calculation derivation can be found here: https://stackoverflow.com/questions/563198/ =#
+function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
     # Return line orientation and 2 intersection points + fractions (nothing if don't exist)
     line_orient = line_out
     intr1 = ((zero(T), zero(T)), (zero(T), zero(T)))

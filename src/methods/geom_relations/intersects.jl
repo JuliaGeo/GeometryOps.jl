@@ -61,8 +61,8 @@ intersects(geom1, geom2) = !disjoint(geom1, geom2)
 #= Returns true if there is at least one intersection between edges within the
 two lists of edges. =#
 function _line_intersects(
-    edges_a::Vector{Edge},
-    edges_b::Vector{Edge}
+    edges_a::Vector{<:Edge},
+    edges_b::Vector{<:Edge}
 )
     # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
     for edge_a in edges_a
