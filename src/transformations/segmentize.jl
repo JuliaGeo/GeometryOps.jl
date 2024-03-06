@@ -41,7 +41,7 @@ using CairoMakie
 linear = GO.segmentize(rectangle; max_distance = 0.01)
 geodesic = GO.segmentize(GO.GeodesicSegments(max_distance = 1000), rectangle)
 f, a, p = poly(collect(GI.getpoint(linear)); label = "Linear", axis = (; aspect = DataAspect()))
-p2 = poly!(collect(GI.getpoint(geodesic)); label = "Geodesic", color = :red)
+p2 = poly!(collect(GI.getpoint(geodesic)); label = "Geodesic")
 axislegend(a; position = :lt)
 f
 ```
