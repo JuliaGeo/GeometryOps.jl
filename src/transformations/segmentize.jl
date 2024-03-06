@@ -91,12 +91,7 @@ struct GeodesicSegments <: SegmentizeMethod
     max_distance::Real
 end
 
-function GeodesicSegments(; max_distance, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563)
-    geodesic = geod_geodesic(equatorial_radius, flattening)
-    return GeodesicSegments(geodesic, max_distance)
-end
-
-function GeodesicSegments(; max_distance, geodesic::Proj.geod_geodesic = Proj.geod_geodesic(6378137, 1/298.257223563))
+function GeodesicSegments(; max_distance, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563, geodesic::Proj.geod_geodesic = Proj.geod_geodesic(equatorial_radius, flattening))
     return GeodesicSegments(geodesic, max_distance)
 end
 
@@ -192,7 +187,7 @@ init_lin = 0.01
 init_geo = 1000
 
 function densify(obj::LG.Geometry, tol::Real, context::LG.GEOSContext = LG.get_context(obj))
-    result = LG.GEOSSimplify_r(context, obj, tol)
+    result = LG.GEOSDensify_r(context, obj, tol)
     if result == C_NULL
         error("LibGEOS: Error in GEOSSimplify")
     end
@@ -204,11 +199,12 @@ for scalefactor in exp10.(LinRange(log10(0.1), log10(10), 10))
     lin_dist = init_lin * scalefactor
     geo_dist = init_geo * scalefactor
 
-    approx_npoints = n_total_points(segmentize(rectangle; max_distance = lin_dist))
+    approx_npoints = n_total_points(GO.segmentize(rectangle; max_distance = lin_dist))
     
-    simplify_suite["Linear"][approx_npoints] = @benchmarkable segmentize(LinearSegments(; max_distance = $lin_dist), $rectangle)
-    simplify_suite["Geodesic"][approx_npoints] = @benchmarkable segmentize(GeodesicSegments(; max_distance = $geo_dist), $rectangle)
+    simplify_suite["Linear"][approx_npoints] = @benchmarkable GO.segmentize(GO.LinearSegments(; max_distance = $lin_dist), $rectangle)
+    simplify_suite["Geodesic"][approx_npoints] = @benchmarkable GO.segmentize(GO.GeodesicSegments(; max_distance = $geo_dist), $rectangle)
     simplify_suite["LibGEOS"][approx_npoints] = @benchmarkable densify($lg_rectangle, $lin_dist)
+    println("For scalefactor=$(round(scalefactor; digits = 3)), GO had $(approx_npoints), LG had $(n_total_points(densify(lg_rectangle, lin_dist))).")
 end
 
 @time tune!(simplify_suite)
