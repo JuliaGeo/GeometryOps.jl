@@ -158,7 +158,7 @@ function overlaps(
     trait_b::GI.PolygonTrait, poly_b,
 )
     edges_a, edges_b = map(sort! ∘ to_edges, (poly_a, poly_b))
-    return _edge_intersects(edges_a, edges_b) &&
+    return _line_intersects(edges_a, edges_b) &&
         !equals(trait_a, poly_a, trait_b, poly_b)
 end
 
@@ -219,35 +219,15 @@ function _overlaps(
     (b1, b2)::Edge
 )
     # meets in more than one point
-    on_top = ExactPredicates.meet(a1, a2, b1, b2) == 0
+    seg_val, _, _ = _intersection_point(Float64, (a1, a2), (b1, b2))
     # one end point is outside of other segment
     a_fully_within = _point_on_seg(a1, b1, b2) && _point_on_seg(a2, b1, b2)
     b_fully_within = _point_on_seg(b1, a1, a2) && _point_on_seg(b2, a1, a2)
-    return on_top && (!a_fully_within && !b_fully_within)
+    return seg_val == line_over && (!a_fully_within && !b_fully_within)
 end
 
 #= TODO: Once overlaps is swapped over to use the geom relations workflow, can
 delete these helpers. =#
-
-# Checks it vectors of edges intersect
-function _edge_intersects(
-    edges_a::Vector{Edge},
-    edges_b::Vector{Edge}
-)
-    # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
-    for edge_a in edges_a
-        for edge_b in edges_b
-            _edge_intersects(edge_a, edge_b) && return true 
-        end
-    end
-    return false
-end
-
-# Checks if two edges intersect
-function _edge_intersects(edge_a::Edge, edge_b::Edge)
-    meet_type = ExactPredicates.meet(edge_a..., edge_b...)
-    return meet_type == 0 || meet_type == 1
-end
 
 # Checks if point is on a segment
 function _point_on_seg(point, start, stop)

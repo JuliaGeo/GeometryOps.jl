@@ -542,52 +542,6 @@ function _point_filled_curve_orientation(
 end
 
 #=
-Determines the type of interaction between two line segments. If the segments
-`cross`, this means that they have a single intersection point that isn't on
-either of their enpoints. If they form a `hinge`, they meet at one of the
-segments endpoints. If they are `over`, then they are co-linear for at least
-some of the length of the segments. Finally, if they are `out`, then the
-segments are disjoint.
-
-Point should be an object of point trait and curve should be an object with a
-linestring or linearring trait.
-
-Can provide values of in, on, and out keywords, which determines return values
-for each scenario. 
-=#
-function _segment_segment_orientation(
-    (a_point, b_point), (c_point, d_point);
-    cross::T = line_cross, hinge::T = line_hinge,
-    over::T = line_over, out::T = line_out,
-) where T
-    (ax, ay) = Float64.(a_point)
-    (bx, by) = Float64.(b_point)
-    (cx, cy) = Float64.(c_point)
-    (dx, dy) = Float64.(d_point)
-    meet_type = ExactPredicates.meet((ax, ay), (bx, by), (cx, cy), (dx, dy))
-    # Lines meet at one point within open segments 
-    meet_type == 1 && return cross
-    # Lines don't meet at any points
-    meet_type == -1 && return out
-    # Lines meet at one or more points within closed segments
-    if _isparallel(((ax, ay), (bx, by)), ((cx, cy), (dx, dy)))
-        min_x, max_x = cx < dx ? (cx, dx) : (dx, cx)
-        min_y, max_y = cy < dy ? (cy, dy) : (dy, cy)
-        if (
-            ((ax ≤ min_x && bx ≤ min_x) || (ax ≥ max_x && bx ≥ max_x)) &&
-            ((ay ≤ min_y && by ≤ min_y) || (ay ≥ max_y && by ≥ max_y))
-        )
-            # a_point and b_point are on the same side of segment, don't overlap
-            return hinge
-        else
-            return over
-        end
-    end
-    # if lines aren't parallel then they must hinge
-    return hinge
-end
-
-#=
 Determines the types of interactions of a line with a filled-in curve. By
 filled-in curve, I am referring to the exterior ring of a poylgon, for example.
 

@@ -75,6 +75,6 @@ end
 
 # Returns true if there is at least one intersection between two edges.
 function _line_intersects(edge_a::Edge, edge_b::Edge)
-    meet_type = ExactPredicates.meet(edge_a..., edge_b...)
-    return meet_type == 0 || meet_type == 1
+    seg_val, _, _ = _intersection_point(Float64, edge_a, edge_b)
+    return seg_val != line_out
 end
