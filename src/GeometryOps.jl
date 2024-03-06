@@ -6,7 +6,6 @@ using GeoInterface
 using GeometryBasics
 import Proj
 using LinearAlgebra
-import ExactPredicates
 import Proj.CoordinateTransformations.StaticArrays
 import Base.@kwdef
 
