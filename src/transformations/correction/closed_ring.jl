@@ -11,7 +11,9 @@ export ClosedRing
 # ## Example
 #=
 
-Many polygon packages do not close their polygons, which makes them invalid according to strict specification.  
+Many polygon providers do not close their polygons, which makes them invalid 
+according to the specification.  Quite a few geometry algorithms assume that 
+polygons are closed, and leaving them open can lead to incorrect results!
 
 For example, the following polygon is not valid:
 
