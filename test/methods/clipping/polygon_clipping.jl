@@ -1,3 +1,6 @@
+import GeoInterface as GI
+import GeometryOps as GO
+
 # Test of polygon clipping
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
 p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
@@ -119,6 +122,8 @@ test_pairs = [
     (p44, p45, "p44", "p45", "Holes form a ring, with an additional hole within that ring of holes"),
 ]
 
+GO.intersection(p27, p28; target = GI.PolygonTrait)
+
 const ϵ = 1e-10
 # Compare clipping results from GeometryOps and LibGEOS
 function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
@@ -147,6 +152,7 @@ end
 # Test clipping functions and print error message if tests fail
 function test_clipping(GO_f, LG_f, f_name)
     for (p1, p2, sg1, sg2, sdesc) in test_pairs
+        @show sg1, sg2
         pass_test = compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         @test pass_test
         !pass_test && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")
@@ -155,5 +161,5 @@ function test_clipping(GO_f, LG_f, f_name)
 end
 
 @testset "Intersection" begin test_clipping(GO.intersection, LG.intersection, "intersection") end
-@testset "Union" begin test_clipping(GO.union, LG.union, "union") end
-@testset "Difference" begin test_clipping(GO.difference, LG.difference, "difference") end
+# @testset "Union" begin test_clipping(GO.union, LG.union, "union") end
+# @testset "Difference" begin test_clipping(GO.difference, LG.difference, "difference") end

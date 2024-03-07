@@ -4,6 +4,10 @@
 # This enum defines which side of an edge a point is on
 @enum PointEdgeSide left=1 right=2 unknown=3
 
+const enter, exit = true, false
+const crossing, bouncing = true, false
+@enum EndPointType start_chain=1 end_chain=2 not_endpoint=3
+
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
 @kwdef struct PolyNode{T <: AbstractFloat}
@@ -12,6 +16,7 @@ an intersection point (ipt). =#
     neighbor::Int = 0          # If ipt, index of equivalent point in a_list or b_list, else 0
     ent_exit::Bool = false     # If ipt, true if enter and false if exit, else false
     crossing::Bool = false     # If ipt, true if intersection crosses from out/in polygon, else false
+    endpoint::EndPointType = not_endpoint # If ipt, true if point is the start of end of an overlapping chain
     fracs::Tuple{T,T} = (0., 0.) # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
 end
 
@@ -210,7 +215,7 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
     curr_pt = a_list[end]
     i = napts
     # keep track of unmatched bouncing chains
-    start_chain_edge = unknown
+    start_chain_edge, start_chain_idx = unknown, 0
     unmatched_end_chain_edge, unmatched_end_chain_idx = unknown, 0
     # loop over list points
     for next_idx in 1:napts
@@ -245,20 +250,33 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
                 if start_chain_edge == unknown  # start loop on overlapping chain
                     unmatched_end_chain_edge = b_side
                     unmatched_end_chain_idx = i
-                elseif b_side != start_chain_edge  # close overlapping chain
+                else  # close overlapping chain
+                    # update end of chain with endpoint and crossing / bouncing tags
+                    crossing = b_side != start_chain_edge
                     a_list[i] = PolyNode{T}(;
                         point = curr_pt.point, inter = true, neighbor = j,
-                        crossing = true, fracs = curr_pt.fracs,
+                        crossing = crossing, endpoint = end_chain, fracs = curr_pt.fracs,
                     )
                     b_list[j] = PolyNode{T}(;
                         point = curr_pt.point, inter = true, neighbor = i,
-                        crossing = true, fracs = curr_pt.fracs,
+                        crossing = crossing, endpoint = end_chain, fracs = curr_pt.fracs,
+                    )
+                    # update start of chain with endpoint and crossing / bouncing tags
+                    start_pt = a_list[start_chain_idx]
+                    a_list[start_chain_idx] = PolyNode{T}(;
+                        point = start_pt.point, inter = true, neighbor = start_pt.neighbor,
+                        crossing = crossing, endpoint = start_chain, fracs = start_pt.fracs,
+                    )
+                    b_list[start_pt.neighbor] = PolyNode{T}(;
+                        point = start_pt.point, inter = true, neighbor = start_chain_idx,
+                        crossing = crossing, endpoint = start_chain, fracs = start_pt.fracs,
                     )
                 end
             # start of overlapping chain
             elseif !a_prev_is_b_prev && !a_prev_is_b_next
                 b_side = a_next_is_b_prev ? b_next_side : b_prev_side
                 start_chain_edge = b_side
+                start_chain_idx = i
             end
         end
         a_prev = curr_pt
@@ -266,17 +284,27 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
         i = next_idx
     end
     # if we started in the middle of overlapping chain, close chain
-    if unmatched_end_chain_edge != unknown && unmatched_end_chain_edge != start_chain_edge
+    if unmatched_end_chain_edge != unknown
+        crossing = unmatched_end_chain_edge != start_chain_edge
+        # update end of chain with endpoint and crossing / bouncing tags
         end_chain_pt = a_list[unmatched_end_chain_idx]
         a_list[unmatched_end_chain_idx] = PolyNode{T}(;
-            point = end_chain_pt.point, inter = true,
-            neighbor = end_chain_pt.neighbor,
-            crossing = true, fracs = end_chain_pt.fracs,
+            point = end_chain_pt.point, inter = true, neighbor = end_chain_pt.neighbor,
+            crossing = crossing, endpoint = end_chain, fracs = end_chain_pt.fracs,
         )
         b_list[end_chain_pt.neighbor] = PolyNode{T}(;
-            point = end_chain_pt.point, inter = true,
-            neighbor = unmatched_end_chain_idx,
-            crossing = true, fracs = end_chain_pt.fracs,
+            point = end_chain_pt.point, inter = true, neighbor = unmatched_end_chain_idx,
+            crossing = crossing, endpoint = end_chain, fracs = end_chain_pt.fracs,
+        )
+        # update start of chain with endpoint and crossing / bouncing tags
+        start_pt = a_list[start_chain_idx]
+        a_list[start_chain_idx] = PolyNode{T}(;
+            point = start_pt.point, inter = true, neighbor = start_pt.neighbor,
+            crossing = crossing, endpoint = start_chain, fracs = start_pt.fracs,
+        )
+        b_list[start_pt.neighbor] = PolyNode{T}(;
+            point = start_pt.point, inter = true, neighbor = start_chain_idx,
+            crossing = crossing, endpoint = start_chain, fracs = start_pt.fracs,
         )
     end
 end
@@ -300,6 +328,9 @@ function _signed_area_triangle(P, Q, R)
     return (GI.x(Q)-GI.x(P))*(GI.y(R)-GI.y(P))-(GI.y(Q)-GI.y(P))*(GI.x(R)-GI.x(P))
 end
 
+# True if the edge with pt as the starting endpoint is not shared between polygons
+_next_edge_off(pt) = !pt.inter || (pt.endpoint == end_chain) || (pt.crossing && pt.endpoint == not_endpoint)
+
 #=
     _flag_ent_exit!(::GI.LinearRingTrait, poly_b, a_list)
 
@@ -309,20 +340,45 @@ returns false. Used for clipping polygons by other polygons.
 =#
 function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list)
     # Find starting index if there is one
-    start_idx = findfirst(x -> x.crossing, pt_list)
+    start_idx = findfirst(_next_edge_off, pt_list)
     isnothing(start_idx) && return
     # Determine if non-overlapping line midpoint is inside or outside of polygon
     npts = length(pt_list)
     next_idx = start_idx < npts ? (start_idx + 1) : 1
-    start_pt = (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
-    status = !_point_filled_curve_orientation(start_pt, poly; in = true, on = false, out = false)
+    start_val = (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
+    status = !_point_filled_curve_orientation(start_val, poly; in = true, on = false, out = false)
     # Loop over points and mark entry and exit status
+    start_chain_idx = 0
     for ii in Iterators.flatten((next_idx:npts, 1:start_idx))
         curr_pt = pt_list[ii]
-        if curr_pt.crossing
+        if curr_pt.endpoint == start_chain
+            start_chain_idx = ii
+        elseif curr_pt.crossing || curr_pt.endpoint == end_chain
+            start_crossing, end_crossing = curr_pt.crossing, curr_pt.crossing
+            if curr_pt.endpoint == end_chain
+                start_pt = pt_list[start_chain_idx]
+                if curr_pt.crossing
+                    start_crossing, end_crossing = !status, status
+                else
+                    next_idx = ii < npts ? (ii + 1) : 1
+                    next_val = (curr_pt.point .+ pt_list[next_idx].point) ./ 2
+                    start_crossing = _point_filled_curve_orientation(next_val, poly; in = true, on = false, out = false)
+                    end_crossing = start_crossing
+                end
+                pt_list[start_chain_idx] = PolyNode(;
+                    point = start_pt.point, inter = start_pt.inter, neighbor = start_pt.neighbor,
+                    ent_exit = status, crossing = start_crossing, endpoint = start_pt.endpoint,
+                    fracs = start_pt.fracs,
+                )
+                if !curr_pt.crossing
+                    status = !status
+                end
+            end
             pt_list[ii] = PolyNode(;
                 point = curr_pt.point, inter = curr_pt.inter, neighbor = curr_pt.neighbor,
-                ent_exit = status, crossing = curr_pt.crossing, fracs = curr_pt.fracs)
+                ent_exit = status, crossing = end_crossing, endpoint = curr_pt.endpoint,
+                fracs = curr_pt.fracs,
+            )
             status = !status
         end
     end
@@ -400,8 +456,8 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
         while curr_not_start
             step = f_step(curr.ent_exit, on_a_list)
             # changed curr_not_intr to curr_not_same_ent_flag
-            curr_not_crossing = true
-            while curr_not_crossing
+            same_status, prev_status = true, curr.ent_exit
+            while same_status
                 # Traverse polygon either forwards or backwards
                 idx += step
                 idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
@@ -410,19 +466,19 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
                 # Get current node and add to pt_list
                 curr = curr_list[idx]
                 push!(pt_list, curr.point)
-                if curr.crossing
+                if (curr.crossing || curr.endpoint != not_endpoint)
                     # Keep track of processed intersection points
+                    same_status = curr.ent_exit == prev_status
                     curr_not_start = curr != start_pt && curr != b_list[start_pt.neighbor]
-                    if curr_not_start
+                    if curr.crossing && curr_not_start
                         processed_pts += 1
                         for (i, a_idx) in enumerate(a_idx_list)
                             if a_idx != 0 && equals(a_list[a_idx].point, curr.point)
                                 a_idx_list[i] = 0
+                                break
                             end
                         end
-                        # a_idx_list[curr.idx] = 0
                     end
-                    curr_not_crossing = false
                 end
             end
 
