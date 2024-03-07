@@ -65,7 +65,7 @@ function _difference(
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
         _add_holes_to_polys!(T, polys, GI.gethole(poly_a))
         for hole in GI.gethole(poly_b)
-            new_polys = intersection(GI.Polygon([hole]), poly_a, T; target = GI.PolygonTrait)
+            new_polys = intersection(GI.Polygon([hole]), poly_a, T; target = GI.PolygonTrait())
             if length(new_polys) > 0
                 append!(polys, new_polys)
             end

@@ -549,7 +549,7 @@ function _combine_holes!(::Type{T}, new_hole, curr_poly, return_polys) where T
         old_hole_poly = GI.Polygon([old_hole])
         if intersects(new_hole_poly, old_hole_poly)
             # If the holes intersect, combine them into a bigger hole
-            hole_union = union(new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait)[1]
+            hole_union = union(new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait())[1]
             push!(remove_idx, k + 1)
             new_hole = GI.getexterior(hole_union)
             new_hole_poly = GI.Polygon([new_hole])
