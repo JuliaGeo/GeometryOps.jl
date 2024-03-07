@@ -26,7 +26,7 @@ GI.coordinates.(diff_poly)
  [[[6.5, 3.5], [5.0, 5.0], [0.0, 0.0], [5.0, -5.0], [6.5, -3.5], [3.0, 0.0], [6.5, 3.5]]]
 ```
 """
-Base.@constprop :aggressive function difference(
+function difference(
     geom_a, geom_b, ::Type{T} = Float64; target::Target = nothing,
 ) where {T <: AbstractFloat, Target <: Union{Nothing, GI.AbstractTrait}}
     return _difference(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)

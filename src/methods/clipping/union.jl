@@ -27,7 +27,7 @@ GI.coordinates.(union_poly)
 ```
 """
 function union(
-    geom_a, geom_b, ::Type{T} = Float64; target::Type{Target} = Nothing,
+    geom_a, geom_b, ::Type{T} = Float64; target::Target = nothing,
 ) where {T <: AbstractFloat, Target <: Union{Nothing, GI.AbstractTrait}}
     _union(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
