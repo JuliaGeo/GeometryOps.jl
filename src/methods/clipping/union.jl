@@ -18,7 +18,7 @@ import GeoInterface as GI, GeometryOps as GO
 
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
 p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
-union_poly = GO.union(p1, p2; target = GI.PolygonTrait)
+union_poly = GO.union(p1, p2; target = GI.PolygonTrait())
 GI.coordinates.(union_poly)
 
 # output
