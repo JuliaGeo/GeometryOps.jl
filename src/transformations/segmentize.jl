@@ -90,7 +90,6 @@ struct GeodesicSegments <: SegmentizeMethod
     geodesic::Proj.geod_geodesic
     max_distance::Float64
 end
-
 function GeodesicSegments(; max_distance, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563, geodesic::Proj.geod_geodesic = Proj.geod_geodesic(equatorial_radius, flattening))
     return GeodesicSegments(geodesic, max_distance)
 end
@@ -113,7 +112,6 @@ Returns a geometry of similar type to the input geometry, but resampled.
 function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False())
     return segmentize(LinearSegments(; max_distance), geom; threaded)
 end
-
 function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = _False())
     @assert method.max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
     segmentize_function = Base.Fix1(_segmentize, method)
@@ -121,10 +119,10 @@ function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsA
 end
 
 _segmentize(method, geom) = _segmentize(method, geom, GI.trait(geom))
-
-
-
-# This is a 
+#= 
+This is a method which performs the common functionality for both linear and geodesic algorithms, 
+and calls out to the "kernel" function which we've defined per linesegment.
+=#
 function _segmentize(method::Union{LinearSegments, GeodesicSegments}, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
     first_coord = GI.getpoint(geom, 1)
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
@@ -155,7 +153,6 @@ function _fill_linear_kernel!(method::LinearSegments, new_coords::Vector, x1, y1
     push!(new_coords, (x2, y2))
     return nothing
 end
-
 function _fill_linear_kernel!(method::GeodesicSegments, new_coords::Vector, x1, y1, x2, y2)
     geod_line = Proj.geod_inverseline(method.geodesic, y1, x1, y2, x2)
     # This is the distance in meters computed between the two points.
