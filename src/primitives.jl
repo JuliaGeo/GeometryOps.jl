@@ -8,8 +8,9 @@ We pass `threading` and `calc_extent` as types, not simple boolean values.
 This is to help compilation - with a type to hold on to, it's easier for 
 the compiler to separate threaded and non-threaded code paths.
 =#
-struct _True end
-struct _False end
+abstract type BoolsAsTypes end
+struct _True <: BoolsAsTypes end
+struct _False <: BoolsAsTypes end
 
 # This struct holds a trait parameter or a union of trait parameters.
 struct TraitTarget{T} end
