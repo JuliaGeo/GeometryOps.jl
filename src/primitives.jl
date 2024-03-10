@@ -2,6 +2,13 @@
 
 # This file mainly defines the [`apply`](@ref) function and its relatives.
 
+# This struct holds a trait parameter or a union of trait parameters.
+struct TraitTarget{T} end
+TraitTarget(::Type{T}) where T = TraitTarget{T}()
+TraitTarget(::T) where T<:GI.AbstractTrait = TraitTarget{T}()
+TraitTarget(::TraitTarget{T}) where T = TraitTarget{T}()
+TraitTarget(::Type{<:TraitTarget{T}}) where T = TraitTarget{T}()
+TraitTarget(traits::GI.AbstractTrait...) where T = TraitTarget{Union{map(typeof, traits)...}}()
 
 const THREADED_KEYWORD = "- `threaded`: `true` or `false`. Whether to use multithreading. Defaults to `false`."
 const CRS_KEYWORD = "- `crs`: The CRS to attach to geometries. Defaults to `nothing`."
@@ -94,11 +101,11 @@ flipped_geom = GO.apply(GI.PointTrait, geom) do p
 end
 """
 @inline function apply(
-    f::F, ::Type{Target}, geom; calc_extent=false, threaded=false, kw...
-) where {F,Target}
+    f::F, target, geom; calc_extent=false, threaded=false, kw...
+) where F
     threaded = _booltype(threaded)
     calc_extent = _booltype(calc_extent)
-    _apply(f, Target, geom; threaded, calc_extent, kw...)
+    _apply(f, TraitTarget(target), geom; threaded, calc_extent, kw...)
 end
 
 #=
@@ -119,38 +126,39 @@ struct _False <: BoolsAsTypes end
 @inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
 @inline _booltype(x::BoolsAsTypes) = x
 
+
 # Call _apply again with the trait of `geom`
-@inline _apply(f::F, ::Type{Target}, geom; kw...)  where {Target,F} =
-    _apply(f, Target, GI.trait(geom), geom; kw...)
+@inline _apply(f::F, target, geom; kw...)  where F =
+    _apply(f, target, GI.trait(geom), geom; kw...)
 # There is no trait and this is an AbstractArray - so just iterate over it calling _apply on the contents
-@inline function _apply(f::F, ::Type{Target}, ::Nothing, A::AbstractArray; threaded, kw...) where {F,Target}
+@inline function _apply(f::F, target, ::Nothing, A::AbstractArray; threaded, kw...) where F
     # For an Array there is nothing else to do but map `_apply` over all values
     # _maptasks may run this level threaded if `threaded==true`,
     # but deeper `_apply` called in the closure will not be threaded
-    apply_to_array(i) = _apply(f, Target, A[i]; threaded=_False(), kw...)
+    apply_to_array(i) = _apply(f, target, A[i]; threaded=_False(), kw...)
     _maptasks(apply_to_array, eachindex(A), threaded)
 end
 # There is no trait and this is not an AbstractArray.
 # Try to call _apply over it. We can't use threading
 # as we don't know if we can can index into it. So just `map`.
-@inline function _apply(f::F, ::Type{Target}, ::Nothing, iterable; threaded, kw...) where {F,Target}
+@inline function _apply(f::F, target, ::Nothing, iterable; threaded, kw...) where F
     if threaded
         # `collect` first so we can use threads
-        _apply(f, Target, collect(iterable); threaded, kw...)
+        _apply(f, target, collect(iterable); threaded, kw...)
     else
-        apply_to_iterable(x) = _apply(f, Target, x; kw...)
+        apply_to_iterable(x) = _apply(f, target, x; kw...)
         map(apply_to_iterable, iterable)
     end
 end
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
 # Maybe use threads to call _apply on componenet features
-@inline function _apply(f::F, ::Type{Target}, ::GI.FeatureCollectionTrait, fc;
+@inline function _apply(f::F, target, ::GI.FeatureCollectionTrait, fc;
     crs=GI.crs(fc), calc_extent=_False(), threaded
-) where {F,Target}
+) where F
 
     # Run _apply on all `features` in the feature collection, possibly threaded
     apply_to_feature(i) =
-        _apply(f, Target, GI.getfeature(fc, i); crs, calc_extent, threaded=_False())::GI.Feature
+        _apply(f, target, GI.getfeature(fc, i); crs, calc_extent, threaded=_False())::GI.Feature
     features = _maptasks(apply_to_feature, 1:GI.nfeature(fc), threaded)
     if calc_extent isa _True
         # Calculate the extent of the features
@@ -163,11 +171,11 @@ end
     end
 end
 # Rewrap all FeatureTrait features as GI.Feature, keeping the properties
-@inline function _apply(f::F, ::Type{Target}, ::GI.FeatureTrait, feature;
+@inline function _apply(f::F, target, ::GI.FeatureTrait, feature;
     crs=GI.crs(feature), calc_extent=_False(), threaded
-) where {F,Target}
+) where F
     # Run _apply on the contained geometry
-    geometry = _apply(f, Target, GI.geometry(feature); crs, calc_extent, threaded)
+    geometry = _apply(f, target, GI.geometry(feature); crs, calc_extent, threaded)
     # Get the feature properties
     properties = GI.properties(feature)
     if calc_extent isa _True
@@ -182,13 +190,13 @@ end
 end
 # Reconstruct nested geometries,
 # maybe using threads to call _apply on component geoms
-@inline function _apply(f::F, ::Type{Target}, trait, geom;
+@inline function _apply(f::F, target, trait, geom;
     crs=GI.crs(geom), calc_extent=_False(), threaded
-)::(GI.geointerface_geomtype(trait)) where {F,Target}
+)::(GI.geointerface_geomtype(trait)) where F
     # Map `_apply` over all sub geometries of `geom`
     # to create a new vector of geometries
     # TODO handle zero length
-    apply_to_geom(i) = _apply(f, Target, GI.getgeom(geom, i); crs, calc_extent, threaded=_False())
+    apply_to_geom(i) = _apply(f, target, GI.getgeom(geom, i); crs, calc_extent, threaded=_False())
     geoms = _maptasks(apply_to_geom, 1:GI.ngeom(geom), threaded)
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
@@ -205,19 +213,19 @@ function _apply_inner(geom, geoms, crs, calc_extent::_False)
 end
 # Fail loudly if we hit PointTrait without running `f`
 # (after PointTrait there is no further to dig with `_apply`)
-@inline _apply(f, ::Type{Target}, trait::GI.PointTrait, geom; crs=nothing, kw...) where Target =
-    throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
+# @inline _apply(f, ::TraitTarget{Target}, trait::GI.PointTrait, geom; crs=nothing, kw...) where Target =
+    # throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 # Finally, these short methods are the main purpose of `apply`.
 # The `Trait` is a subtype of the `Target` (or identical to it)
 # So the `Target` is found. We apply `f` to geom and return it to previous
 # _apply calls to be wrapped with the outer geometries/feature/featurecollection/array.
-_apply(f::F, ::Type{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} = f(geom)
+_apply(f::F, ::TraitTarget{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} = f(geom)
 # Define some specific cases of this match to avoid method ambiguity
 for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString,
     GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait
 )
-    @eval _apply(f::F, target::Type{$T}, trait::$T, x; kw...) where F = f(x)
+    @eval _apply(f::F, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F = f(x)
 end
 
 """
@@ -232,61 +240,63 @@ If `threaded==true` threads will be used over arrays and iterables,
 feature collections and nested geometries.
 """
 @inline function applyreduce(
-    f::F, op, ::Type{Target}, geom; threaded=false, init=nothing
-) where {F,Target}
-    threaded::BoolsAsTypes = _booltype(threaded)::BoolsAsTypes
-    _applyreduce(f, op, Target, geom; threaded, init)
+    f::F, op, target, geom; threaded=false, init=nothing
+) where F
+    threaded = _booltype(threaded)
+    _applyreduce(f, op, TraitTarget(target), geom; threaded, init)
+
 end
 
-@inline _applyreduce(f::F, op, ::Type{Target}, geom; threaded, init) where {F,Target} =
-    _applyreduce(f, op, Target, GI.trait(geom), geom; threaded, init)
+@inline _applyreduce(f::F, op, target, geom; threaded, init) where F =
+    _applyreduce(f, op, target, GI.trait(geom), geom; threaded, init)
 # Maybe use threads recucing over arrays
-@inline function _applyreduce(f::F, op, ::Type{Target}, ::Nothing, A::AbstractArray; threaded, init) where {F,Target}
-    applyreduce_array(i) = _applyreduce(f, op, Target, A[i]; threaded=_False(), init)
+@inline function _applyreduce(f::F, op, target, ::Nothing, A::AbstractArray; threaded, init) where F
+    applyreduce_array(i) = _applyreduce(f, op, target, A[i]; threaded=_False(), init)
     _mapreducetasks(applyreduce_array, op, eachindex(A), threaded; init)
 end
 # Try to applyreduce over iterables
-@inline function _applyreduce(f::F, op, ::Type{Target}, ::Nothing, iterable; threaded, init) where {F,Target}
-    applyreduce_iterable(i) = _applyreduce(f, op, Target, x; threaded=_False(), init)
+@inline function _applyreduce(f::F, op, target, ::Nothing, iterable; threaded, init) where F
+    applyreduce_iterable(i) = _applyreduce(f, op, target, x; threaded=_False(), init)
     if threaded # Try to `collect` and reduce over the vector with threads
-        _applyreduce(f, op, Target, collect(iterable); threaded, init)
+        _applyreduce(f, op, target, collect(iterable); threaded, init)
     else
         # Try to `mapreduce` the iterable as-is
         mapreduce(applyreduce_iterable, op, iterable; init)
     end
 end
 # Maybe use threads reducing over features of feature collections
-@inline function _applyreduce(f::F, op, ::Type{Target}, ::GI.FeatureCollectionTrait, fc; threaded, init) where {F,Target}
-    applyreduce_fc(i) = _applyreduce(f, op, Target, GI.getfeature(fc, i); threaded=_False(), init)
+@inline function _applyreduce(f::F, op, target, ::GI.FeatureCollectionTrait, fc; threaded, init) where F
+    applyreduce_fc(i) = _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=_False(), init)
     _mapreducetasks(applyreduce_fc, op, 1:GI.nfeature(fc), threaded; init)
 end
 # Features just applyreduce to their geometry
-@inline _applyreduce(f::F, op, ::Type{Target}, ::GI.FeatureTrait, feature; threaded, init) where {F,Target} =
+@inline _applyreduce(f::F, op, target, ::GI.FeatureTrait, feature; threaded, init) where F =
     _applyreduce(f, op, target, GI.geometry(feature); threaded, init)
 # Maybe use threads over components of nested geometries
-@inline function _applyreduce(f::F, op, ::Type{Target}, trait, geom; threaded, init) where {F,Target}
-    applyreduce_geom(i) = _applyreduce(f, op, Target, GI.getgeom(geom, i); threaded=_False(), init)
+@inline function _applyreduce(f::F, op, target, trait, geom; threaded, init) where F
+    applyreduce_geom(i) = _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=_False(), init)
     _mapreducetasks(applyreduce_geom, op, 1:GI.ngeom(geom), threaded; init)
 end
 # Don't thread over points it won't pay off
 @inline function _applyreduce(
-    f::F, op, ::Type{Target}, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom;
+    f::F, op, target, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom;
     threaded, init
-) where {F,Target}
-    _applyreduce(f, op, Target, GI.getgeom(geom); threaded=_False(), init)
+) where F
+    _applyreduce(f, op, target, GI.getgeom(geom); threaded=_False(), init)
 end
 # Apply f to the target
-@inline function _applyreduce(f::F, op, ::Type{Target}, ::Trait, x; kw...) where {F,Target<:GI.AbstractTrait,Trait<:Target} 
+@inline function _applyreduce(f::F, op, ::TraitTarget{Target}, ::Trait, x; kw...) where {F,Target,Trait<:Target} 
     f(x)
 end
 # Fail if we hit PointTrait
-_applyreduce(f, op, target, trait, geom; kw...) = throw(ArgumentError("target $target not found"))
+# _applyreduce(f, op, target::TraitTarget{Target}, trait::PointTrait, geom; kw...) where Target = 
+    # throw(ArgumentError("target $target not found"))
 # Specific cases to avoid method ambiguity
 for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString, 
     GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait
 )
-    @eval _applyreduce(f::F, op, target::Type{$T}, trait::$T, x; kw...) where F = f(x)
+    @eval _applyreduce(f::F, op, ::TraitTarget{<:$T}, trait::$T, x; kw...) where F = f(x)
 end
 
 """

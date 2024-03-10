@@ -18,7 +18,7 @@ import GeoInterface as GI, GeometryOps as GO
 
 poly1 = GI.Polygon([[[0.0, 0.0], [5.0, 5.0], [10.0, 0.0], [5.0, -5.0], [0.0, 0.0]]])
 poly2 = GI.Polygon([[[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]]])
-diff_poly = GO.difference(poly1, poly2; target = GI.PolygonTrait)
+diff_poly = GO.difference(poly1, poly2; target = GI.PolygonTrait())
 GI.coordinates.(diff_poly)
 
 # output
@@ -27,16 +27,16 @@ GI.coordinates.(diff_poly)
 ```
 """
 function difference(
-    geom_a, geom_b, ::Type{T} = Float64; target::Type{Target} = Nothing,
-) where {T <: AbstractFloat, Target <: Union{Nothing, GI.AbstractTrait}}
-    return _difference(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    geom_a, geom_b, ::Type{T} = Float64; target=nothing,
+) where {T<:AbstractFloat}
+    return _difference(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
 #= The 'difference' function returns the difference of two polygons as a list of polygons.
 The algorithm to determine the difference was adapted from "Efficient clipping of efficient
 polygons," by Greiner and Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
 function _difference(
-    ::Type{GI.PolygonTrait}, ::Type{T},
+    ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b,
 ) where T
@@ -76,7 +76,7 @@ end
 
 # Many type and target combos aren't implemented
 function _difference(
-    ::Type{Target}, ::Type{T},
+    ::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
 ) where {Target, T}

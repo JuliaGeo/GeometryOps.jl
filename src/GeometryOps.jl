@@ -4,6 +4,7 @@ module GeometryOps
 
 using GeoInterface
 using GeometryBasics
+using GeometryBasics.StaticArrays
 import Proj
 using LinearAlgebra
 import ExactPredicates
