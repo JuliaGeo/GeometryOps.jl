@@ -28,7 +28,7 @@ geometry trait. This is also used in the implementation, since it's a lot less
 work!
 =#
 
-const _ANGLE_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
+const _ANGLE_TARGETS = TraitTarget{Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}}()
 
 """
     angles(geom, ::Type{T} = Float64)

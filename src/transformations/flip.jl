@@ -16,11 +16,11 @@ $APPLY_KEYWORDS
 """
 function flip(geom; kw...) 
     if _is3d(geom)
-        return apply(PointTrait, geom; kw...) do p
+        return apply(PointTrait(), geom; kw...) do p
             (GI.y(p), GI.x(p), GI.z(p))
         end
     else
-        return apply(PointTrait, geom; kw...) do p
+        return apply(PointTrait(), geom; kw...) do p
             (GI.y(p), GI.x(p))
         end
     end

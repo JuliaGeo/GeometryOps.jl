@@ -27,9 +27,9 @@ GI.coordinates.(inter_points)
 ```
 """
 function intersection(
-    geom_a, geom_b, ::Type{T} = Float64; target::Target = nothing,
-) where {T <: AbstractFloat, Target <: Union{Nothing, GI.AbstractTrait}}
-    return _intersection(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    geom_a, geom_b, ::Type{T}=Float64; target=nothing,
+) where {T<:AbstractFloat}
+    return _intersection(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
 # Curve-Curve Intersections with target Point
@@ -45,7 +45,7 @@ The algorithm to determine the intersection was adapted from "Efficient clipping
 of efficient polygons," by Greiner and Hormann (1998).
 DOI: https://doi.org/10.1145/274363.274364 =#
 function _intersection(
-    ::Type{GI.PolygonTrait}, ::Type{T},
+    ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b,
 ) where {T}
@@ -73,7 +73,7 @@ end
 
 # Many type and target combos aren't implemented
 function _intersection(
-    ::Type{Target}, ::Type{T},
+    ::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
 ) where {Target, T}

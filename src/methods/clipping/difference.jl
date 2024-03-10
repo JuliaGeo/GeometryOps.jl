@@ -27,16 +27,16 @@ GI.coordinates.(diff_poly)
 ```
 """
 function difference(
-    geom_a, geom_b, ::Type{T} = Float64; target::Target = nothing,
-) where {T <: AbstractFloat, Target <: Union{Nothing, GI.AbstractTrait}}
-    return _difference(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    geom_a, geom_b, ::Type{T} = Float64; target=nothing,
+) where {T<:AbstractFloat}
+    return _difference(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
 #= The 'difference' function returns the difference of two polygons as a list of polygons.
 The algorithm to determine the difference was adapted from "Efficient clipping of efficient
 polygons," by Greiner and Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
 function _difference(
-    ::Type{GI.PolygonTrait}, ::Type{T},
+    ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b,
 ) where T
@@ -65,7 +65,7 @@ function _difference(
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
         _add_holes_to_polys!(T, polys, GI.gethole(poly_a))
         for hole in GI.gethole(poly_b)
-            new_polys = intersection(GI.Polygon([hole]), poly_a, T; target = GI.PolygonTrait())
+            new_polys = intersection(GI.Polygon([hole]), poly_a, T; target = GI.PolygonTrait)
             if length(new_polys) > 0
                 append!(polys, new_polys)
             end
@@ -76,7 +76,7 @@ end
 
 # Many type and target combos aren't implemented
 function _difference(
-    ::Type{Target}, ::Type{T},
+    ::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
 ) where {Target, T}
