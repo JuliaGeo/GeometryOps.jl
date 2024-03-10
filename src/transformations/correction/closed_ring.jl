@@ -19,7 +19,7 @@ For example, the following polygon is not valid:
 
 ```@example closed-ring
 import GeoInterface as GI
-polygon = GI.Wrappers.Polygon([[(0, 0), (1, 0), (1, 1), (0, 1)]])
+polygon = GI.Polygon([[(0, 0), (1, 0), (1, 1), (0, 1)]])
 ```
 
 even though it will look correct when visualized, and indeed appears correct.
@@ -63,6 +63,11 @@ function _close_linear_ring(ring)
         # the ring is closed, all hail the ring
         return ring
     else
-        return GI.Wrappers.LinearRing([tuples.(GI.getpoint(ring))..., tuples(GI.getpoint(ring, 1))])
+        # Assemble the ring as a vector
+        tups = tuples.(GI.getpoint(ring))
+        # Close the ring
+        push!(tups, tups[1])
+        # Return an actual ring
+        return GI.Wrappers.LinearRing(tups)
     end
 end
