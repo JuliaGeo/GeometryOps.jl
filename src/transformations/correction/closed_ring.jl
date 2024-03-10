@@ -68,6 +68,6 @@ function _close_linear_ring(ring)
         # Close the ring
         push!(tups, tups[1])
         # Return an actual ring
-        return GI.Wrappers.LinearRing(tups)
+        return GI.LinearRing(tups)
     end
 end
