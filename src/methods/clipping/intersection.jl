@@ -34,7 +34,7 @@ end
 
 # Curve-Curve Intersections with target Point
 _intersection(
-    ::Type{GI.PointTrait}, ::Type{T},
+    ::TraitTarget{GI.PointTrait}, ::Type{T},
     trait_a::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_a,
     trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b,
 ) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
