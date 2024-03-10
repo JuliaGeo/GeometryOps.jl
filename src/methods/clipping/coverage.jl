@@ -37,7 +37,7 @@ with a linear ring.
 =#
 
 # Targets for applys functions
-const _COVERAGE_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
+const _COVERAGE_TARGETS = TraitTarget{Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}}()
 
 # Wall types for coverage
 const UNKNOWN, NORTH, EAST, SOUTH, WEST = 0:4

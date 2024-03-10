@@ -63,7 +63,7 @@ Also note that singed_distance only makes sense for "filled-in" shapes, like
 polygons, so it isn't implemented for curves.
 =#
 
-const _DISTANCE_TARGETS = Union{GI.AbstractPolygonTrait,GI.LineStringTrait,GI.LinearRingTrait,GI.LineTrait,GI.PointTrait}
+const _DISTANCE_TARGETS = TraitTarget{Union{GI.AbstractPolygonTrait,GI.LineStringTrait,GI.LinearRingTrait,GI.LineTrait,GI.PointTrait}}()
 
 """
     distance(point, geom, ::Type{T} = Float64)::T
