@@ -1,6 +1,7 @@
 using Test
 
 import GeometryOps as GO
+import GeoInterface as GI
 
 @testset "Segmentation on multiple geometry levels" begin
     ls = GI.LineString([(0, 0), (1, 1), (2, 2), (3, 3)])
