@@ -97,6 +97,14 @@ _area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
 
 _signed_area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
 
+# LinearRings
+
+# For LinearRings, we default to the curve implementation.
+
+_area(::Type{T}, tr::GI.LinearRingTrait, geom) where T = abs(_signed_area(T, tr, geom))
+
+_signed_area(::Type{T}, ::GI.LinearRingTrait, geom) where T = _signed_area(T, geom)
+
 # Polygons
 _area(::Type{T}, trait::GI.PolygonTrait, poly) where T =
     abs(_signed_area(T, trait, poly))
