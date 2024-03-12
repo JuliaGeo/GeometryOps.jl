@@ -132,7 +132,6 @@ function _segmentize(method::Union{LinearSegments, GeodesicSegments}, geom, T::U
     for coord in Iterators.drop(GI.getpoint(geom), 1)
         x2, y2 = GI.x(coord), GI.y(coord)
         _fill_linear_kernel!(method, new_coords, x1, y1, x2, y2)
-        push!(new_coords, (x2, y2))
         x1, y1 = x2, y2
     end 
     return rebuild(geom, new_coords)
