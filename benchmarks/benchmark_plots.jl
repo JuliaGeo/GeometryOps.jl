@@ -1,4 +1,4 @@
-using Printf, Statistics, MakieThemes
+using Printf, Statistics, MakieThemes, BenchmarkTools
 
 function compute_gridsize(numplts::Int, nr::Int, nc::Int)
     # figure out how many rows/columns we need
@@ -31,7 +31,7 @@ end
 _prettytime(ts::AbstractArray{<: Real}) = _prettytime.(ts)
 
 
-function results_to_numbers(result::BenchmarkTools.BenchmarkGroup, postprocess_times = Statistics.median, postprocess_numbers = identity)
+function results_to_numbers(result::BenchmarkGroup, postprocess_times = Statistics.median, postprocess_numbers = identity)
     # First, we extract the keys from the result.  
     # It's assumed that there is only one key per result, and that it's a number.
     numbers = identity.(collect(keys(result)))
