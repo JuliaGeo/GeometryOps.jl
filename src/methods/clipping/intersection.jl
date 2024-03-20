@@ -39,7 +39,9 @@ _intersection(
     trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b,
 ) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
 
-
+_inter_delay_cross_f(x) = (!x, x)
+_inter_delay_bounce_f(x, _) = x
+_inter_step(x, _) =  x ? 1 : (-1)
 #= Polygon-Polygon Intersections with target Polygon
 The algorithm to determine the intersection was adapted from "Efficient clipping
 of efficient polygons," by Greiner and Hormann (1998).
@@ -53,8 +55,8 @@ function _intersection(
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b)
-    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> x ? 1 : (-1))
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f)
+    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _inter_step)
     if isempty(polys) # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
         if a_in_b

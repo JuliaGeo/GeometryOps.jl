@@ -29,7 +29,7 @@ returns are the fully updated vectors of PolyNodes that represent the rings 'pol
 'poly_b', respectively. This function also returns 'a_idx_list', which at its "ith" index
 stores the index in 'a_list' at which the "ith" intersection point lies.
 =#
-function _build_ab_list(::Type{T}, poly_a, poly_b) where T
+function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f) where T
     # Make a list for nodes of each polygon
     a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b)
     b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
@@ -37,8 +37,8 @@ function _build_ab_list(::Type{T}, poly_a, poly_b) where T
     _classify_crossing!(T, a_list, b_list)
 
     # Flag the entry and exits
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list)
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list)
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, (x) -> delay_bounce_f(x, true))
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list, delay_cross_f, (x) -> delay_bounce_f(x, false))
 
     return a_list, b_list, a_idx_list
 end
@@ -217,6 +217,7 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
     # keep track of unmatched bouncing chains
     start_chain_edge, start_chain_idx = unknown, 0
     unmatched_end_chain_edge, unmatched_end_chain_idx = unknown, 0
+    same_winding = true
     # loop over list points
     for next_idx in 1:napts
         a_next = a_list[next_idx]
@@ -250,6 +251,7 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
                 if start_chain_edge == unknown  # start loop on overlapping chain
                     unmatched_end_chain_edge = b_side
                     unmatched_end_chain_idx = i
+                    same_winding = a_prev_is_b_prev
                 else  # close overlapping chain
                     # update end of chain with endpoint and crossing / bouncing tags
                     crossing = b_side != start_chain_edge
@@ -259,7 +261,8 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
                     )
                     b_list[j] = PolyNode{T}(;
                         point = curr_pt.point, inter = true, neighbor = i,
-                        crossing = crossing, endpoint = end_chain, fracs = curr_pt.fracs,
+                        crossing = crossing, endpoint = same_winding ? end_chain : start_chain,
+                        fracs = curr_pt.fracs,
                     )
                     # update start of chain with endpoint and crossing / bouncing tags
                     start_pt = a_list[start_chain_idx]
@@ -269,7 +272,8 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
                     )
                     b_list[start_pt.neighbor] = PolyNode{T}(;
                         point = start_pt.point, inter = true, neighbor = start_chain_idx,
-                        crossing = crossing, endpoint = start_chain, fracs = start_pt.fracs,
+                        crossing = crossing, endpoint = same_winding ? start_chain : end_chain,
+                        fracs = start_pt.fracs,
                     )
                 end
             # start of overlapping chain
@@ -277,6 +281,7 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
                 b_side = a_next_is_b_prev ? b_next_side : b_prev_side
                 start_chain_edge = b_side
                 start_chain_idx = i
+                same_winding = a_next_is_b_next
             end
         end
         a_prev = curr_pt
@@ -294,7 +299,8 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
         )
         b_list[end_chain_pt.neighbor] = PolyNode{T}(;
             point = end_chain_pt.point, inter = true, neighbor = unmatched_end_chain_idx,
-            crossing = crossing, endpoint = end_chain, fracs = end_chain_pt.fracs,
+            crossing = crossing, endpoint = same_winding ? end_chain : start_chain,
+            fracs = end_chain_pt.fracs,
         )
         # update start of chain with endpoint and crossing / bouncing tags
         start_pt = a_list[start_chain_idx]
@@ -304,7 +310,8 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
         )
         b_list[start_pt.neighbor] = PolyNode{T}(;
             point = start_pt.point, inter = true, neighbor = start_chain_idx,
-            crossing = crossing, endpoint = start_chain, fracs = start_pt.fracs,
+            crossing = crossing, endpoint = same_winding ? start_chain : end_chain,
+            fracs = start_pt.fracs,
         )
     end
 end
@@ -338,7 +345,7 @@ This function flags all the intersection points as either an 'entry' or 'exit' p
 relation to the given polygon. Returns true if there are crossing points to classify, else
 returns false. Used for clipping polygons by other polygons.
 =#
-function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list)
+function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f)
     # Find starting index if there is one
     start_idx = findfirst(_next_edge_off, pt_list)
     isnothing(start_idx) && return
@@ -357,12 +364,13 @@ function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list)
             start_crossing, end_crossing = curr_pt.crossing, curr_pt.crossing
             if curr_pt.endpoint == end_chain
                 start_pt = pt_list[start_chain_idx]
-                if curr_pt.crossing
-                    start_crossing, end_crossing = !status, status
-                else
+                if curr_pt.crossing  # delayed crossing
+                    start_crossing, end_crossing = delay_cross_f(status)
+                else  # delayed bouncing
                     next_idx = ii < npts ? (ii + 1) : 1
                     next_val = (curr_pt.point .+ pt_list[next_idx].point) ./ 2
-                    start_crossing = _point_filled_curve_orientation(next_val, poly; in = true, on = false, out = false)
+                    pt_in_poly = _point_filled_curve_orientation(next_val, poly; in = true, on = false, out = false)
+                    start_crossing = delay_bounce_f(pt_in_poly)
                     end_crossing = start_crossing
                 end
                 pt_list[start_chain_idx] = PolyNode(;
@@ -443,7 +451,7 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
         on_a_list = true
         # Find first unprocessed intersecting point in subject polygon
         processed_pts += 1
-        first_idx = findnext(x -> x != 0, a_idx_list, processed_pts)
+        first_idx = findnext(x -> x != 0, a_idx_list, processed_pts) # TODO: should this be processed_points?
         idx = a_idx_list[first_idx]
         a_idx_list[first_idx] = 0
         start_pt = a_list[idx]
@@ -470,7 +478,8 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
                     # Keep track of processed intersection points
                     same_status = curr.ent_exit == prev_status
                     curr_not_start = curr != start_pt && curr != b_list[start_pt.neighbor]
-                    if curr.crossing && curr_not_start
+                    !curr_not_start && break
+                    if (on_a_list && curr.crossing) || (!on_a_list && a_list[curr.neighbor].crossing)
                         processed_pts += 1
                         for (i, a_idx) in enumerate(a_idx_list)
                             if a_idx != 0 && equals(a_list[a_idx].point, curr.point)
@@ -544,6 +553,7 @@ polygons, they are removed from the list
 =#
 function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
     n_polys = length(return_polys)
+    remove_idx = fill(false, n_polys)
     # Remove set of holes from all polygons
     for i in 1:n_polys
         n_new_per_poly = 0
@@ -551,13 +561,16 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
             # loop through all pieces of original polygon (new pieces added to end of list)
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
                 curr_poly = return_polys[j]
-                isnothing(curr_poly) && continue
+                remove_idx[j] && continue
                 n_existing_holes = GI.nhole(curr_poly)
                 curr_poly_ext = n_existing_holes > 0 ? GI.Polygon([GI.getexterior(curr_poly)]) : curr_poly
                 in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; closed_line = true)
                 if in_ext  # hole is at least partially within the polygon's exterior
                     new_hole, new_hole_poly, n_new_pieces = _combine_holes!(T, curr_hole, curr_poly, return_polys)
-                    n_new_per_poly += n_new_pieces
+                    if n_new_pieces > 0
+                        append!(remove_idx, fill(false, n_new_pieces))
+                        n_new_per_poly += n_new_pieces
+                    end
                     if !on_ext && !out_ext  # hole is completly within exterior
                         push!(curr_poly.geom, new_hole)
                     else  # hole is partially within and outside of polygon's exterior
@@ -567,19 +580,20 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
                         curr_poly.geom[1] = GI.getexterior(new_polys[1])
                         if n_new_polys > 0  # add any extra pieces
                             append!(return_polys, @view new_polys[2:end])
+                            append!(remove_idx, fill(false, n_new_polys))
                             n_new_per_poly += n_new_polys
                         end
                     end
                 # polygon is completly within hole
                 elseif coveredby(curr_poly_ext, GI.Polygon([curr_hole]))
-                    return_polys[j] = nothing
+                    remove_idx[j] = true
                 end
             end
         end
         n_polys += n_new_per_poly
     end
     # Remove all polygon that were marked for removal
-    filter!(!isnothing, return_polys)
+    deleteat!(return_polys, remove_idx)
     return
 end
 

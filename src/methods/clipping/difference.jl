@@ -32,6 +32,10 @@ function difference(
     return _difference(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
+_diff_delay_cross_f(x) = (x, !x)
+_diff_delay_bounce_f(x, y) = x ⊻ y
+_diff_step(x, y) = (x ⊻ y) ? 1 : (-1)
+
 #= The 'difference' function returns the difference of two polygons as a list of polygons.
 The algorithm to determine the difference was adapted from "Efficient clipping of efficient
 polygons," by Greiner and Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
@@ -44,8 +48,8 @@ function _difference(
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Find the difference of the exterior of the polygons
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b)
-    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> (x ⊻ y) ? 1 : (-1))
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f)
+    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _diff_step)
     # if no crossing points, determine if either poly is inside of the other
     if isempty(polys)
         a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)

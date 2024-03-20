@@ -32,6 +32,10 @@ function union(
     _union(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
+_union_delay_cross_f(x) = (x, !x)
+_union_delay_bounce_f(x, _) = !x
+_union_step(x, _) = x ? (-1) : 1
+
 #= This 'union' implementation returns the union of two polygons. The algorithm to determine
 the union was adapted from "Efficient clipping of efficient polygons," by Greiner and
 Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
@@ -44,8 +48,8 @@ function _union(
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Then, I get the union of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b)
-    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> x ? (-1) : 1)
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _union_delay_cross_f, _union_delay_bounce_f)
+    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _union_step)
     n_pieces = length(polys)
     # Check if one polygon totally within other and if so, return the larger polygon.
     if n_pieces == 0 # no crossing points, determine if either poly is inside the other
