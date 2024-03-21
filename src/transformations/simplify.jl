@@ -28,6 +28,7 @@ f
 
 export simplify, VisvalingamWhyatt, DouglasPeucker, RadialDistance
 
+const _SIMPLIFY_TARGET = TraitTarget{Union{GI.PolygonTrait, GI.AbstractCurveTrait, GI.MultiPointTrait, GI.PointTrait}}()
 const MIN_POINTS = 3
 const SIMPLIFY_ALG_KEYWORDS = """
 ## Keywords
@@ -128,16 +129,12 @@ simplify(
     calc_extent=false, threaded=false, crs=nothing, kw...,
  ) = _simplify(DouglasPeucker(; kw...), data; prefilter_alg, calc_extent, threaded, crs)
 
+
 #= For each algorithm, apply simplication to all curves, multipoints, and
 points, reconstructing everything else around them. =#
-function _simplify(alg::SimplifyAlg, data; prefilter_alg = nothing, kw...)
-    simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg = prefilter_alg)
-    return apply(
-        simplifier,
-        Union{GI.PolygonTrait, GI.AbstractCurveTrait, GI.MultiPointTrait, GI.PointTrait},
-        data;
-        kw...,
-    )
+function _simplify(alg::SimplifyAlg, data; prefilter_alg=nothing, kw...)
+    simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg)
+    return apply(simplifier, _SIMPLIFY_TARGET, data; kw...)
 end
 
 

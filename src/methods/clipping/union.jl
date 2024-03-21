@@ -18,7 +18,7 @@ import GeoInterface as GI, GeometryOps as GO
 
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
 p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
-union_poly = GO.union(p1, p2; target = GI.PolygonTrait)
+union_poly = GO.union(p1, p2; target = GI.PolygonTrait())
 GI.coordinates.(union_poly)
 
 # output
@@ -27,9 +27,9 @@ GI.coordinates.(union_poly)
 ```
 """
 function union(
-    geom_a, geom_b, ::Type{T} = Float64; target::Type{Target} = Nothing,
-) where {T <: AbstractFloat, Target <: Union{Nothing, GI.AbstractTrait}}
-    _union(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    geom_a, geom_b, ::Type{T}=Float64; target=nothing,
+) where {T<:AbstractFloat}
+    _union(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
 _union_delay_cross_f(x) = (x, !x)
@@ -40,7 +40,7 @@ _union_step(x, _) = x ? (-1) : 1
 the union was adapted from "Efficient clipping of efficient polygons," by Greiner and
 Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
 function _union(
-    ::Type{GI.PolygonTrait}, ::Type{T},
+    ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b,
 ) where T
@@ -78,12 +78,13 @@ function _union(
     return polys
 end
 
+
 # Many type and target combos aren't implemented
 function _union(
-    ::Type{Target}, ::Type{T},
+    ::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
-) where {Target, T}
+) where {Target,T}
     throw(ArgumentError("Union between $trait_a and $trait_b with target $Target isn't implemented yet."))
     return nothing
 end

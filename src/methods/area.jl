@@ -48,7 +48,7 @@ This is why signed area is only implemented for polygons.
 =#
 
 # Targets for applys functions
-const _AREA_TARGETS = Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}
+const _AREA_TARGETS = TraitTarget{Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}}()
 
 """
     area(geom, [T = Float64])::T

@@ -4,9 +4,9 @@ module GeometryOps
 
 using GeoInterface
 using GeometryBasics
+using GeometryBasics.StaticArrays
 import Proj
 using LinearAlgebra
-import ExactPredicates
 import Proj.CoordinateTransformations.StaticArrays
 import Base.@kwdef
 
@@ -15,8 +15,8 @@ using GeoInterface.Extents: Extents
 const GI = GeoInterface
 const GB = GeometryBasics
 
-const TuplePoint = Tuple{Float64,Float64}
-const Edge = Tuple{TuplePoint,TuplePoint}
+const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
+const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
 include("primitives.jl")
 include("utils.jl")

@@ -1,6 +1,13 @@
 # # Geometry Intersection
 export intersection, intersection_points
 
+"""
+    Enum LineOrientation
+Enum for the orientation of a line with respect to a curve. A line can be
+`line_cross` (crossing over the curve), `line_hinge` (crossing the endpoint of the curve),
+`line_over` (colinear with the curve), or `line_out` (not interacting with the curve).
+"""
+@enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
 """
     intersection(geom_a, geom_b, [T::Type]; target::Type)
@@ -18,7 +25,7 @@ import GeoInterface as GI, GeometryOps as GO
 
 line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
 line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
-inter_points = GO.intersection(line1, line2; target = GI.PointTrait)
+inter_points = GO.intersection(line1, line2; target = GI.PointTrait())
 GI.coordinates.(inter_points)
 
 # output
@@ -27,14 +34,14 @@ GI.coordinates.(inter_points)
 ```
 """
 function intersection(
-    geom_a, geom_b, ::Type{T} = Float64; target::Type{Target} = Nothing,
-) where {T <: AbstractFloat, Target <: Union{Nothing, GI.AbstractTrait}}
-    return _intersection(Target, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    geom_a, geom_b, ::Type{T}=Float64; target=nothing,
+) where {T<:AbstractFloat}
+    return _intersection(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
 # Curve-Curve Intersections with target Point
 _intersection(
-    ::Type{GI.PointTrait}, ::Type{T},
+    ::TraitTarget{GI.PointTrait}, ::Type{T},
     trait_a::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_a,
     trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b,
 ) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
@@ -47,7 +54,7 @@ The algorithm to determine the intersection was adapted from "Efficient clipping
 of efficient polygons," by Greiner and Hormann (1998).
 DOI: https://doi.org/10.1145/274363.274364 =#
 function _intersection(
-    ::Type{GI.PolygonTrait}, ::Type{T},
+    ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b,
 ) where {T}
@@ -75,7 +82,7 @@ end
 
 # Many type and target combos aren't implemented
 function _intersection(
-    ::Type{Target}, ::Type{T},
+    ::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
 ) where {Target, T}
@@ -120,13 +127,14 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
     if npoints_a > 0 && npoints_b > 0
         # Loop over pairs of edges and add any intersection points to results
         for i in eachindex(edges_a), j in eachindex(edges_b)
-            point, fracs = _intersection_point(T, edges_a[i], edges_b[j])
-            if !isnothing(point)
+            line_orient, intr1, _ = _intersection_point(T, edges_a[i], edges_b[j])
+            # TODO: Add in degenerate intersection points when line_over
+            if line_orient == line_cross || line_orient == line_hinge
                 #=
                 Determine if point is on edge (all edge endpoints excluded
                 except for the last edge for an open geometry)
                 =#
-                α, β = fracs
+                point, (α, β) = intr1
                 on_a_edge = (!a_closed && i == npoints_a && 0 <= α <= 1) ||
                     (0 <= α < 1)
                 on_b_edge = (!b_closed && j == npoints_b && 0 <= β <= 1) ||
@@ -140,43 +148,86 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
     return result
 end
 
-#= Calculates the intersection point between two lines if it exists, and as if the line
-extended to infinity, and the fractional component of each line from the initial end point
-to the intersection point.
-Inputs:
-    (a1, a2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} first line
-    (b1, b2)::Tuple{Tuple{::Real, ::Real}, Tuple{::Real, ::Real}} second line
-Outputs:
-    (x, y)::Tuple{::Real, ::Real} intersection point
-    (t, u)::Tuple{::Real, ::Real} fractional length of lines to intersection
-    Both are ::Nothing if point doesn't exist!
+#= Calculates the intersection points between two lines if they exists and the fractional
+component of each line from the initial end point to the intersection point where α is the
+fraction along (a1, a2) and β is the fraction along (b1, b2).
 
-Calculation derivation can be found here:
-    https://stackoverflow.com/questions/563198/
-=#
-function _intersection_point(::Type{T}, (a1, a2)::Tuple, (b1, b2)::Tuple) where T
+Note that the first return is the type of intersection (line_cross, line_hinge, line_over,
+or line_out). The type of intersection determines how many intersection points there are.
+If the intersection is line_out, then there are no intersection points and the two
+intersections aren't valid and shouldn't be used. If the intersection is line_cross or
+line_hinge then the lines meet at one point and the first intersection is valid, while the
+second isn't. Finally, if the intersection is line_over, then both points are valid and they
+are the two points that define the endpoints of the overlapping region between the two
+lines.
+
+Also note again that each intersection is a tuple of two tuples. The first is the
+intersection point (x,y) while the second is the ratio along the initial lines (α, β) for
+that point. 
+
+Calculation derivation can be found here: https://stackoverflow.com/questions/563198/ =#
+function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
+    # Return line orientation and 2 intersection points + fractions (nothing if don't exist)
+    line_orient = line_out
+    intr1 = ((zero(T), zero(T)), (zero(T), zero(T)))
+    intr2 = intr1
     # First line runs from p to p + r
     px, py = GI.x(a1), GI.y(a1)
     rx, ry = GI.x(a2) - px, GI.y(a2) - py
     # Second line runs from q to q + s 
     qx, qy = GI.x(b1), GI.y(b1)
     sx, sy = GI.x(b2) - qx, GI.y(b2) - qy
-    # Intersection will be where p + tr = q + us where 0 < t, u < 1 and
+    # Intersections will be where p + αr = q + βs where 0 < α, β < 1 and
     r_cross_s = rx * sy - ry * sx
     Δqp_x = qx - px
     Δqp_y = qy - py
-    point, fracs = if r_cross_s != 0  # if lines aren't parallel
-        t = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
-        u = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
-        x = px + t * rx
-        y = py + t * ry
-        (T(x), T(y)), (T(t), T(u))
-    elseif  sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
-        t = (Δqp_x * rx + Δqp_y * ry) / (rx^2 + ry^2)
-        u = -(Δqp_x * sx + Δqp_y * sy) / (sx^2 + sy^2)
-        nothing, (T(t), T(u))
-    else
-        nothing, nothing
+    if r_cross_s != 0  # if lines aren't parallel
+        α = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
+        β = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
+        x = px + α * rx
+        y = py + α * ry
+        if 0 ≤ α ≤ 1 && 0 ≤ β ≤ 1
+            intr1 = (T(x), T(y)), (T(α), T(β))
+            line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
+        end
+    elseif sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
+        # Determine overlap fractions
+        r_dot_r = (rx^2 + ry^2)
+        s_dot_s = (sx^2 + sy^2)
+        r_dot_s = rx * sx + ry * sy
+        b1_α = (Δqp_x * rx + Δqp_y * ry) / r_dot_r
+        b2_α = b1_α + r_dot_s / r_dot_r
+        a1_β = -(Δqp_x * sx + Δqp_y * sy) / s_dot_s
+        a2_β = a1_β + r_dot_s / s_dot_s
+        # Determine which endpoints start and end the overlapping region
+        n_intrs = 0
+        if 0 ≤ a1_β ≤ 1
+            n_intrs += 1
+            intr1 = (T.(a1), (zero(T), T(a1_β)))
+        end
+        if 0 ≤ a2_β ≤ 1
+            n_intrs += 1
+            new_intr = (T.(a2), (one(T), T(a2_β)))
+            n_intrs == 1 && (intr1 = new_intr)
+            n_intrs == 2 && (intr2 = new_intr)
+        end
+        if 0 < b1_α < 1 
+            n_intrs += 1
+            new_intr = (T.(b1), (T(b1_α), zero(T)))
+            n_intrs == 1 && (intr1 = new_intr)
+            n_intrs == 2 && (intr2 = new_intr)
+        end
+        if 0 < b2_α < 1
+            n_intrs += 1
+            new_intr = (T.(b2), (T(b2_α), one(T)))
+            n_intrs == 1 && (intr1 = new_intr)
+            n_intrs == 2 && (intr2 = new_intr)
+        end
+        if n_intrs == 1
+            line_orient = line_hinge
+        elseif n_intrs == 2
+            line_orient = line_over
+        end
     end
-    return point, fracs
+    return line_orient, intr1, intr2
 end
