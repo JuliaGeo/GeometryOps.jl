@@ -12,15 +12,6 @@ Enum for the orientation of a point with respect to a curve. A point can be
 """
 @enum PointOrientation point_in=1 point_on=2 point_out=3
 
-"""
-    Enum LineOrientation
-Enum for the orientation of a line with respect to a curve. A line can be
-`line_cross` (crossing over the curve), `line_hinge` (crossing the endpoint of the curve),
-`line_over` (colinear with the curve), or `line_out` (not interacting with the curve).
-"""
-@enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
-
-
 #=
 Determines if a point meets the given checks with respect to a curve.
 
@@ -146,7 +137,7 @@ function _line_curve_process(
         for j in (closed_curve ? 1 : 2):nc
             c_end = _tuple_point(GI.getpoint(curve, j))
             # Check if line and curve segments meet
-            seg_val = _segment_segment_orientation((l_start, l_end), (c_start, c_end))
+            seg_val, intr1, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end))
             # If segments are co-linear
             if seg_val == line_over
                 !over_allow && return false
@@ -164,7 +155,7 @@ function _line_curve_process(
                     in_req_met = true
                 elseif seg_val == line_hinge  # could cross or overlap
                     # Determine location of intersection point on each segment
-                    (α, β) = _find_intersect_fracs(l_start, l_end, c_start, c_end)
+                    (_, (α, β)) = intr1
                     if ( # Don't consider edges of curves as they can't cross
                         (!closed_line && ((α == 0 && i == 2) || (α == 1 && i == nl))) ||
                         (!closed_curve && ((β == 0 && j == 2) || (β == 1 && j == nc)))
@@ -180,7 +171,8 @@ function _line_curve_process(
                                 α, β, l_start, l_end, c_start, c_end,
                                 i, line, j, curve,
                             )
-                            if _segment_segment_orientation(l, c) == line_hinge
+                            next_val, _, _ = _intersection_point(Float64, l, c)
+                            if next_val == line_hinge
                                 !cross_allow && return false
                             else
                                 !over_allow && return false
@@ -219,30 +211,6 @@ function _find_new_seg(i, ls, le, cs, ce)
         break_off = false
     end
     return i, ls, break_off
-end
-
-#= Find where line and curve segments intersect by fraction of length. α is the fraction of
-the line (ls to le) and β is the traction of the curve (cs to ce). All inputs are tuples. =#
-function _find_intersect_fracs(ls, le, cs, ce)
-    point, fracs = _intersection_point(
-        Float64,
-        (ls, le),
-        (cs, ce)
-    )
-    (α, β) = if !isnothing(point)
-        fracs
-    else  # line and curve segments are parallel
-        if equals(ls, cs)
-            (0, 0)
-        elseif equals(ls, ce)
-            (0, 1)
-        elseif equals(le, cs)
-            (1, 0)
-        else  # equals(l_end, c_end)
-            (1, 1)
-        end
-    end
-    return α, β
 end
 
 #= Find next set of segments needed to determine if given hinge segments cross or not.=#
@@ -538,52 +506,6 @@ function _point_filled_curve_orientation(
 end
 
 #=
-Determines the type of interaction between two line segments. If the segments
-`cross`, this means that they have a single intersection point that isn't on
-either of their enpoints. If they form a `hinge`, they meet at one of the
-segments endpoints. If they are `over`, then they are co-linear for at least
-some of the length of the segments. Finally, if they are `out`, then the
-segments are disjoint.
-
-Point should be an object of point trait and curve should be an object with a
-linestring or linearring trait.
-
-Can provide values of in, on, and out keywords, which determines return values
-for each scenario. 
-=#
-function _segment_segment_orientation(
-    (a_point, b_point), (c_point, d_point);
-    cross::T = line_cross, hinge::T = line_hinge,
-    over::T = line_over, out::T = line_out,
-) where T
-    (ax, ay) = Float64.(a_point)
-    (bx, by) = Float64.(b_point)
-    (cx, cy) = Float64.(c_point)
-    (dx, dy) = Float64.(d_point)
-    meet_type = ExactPredicates.meet((ax, ay), (bx, by), (cx, cy), (dx, dy))
-    # Lines meet at one point within open segments 
-    meet_type == 1 && return cross
-    # Lines don't meet at any points
-    meet_type == -1 && return out
-    # Lines meet at one or more points within closed segments
-    if _isparallel(((ax, ay), (bx, by)), ((cx, cy), (dx, dy)))
-        min_x, max_x = cx < dx ? (cx, dx) : (dx, cx)
-        min_y, max_y = cy < dy ? (cy, dy) : (dy, cy)
-        if (
-            ((ax ≤ min_x && bx ≤ min_x) || (ax ≥ max_x && bx ≥ max_x)) &&
-            ((ay ≤ min_y && by ≤ min_y) || (ay ≥ max_y && by ≥ max_y))
-        )
-            # a_point and b_point are on the same side of segment, don't overlap
-            return hinge
-        else
-            return over
-        end
-    end
-    # if lines aren't parallel then they must hinge
-    return hinge
-end
-
-#=
 Determines the types of interactions of a line with a filled-in curve. By
 filled-in curve, I am referring to the exterior ring of a poylgon, for example.
 
@@ -636,10 +558,7 @@ function _line_filled_curve_interactions(
         for j in 1:nc
             c_end = _tuple_point(GI.getpoint(curve, j))
             # Check if two line and curve segments meet
-            seg_val = _segment_segment_orientation(
-                (l_start, l_end),
-                (c_start, c_end),
-            )
+            seg_val, _, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end))
             if seg_val != line_out
                 # If line and curve meet, then at least one point is on boundary
                 on_curve = true
