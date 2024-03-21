@@ -52,7 +52,7 @@ and maximum x and y-values. This is computed differently for different geometrie
 - The signed area of a curve is always zero.
 - The signed area of a polygon is calculated by tracing along its edges and switching to the
     cell edges if needed.
-- The covverage of a geometry collection, multi-geometry, feature collection of
+- The coverage of a geometry collection, multi-geometry, feature collection of
     array/iterable is the sum of the coverages of all of the sub-geometries. 
 
 Result will be of type T, where T is an optional argument with a default value

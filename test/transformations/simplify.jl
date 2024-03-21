@@ -1,5 +1,6 @@
 import GeoJSON
 import JLD2
+import LibGEOS as LG
 
 datadir = realpath(joinpath(dirname(pathof(GO)), "../test/data"))
 @testset "RadialDistance and VisvalingamWhyatt" begin
