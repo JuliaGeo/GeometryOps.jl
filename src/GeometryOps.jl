@@ -4,11 +4,9 @@ module GeometryOps
 
 using GeoInterface
 using GeometryBasics
-using GeometryBasics.StaticArrays
-import Proj
-using LinearAlgebra
+using LinearAlgebra, Statistics
 import ExactPredicates
-import Proj.CoordinateTransformations.StaticArrays
+import CoordinateTransformations.StaticArrays
 import Base.@kwdef
 
 using GeoInterface.Extents: Extents
@@ -56,5 +54,10 @@ include("transformations/tuples.jl")
 include("transformations/transform.jl")
 include("transformations/correction/geometry_correction.jl")
 include("transformations/correction/closed_ring.jl")
+
+function __init__()
+    # Handle all available errors!
+    Base.Experimental.register_error_hint(_reproject_error_hinter, MethodError)
+end
 
 end

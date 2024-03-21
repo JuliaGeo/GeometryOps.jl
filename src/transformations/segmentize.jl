@@ -87,11 +87,8 @@ One can also omit the `equatorial_radius` and `flattening` keyword arguments, an
 This method uses the Proj/GeographicLib API for geodesic calculations.
 """
 struct GeodesicSegments <: SegmentizeMethod 
-    geodesic::Proj.geod_geodesic
+    geodesic# ::Proj.geod_geodesic
     max_distance::Float64
-end
-function GeodesicSegments(; max_distance, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563, geodesic::Proj.geod_geodesic = Proj.geod_geodesic(equatorial_radius, flattening))
-    return GeodesicSegments(geodesic, max_distance)
 end
 
 # ## Implementation
@@ -152,23 +149,7 @@ function _fill_linear_kernel!(method::LinearSegments, new_coords::Vector, x1, y1
     push!(new_coords, (x2, y2))
     return nothing
 end
-function _fill_linear_kernel!(method::GeodesicSegments, new_coords::Vector, x1, y1, x2, y2)
-    geod_line = Proj.geod_inverseline(method.geodesic, y1, x1, y2, x2)
-    # This is the distance in meters computed between the two points.
-    # It's `s13` because `geod_inverseline` sets point 3 to the second input point.
-    distance = geod_line.s13 
-    if distance > method.max_distance
-        n_segments = ceil(Int, distance / method.max_distance)
-        for i in 1:(n_segments - 1)
-            y, x, _ = Proj.geod_position(geod_line, i / n_segments * distance)
-            push!(new_coords, (x, y))
-        end
-    end
-    # End the line with the original coordinate,
-    # to avoid any multiplication errors.
-    push!(new_coords, (x2, y2))
-    return nothing
-end
+# The `_fill_linear_kernel` definition for `GeodesicSegments` is in the `GeometryOpsProjExt` extension module, in the `segmentize.jl` file.
 
 #=
 
@@ -179,6 +160,7 @@ end
 using BenchmarkTools
 
 import GeometryOps as GO, LibGEOS as LG, GeoInterface as GI
+import Proj # for geodesic segments
 
 rectangle = GI.Wrappers.Polygon([[(0.0, 50.0), (7.071, 57.07), (0.0, 64.14), (-7.07, 57.07), (0.0, 50.0)]])
 lg_rectangle = GI.convert(LG, rectangle)

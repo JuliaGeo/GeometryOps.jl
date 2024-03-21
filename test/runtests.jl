@@ -7,6 +7,7 @@ using GeoInterface.Extents: Extents
 using ArchGDAL
 using LibGEOS
 using Random, Distributions
+using Proj
 
 const GI = GeoInterface
 const AG = ArchGDAL
