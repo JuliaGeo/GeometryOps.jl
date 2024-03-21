@@ -5,7 +5,7 @@ module GeometryOps
 using GeoInterface
 using GeometryBasics
 using LinearAlgebra, Statistics
-import CoordinateTransformations.StaticArrays
+import GeometryBasics.StaticArrays
 import Base.@kwdef
 
 using GeoInterface.Extents: Extents

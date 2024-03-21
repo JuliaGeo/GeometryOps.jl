@@ -45,7 +45,7 @@ TraitTarget(::Type{T}) where T = TraitTarget{T}()
 TraitTarget(::T) where T<:GI.AbstractTrait = TraitTarget{T}()
 TraitTarget(::TraitTarget{T}) where T = TraitTarget{T}()
 TraitTarget(::Type{<:TraitTarget{T}}) where T = TraitTarget{T}()
-TraitTarget(traits::GI.AbstractTrait...) where T = TraitTarget{Union{map(typeof, traits)...}}()
+TraitTarget(traits::GI.AbstractTrait...) = TraitTarget{Union{map(typeof, traits)...}}()
 
 const THREADED_KEYWORD = "- `threaded`: `true` or `false`. Whether to use multithreading. Defaults to `false`."
 const CRS_KEYWORD = "- `crs`: The CRS to attach to geometries. Defaults to `nothing`."
