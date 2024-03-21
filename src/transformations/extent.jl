@@ -16,4 +16,4 @@ $THREADED_KEYWORD
 $CRS_KEYWORD
 """
 embed_extent(x; threaded=false, crs=nothing) = 
-    apply(identity, GI.PointTrait, x; calc_extent=true, threaded, crs)
+    apply(identity, GI.PointTrait(), x; calc_extent=true, threaded, crs)

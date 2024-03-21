@@ -515,7 +515,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
                     if !on_ext && !out_ext  # hole is completly within exterior
                         push!(curr_poly.geom, new_hole)
                     else  # hole is partially within and outside of polygon's exterior
-                        new_polys = difference(curr_poly_ext, new_hole_poly, T; target = GI.PolygonTrait)
+                        new_polys = difference(curr_poly_ext, new_hole_poly, T; target=GI.PolygonTrait())
                         n_new_polys = length(new_polys) - 1
                         # replace original -> can't have a hole
                         curr_poly.geom[1] = GI.getexterior(new_polys[1])
@@ -559,7 +559,7 @@ function _combine_holes!(::Type{T}, new_hole, curr_poly, return_polys) where T
         old_hole_poly = GI.Polygon([old_hole])
         if intersects(new_hole_poly, old_hole_poly)
             # If the holes intersect, combine them into a bigger hole
-            hole_union = union(new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait)[1]
+            hole_union = union(new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait())[1]
             push!(remove_idx, k + 1)
             new_hole = GI.getexterior(hole_union)
             new_hole_poly = GI.Polygon([new_hole])

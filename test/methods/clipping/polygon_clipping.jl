@@ -122,7 +122,7 @@ test_pairs = [
 const ϵ = 1e-10
 # Compare clipping results from GeometryOps and LibGEOS
 function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
-    GO_result_list = GO_f(p1, p2; target = GI.PolygonTrait)
+    GO_result_list = GO_f(p1, p2; target = GI.PolygonTrait())
     LG_result_geom = LG_f(p1, p2)
     if LG_result_geom isa LG.GeometryCollection
         poly_list = LG.Polygon[]
