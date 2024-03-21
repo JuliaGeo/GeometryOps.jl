@@ -128,6 +128,7 @@ test_pairs = [
     (p46, p47, "p46", "p47", ""),
     (p48, p49, "p48", "p49", ""),
     (p46, p50, "p46", "p50", ""),
+    (p50, p46, "p50", "p46", ""),
 ]
 
 GO.difference(p46, p50; target = GI.PolygonTrait)
@@ -160,7 +161,6 @@ end
 # Test clipping functions and print error message if tests fail
 function test_clipping(GO_f, LG_f, f_name)
     for (p1, p2, sg1, sg2, sdesc) in test_pairs
-        @show sg1, sg2
         pass_test = compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         @test pass_test
         !pass_test && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")
