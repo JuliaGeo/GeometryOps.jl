@@ -90,6 +90,7 @@ p46 = GI.Polygon([[(0.0, 0.0), (6.0, 0.0), (6.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
 p47 = GI.Polygon([[(1.0, -1.0), (2.0, -1.0), (2.0, 0.0), (5.0, 0.0), (5.0, 2.0), (4.0, 2.0), (4.0, 1.0), (1.0, 1.0), (1.0, -1.0)]])
 p48 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (2.0, 1.0), (3.0, 0.0), (5.0, 0.0), (5.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
 p49 = GI.Polygon([[(1.0, -1.0), (4.0, -1.0), (4.0, 2.0), (3.0, 2.0), (3.0, 0.0), (2.0, 1.0), (1.0, 0.0), (1.0, -1.0)]])
+p50 = GI.Polygon([[(1.0, -1.0), (1.0, 1.0), (2.0, 0.0), (3.0, 0.0), (3.0, -1.0), (1.0, -1.0)]])
 
 test_pairs = [
     (p1, p1, "p1", "p1", "Same polygon"),
@@ -126,9 +127,10 @@ test_pairs = [
     (p44, p45, "p44", "p45", "Holes form a ring, with an additional hole within that ring of holes"),
     (p46, p47, "p46", "p47", ""),
     (p48, p49, "p48", "p49", ""),
+    (p46, p50, "p46", "p50", ""),
 ]
 
-# GO.difference(p27, p28; target = GI.PolygonTrait)
+GO.difference(p46, p50; target = GI.PolygonTrait)
 
 const ϵ = 1e-10
 # Compare clipping results from GeometryOps and LibGEOS
