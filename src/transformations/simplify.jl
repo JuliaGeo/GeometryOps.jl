@@ -42,7 +42,9 @@ usa_poly = GI.getgeom(usa_multipoly, findmax(GO.area.(GI.getgeom(usa_multipoly))
 usa_centroid = GO.centroid(usa_poly)
 usa_reflected = GO.apply(Translation(usa_centroid...) ∘ LinearMap(Makie.rotmatrix2d(π)) ∘ Translation((-).(usa_centroid)...) ∘ GO.Point2{Float64}, PointTrait, usa_poly)
 f, a, p = plot(usa_poly; label = "Original"); plot!(usa_reflected; label = "Reflected")
-
+```
+This is the complex polygon we'll be benchmarking.
+```@example benchmark
 simplify_suite = BenchmarkGroup(["Simplify"])
 singlepoly_suite = BenchmarkGroup(["Polygon", "title:Polygon simplify", "subtitle:Random blob"])
 multipoly_suite = BenchmarkGroup(["MultiPolygon", "title:Multipolygon simplify", "subtitle:USA multipolygon"])

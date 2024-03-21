@@ -44,7 +44,7 @@ function reproject end
 # prints a suggestion if the Proj extension is not loaded.
 
 function _reproject_error_hinter(io, exc, argtypes, kwargs)
-    if isnothing(Base.get_extension(GeometryOps, :GeometryOpsProjExt))
+    if isnothing(Base.get_extension(GeometryOps, :GeometryOpsProjExt)) && exc.f == reproject
         print(io, "\n\nThe `reproject` method requires the Proj.jl package to be explicitly loaded.\n")
         print(io, "You can do this by simply typing ")
         printstyled(io, "using Proj"; color = :cyan, bold = true)

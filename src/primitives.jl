@@ -1,5 +1,7 @@
 # # Primitive functions
 
+export apply, applyreduce, TraitTarget
+
 # This file mainly defines the [`apply`](@ref) function and its relatives.
 
 #=

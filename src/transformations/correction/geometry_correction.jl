@@ -50,7 +50,7 @@ function fix(geometry; corrections = GeometryCorrection[ClosedRing(),], kwargs..
     for Trait in (GI.PointTrait, GI.MultiPointTrait, GI.LineStringTrait, GI.LinearRingTrait, GI.MultiLineStringTrait, GI.PolygonTrait, GI.MultiPolygonTrait)
         available_corrections = findall(x -> x == Trait, traits)
         isempty(available_corrections) && continue
-        println("Correcting for $(Trait)")
+        @debug "Correcting for $(Trait)"
         net_function = reduce(∘, corrections[available_corrections])
         final_geometry = apply(net_function, Trait, final_geometry; kwargs...)
     end
