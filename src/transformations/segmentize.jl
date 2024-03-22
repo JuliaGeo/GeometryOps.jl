@@ -26,9 +26,10 @@ collect(GI.getpoint(linear))
 ```
 You can see that this geometry was segmentized correctly, and now has 8 vertices where it previously had only 4.
 
-Now, we'll also segmentize this using the geodetic method, which is more accurate for lat/lon coordinates.
+Now, we'll also segmentize this using the geodesic method, which is more accurate for lat/lon coordinates.
 
 ```@example segmentize
+using Proj # required to activate the `GeodesicSegments` method!
 geodesic = GO.segmentize(GO.GeodesicSegments(max_distance = 1000), rectangle)
 length(GI.getpoint(geodesic) |> collect)
 ```
@@ -39,7 +40,7 @@ Now, let's see what they look like!  To make this fair, we'll use approximately 
 ```@example segmentize
 using CairoMakie
 linear = GO.segmentize(rectangle; max_distance = 0.01)
-geodesic = GO.segmentize(GO.GeodesicSegments(; max_distance = 900), rectangle)
+geodesic = GO.segmentize(GO.GeodesicSegments(; max_distance = 1000), rectangle)
 f, a, p = poly(collect(GI.getpoint(linear)); label = "Linear", axis = (; aspect = DataAspect()))
 p2 = poly!(collect(GI.getpoint(geodesic)); label = "Geodesic")
 axislegend(a; position = :lt)
@@ -118,6 +119,7 @@ provided in lat/lon coordinates then the `max_distance` will be in degrees of ar
 Base.@kwdef struct LinearSegments <: SegmentizeMethod 
     max_distance::Float64
 end
+
 """
     GeodesicSegments(; max_distance::Real, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563)
 
@@ -139,6 +141,16 @@ This method uses the Proj/GeographicLib API for geodesic calculations.
 struct GeodesicSegments <: SegmentizeMethod 
     geodesic# ::Proj.geod_geodesic
     max_distance::Float64
+end
+
+# Add an error hint for GeodesicSegments if Proj is not loaded!
+function _geodesic_segments_error_hinter(io, exc, argtypes, kwargs)
+    if isnothing(Base.get_extension(GeometryOps, :GeometryOpsProjExt)) && exc.f == GeodesicSegments
+        print(io, "\n\nThe `GeodesicSegments` method requires the Proj.jl package to be explicitly loaded.\n")
+        print(io, "You can do this by simply typing ")
+        printstyled(io, "using Proj"; color = :cyan, bold = true)
+        println(io, " in your REPL, \nor otherwise loading Proj.jl via using or import.")
+    end
 end
 
 # ## Implementation
