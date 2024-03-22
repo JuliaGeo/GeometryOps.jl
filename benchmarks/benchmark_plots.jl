@@ -1,4 +1,6 @@
-using Printf, Statistics, MakieThemes, BenchmarkTools
+using Printf, Statistics
+using Makie, MakieThemes
+using BenchmarkTools, Chairmarks
 
 function compute_gridsize(numplts::Int, nr::Int, nc::Int)
     # figure out how many rows/columns we need
@@ -57,11 +59,17 @@ end
     plot_trials(result, title_str; theme = MakieThemes.bbc())::Figure
 This function takes `result::BenchmarkTools.BenchmarkGroup` and plots the trials.  It returns the figure.
 """
+plot_trials(results; kwargs...) = begin
+    fig = Figure()
+    plot_trials(fig[1, 1], results; kwargs...)
+    fig
+end
+
 function plot_trials(
-        results, 
-        title_str_part; 
-        theme = merge(Makie.CURRENT_DEFAULT_THEME, MakieThemes.bbc()),
-        legend_position = (1, 1, TopRight()),
+        gp::Makie.GridPosition,
+        results;
+        theme = merge(deepcopy(Makie.CURRENT_DEFAULT_THEME), MakieThemes.bbc()),
+        legend_position = Makie.automatic, #(1, 1, TopRight()),
         legend_orientation = :horizontal,
         legend_halign = 1.0,
         legend_valign = -0.25,
@@ -80,20 +88,32 @@ function plot_trials(
         push!(labels, label)
     end
 
-    return Makie.with_theme(theme) do
-        fig = Figure()
+    tag_attrs = capture_tag_attrs(results.tags)
+    tag_theme = merge(theme, tag_attrs)
+
+    lp = if legend_position isa Makie.Automatic 
+        gp.layout[gp.span.rows, gp.span.cols, TopRight()] 
+    elseif legend_position isa Tuple 
+        gp.layout[legend_position...] 
+    elseif legend_position isa Union{Makie.GridPosition, Makie.GridSubposition}
+        legend_position
+    else
+        error()
+    end
+
+    return Makie.with_theme(tag_theme) do
         ax = Axis(
-            fig[1, 1];
-            title = title_str_part, subtitle = "Tested on a regular circle",
+            gp;
+            tag_attrs.Axis...,
             xlabel = "Number of points", ylabel = "Time to calculate",
             xscale = log10, yscale = log10, ytickformat = _prettytime,
         ) 
         plots = [scatterlines!(ax, x, y; label = label) for (x, y, label) in zip(xs, ys, labels)]
         setproperty!.(getindex.(getproperty.(plots, :plots), 1), :alpha, 0.1)
         leg = Legend(
-            fig[legend_position...], ax; 
-            tellwidth = length(legend_position) != 3 && legend_orientation == :vertical, 
-            tellheight = length(legend_position) != 3 && legend_orientation == :horizontal, 
+            lp, ax; 
+            tellwidth = legend_position isa Union{Tuple, Makie.Automatic} && (legend_position isa Makie.Automatic || length(legend_position) != 3) && legend_orientation == :vertical, 
+            tellheight = legend_position isa Union{Tuple, Makie.Automatic} && (legend_position isa Makie.Automatic || length(legend_position) != 3) && legend_orientation == :horizontal, 
             halign = legend_halign, 
             valign = legend_valign, 
             orientation = legend_orientation
@@ -103,6 +123,27 @@ function plot_trials(
         ax.xticklabelsvisible[] = true
         ax.yticks[] = Makie.LogTicks(Makie.WilkinsonTicks(7; k_min = 4))
         ax.ygridwidth[] = 0.75
-        return fig
+        return ax
     end
+end
+
+const _tag_includelist = ["title", "subtitle"]
+
+function capture_tag_attrs(tags)
+    attr_dict = Attributes()
+    axis = attr_dict.Axis = Attributes()
+    for tag in tags
+        for possibility in sort(_tag_includelist; by = length)
+            if startswith(tag, possibility)
+                axis[Symbol(possibility)] = tag[(length(possibility) + 2):end]
+                break
+            end
+        end
+    end
+    return attr_dict
+end
+
+function decompose_benchmarksuite_to_2ndlevel(result)
+    # here, `result` is a BenchmarkGroup.
+    
 end

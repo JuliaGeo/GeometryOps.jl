@@ -29,8 +29,9 @@ f
 We benchmark these methods against LibGEOS's `simplify` implementation, which uses the Douglas-Peucker algorithm.
 
 ```@example benchmark
-using BenchmarkTools, Chairmarks, GeoJSON, CoordinateTransformations
+using BenchmarkTools, Chairmarks, GeoJSON, CairoMakie
 import GeometryOps as GO, LibGEOS as LG, GeoInterface as GI
+using CoordinateTransformations
 import Main: plot_trials # hide
 lg_and_go(geometry) = (GI.convert(LG, geometry), GO.tuples(geometry))
 # Load in the Natural Earth admin GeoJSON, then extract the USA's geometry
@@ -40,14 +41,15 @@ include(joinpath(dirname(dirname(pathof(GO))), "test", "data", "polygon_generati
 
 usa_poly = GI.getgeom(usa_multipoly, findmax(GO.area.(GI.getgeom(usa_multipoly)))[2]) # isolate the poly with the most area
 usa_centroid = GO.centroid(usa_poly)
-usa_reflected = GO.apply(Translation(usa_centroid...) ∘ LinearMap(Makie.rotmatrix2d(π)) ∘ Translation((-).(usa_centroid)...) ∘ GO.Point2{Float64}, PointTrait, usa_poly)
-f, a, p = plot(usa_poly; label = "Original"); plot!(usa_reflected; label = "Reflected")
+usa_reflected = GO.transform(Translation(usa_centroid...) ∘ LinearMap(Makie.rotmatrix2d(π)) ∘ Translation((-).(usa_centroid)...), usa_poly)
+f, a, p = plot(usa_poly; label = "Original", axis = (; aspect = DataAspect()))#; plot!(usa_reflected; label = "Reflected")
 ```
 This is the complex polygon we'll be benchmarking.
 ```@example benchmark
 simplify_suite = BenchmarkGroup(["Simplify"])
 singlepoly_suite = BenchmarkGroup(["Polygon", "title:Polygon simplify", "subtitle:Random blob"])
-multipoly_suite = BenchmarkGroup(["MultiPolygon", "title:Multipolygon simplify", "subtitle:USA multipolygon"])
+
+include(joinpath(dirname(dirname(pathof(GO))), "test", "data", "polygon_generation.jl"))
 
 for n_verts in round.(Int, exp10.(LinRange(log10(10), log10(10_000), 10)))
     geom = GI.Wrappers.Polygon(generate_random_poly(0, 0, n_verts, 2, 0.2, 0.3))
@@ -57,6 +59,12 @@ for n_verts in round.(Int, exp10.(LinRange(log10(10), log10(10_000), 10)))
     singlepoly_suite["GO-RD"][GI.npoint(geom)] = @be GO.simplify($(GO.RadialDistance(; tol = 0.1)), $geom_go) seconds=1
     singlepoly_suite["LibGEOS"][GI.npoint(geom)] = @be LG.simplify($geom_lg, 0.1) seconds=1
 end
+
+plot_trials(singlepoly_suite; legend_position=(1, 1, TopRight()), legend_valign = -2, legend_halign = 1.2, legend_orientation = :horizontal)
+```
+
+```@example benchmark
+multipoly_suite = BenchmarkGroup(["MultiPolygon", "title:Multipolygon simplify", "subtitle:USA multipolygon"])
 
 for frac in exp10.(LinRange(log10(0.3), log10(1), 6)) # TODO: this example isn't the best.  How can we get this better?
     geom = GO.simplify(usa_multipoly; ratio = frac)
@@ -75,12 +83,7 @@ for frac in exp10.(LinRange(log10(0.3), log10(1), 6)) # TODO: this example isn't
     # GO-VW : $(GI.npoint( GO.simplify((GO.VisvalingamWhyatt(; tol = _tol)), geom_go)))
     println()
 end
-
-plot_trials(singlepoly_suite, "Simplify random polygon")
-```
-
-```@example benchmark
-plot_trials(multipoly_suite, "Simplify USA multipolygon")
+plot_trials(multipoly_suite)
 ```
 
 =#

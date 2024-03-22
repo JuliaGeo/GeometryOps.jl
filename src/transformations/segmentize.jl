@@ -39,7 +39,7 @@ Now, let's see what they look like!  To make this fair, we'll use approximately 
 ```@example segmentize
 using CairoMakie
 linear = GO.segmentize(rectangle; max_distance = 0.01)
-geodesic = GO.segmentize(GO.GeodesicSegments(max_distance = 1000), rectangle)
+geodesic = GO.segmentize(GO.GeodesicSegments(; max_distance = 900), rectangle)
 f, a, p = poly(collect(GI.getpoint(linear)); label = "Linear", axis = (; aspect = DataAspect()))
 p2 = poly!(collect(GI.getpoint(geodesic)); label = "Geodesic")
 axislegend(a; position = :lt)
@@ -51,6 +51,56 @@ There are two methods available for segmentizing geometries at the moment:
 ```@docs
 LinearSegments
 GeodesicSegments
+```
+
+## Benchmark
+
+We benchmark our method against LibGEOS's `GEOSDensify` method, which is a similar method for densifying geometries.
+
+```@example benchmark
+using BenchmarkTools: BenchmarkGroup
+using Chairmarks: @be
+using Main: plot_trials
+using CairoMakie
+
+import GeometryOps as GO, GeoInterface as GI, LibGEOS as LG
+
+segmentize_suite = BenchmarkGroup(["title:Segmentize", "subtitle:Segmentize a rectangle"])
+
+rectangle = GI.Wrappers.Polygon([[(0.0, 50.0), (7.071, 57.07), (0.0, 64.14), (-7.07, 57.07), (0.0, 50.0)]])
+lg_rectangle = GI.convert(LG, rectangle)
+```
+
+```@example benchmark
+# These are initial distances, which yield similar numbers of points 
+# in the final geometry.
+init_lin = 0.01
+init_geo = 900
+
+# LibGEOS.jl doesn't offer this function, so we just wrap it ourselves!
+function densify(obj::LG.Geometry, tol::Real, context::LG.GEOSContext = LG.get_context(obj))
+    result = LG.GEOSDensify_r(context, obj, tol)
+    if result == C_NULL
+        error("LibGEOS: Error in GEOSDensify")
+    end
+    LG.geomFromGEOS(result, context)
+end
+# now, we get to the actual benchmarking:
+for scalefactor in exp10.(LinRange(log10(0.1), log10(10), 5))
+    lin_dist = init_lin * scalefactor
+    geo_dist = init_geo * scalefactor
+
+    npoints_linear = GI.npoint(GO.segmentize(rectangle; max_distance = lin_dist))
+    npoints_geodesic = GO.segmentize(GO.GeodesicSegments(; max_distance = geo_dist), rectangle) |> GI.npoint
+    npoints_libgeos = GI.npoint(densify(lg_rectangle, lin_dist))
+    
+    segmentize_suite["Linear"][npoints_linear] = @be GO.segmentize(GO.LinearSegments(; max_distance = $lin_dist), $rectangle) seconds=1
+    segmentize_suite["Geodesic"][npoints_geodesic] = @be GO.segmentize(GO.GeodesicSegments(; max_distance = $geo_dist), $rectangle) seconds=1
+    segmentize_suite["LibGEOS"][npoints_libgeos] = @be densify($lg_rectangle, $lin_dist) seconds=1
+    
+end
+
+plot_trials(segmentize_suite)
 ```
 
 =#
@@ -149,56 +199,9 @@ function _fill_linear_kernel!(method::LinearSegments, new_coords::Vector, x1, y1
     push!(new_coords, (x2, y2))
     return nothing
 end
-# The `_fill_linear_kernel` definition for `GeodesicSegments` is in the `GeometryOpsProjExt` extension module, in the `segmentize.jl` file.
-
 #=
 
-## Benchmarks
-
-```julia
-
-using BenchmarkTools
-
-import GeometryOps as GO, LibGEOS as LG, GeoInterface as GI
-import Proj # for geodesic segments
-
-rectangle = GI.Wrappers.Polygon([[(0.0, 50.0), (7.071, 57.07), (0.0, 64.14), (-7.07, 57.07), (0.0, 50.0)]])
-lg_rectangle = GI.convert(LG, rectangle)
-# These are initial distances, which yield similar numbers of points 
-# in the final geometry.
-init_lin = 0.01
-init_geo = 900
-
-# LibGEOS.jl doesn't offer this function
-function densify(obj::LG.Geometry, tol::Real, context::LG.GEOSContext = LG.get_context(obj))
-    result = LG.GEOSDensify_r(context, obj, tol)
-    if result == C_NULL
-        error("LibGEOS: Error in GEOSDensify")
-    end
-    LG.geomFromGEOS(result, context)
-end
-
-simplify_suite = BenchmarkGroup()
-for scalefactor in exp10.(LinRange(log10(0.1), log10(10), 5))
-    lin_dist = init_lin * scalefactor
-    geo_dist = init_geo * scalefactor
-
-    npoints_linear = GI.npoint(GO.segmentize(rectangle; max_distance = lin_dist))
-    npoints_geodesic = GO.segmentize(GO.GeodesicSegments(; max_distance = geo_dist), rectangle) |> GI.npoint
-    npoints_libgeos = GI.npoint(densify(lg_rectangle, lin_dist))
-    
-    simplify_suite["Linear"][npoints_linear] = @benchmarkable GO.segmentize(GO.LinearSegments(; max_distance = $lin_dist), $rectangle)
-    simplify_suite["Geodesic"][npoints_geodesic] = @benchmarkable GO.segmentize(GO.GeodesicSegments(; max_distance = $geo_dist), $rectangle)
-    simplify_suite["LibGEOS"][npoints_libgeos] = @benchmarkable densify($lg_rectangle, $lin_dist)
-    
-end
-
-@time tune!(simplify_suite)
-@time simplify_results = run(simplify_suite)
-
-f = plot_trials(simplify_results, "Segmentize")
-contents(f.layout)[1].subtitle = "Tested on a rotated rectangle"
-f
-```
+!!! note
+    The `_fill_linear_kernel` definition for `GeodesicSegments` is in the `GeometryOpsProjExt` extension module, in the `segmentize.jl` file.
 
 =#
