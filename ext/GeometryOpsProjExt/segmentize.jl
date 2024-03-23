@@ -4,11 +4,11 @@ import GeometryOps: GeodesicSegments, _fill_linear_kernel!
 import Proj
 
 function GeometryOps.GeodesicSegments(; max_distance, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563, geodesic::Proj.geod_geodesic = Proj.geod_geodesic(equatorial_radius, flattening))
-    return GeometryOps.GeodesicSegments(geodesic, max_distance)
+    return GeometryOps.GeodesicSegments{Proj.geod_geodesic}(geodesic, max_distance)
 end
 
 
-function GeometryOps._fill_linear_kernel!(method::GeodesicSegments, new_coords::Vector, x1, y1, x2, y2)
+function GeometryOps._fill_linear_kernel!(method::GeodesicSegments{Proj.geod_geodesic}, new_coords::Vector, x1, y1, x2, y2)
     geod_line = Proj.geod_inverseline(method.geodesic, y1, x1, y2, x2)
     # This is the distance in meters computed between the two points.
     # It's `s13` because `geod_inverseline` sets point 3 to the second input point.

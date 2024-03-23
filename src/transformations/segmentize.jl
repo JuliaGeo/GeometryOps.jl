@@ -138,8 +138,8 @@ One can also omit the `equatorial_radius` and `flattening` keyword arguments, an
 
 This method uses the Proj/GeographicLib API for geodesic calculations.
 """
-struct GeodesicSegments <: SegmentizeMethod 
-    geodesic# ::Proj.geod_geodesic
+struct GeodesicSegments{T} <: SegmentizeMethod 
+    geodesic::T# ::Proj.geod_geodesic
     max_distance::Float64
 end
 
