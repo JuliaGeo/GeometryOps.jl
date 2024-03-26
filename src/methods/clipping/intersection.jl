@@ -177,17 +177,34 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
     # Second line runs from q to q + s 
     qx, qy = GI.x(b1), GI.y(b1)
     sx, sy = GI.x(b2) - qx, GI.y(b2) - qy
-    # Intersections will be where p + αr = q + βs where 0 < α, β < 1 and
+    # Intersections will be where p + αr = q + βs where 0 < α, β < 1
     r_cross_s = rx * sy - ry * sx
     Δqp_x = qx - px
     Δqp_y = qy - py
     if r_cross_s != 0  # if lines aren't parallel
-        α = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
-        β = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
-        x = px + α * rx
-        y = py + α * ry
+        # Calculate α (uses approx comparisons due to inexact calculations)
+        α_num_t1, α_num_t2 = Δqp_x * sy, Δqp_y * sx  # α numerator terms
+        α_num = α_num_t1 - α_num_t2
+        α = if α_num_t1 ≈ α_num_t2
+            zero(T)
+        elseif α_num ≈ r_cross_s
+            one(T)
+        else
+            T(α_num / r_cross_s)
+        end
+        β_num_t1, β_num_t2 = Δqp_x * ry, Δqp_y * rx
+        β_num = β_num_t1 - β_num_t2
+        β = if β_num_t1 ≈ β_num_t2
+            zero(T)
+        elseif β_num ≈ r_cross_s
+            one(T)
+        else
+            T(β_num / r_cross_s)
+        end
+        x = T(px + α * rx)
+        y = T(py + α * ry)
         if 0 ≤ α ≤ 1 && 0 ≤ β ≤ 1
-            intr1 = (T(x), T(y)), (T(α), T(β))
+            intr1 = (x, y), (α, β)
             line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
         end
     elseif sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
