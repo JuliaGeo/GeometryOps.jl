@@ -20,6 +20,8 @@ an intersection point (ipt). =#
     fracs::Tuple{T,T} = (0., 0.) # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
 end
 
+# TODO: Add update_node function and make sure that repeated points aren't added to a_list and b_list
+
 #=
     _build_ab_list(::Type{T}, poly_a, poly_b) -> (a_list, b_list, a_idx_list)
 
@@ -461,7 +463,7 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
         on_a_list = true
         # Find first unprocessed intersecting point in subject polygon
         processed_pts += 1
-        first_idx = findnext(x -> x != 0, a_idx_list, processed_pts) # TODO: should this be processed_points?
+        first_idx = findfirst(x -> x != 0, a_idx_list)
         idx = a_idx_list[first_idx]
         a_idx_list[first_idx] = 0
         start_pt = a_list[idx]
