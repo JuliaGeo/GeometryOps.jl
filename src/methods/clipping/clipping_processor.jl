@@ -4,8 +4,12 @@
 # This enum defines which side of an edge a point is on
 @enum PointEdgeSide left=1 right=2 unknown=3
 
+# Constants assigned for readability
 const enter, exit = true, false
 const crossing, bouncing = true, false
+
+#= A point can either be the start or end of an overlapping chain of points between two
+polygons, or not an endpoint of a chain. =#
 @enum EndPointType start_chain=1 end_chain=2 not_endpoint=3
 
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
@@ -16,12 +20,12 @@ an intersection point (ipt). =#
     neighbor::Int = 0          # If ipt, index of equivalent point in a_list or b_list, else 0
     ent_exit::Bool = false     # If ipt, true if enter and false if exit, else false
     crossing::Bool = false     # If ipt, true if intersection crosses from out/in polygon, else false
-    endpoint::EndPointType = not_endpoint # If ipt, true if point is the start of end of an overlapping chain
+    endpoint::EndPointType = not_endpoint # If ipt, denotes if point is the start or end of an overlapping chain
     fracs::Tuple{T,T} = (0., 0.) # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
 end
 
-# TODO: Add update_node function and make sure that repeated points aren't added to a_list and b_list
-
+#= Create a new node with all of the same field values unless alternative values are
+provided, in which case those should be used. =#
 _update_node(node::PolyNode{T};
     point = node.point, inter = node.inter, neighbor = node.neighbor,
     ent_exit = node.ent_exit, crossing = node.crossing, endpoint = node.endpoint,
@@ -43,6 +47,7 @@ function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f
     # Make a list for nodes of each polygon
     a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b)
     b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
+
     # Flag crossings
     _classify_crossing!(T, a_list, b_list)
 
@@ -69,8 +74,8 @@ index i of a_idx_list is the location in a_list where the ith intersection point
 =#
 function _build_a_list(::Type{T}, poly_a, poly_b) where T
     n_a_edges = _nedge(poly_a)
-    a_list = PolyNode{T}[]
-    sizehint!(a_list, n_a_edges)  # list of points in poly_a
+    a_list = PolyNode{T}[]  # list of points in poly_a
+    sizehint!(a_list, n_a_edges)
     a_idx_list = Vector{Int}()  # finds indices of intersection points in a_list
     a_count = 0  # number of points added to a_list
     n_b_intrs = 0
@@ -78,7 +83,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
     local a_pt1
     for (i, a_p2) in enumerate(GI.getpoint(poly_a))
         a_pt2 = (T(GI.x(a_p2)), T(GI.y(a_p2)))
-        if i <= 1 || a_pt1 == a_pt2
+        if i <= 1 || (a_pt1 == a_pt2)  # don't repeat points
             a_pt1 = a_pt2
             continue
         end
@@ -91,7 +96,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
         prev_counter = a_count
         for (j, b_p2) in enumerate(GI.getpoint(poly_b))
             b_pt2 = _tuple_point(b_p2, T)
-            if j <= 1 || b_pt1 == b_pt2
+            if j <= 1 || (b_pt1 == b_pt2)  # don't repeat points
                 b_pt1 = b_pt2
                 continue
             end
@@ -110,10 +115,12 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                     push!(a_idx_list, a_count)
                 else
                     (_, (α1, β1)) = intr1
+                    # Determine if a1 or b1 should be added to a_list
                     add_a1 = α1 == 0 && 0 ≤ β1 < 1
                     a1_β = add_a1 ? β1 : zero(T)
                     add_b1 = β1 == 0 && 0 < α1 < 1
                     b1_α = add_b1 ? α1 : zero(T)
+                    # If lines are collinear and overlapping, a second intersection exists
                     if line_orient == line_over
                         (_, (α2, β2)) = intr2
                         if α2 == 0 && 0 ≤ β2 < 1
@@ -123,6 +130,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                             add_b1, b1_α = true, α2
                         end
                     end
+                    # Add intersection points determined above
                     if add_a1
                         n_b_intrs += a1_β == 0 ? 0 : 1
                         a_list[prev_counter] = PolyNode{T}(;
@@ -144,7 +152,6 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
             end
             b_pt1 = b_pt2
         end
-
         # Order intersection points by placement along edge using fracs value
         if prev_counter < a_count
             Δintrs = a_count - prev_counter
@@ -180,17 +187,17 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
     local b_pt1
     for (i, b_p2) in enumerate(GI.getpoint(poly_b))
         b_pt2 = _tuple_point(b_p2, T)
-        if i ≤ 1 || (b_pt1 == b_pt2)
+        if i ≤ 1 || (b_pt1 == b_pt2)  # don't repeat points
             b_pt1 = b_pt2
             continue
         end
         b_count += 1
-        push!(b_list, PolyNode{T}(;point = b_pt1))
+        push!(b_list, PolyNode{T}(; point = b_pt1))
         if intr_curr ≤ n_intr_pts
             curr_idx = a_idx_list[intr_curr]
             curr_node = a_list[curr_idx]
             prev_counter = b_count
-            while curr_node.neighbor == i - 1  # Add all intersection points in current edge
+            while curr_node.neighbor == i - 1  # Add all intersection points on current edge
                 b_idx = 0
                 new_intr = _update_node(curr_node; neighbor = curr_idx)
                 if equals(curr_node.point, b_list[prev_counter].point)
@@ -218,7 +225,13 @@ end
 #=
     _classify_crossing!(T, poly_b, a_list)
 
-This function marks all intersection points as either bouncing or crossing points.
+This function marks all intersection points as either bouncing or crossing points. "Delayed"
+crossing or bouncing intersections (a chain of edges where the central edges overlap and
+thus only the first and last edge of the chain determine if the chain is bounding or
+crossing) are marked as follows: the first and the last points are marked as crossing if the
+chain is crossing and delayed otherwise and all middle points are marked as bouncing.
+Additionally, the start and end points of the chain are marked as endpoints using the
+endpoints field. 
 =#
 function _classify_crossing!(::Type{T}, a_list, b_list) where T
     napts = length(a_list)
@@ -262,12 +275,24 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
                 else  # close overlapping chain
                     # update end of chain with endpoint and crossing / bouncing tags
                     crossing = b_side != start_chain_edge
-                    a_list[i] = _update_node(curr_pt; crossing = crossing, endpoint = end_chain)
-                    b_list[j] = _update_node(b_list[j]; crossing = crossing, endpoint = same_winding ? end_chain : start_chain)
+                    a_list[i] = _update_node(curr_pt;
+                        crossing = crossing,
+                        endpoint = end_chain,
+                    )
+                    b_list[j] = _update_node(b_list[j];
+                        crossing = crossing,
+                        endpoint = same_winding ? end_chain : start_chain,
+                    )
                     # update start of chain with endpoint and crossing / bouncing tags
                     start_pt = a_list[start_chain_idx]
-                    a_list[start_chain_idx] = _update_node(start_pt; crossing = crossing, endpoint = start_chain)
-                    b_list[start_pt.neighbor] = _update_node(b_list[start_pt.neighbor]; crossing = crossing, endpoint = same_winding ? start_chain : end_chain)
+                    a_list[start_chain_idx] = _update_node(start_pt;
+                        crossing = crossing,
+                        endpoint = start_chain,
+                    )
+                    b_list[start_pt.neighbor] = _update_node(b_list[start_pt.neighbor];
+                        crossing = crossing,
+                        endpoint = same_winding ? start_chain : end_chain,
+                    )
                 end
             # start of overlapping chain
             elseif !a_prev_is_b_prev && !a_prev_is_b_next
@@ -286,12 +311,24 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
         crossing = unmatched_end_chain_edge != start_chain_edge
         # update end of chain with endpoint and crossing / bouncing tags
         end_chain_pt = a_list[unmatched_end_chain_idx]
-        a_list[unmatched_end_chain_idx] = _update_node(end_chain_pt; crossing = crossing, endpoint = end_chain)
-        b_list[end_chain_pt.neighbor] = _update_node(b_list[end_chain_pt.neighbor]; crossing = crossing, endpoint = same_winding ? end_chain : start_chain)
+        a_list[unmatched_end_chain_idx] = _update_node(end_chain_pt;
+            crossing = crossing,
+            endpoint = end_chain,
+        )
+        b_list[end_chain_pt.neighbor] = _update_node(b_list[end_chain_pt.neighbor];
+            crossing = crossing,
+            endpoint = same_winding ? end_chain : start_chain,
+        )
         # update start of chain with endpoint and crossing / bouncing tags
         start_pt = a_list[start_chain_idx]
-        a_list[start_chain_idx] = _update_node(start_pt; crossing = crossing, endpoint = start_chain)
-        b_list[start_pt.neighbor] = _update_node(start_pt; crossing = crossing, endpoint = same_winding ? start_chain : end_chain)
+        a_list[start_chain_idx] = _update_node(start_pt;
+            crossing = crossing,
+            endpoint = start_chain,
+        )
+        b_list[start_pt.neighbor] = _update_node(start_pt;
+            crossing = crossing,
+            endpoint = same_winding ? start_chain : end_chain,
+        )
     end
 end
 
@@ -318,11 +355,20 @@ end
 _next_edge_off(pt) = !pt.inter || (pt.endpoint == end_chain) || (pt.crossing && pt.endpoint == not_endpoint)
 
 #=
-    _flag_ent_exit!(::GI.LinearRingTrait, poly_b, a_list)
+    _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f)
 
 This function flags all the intersection points as either an 'entry' or 'exit' point in
-relation to the given polygon. Returns true if there are crossing points to classify, else
-returns false. Used for clipping polygons by other polygons.
+relation to the given polygon. For non-delayed crossings we simply alternate the enter/exit
+status. This also holds true for the first and last points of a delayed bouncing, where they
+both have an opposite entry/exit flag. Conversely, the first and last point of a delayed
+crossing have the same entry/exit status. Furthermore, the crossing/bouncing flag of delayed
+crossings and bouncings may be updated. This depends on function specific rules that
+determine which of the start or end points (if any) should be marked as crossing for used
+during polygon tracing. A consistent rule is that the start and end points of a delayed
+crossing will have different crossing/bouncing flags, while a the endpoints of a delayed
+bounce will be the same.
+
+Used for clipping polygons by other polygons.
 =#
 function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f)
     # Find starting index if there is one
@@ -341,17 +387,22 @@ function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, del
             start_chain_idx = ii
         elseif curr_pt.crossing || curr_pt.endpoint == end_chain
             start_crossing, end_crossing = curr_pt.crossing, curr_pt.crossing
-            if curr_pt.endpoint == end_chain
+            if curr_pt.endpoint == end_chain  # ending overlapping chain
                 start_pt = pt_list[start_chain_idx]
                 if curr_pt.crossing  # delayed crossing
+                    #= start and end crossing status are different and depend on current
+                    entry/exit status =#
                     start_crossing, end_crossing = delay_cross_f(status)
                 else  # delayed bouncing
                     next_idx = ii < npts ? (ii + 1) : 1
                     next_val = (curr_pt.point .+ pt_list[next_idx].point) ./ 2
                     pt_in_poly = _point_filled_curve_orientation(next_val, poly; in = true, on = false, out = false)
+                    #= start and end crossing status are the same and depend on if adjacent
+                    edges of pt_list are within poly =#
                     start_crossing = delay_bounce_f(pt_in_poly)
                     end_crossing = start_crossing
                 end
+                # update start of chain point
                 pt_list[start_chain_idx] = _update_node(start_pt; ent_exit = status, crossing = start_crossing)
                 if !curr_pt.crossing
                     status = !status
@@ -459,7 +510,6 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
                     end
                 end
             end
-
             # Switch to next list and next point
             curr_list, curr_npoints = on_a_list ? (b_list, n_b_pts) : (a_list, n_a_pts)
             on_a_list = !on_a_list
@@ -497,20 +547,6 @@ function _find_non_cross_orientation(a_list, b_list, a_poly, b_poly)
     a_in_b = a_pt_orient != point_out && b_pt_orient != point_in
     b_in_a = b_pt_orient != point_out && a_pt_orient != point_in
     return a_in_b, b_in_a
-end
-
-#= Determines if polygons share an edge (in the case where polygons are inside or outside
-of one another and only commected by single points or edges) - if they share an edge,
-print error message. =#
-function share_edge_warn(list, warn_str)
-    shared_edge = false
-    prev_pt_inter = false
-    for pt in list
-        shared_edge = prev_pt_inter && pt.inter
-        shared_edge && break
-        prev_pt_inter = pt.inter
-    end
-    shared_edge && @warn warn_str
 end
 
 #=

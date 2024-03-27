@@ -56,7 +56,6 @@ function _difference(
         # add case for if they polygons are the same (all intersection points!)
         # add a find_first check to find first non-inter poly!
         if b_in_a && !a_in_b  # b in a and can't be the same polygon
-            share_edge_warn(a_list, "Edge case: polygons share edge but one is hole of the other.")  # will get taken care of with "glued edges"
             poly_a_b_hole = GI.Polygon([tuples(ext_a), tuples(ext_b)])
             push!(polys, poly_a_b_hole)
         elseif !b_in_a && !a_in_b # polygons don't intersect
