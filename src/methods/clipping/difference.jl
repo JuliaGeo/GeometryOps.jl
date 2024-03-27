@@ -32,10 +32,6 @@ function difference(
     return _difference(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
-_diff_delay_cross_f(x) = (x, !x)
-_diff_delay_bounce_f(x, y) = x ⊻ y
-_diff_step(x, y) = (x ⊻ y) ? 1 : (-1)
-
 #= The 'difference' function returns the difference of two polygons as a list of polygons.
 The algorithm to determine the difference was adapted from "Efficient clipping of efficient
 polygons," by Greiner and Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
@@ -76,6 +72,25 @@ function _difference(
     end
     return polys
 end
+
+# # Helper functions for Differences with Greiner and Hormann Polygon Clipping # #
+
+#= When marking the crossing status of a delayed crossing, the chain start point is crossing
+when the start point is a entry point and is a bouncing point when the start point is an
+exit point. The end of the chain has the opposite crossing / bouncing status. =#
+_diff_delay_cross_f(x) = (x, !x)
+#= When marking the crossing status of a delayed bouncing, the chain start and end points
+are crossing if the current polygon's adjacent edges are within the non-tracing polygon and
+we are tracing b_list or if the edges are outside and we are on a_list. Otherwise the
+endpoints are marked as crossing. x is a boolean representing if the edges are inside or
+outside of the polygon and y is a variable that is true if we are on a_list and false if we
+are on b_list. =#
+_diff_delay_bounce_f(x, y) = x ⊻ y
+#= When tracing polygons, step forwards if the most recent intersection point was an entry
+point and we are currently tracing b_list or if it was an exit point and we are currently
+tracing a_list, else step backwards, where x is the entry/exit status and y is a variable
+that is true if we are on a_list and false if we are on b_list. =#
+_diff_step(x, y) = (x ⊻ y) ? 1 : (-1)
 
 # Many type and target combos aren't implemented
 function _difference(

@@ -32,10 +32,6 @@ function union(
     _union(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
-_union_delay_cross_f(x) = (x, !x)
-_union_delay_bounce_f(x, _) = !x
-_union_step(x, _) = x ? (-1) : 1
-
 #= This 'union' implementation returns the union of two polygons. The algorithm to determine
 the union was adapted from "Efficient clipping of efficient polygons," by Greiner and
 Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
@@ -77,6 +73,20 @@ function _union(
     return polys
 end
 
+# # Helper functions for Unions with Greiner and Hormann Polygon Clipping # #
+
+#= When marking the crossing status of a delayed crossing, the chain start point is crossing
+when the start point is a entry point and is a bouncing point when the start point is an
+exit point. The end of the chain has the opposite crossing / bouncing status. =#
+_union_delay_cross_f(x) = (x, !x)
+#= When marking the crossing status of a delayed bouncing, the chain start and end points
+are bouncing if the current polygon's adjacent edges are within the non-tracing polygon. If
+the edges are outside then the chain endpoints are marked as crossing. x is a boolean
+representing if the edges are inside or outside of the polygon. =#
+_union_delay_bounce_f(x, _) = !x
+#= When tracing polygons, step backwards if the most recent intersection point was an entry
+point, else step forwards where x is the entry/exit status. =#
+_union_step(x, _) = x ? (-1) : 1
 
 # Many type and target combos aren't implemented
 function _union(

@@ -46,9 +46,6 @@ _intersection(
     trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b,
 ) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
 
-_inter_delay_cross_f(x) = (!x, x)
-_inter_delay_bounce_f(x, _) = x
-_inter_step(x, _) =  x ? 1 : (-1)
 #= Polygon-Polygon Intersections with target Polygon
 The algorithm to determine the intersection was adapted from "Efficient clipping
 of efficient polygons," by Greiner and Hormann (1998).
@@ -79,6 +76,22 @@ function _intersection(
     end    
     return polys
 end
+
+# # Helper functions for Intersections with Greiner and Hormann Polygon Clipping # #
+
+#= When marking the crossing status of a delayed crossing, the chain start point is bouncing
+when the start point is a entry point and is a crossing point when the start point is an
+exit point. The end of the chain has the opposite crossing / bouncing status. x is the 
+entry/exit status. =#
+_inter_delay_cross_f(x) = (!x, x)
+#= When marking the crossing status of a delayed bouncing, the chain start and end points
+are crossing if the current polygon's adjacent edges are within the non-tracing polygon. If
+the edges are outside then the chain endpoints are marked as bouncing. x is a boolean
+representing if the edges are inside or outside of the polygon. =#
+_inter_delay_bounce_f(x, _) = x
+#= When tracing polygons, step forward if the most recent intersection point was an entry
+point, else step backwards where x is the entry/exit status. =#
+_inter_step(x, _) =  x ? 1 : (-1)
 
 # Many type and target combos aren't implemented
 function _intersection(
