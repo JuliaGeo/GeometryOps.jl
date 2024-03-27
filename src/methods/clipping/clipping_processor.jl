@@ -18,6 +18,7 @@ an intersection point (ipt). =#
     point::Tuple{T,T}          # (x, y) values of given point
     inter::Bool = false        # If ipt, true, else 0
     neighbor::Int = 0          # If ipt, index of equivalent point in a_list or b_list, else 0
+    idx::Int = 0               # If crossing point, index within sorted a_idx_list
     ent_exit::Bool = false     # If ipt, true if enter and false if exit, else false
     crossing::Bool = false     # If ipt, true if intersection crosses from out/in polygon, else false
     endpoint::EndPointType = not_endpoint # If ipt, denotes if point is the start or end of an overlapping chain
@@ -27,11 +28,11 @@ end
 #= Create a new node with all of the same field values unless alternative values are
 provided, in which case those should be used. =#
 _update_node(node::PolyNode{T};
-    point = node.point, inter = node.inter, neighbor = node.neighbor,
+    point = node.point, inter = node.inter, neighbor = node.neighbor, idx = node.idx,
     ent_exit = node.ent_exit, crossing = node.crossing, endpoint = node.endpoint,
     fracs = node.fracs,
 ) where T = PolyNode{T}(;
-    point = point, inter = inter, neighbor = neighbor, ent_exit = ent_exit,
+    point = point, inter = inter, neighbor = neighbor, idx = idx, ent_exit = ent_exit,
     crossing = crossing, endpoint = endpoint, fracs = fracs)
 
 #=
@@ -52,8 +53,11 @@ function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f
     _classify_crossing!(T, a_list, b_list)
 
     # Flag the entry and exits
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, (x) -> delay_bounce_f(x, true))
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list, delay_cross_f, (x) -> delay_bounce_f(x, false))
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list, (x) -> delay_cross_f(x), (x) -> delay_bounce_f(x, true))
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list, (x) -> delay_cross_f(x), (x) -> delay_bounce_f(x, false))
+
+    # Set node indices and filter a_idx_list to just crossing points
+    _index_crossing_intrs!(a_list, b_list, a_idx_list)
 
     return a_list, b_list, a_idx_list
 end
@@ -436,6 +440,19 @@ function _flag_ent_exit!(::GI.LineTrait, poly, pt_list)
     return
 end
 
+#= Filters a_idx_list to just include crossing points and sets the index of all crossing
+points (which element they correspond to within a_idx_list). =#
+function _index_crossing_intrs!(a_list, b_list, a_idx_list)
+    filter!(x -> a_list[x].crossing, a_idx_list)
+    for (i, a_idx) in enumerate(a_idx_list)
+        curr_node = a_list[a_idx]
+        neighbor_node = b_list[curr_node.neighbor]
+        a_list[a_idx] = _update_node(curr_node; idx = i)
+        b_list[curr_node.neighbor] = _update_node(neighbor_node; idx = i)
+    end
+    return
+end
+
 #=
     _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step)::Vector{GI.Polygon}
 
@@ -453,25 +470,17 @@ A list of GeoInterface polygons is returned from this function.
 =#
 function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
     n_a_pts, n_b_pts = length(a_list), length(b_list)
-    # Determine number of crossing intersection points
-    n_cross_pts = 0
-    for i in eachindex(a_idx_list)
-        if a_list[a_idx_list[i]].crossing
-            n_cross_pts += 1
-        else
-            a_idx_list[i] = 0
-        end
-    end
-
+    n_cross_pts = length(a_idx_list)
     return_polys = Vector{_get_poly_type(T)}(undef, 0)
     # Keep track of number of processed intersection points
     processed_pts = 0
+    first_idx = 1
     while processed_pts < n_cross_pts
         curr_list, curr_npoints = a_list, n_a_pts
         on_a_list = true
         # Find first unprocessed intersecting point in subject polygon
         processed_pts += 1
-        first_idx = findfirst(x -> x != 0, a_idx_list)
+        first_idx = findnext(x -> x != 0, a_idx_list, first_idx)
         idx = a_idx_list[first_idx]
         a_idx_list[first_idx] = 0
         start_pt = a_list[idx]
@@ -501,12 +510,7 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
                     !curr_not_start && break
                     if (on_a_list && curr.crossing) || (!on_a_list && a_list[curr.neighbor].crossing)
                         processed_pts += 1
-                        for (i, a_idx) in enumerate(a_idx_list)
-                            if a_idx != 0 && equals(a_list[a_idx].point, curr.point)
-                                a_idx_list[i] = 0
-                                break
-                            end
-                        end
+                        a_idx_list[curr.idx] = 0
                     end
                 end
             end
