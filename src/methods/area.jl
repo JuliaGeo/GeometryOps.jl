@@ -97,6 +97,11 @@ _area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
 
 _signed_area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
 
+# LibGEOS treats linear rings as zero area.   I disagree with that but we should probably maintain compatibility...
+
+_area(::Type{T}, tr::GI.LinearRingTrait, geom) where T = 0 # could be abs(_signed_area(T, tr, geom))
+
+_signed_area(::Type{T}, ::GI.LinearRingTrait, geom) where T = 0 # could be _signed_area(T, tr, geom)
 # Polygons
 _area(::Type{T}, trait::GI.PolygonTrait, poly) where T =
     abs(_signed_area(T, trait, poly))

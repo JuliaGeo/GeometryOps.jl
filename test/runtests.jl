@@ -7,6 +7,7 @@ using GeoInterface.Extents: Extents
 using ArchGDAL
 using LibGEOS
 using Random, Distributions
+using Proj
 
 const GI = GeoInterface
 const AG = ArchGDAL
@@ -33,5 +34,10 @@ const GO = GeometryOps
     @testset "Reproject" begin include("transformations/reproject.jl") end
     @testset "Flip" begin include("transformations/flip.jl") end
     @testset "Simplify" begin include("transformations/simplify.jl") end
+    @testset "Segmentize" begin include("transformations/segmentize.jl") end
     @testset "Transform" begin include("transformations/transform.jl") end
+    @testset "Geometry correction" begin 
+        include("transformations/correction/geometry_correction.jl")
+        include("transformations/correction/closed_ring.jl") 
+    end
 end

@@ -14,7 +14,7 @@ We welcome contributions, either as pull requests or discussion on issues!
 ### The `apply` paradigm
 
 !!! note
-    See the [Primitive Functions](/source/primitives) page for more information on this.
+    See the [Primitive Functions](@ref Primitive-functions) page for more information on this.
 
 The `apply` function allows you to decompose a given collection of geometries down to a certain level, and then operate on it. 
 

@@ -4,10 +4,8 @@ module GeometryOps
 
 using GeoInterface
 using GeometryBasics
-using GeometryBasics.StaticArrays
-import Proj
-using LinearAlgebra
-import Proj.CoordinateTransformations.StaticArrays
+using LinearAlgebra, Statistics
+import GeometryBasics.StaticArrays
 import Base.@kwdef
 
 using GeoInterface.Extents: Extents
@@ -49,8 +47,17 @@ include("methods/polygonize.jl")
 include("transformations/extent.jl")
 include("transformations/flip.jl")
 include("transformations/reproject.jl")
+include("transformations/segmentize.jl")
 include("transformations/simplify.jl")
 include("transformations/tuples.jl")
 include("transformations/transform.jl")
+include("transformations/correction/geometry_correction.jl")
+include("transformations/correction/closed_ring.jl")
+
+function __init__()
+    # Handle all available errors!
+    Base.Experimental.register_error_hint(_reproject_error_hinter, MethodError)
+    Base.Experimental.register_error_hint(_geodesic_segments_error_hinter, MethodError)
+end
 
 end

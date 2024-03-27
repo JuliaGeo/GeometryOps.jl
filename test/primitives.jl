@@ -3,6 +3,7 @@ using Test
 import GeoInterface as GI
 import GeometryOps as GO
 import GeometryBasics as GB
+import Proj
 
 pv1 = [(1, 2), (3, 4), (5, 6), (1, 2)]
 pv2 = [(3, 4), (5, 6), (6, 7), (3, 4)]
