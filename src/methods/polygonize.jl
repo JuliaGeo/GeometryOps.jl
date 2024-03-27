@@ -1,55 +1,58 @@
 # # Polygonizing raster data
 export polygonize
-# The methods in this file are able to convert a raster image into a set of polygons, 
-# by contour detection using a clockwise Moore neighborhood method.
 
-# The main entry point is the [`polygonize`](@ref) function.
+#= 
+The methods in this file are able to convert a raster image into a set of polygons, 
+by contour detection using a clockwise Moore neighborhood method.
 
-# ```@docs
-# polygonize
-# ```
+The main entry point is the [`polygonize`](@ref) function.
 
-# ## Example
+```@docs
+polygonize
+```
 
-# Here's a basic example, using the `Makie.peaks()` function.  First, let's investigate the nature of the function:
-# ```@example polygonize
-# using Makie, GeometryOps
-# n = 49
-# xs, ys = LinRange(-3, 3, n), LinRange(-3, 3, n)
-# zs = Makie.peaks(n)
-# z_max_value = maximum(abs.(extrema(zs)))
-# f, a, p = heatmap(
-#     xs, ys, zs; 
-#     axis = (; aspect = DataAspect(), title = "Exact function")
-# )
-# cb = Colorbar(f[1, 2], p; label = "Z-value")
-# f 
-# ```
+## Example
 
-# Now, we can use the `polygonize` function to convert the raster data into polygons.
+Here's a basic example, using the `Makie.peaks()` function.  First, let's investigate the nature of the function:
+```@example polygonize
+using Makie, GeometryOps
+n = 49
+xs, ys = LinRange(-3, 3, n), LinRange(-3, 3, n)
+zs = Makie.peaks(n)
+z_max_value = maximum(abs.(extrema(zs)))
+f, a, p = heatmap(
+    xs, ys, zs; 
+    axis = (; aspect = DataAspect(), title = "Exact function")
+)
+cb = Colorbar(f[1, 2], p; label = "Z-value")
+f 
+```
 
-# For this particular example, we chose a range of z-values between 0.8 and 3.2, 
-# which would provide two distinct polyogns with holes.
+Now, we can use the `polygonize` function to convert the raster data into polygons.
 
-# ```@example polygonize
-# polygons = polygonize(xs, ys, 0.8 .< zs .< 3.2)
-# ```
-# This returns a list of `GeometryBasics.Polygon`, which can be plotted immediately, 
-# or wrapped directly in a `GeometryBasics.MultiPolygon`.  Let's see how these look:
+For this particular example, we chose a range of z-values between 0.8 and 3.2, 
+which would provide two distinct polyogns with holes.
 
-# ```@example polygonize
-# f, a, p = poly(polygons; label = "Polygonized polygons", axis = (; aspect = DataAspect()))
-# ```
+```@example polygonize
+polygons = polygonize(xs, ys, 0.8 .< zs .< 3.2)
+```
+This returns a list of `GeometryBasics.Polygon`, which can be plotted immediately, 
+or wrapped directly in a `GeometryBasics.MultiPolygon`.  Let's see how these look:
 
-# Finally, let's plot the Makie contour lines on top, to see how well the polygonization worked:
-# ```@example polygonize
-# contour!(a, xs, ys, zs; labels = true, levels = [0.8, 3.2], label = "Contour lines")
-# f
-# ```
+```@example polygonize
+f, a, p = poly(polygons; label = "Polygonized polygons", axis = (; aspect = DataAspect()))
+```
 
-# ## Implementation
+Finally, let's plot the Makie contour lines on top, to see how well the polygonization worked:
+```@example polygonize
+contour!(a, xs, ys, zs; labels = true, levels = [0.8, 3.2], label = "Contour lines")
+f
+```
 
-# The implementation follows:
+## Implementation
+
+The implementation follows:
+=# 
 
 """
     polygonize(A; minpoints=10)
