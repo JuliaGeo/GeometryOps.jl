@@ -73,7 +73,7 @@ function _union(
     return polys
 end
 
-# # Helper functions for Unions with Greiner and Hormann Polygon Clipping # #
+# # Helper functions for Unions with Greiner and Hormann Polygon Clipping
 
 #= When marking the crossing status of a delayed crossing, the chain start point is crossing
 when the start point is a entry point and is a bouncing point when the start point is an

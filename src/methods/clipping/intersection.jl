@@ -77,7 +77,7 @@ function _intersection(
     return polys
 end
 
-# # Helper functions for Intersections with Greiner and Hormann Polygon Clipping # #
+# # Helper functions for Intersections with Greiner and Hormann Polygon Clipping
 
 #= When marking the crossing status of a delayed crossing, the chain start point is bouncing
 when the start point is a entry point and is a crossing point when the start point is an

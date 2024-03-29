@@ -25,9 +25,9 @@ an intersection point (ipt). =#
     fracs::Tuple{T,T} = (0., 0.) # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
 end
 
-#= Create a new node with all of the same field values unless alternative values are
-provided, in which case those should be used. =#
-_update_node(node::PolyNode{T};
+#= Create a new node with all of the same field values as the given PolyNode unless
+alternative values are provided, in which case those should be used. =#
+PolyNode(node::PolyNode{T};
     point = node.point, inter = node.inter, neighbor = node.neighbor, idx = node.idx,
     ent_exit = node.ent_exit, crossing = node.crossing, endpoint = node.endpoint,
     fracs = node.fracs,
@@ -44,7 +44,7 @@ returns are the fully updated vectors of PolyNodes that represent the rings 'pol
 'poly_b', respectively. This function also returns 'a_idx_list', which at its "ith" index
 stores the index in 'a_list' at which the "ith" intersection point lies.
 =#
-function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f) where T
+function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_bounce_f::F2) where {T, F1, F2}
     # Make a list for nodes of each polygon
     a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b)
     b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
@@ -53,8 +53,8 @@ function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f
     _classify_crossing!(T, a_list, b_list)
 
     # Flag the entry and exits
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list, (x) -> delay_cross_f(x), (x) -> delay_bounce_f(x, true))
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list, (x) -> delay_cross_f(x), (x) -> delay_bounce_f(x, false))
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, Base.Fix2(delay_bounce_f, true))
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list, delay_cross_f, Base.Fix2(delay_bounce_f, false))
 
     # Set node indices and filter a_idx_list to just crossing points
     _index_crossing_intrs!(a_list, b_list, a_idx_list)
@@ -203,7 +203,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
             prev_counter = b_count
             while curr_node.neighbor == i - 1  # Add all intersection points on current edge
                 b_idx = 0
-                new_intr = _update_node(curr_node; neighbor = curr_idx)
+                new_intr = PolyNode(curr_node; neighbor = curr_idx)
                 if equals(curr_node.point, b_list[prev_counter].point)
                     # intersection point is vertex of b
                     b_idx = prev_counter
@@ -213,7 +213,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
                     b_idx = b_count
                     push!(b_list, new_intr)
                 end
-                a_list[curr_idx] = _update_node(curr_node; neighbor = b_idx)
+                a_list[curr_idx] = PolyNode(curr_node; neighbor = b_idx)
                 intr_curr += 1
                 intr_curr > n_intr_pts && break
                 curr_idx = a_idx_list[intr_curr]
@@ -266,8 +266,8 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
             # no sides overlap
             if !a_prev_is_b_prev && !a_prev_is_b_next && !a_next_is_b_prev && !a_next_is_b_next
                 if b_prev_side != b_next_side  # lines cross 
-                    a_list[i] = _update_node(curr_pt; crossing = true)
-                    b_list[j] = _update_node(b_list[j]; crossing = true)
+                    a_list[i] = PolyNode(curr_pt; crossing = true)
+                    b_list[j] = PolyNode(b_list[j]; crossing = true)
                 end
             # end of overlapping chain
             elseif !a_next_is_b_prev && !a_next_is_b_next 
@@ -279,21 +279,21 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
                 else  # close overlapping chain
                     # update end of chain with endpoint and crossing / bouncing tags
                     crossing = b_side != start_chain_edge
-                    a_list[i] = _update_node(curr_pt;
+                    a_list[i] = PolyNode(curr_pt;
                         crossing = crossing,
                         endpoint = end_chain,
                     )
-                    b_list[j] = _update_node(b_list[j];
+                    b_list[j] = PolyNode(b_list[j];
                         crossing = crossing,
                         endpoint = same_winding ? end_chain : start_chain,
                     )
                     # update start of chain with endpoint and crossing / bouncing tags
                     start_pt = a_list[start_chain_idx]
-                    a_list[start_chain_idx] = _update_node(start_pt;
+                    a_list[start_chain_idx] = PolyNode(start_pt;
                         crossing = crossing,
                         endpoint = start_chain,
                     )
-                    b_list[start_pt.neighbor] = _update_node(b_list[start_pt.neighbor];
+                    b_list[start_pt.neighbor] = PolyNode(b_list[start_pt.neighbor];
                         crossing = crossing,
                         endpoint = same_winding ? start_chain : end_chain,
                     )
@@ -315,21 +315,21 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
         crossing = unmatched_end_chain_edge != start_chain_edge
         # update end of chain with endpoint and crossing / bouncing tags
         end_chain_pt = a_list[unmatched_end_chain_idx]
-        a_list[unmatched_end_chain_idx] = _update_node(end_chain_pt;
+        a_list[unmatched_end_chain_idx] = PolyNode(end_chain_pt;
             crossing = crossing,
             endpoint = end_chain,
         )
-        b_list[end_chain_pt.neighbor] = _update_node(b_list[end_chain_pt.neighbor];
+        b_list[end_chain_pt.neighbor] = PolyNode(b_list[end_chain_pt.neighbor];
             crossing = crossing,
             endpoint = same_winding ? end_chain : start_chain,
         )
         # update start of chain with endpoint and crossing / bouncing tags
         start_pt = a_list[start_chain_idx]
-        a_list[start_chain_idx] = _update_node(start_pt;
+        a_list[start_chain_idx] = PolyNode(start_pt;
             crossing = crossing,
             endpoint = start_chain,
         )
-        b_list[start_pt.neighbor] = _update_node(start_pt;
+        b_list[start_pt.neighbor] = PolyNode(start_pt;
             crossing = crossing,
             endpoint = same_winding ? start_chain : end_chain,
         )
@@ -407,12 +407,12 @@ function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, del
                     end_crossing = start_crossing
                 end
                 # update start of chain point
-                pt_list[start_chain_idx] = _update_node(start_pt; ent_exit = status, crossing = start_crossing)
+                pt_list[start_chain_idx] = PolyNode(start_pt; ent_exit = status, crossing = start_crossing)
                 if !curr_pt.crossing
                     status = !status
                 end
             end
-            pt_list[ii] = _update_node(curr_pt; ent_exit = status, crossing = end_crossing)
+            pt_list[ii] = PolyNode(curr_pt; ent_exit = status, crossing = end_crossing)
             status = !status
         end
     end
@@ -433,7 +433,7 @@ function _flag_ent_exit!(::GI.LineTrait, poly, pt_list)
     # Loop over points and mark entry and exit status
     for (ii, curr_pt) in enumerate(pt_list)
         if curr_pt.crossing
-            pt_list[ii] = _update_node(curr_pt; ent_exit = status)
+            pt_list[ii] = PolyNode(curr_pt; ent_exit = status)
             status = !status
         end
     end
@@ -447,8 +447,8 @@ function _index_crossing_intrs!(a_list, b_list, a_idx_list)
     for (i, a_idx) in enumerate(a_idx_list)
         curr_node = a_list[a_idx]
         neighbor_node = b_list[curr_node.neighbor]
-        a_list[a_idx] = _update_node(curr_node; idx = i)
-        b_list[curr_node.neighbor] = _update_node(neighbor_node; idx = i)
+        a_list[a_idx] = PolyNode(curr_node; idx = i)
+        b_list[curr_node.neighbor] = PolyNode(neighbor_node; idx = i)
     end
     return
 end
@@ -562,7 +562,7 @@ polygons, they are removed from the list
 =#
 function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
     n_polys = length(return_polys)
-    remove_poly_idx = fill(false, n_polys)
+    remove_poly_idx = falses(n_polys)
     remove_hole_idx = Int[]
     # Remove set of holes from all polygons
     for i in 1:n_polys
@@ -578,7 +578,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
                 if in_ext  # hole is at least partially within the polygon's exterior
                     new_hole, new_hole_poly, n_new_pieces = _combine_holes!(T, curr_hole, curr_poly, return_polys, remove_hole_idx)
                     if n_new_pieces > 0
-                        append!(remove_poly_idx, fill(false, n_new_pieces))
+                        append!(remove_poly_idx, falses(n_new_pieces))
                         n_new_per_poly += n_new_pieces
                     end
                     if !on_ext && !out_ext  # hole is completly within exterior
@@ -590,7 +590,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
                         curr_poly.geom[1] = GI.getexterior(new_polys[1])
                         if n_new_polys > 0  # add any extra pieces
                             append!(return_polys, @view new_polys[2:end])
-                            append!(remove_poly_idx, fill(false, n_new_polys))
+                            append!(remove_poly_idx, falses(n_new_polys))
                             n_new_per_poly += n_new_polys
                         end
                     end
