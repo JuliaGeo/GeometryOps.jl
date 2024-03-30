@@ -567,7 +567,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
     # Remove set of holes from all polygons
     for i in 1:n_polys
         n_new_per_poly = 0
-        for curr_hole in hole_iterator # loop through all holes
+        for curr_hole in Iterators.map(tuples, hole_iterator) # loop through all holes
             # loop through all pieces of original polygon (new pieces added to end of list)
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
                 curr_poly = return_polys[j]
