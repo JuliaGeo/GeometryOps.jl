@@ -1,8 +1,10 @@
 # # Polygonizing raster data
+
 export polygonize
 
 #= 
-The methods in this file are able to convert a raster image into a set of polygons, 
+
+The methods in this file convert a raster image into a set of polygons, 
 by contour detection using a clockwise Moore neighborhood method.
 
 The main entry point is the [`polygonize`](@ref) function.
