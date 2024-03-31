@@ -20,7 +20,7 @@ struct _True <: BoolsAsTypes end
 struct _False <: BoolsAsTypes end
 
 @inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
-@inline _booltype(x::BoolsAsTypes) = x
+@inline _booltype(x::BoolsAsTypes)::BoolsAsTypes = x
 
 """
     TraitTarget{T}
