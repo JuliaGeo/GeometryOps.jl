@@ -195,28 +195,32 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
     Δqp_x = qx - px
     Δqp_y = qy - py
     if r_cross_s != 0  # if lines aren't parallel
-        # Calculate α (uses approx comparisons due to inexact calculations)
+        #= Calculate α = (Δqp_x * sy - Δqp_y * sx) / r_cross_s where we use approx
+        comparisons due to inexact calculations =#
         α_num_t1, α_num_t2 = Δqp_x * sy, Δqp_y * sx  # α numerator terms
         α_num = α_num_t1 - α_num_t2
-        α = if α_num_t1 ≈ α_num_t2
+        α = if α_num_t1 ≈ α_num_t2  # α = 0
             zero(T)
-        elseif α_num ≈ r_cross_s
+        elseif α_num ≈ r_cross_s  # α = 1
             one(T)
-        else
+        else  # α != 0, 1
             T(α_num / r_cross_s)
         end
+         #= Calculate β = (Δqp_x * ry - Δqp_y * rx) / r_cross_s where we use approx
+        comparisons due to inexact calculations =#
         β_num_t1, β_num_t2 = Δqp_x * ry, Δqp_y * rx
         β_num = β_num_t1 - β_num_t2
-        β = if β_num_t1 ≈ β_num_t2
+        β = if β_num_t1 ≈ β_num_t2  # β = 0
             zero(T)
-        elseif β_num ≈ r_cross_s
+        elseif β_num ≈ r_cross_s  # β = 1
             one(T)
-        else
+        else  # β != 0, 1
             T(β_num / r_cross_s)
         end
+        # Calculate intersection point using α and β
         x = T(px + α * rx)
         y = T(py + α * ry)
-        if 0 ≤ α ≤ 1 && 0 ≤ β ≤ 1
+        if 0 ≤ α ≤ 1 && 0 ≤ β ≤ 1  # only a valid intersection is 0 ≤ α, β ≤ 1
             intr1 = (x, y), (α, β)
             line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
         end
