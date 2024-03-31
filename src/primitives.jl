@@ -2,7 +2,57 @@
 
 export apply, applyreduce, TraitTarget
 
-# This file mainly defines the [`apply`](@ref) function and its relatives.
+#=
+
+This file mainly defines the [`apply`](@ref) and [`applyreduce`](@ref) functions, and some related functionality.
+
+In general, the idea behind the `apply` framework is to take 
+as input any geometry, vector of geometries, or feature collection,
+deconstruct it to the given trait target (any arbitrary GI.AbstractTrait 
+or `TraitTarget` union thereof, like `PointTrait` or `PolygonTrait`) 
+and perform some operation on it.  
+
+This allows for a simple and consistent framework within which users can 
+define their own operations trivially easily, and removes a lot of the 
+complexity involved with handling complex geometry structures.
+
+For example, a simple way to flip the x and y coordinates of a geometry is:
+
+```julia
+flipped_geom = GO.apply(GI.PointTrait, geom) do p
+    (GI.y(p), GI.x(p))
+end
+```
+
+As simple as that.  There's no need to implement your own decomposition because it's done for you.
+
+Functions like [`flip`](@ref), [`reproject`](@ref), [`transform`](@ref), even [`segmentize`](@ref) and [`simplify`](@ref) have been implemented
+using the `apply` framework.  Similarly, [`centroid`](@ref), [`area`](@ref) and [`distance`](@ref) have been implemented using the 
+[`applyreduce`](@ref) framework.
+
+## Docstrings
+
+### Functions
+
+```@docs
+apply
+applyreduce
+GeometryOps.unwrap
+GeometryOps.flatten
+GeometryOps.reconstruct
+GeometryOps.rebuild
+```
+
+## Types
+
+```@docs
+TraitTarget
+```
+
+## Implementation
+
+=#
+
 
 #=
 We pass `threading` and `calc_extent` as types, not simple boolean values.  
@@ -125,7 +175,7 @@ The result is a functionally similar geometry with values depending on `f`
 
 $APPLY_KEYWORDS
 
-# Example
+## Example
 
 Flipped point the order in any feature or geometry, or iterables of either:
 
@@ -138,6 +188,7 @@ geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]),
 flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
+```
 """
 @inline function apply(
     f::F, target, geom; calc_extent=false, threaded=false, kw...
