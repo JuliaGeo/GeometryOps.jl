@@ -69,11 +69,16 @@ function _intersection(
             push!(polys, GI.Polygon([tuples(ext_b)]))
         end
     end
+    remove_idx = falses(length(polys))
     # If the original polygons had holes, take that into account.
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
         hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
-        _add_holes_to_polys!(T, polys, hole_iterator)
-    end    
+        _add_holes_to_polys!(T, polys, hole_iterator, remove_idx)
+    end
+    # Remove uneeded collinear points on same edge
+    # for p in polys
+    #     _remove_collinear_points!(p, remove_idx)
+    # end
     return polys
 end
 

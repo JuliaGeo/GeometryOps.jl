@@ -140,9 +140,15 @@ function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         end
         LG_result_geom = LG.MultiPolygon(poly_list)
     end
+    # Check if nothing is returned
     if isempty(GO_result_list) && (LG.isEmpty(LG_result_geom) || LG.area(LG_result_geom) == 0)
         return true
     end
+    # Check for unnecessary points
+    # if sum(GI.npoint, GO_result_list; init = 0.0) != GI.npoint(LG_result_geom)
+    #     return false
+    # end
+    # Check if polygons cover the same area
     local GO_result_geom
     if length(GO_result_list)==1
         GO_result_geom = GO_result_list[1]

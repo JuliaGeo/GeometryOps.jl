@@ -65,11 +65,16 @@ function _union(
     # the first element is the exterior, the rest are holes
     new_holes = @views (GI.getexterior(p) for p in polys[2:end])
     polys = n_pieces > 1 ? polys[1:1] : polys
+    remove_idx = falses(length(polys))
     # Add holes back in for there are any
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0 || n_pieces > 1
         hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b), new_holes))
-        _add_holes_to_polys!(T, polys, hole_iterator)
+        _add_holes_to_polys!(T, polys, hole_iterator, remove_idx)
     end
+    # Remove uneeded collinear points on same edge
+    # for p in polys
+    #     _remove_collinear_points!(p, remove_idx)
+    # end
     return polys
 end
 

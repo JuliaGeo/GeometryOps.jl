@@ -59,10 +59,10 @@ function _difference(
             return polys
         end
     end
-
+    remove_idx = falses(length(polys))
     # If the original polygons had holes, take that into account.
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
-        _add_holes_to_polys!(T, polys, GI.gethole(poly_a))
+        _add_holes_to_polys!(T, polys, GI.gethole(poly_a), remove_idx)
         for hole in GI.gethole(poly_b)
             new_polys = intersection(GI.Polygon([hole]), poly_a, T; target = GI.PolygonTrait)
             if length(new_polys) > 0
@@ -70,6 +70,10 @@ function _difference(
             end
         end
     end
+    # Remove uneeded collinear points on same edge
+    # for p in polys
+    #     _remove_collinear_points!(p, remove_idx)
+    # end
     return polys
 end
 

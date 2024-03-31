@@ -560,9 +560,8 @@ The holes specified by the hole iterator are added to the polygons in the return
 If this creates more polygon, they are added to the end of the list. If this removes
 polygons, they are removed from the list
 =#
-function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator) where T
+function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_poly_idx) where T
     n_polys = length(return_polys)
-    remove_poly_idx = falses(n_polys)
     remove_hole_idx = Int[]
     # Remove set of holes from all polygons
     for i in 1:n_polys
@@ -654,4 +653,36 @@ function _combine_holes!(::Type{T}, new_hole, curr_poly, return_polys, remove_ho
     end
     deleteat!(curr_poly.geom, remove_hole_idx)
     return new_hole, new_hole_poly, n_new_polys
+end
+
+function _remove_collinear_points!(poly, remove_idx)
+    for ring in GI.getring(poly)
+        n = length(ring.geom)
+        resize!(remove_idx, n)
+        fill!(remove_idx, false)
+        local p1, p2
+        for (i, p) in enumerate(ring.geom)
+            if i == 1
+                p1 = p
+                continue
+            elseif i == 2
+                p2 = p
+                continue
+            else
+                p3 = p
+                if _signed_area_triangle(p1, p2, p3) == 0
+                    remove_idx[i - 1] = true
+                end
+            end
+            p1, p2 = p2, p3
+        end
+        if _signed_area_triangle(ring.geom[end - 1], ring.geom[1], ring.geom[2]) == 0
+            remove_idx[1], remove_idx[end] = true, true
+        end
+        deleteat!(ring.geom, remove_idx)
+        if remove_idx[1]
+            push!(ring.geom, ring.geom[1])
+        end
+    end
+    return
 end
