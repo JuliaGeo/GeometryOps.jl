@@ -226,24 +226,33 @@ end
         end
     end
 end
+#= 
+Doing this inline in `_apply` is _heavily_ type unstable, so it's best to separate this 
+by a function barrier.
 
+This function operates `apply` on the `geometry` column of the table, and returns a new table
+with the same schema, but with the new geometry column.
+
+This new table may be of the same type as the old one iff `Tables.materializer` is defined for 
+that table.  If not, then a `NamedTuple` is returned.
+=#
 function _apply_to_table(f::F, target, iterable::IterableType; threaded, kw...) where {F, IterableType}
     _get_col_pair(colname) = colname => Tables.getcolumn(iterable, colname)
-        # We extract the geometry column and run `apply` on it.
-        geometry_column = first(GI.geometrycolumns(iterable))
-        new_geometry = _apply(f, target, Tables.getcolumn(iterable, geometry_column); threaded, kw...)
-        # Then, we obtain the schema of the table,
-        old_schema = Tables.schema(iterable)
-        # filter the geometry column out,
-        new_names = Iterators.filter(Base.Fix1(!==, geometry_column), old_schema.names)
-        # and try to rebuild the same table as the best type - either the original type of `iterable`,
-        # or a named tuple which is the default fallback.
-        return Tables.materializer(iterable)(
-            merge(
-                NamedTuple{(geometry_column,), Base.Tuple{typeof(new_geometry)}}((new_geometry,)),
-                NamedTuple(Iterators.map(_get_col_pair, new_names))
-            )
+    # We extract the geometry column and run `apply` on it.
+    geometry_column = first(GI.geometrycolumns(iterable))
+    new_geometry = _apply(f, target, Tables.getcolumn(iterable, geometry_column); threaded, kw...)
+    # Then, we obtain the schema of the table,
+    old_schema = Tables.schema(iterable)
+    # filter the geometry column out,
+    new_names = Iterators.filter(Base.Fix1(!==, geometry_column), old_schema.names)
+    # and try to rebuild the same table as the best type - either the original type of `iterable`,
+    # or a named tuple which is the default fallback.
+    return Tables.materializer(iterable)(
+        merge(
+            NamedTuple{(geometry_column,), Base.Tuple{typeof(new_geometry)}}((new_geometry,)),
+            NamedTuple(Iterators.map(_get_col_pair, new_names))
         )
+    )
 end
 
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
