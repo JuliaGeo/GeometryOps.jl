@@ -212,15 +212,40 @@ end
 # There is no trait and this is not an AbstractArray.
 # Try to call _apply over it. We can't use threading
 # as we don't know if we can can index into it. So just `map`.
-@inline function _apply(f::F, target, ::Nothing, iterable; threaded, kw...) where F
-    if threaded
-        # `collect` first so we can use threads
-        _apply(f, target, collect(iterable); threaded, kw...)
-    else
-        apply_to_iterable(x) = _apply(f, target, x; kw...)
-        map(apply_to_iterable, iterable)
+@inline function _apply(f::F, target, ::Nothing, iterable::IterableType; threaded, kw...) where {F, IterableType}
+    # Try the Tables.jl interface first
+    if Tables.istable(iterable)
+        _apply_to_table(f, target, iterable; threaded, kw...)
+    else # this is probably some form of iterable...
+        if threaded
+            # `collect` first so we can use threads
+            _apply(f, target, collect(iterable); threaded, kw...)
+        else
+            apply_to_iterable(x) = _apply(f, target, x; kw...)
+            map(apply_to_iterable, iterable)
+        end
     end
 end
+
+function _apply_to_table(f::F, target, iterable::IterableType; threaded, kw...) where {F, IterableType}
+    _get_col_pair(colname) = colname => Tables.getcolumn(iterable, colname)
+        # We extract the geometry column and run `apply` on it.
+        geometry_column = first(GI.geometrycolumns(iterable))
+        new_geometry = _apply(f, target, Tables.getcolumn(iterable, geometry_column); threaded, kw...)
+        # Then, we obtain the schema of the table,
+        old_schema = Tables.schema(iterable)
+        # filter the geometry column out,
+        new_names = Iterators.filter(Base.Fix1(!==, geometry_column), old_schema.names)
+        # and try to rebuild the same table as the best type - either the original type of `iterable`,
+        # or a named tuple which is the default fallback.
+        return Tables.materializer(iterable)(
+            merge(
+                NamedTuple{(geometry_column,), Base.Tuple{typeof(new_geometry)}}((new_geometry,)),
+                NamedTuple(Iterators.map(_get_col_pair, new_names))
+            )
+        )
+end
+
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
 # Maybe use threads to call _apply on componenet features
 @inline function _apply(f::F, target, ::GI.FeatureCollectionTrait, fc;
