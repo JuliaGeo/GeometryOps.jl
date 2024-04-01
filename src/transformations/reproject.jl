@@ -20,6 +20,10 @@ Reproject any GeoInterface.jl compatible `geometry` from `source_crs` to `target
 The returned object will be constructed from `GeoInterface.WrapperGeometry`
 geometries, wrapping views of a `Vector{Proj.Point{D}}`, where `D` is the dimension.
 
+!!! tip
+    The `Proj.jl` package must be loaded for this method to work, 
+    since it is implemented in a package extension.
+
 ## Arguments
 
 - `geometry`: Any GeoInterface.jl compatible geometries.
