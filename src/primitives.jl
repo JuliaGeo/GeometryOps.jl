@@ -260,21 +260,21 @@ If `threaded==true` threads will be used over arrays and iterables,
 feature collections and nested geometries.
 """
 @inline function applyreduce(
-    f::F, op::OT, target, geom; threaded=false, init=nothing
-) where {F, OT}
+    f::F, op::O, target, geom; threaded=false, init=nothing
+) where {F, O}
     threaded = _booltype(threaded)
     _applyreduce(f, op, TraitTarget(target), geom; threaded, init)
 end
 
-@inline _applyreduce(f::F, op::OT, target, geom; threaded, init) where {F, OT} =
+@inline _applyreduce(f::F, op::O, target, geom; threaded, init) where {F, O} =
     _applyreduce(f, op, target, GI.trait(geom), geom; threaded, init)
 # Maybe use threads recucing over arrays
-@inline function _applyreduce(f::F, op::OT, target, ::Nothing, A::AbstractArray; threaded, init) where {F, OT}
+@inline function _applyreduce(f::F, op::O, target, ::Nothing, A::AbstractArray; threaded, init) where {F, O}
     applyreduce_array(i) = _applyreduce(f, op, target, A[i]; threaded=_False(), init)
     _mapreducetasks(applyreduce_array, op, eachindex(A), threaded; init)
 end
 # Try to applyreduce over iterables
-@inline function _applyreduce(f::F, op::OT, target, ::Nothing, iterable; threaded, init) where {F, OT}
+@inline function _applyreduce(f::F, op::O, target, ::Nothing, iterable; threaded, init) where {F, O}
     applyreduce_iterable(i) = _applyreduce(f, op, target, x; threaded=_False(), init)
     if threaded # Try to `collect` and reduce over the vector with threads
         _applyreduce(f, op, target, collect(iterable); threaded, init)
@@ -284,27 +284,27 @@ end
     end
 end
 # Maybe use threads reducing over features of feature collections
-@inline function _applyreduce(f::F, op::OT, target, ::GI.FeatureCollectionTrait, fc; threaded, init) where {F, OT}
+@inline function _applyreduce(f::F, op::O, target, ::GI.FeatureCollectionTrait, fc; threaded, init) where {F, O}
     applyreduce_fc(i) = _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=_False(), init)
     _mapreducetasks(applyreduce_fc, op, 1:GI.nfeature(fc), threaded; init)
 end
 # Features just applyreduce to their geometry
-@inline _applyreduce(f::F, op::OT, target, ::GI.FeatureTrait, feature; threaded, init) where {F, OT} =
+@inline _applyreduce(f::F, op::O, target, ::GI.FeatureTrait, feature; threaded, init) where {F, O} =
     _applyreduce(f, op, target, GI.geometry(feature); threaded, init)
 # Maybe use threads over components of nested geometries
-@inline function _applyreduce(f::F, op::OT, target, trait, geom; threaded, init) where {F, OT}
+@inline function _applyreduce(f::F, op::O, target, trait, geom; threaded, init) where {F, O}
     applyreduce_geom(i) = _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=_False(), init)
     _mapreducetasks(applyreduce_geom, op, 1:GI.ngeom(geom), threaded; init)
 end
 # Don't thread over points it won't pay off
 @inline function _applyreduce(
-    f::F, op::OT, target, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom;
+    f::F, op::O, target, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom;
     threaded, init
-) where {F, OT}
+) where {F, O}
     _applyreduce(f, op, target, GI.getgeom(geom); threaded=_False(), init)
 end
 # Apply f to the target
-@inline function _applyreduce(f::F, op::OT, ::TraitTarget{Target}, ::Trait, x; kw...) where {F,OT,Target,Trait<:Target} 
+@inline function _applyreduce(f::F, op::O, ::TraitTarget{Target}, ::Trait, x; kw...) where {F,O,Target,Trait<:Target} 
     f(x)
 end
 # Fail if we hit PointTrait
@@ -315,7 +315,7 @@ for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString, 
     GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait
 )
-    @eval _applyreduce(f::F, op::OT, ::TraitTarget{<:$T}, trait::$T, x; kw...) where {F, OT} = f(x)
+    @eval _applyreduce(f::F, op::O, ::TraitTarget{<:$T}, trait::$T, x; kw...) where {F, O} = f(x)
 end
 
 """
