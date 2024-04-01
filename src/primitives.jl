@@ -359,14 +359,35 @@ end
     _mapreducetasks(applyreduce_array, op, eachindex(A), threaded; init)
 end
 # Try to applyreduce over iterables
-@inline function _applyreduce(f::F, op::O, target, ::Nothing, iterable; threaded, init) where {F, O}
-    applyreduce_iterable(i) = _applyreduce(f, op, target, x; threaded=_False(), init)
-    if threaded # Try to `collect` and reduce over the vector with threads
-        _applyreduce(f, op, target, collect(iterable); threaded, init)
+@inline function _applyreduce(f::F, op::O, target, ::Nothing, iterable::IterableType; threaded, init) where {F, O, IterableType}
+    if Tables.istable(iterable)
+        _applyreduce_to_table(f, op, target, iterable; threaded, init)
     else
+        applyreduce_iterable(i) = _applyreduce(f, op, target, x; threaded=_False(), init)
         if threaded isa _True # Try to `collect` and reduce over the vector with threads
-        mapreduce(applyreduce_iterable, op, iterable; init)
+            _applyreduce(f, op, target, collect(iterable); threaded, init)
+        else
+            # Try to `mapreduce` the iterable as-is
+            mapreduce(applyreduce_iterable, op, iterable; init)
+        end
     end
+end
+# In this case, we don't reconstruct the table, but only operate on the geometry column.
+function _applyreduce_to_table(f::F, op::O, target, iterable::IterableType; threaded, init) where {F, O, IterableType}
+    # We extract the geometry column and run `applyreduce` on it.
+    geometry_column = first(GI.geometrycolumns(iterable))
+    return _applyreduce(f, op, target, Tables.getcolumn(iterable, geometry_column); threaded, init)
+end
+# If `applyreduce` wants features, then applyreduce over the rows as `GI.Feature`s.
+___get_col_pair_from_row(row, colname) = colname => Tables.getcolumn(row, colname)
+function _applyreduce_to_table(f::F, op::O, target::GI.FeatureTrait, iterable::IterableType; threaded, init) where {F, O, IterableType}
+    # We extract the geometry column and run `apply` on it.
+    geometry_column = first(GI.geometrycolumns(iterable))
+    property_names = Iterators.filter(!=(geometry_column), Tables.schema(iterable).names)
+    features = map(Tables.rows(iterable)) do row
+        GI.Feature(Tables.getcolumn(row, geometry_column), properties=NamedTuple(Iterators.map(Base.Fix1(_get_col_pair, row), property_names)))
+    end
+    return _applyreduce(f, op, target, features; threaded, init)
 end
 # Maybe use threads reducing over features of feature collections
 @inline function _applyreduce(f::F, op::O, target, ::GI.FeatureCollectionTrait, fc; threaded, init) where {F, O}
