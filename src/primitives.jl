@@ -217,7 +217,7 @@ end
     if Tables.istable(iterable)
         _apply_to_table(f, target, iterable; threaded, kw...)
     else # this is probably some form of iterable...
-        if threaded
+        if threaded isa _True
             # `collect` first so we can use threads
             _apply(f, target, collect(iterable); threaded, kw...)
         else
@@ -247,7 +247,7 @@ function _apply_to_table(f::F, target, iterable::IterableType; threaded, kw...) 
 end
 
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
-# Maybe use threads to call _apply on componenet features
+# Maybe use threads to call _apply on component features
 @inline function _apply(f::F, target, ::GI.FeatureCollectionTrait, fc;
     crs=GI.crs(fc), calc_extent=_False(), threaded
 ) where F
@@ -355,7 +355,7 @@ end
     if threaded # Try to `collect` and reduce over the vector with threads
         _applyreduce(f, op, target, collect(iterable); threaded, init)
     else
-        # Try to `mapreduce` the iterable as-is
+        if threaded isa _True # Try to `collect` and reduce over the vector with threads
         mapreduce(applyreduce_iterable, op, iterable; init)
     end
 end
