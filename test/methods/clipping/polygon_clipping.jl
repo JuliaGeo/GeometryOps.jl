@@ -1,3 +1,6 @@
+import GeometryOps as GO
+import GeoInterface as GI
+
 # Test of polygon clipping
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
 p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
@@ -128,6 +131,8 @@ test_pairs = [
     (p50, p51, "p50", "p51", "Intersection polygons with opposite winding orders and repeated points"),
 ]
 
+GO.intersection(p27, p28; target = GI.PolygonTrait())
+
 const ϵ = 1e-10
 # Compare clipping results from GeometryOps and LibGEOS
 function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
@@ -155,13 +160,15 @@ function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
     else
         GO_result_geom = GI.MultiPolygon(GO_result_list)
     end
-    diff_area = LG.area(LG.difference(GO_result_geom, LG_result_geom))
-    return diff_area ≤ ϵ
+    diff_1_area = LG.area(LG.difference(GO_result_geom, LG_result_geom))
+    diff_2_area = LG.area(LG.difference(LG_result_geom, GO_result_geom))
+    return diff_1_area ≤ ϵ && diff_2_area ≤ ϵ
 end
 
 # Test clipping functions and print error message if tests fail
 function test_clipping(GO_f, LG_f, f_name)
     for (p1, p2, sg1, sg2, sdesc) in test_pairs
+        @show sg1, sg2
         pass_test = compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         @test pass_test
         !pass_test && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")

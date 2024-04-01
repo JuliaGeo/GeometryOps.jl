@@ -329,7 +329,7 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
             crossing = crossing,
             endpoint = start_chain,
         )
-        b_list[start_pt.neighbor] = PolyNode(start_pt;
+        b_list[start_pt.neighbor] = PolyNode(b_list[start_pt.neighbor];
             crossing = crossing,
             endpoint = same_winding ? start_chain : end_chain,
         )
