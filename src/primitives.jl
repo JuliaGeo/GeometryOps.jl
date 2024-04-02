@@ -379,7 +379,6 @@ function _applyreduce_to_table(f::F, op::O, target, iterable::IterableType; thre
     return _applyreduce(f, op, target, Tables.getcolumn(iterable, geometry_column); threaded, init)
 end
 # If `applyreduce` wants features, then applyreduce over the rows as `GI.Feature`s.
-___get_col_pair_from_row(row, colname) = colname => Tables.getcolumn(row, colname)
 function _applyreduce_to_table(f::F, op::O, target::GI.FeatureTrait, iterable::IterableType; threaded, init) where {F, O, IterableType}
     # We extract the geometry column and run `apply` on it.
     geometry_column = first(GI.geometrycolumns(iterable))
