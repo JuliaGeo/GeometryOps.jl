@@ -44,9 +44,9 @@ poly = GI.Polygon([lr1, lr2])
             end
 
             @testset "DataFrames" begin
-                countries_df = DataFrame(countries_table)
+                countries_df = DataFrames.DataFrame(countries_table)
                 centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df);
-                @test centroid_df isa DataFrame
+                @test centroid_df isa DataFrames.DataFrame
                 centroid_geometry = centroid_df.geometry
                 # Test that the centroids are correct
                 @test all(centroid_geometry .== GO.centroid.(countries_df.geometry))
