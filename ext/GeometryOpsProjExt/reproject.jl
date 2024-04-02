@@ -25,7 +25,7 @@ end
 function reproject(geom, source_crs, target_crs;
     time=Inf,
     always_xy=true,
-    transform=Proj.Transformation(Proj.CRS(source_crs), Proj.CRS(target_crs); always_xy),
+    transform=Proj.Transformation(convert(String, source_crs), convert(String, target_crs); always_xy),
     kw...
 )
     reproject(geom, transform; time, target_crs, kw...)
