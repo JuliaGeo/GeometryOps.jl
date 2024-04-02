@@ -95,17 +95,17 @@ function to_extent(edges::Vector{Edge})
     Extents.Extent(X=x, Y=y)
 end
 
-_to_point3(T, p) = (T(GI.x(p)), T(GI.y(p)), T(GI.z(p)))
-_to_point2(T, p) = (T(GI.x(p)), T(GI.y(p)))
+to_point3(p, T::Type = Float64) = (T(GI.x(p)), T(GI.y(p)), T(GI.z(p)))
+to_point2(p, T::Type = Float64) = (T(GI.x(p)), T(GI.y(p)))
 
 """
     to_points(geom::AbstractGeometry, ::Type{T} = Float64) where {T <: Number}
 """
 function to_points(geom, ::Type{T} = Float64) where {T <: Number}
     if _is3d(geom)
-        return collect(flatten(p -> _to_point3(T, p)), GI.PointTrait, geom))
+        return collect(flatten(p -> to_point3(p, T), GI.PointTrait, geom))
     else
-        return collect(flatten(p -> _to_point2(T, p), GI.PointTrait, geom))
+        return collect(flatten(p -> to_point2(p, T), GI.PointTrait, geom))
     end
 end
 
