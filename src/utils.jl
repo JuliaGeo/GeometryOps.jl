@@ -102,7 +102,11 @@ _to_point2(T, p) = (T(GI.x(p)), T(GI.y(p)))
     to_points(geom::AbstractGeometry, ::Type{T} = Float64) where {T <: Number}
 """
 function to_points(geom, ::Type{T} = Float64) where {T <: Number}
-    return collect(flatten(Base.Fix1(_is3d(geom) ? _to_point3 : _to_point2, T), GI.PointTrait, geom))
+    if _is3d(geom)
+        return collect(flatten(p -> _to_point3(T, p)), GI.PointTrait, geom))
+    else
+        return collect(flatten(p -> _to_point2(T, p), GI.PointTrait, geom))
+    end
 end
 
 function point_in_extent(p, extent::Extents.Extent)
