@@ -25,9 +25,16 @@ end
 function reproject(geom, source_crs, target_crs;
     time=Inf,
     always_xy=true,
-    transform=Proj.Transformation(Proj.CRS(source_crs), Proj.CRS(target_crs); always_xy),
+    transform=nothing,
     kw...
 )
+    transform = if isnothing(transform) 
+        s = source_crs isa Proj.CRS ? source_crs : convert(String, source_crs)
+        t = target_crs isa Proj.CRS ? target_crs : convert(String, target_crs)
+        Proj.Transformation(s, t; always_xy)
+    else
+        transform
+    end
     reproject(geom, transform; time, target_crs, kw...)
 end
 function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=nothing, kw...)
