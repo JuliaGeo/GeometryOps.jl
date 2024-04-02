@@ -54,6 +54,14 @@ include("transformations/transform.jl")
 include("transformations/correction/geometry_correction.jl")
 include("transformations/correction/closed_ring.jl")
 
+# Import all names from GeoInterface and Extents, so users can do `GO.extent` or `GO.trait`.
+for name in names(GeoInterface)
+    @eval using GeoInterface: $name
+end
+for name in names(Extents)
+    @eval using GeoInterface.Extents: $name
+end
+
 function __init__()
     # Handle all available errors!
     Base.Experimental.register_error_hint(_reproject_error_hinter, MethodError)
