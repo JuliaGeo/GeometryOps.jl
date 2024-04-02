@@ -215,7 +215,7 @@ end
 @inline function _apply(f::F, target, ::Nothing, iterable::IterableType; threaded, kw...) where {F, IterableType}
     # Try the Tables.jl interface first
     if Tables.istable(iterable)
-        _apply_to_table(f, target, iterable; threaded, kw...)
+    _apply_table(f, target, iterable; threaded, kw...)
     else # this is probably some form of iterable...
         if threaded isa _True
             # `collect` first so we can use threads
@@ -236,7 +236,7 @@ with the same schema, but with the new geometry column.
 This new table may be of the same type as the old one iff `Tables.materializer` is defined for 
 that table.  If not, then a `NamedTuple` is returned.
 =#
-function _apply_to_table(f::F, target, iterable::IterableType; threaded, kw...) where {F, IterableType}
+function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) where {F, IterableType}
     _get_col_pair(colname) = colname => Tables.getcolumn(iterable, colname)
     # We extract the geometry column and run `apply` on it.
     geometry_column = first(GI.geometrycolumns(iterable))
@@ -361,7 +361,7 @@ end
 # Try to applyreduce over iterables
 @inline function _applyreduce(f::F, op::O, target, ::Nothing, iterable::IterableType; threaded, init) where {F, O, IterableType}
     if Tables.istable(iterable)
-        _applyreduce_to_table(f, op, target, iterable; threaded, init)
+        _applyreduce_table(f, op, target, iterable; threaded, init)
     else
         applyreduce_iterable(i) = _applyreduce(f, op, target, x; threaded=_False(), init)
         if threaded isa _True # Try to `collect` and reduce over the vector with threads
@@ -373,13 +373,13 @@ end
     end
 end
 # In this case, we don't reconstruct the table, but only operate on the geometry column.
-function _applyreduce_to_table(f::F, op::O, target, iterable::IterableType; threaded, init) where {F, O, IterableType}
+function _applyreduce_table(f::F, op::O, target, iterable::IterableType; threaded, init) where {F, O, IterableType}
     # We extract the geometry column and run `applyreduce` on it.
     geometry_column = first(GI.geometrycolumns(iterable))
     return _applyreduce(f, op, target, Tables.getcolumn(iterable, geometry_column); threaded, init)
 end
 # If `applyreduce` wants features, then applyreduce over the rows as `GI.Feature`s.
-function _applyreduce_to_table(f::F, op::O, target::GI.FeatureTrait, iterable::IterableType; threaded, init) where {F, O, IterableType}
+function _applyreduce_table(f::F, op::O, target::GI.FeatureTrait, iterable::IterableType; threaded, init) where {F, O, IterableType}
     # We extract the geometry column and run `apply` on it.
     geometry_column = first(GI.geometrycolumns(iterable))
     property_names = Iterators.filter(!=(geometry_column), Tables.schema(iterable).names)
