@@ -1,7 +1,7 @@
 name = "GeometryOps"
 uuid = "3251bfac-6a57-4b6d-aa61-ac1fef2975ab"
 authors = ["Anshul Singhvi <anshulsinghvi@gmail.com> and contributors"]
-version = "0.0.1"
+version = "0.1.1"
 
 [deps]
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"

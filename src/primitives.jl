@@ -2,7 +2,57 @@
 
 export apply, applyreduce, TraitTarget
 
-# This file mainly defines the [`apply`](@ref) function and its relatives.
+#=
+
+This file mainly defines the [`apply`](@ref) and [`applyreduce`](@ref) functions, and some related functionality.
+
+In general, the idea behind the `apply` framework is to take 
+as input any geometry, vector of geometries, or feature collection,
+deconstruct it to the given trait target (any arbitrary GI.AbstractTrait 
+or `TraitTarget` union thereof, like `PointTrait` or `PolygonTrait`) 
+and perform some operation on it.  
+
+This allows for a simple and consistent framework within which users can 
+define their own operations trivially easily, and removes a lot of the 
+complexity involved with handling complex geometry structures.
+
+For example, a simple way to flip the x and y coordinates of a geometry is:
+
+```julia
+flipped_geom = GO.apply(GI.PointTrait, geom) do p
+    (GI.y(p), GI.x(p))
+end
+```
+
+As simple as that.  There's no need to implement your own decomposition because it's done for you.
+
+Functions like [`flip`](@ref), [`reproject`](@ref), [`transform`](@ref), even [`segmentize`](@ref) and [`simplify`](@ref) have been implemented
+using the `apply` framework.  Similarly, [`centroid`](@ref), [`area`](@ref) and [`distance`](@ref) have been implemented using the 
+[`applyreduce`](@ref) framework.
+
+## Docstrings
+
+### Functions
+
+```@docs
+apply
+applyreduce
+GeometryOps.unwrap
+GeometryOps.flatten
+GeometryOps.reconstruct
+GeometryOps.rebuild
+```
+
+## Types
+
+```@docs
+TraitTarget
+```
+
+## Implementation
+
+=#
+
 
 #=
 We pass `threading` and `calc_extent` as types, not simple boolean values.  
@@ -20,7 +70,7 @@ struct _True <: BoolsAsTypes end
 struct _False <: BoolsAsTypes end
 
 @inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
-@inline _booltype(x::BoolsAsTypes) = x
+@inline _booltype(x::BoolsAsTypes)::BoolsAsTypes = x
 
 """
     TraitTarget{T}
@@ -125,7 +175,7 @@ The result is a functionally similar geometry with values depending on `f`
 
 $APPLY_KEYWORDS
 
-# Example
+## Example
 
 Flipped point the order in any feature or geometry, or iterables of either:
 
@@ -138,6 +188,7 @@ geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]),
 flipped_geom = GO.apply(GI.PointTrait, geom) do p
     (GI.y(p), GI.x(p))
 end
+```
 """
 @inline function apply(
     f::F, target, geom; calc_extent=false, threaded=false, kw...
@@ -260,21 +311,21 @@ If `threaded==true` threads will be used over arrays and iterables,
 feature collections and nested geometries.
 """
 @inline function applyreduce(
-    f::F, op, target, geom; threaded=false, init=nothing
-) where F
+    f::F, op::O, target, geom; threaded=false, init=nothing
+) where {F, O}
     threaded = _booltype(threaded)
     _applyreduce(f, op, TraitTarget(target), geom; threaded, init)
 end
 
-@inline _applyreduce(f::F, op, target, geom; threaded, init) where F =
+@inline _applyreduce(f::F, op::O, target, geom; threaded, init) where {F, O} =
     _applyreduce(f, op, target, GI.trait(geom), geom; threaded, init)
 # Maybe use threads recucing over arrays
-@inline function _applyreduce(f::F, op, target, ::Nothing, A::AbstractArray; threaded, init) where F
+@inline function _applyreduce(f::F, op::O, target, ::Nothing, A::AbstractArray; threaded, init) where {F, O}
     applyreduce_array(i) = _applyreduce(f, op, target, A[i]; threaded=_False(), init)
     _mapreducetasks(applyreduce_array, op, eachindex(A), threaded; init)
 end
 # Try to applyreduce over iterables
-@inline function _applyreduce(f::F, op, target, ::Nothing, iterable; threaded, init) where F
+@inline function _applyreduce(f::F, op::O, target, ::Nothing, iterable; threaded, init) where {F, O}
     applyreduce_iterable(i) = _applyreduce(f, op, target, x; threaded=_False(), init)
     if threaded # Try to `collect` and reduce over the vector with threads
         _applyreduce(f, op, target, collect(iterable); threaded, init)
@@ -284,27 +335,27 @@ end
     end
 end
 # Maybe use threads reducing over features of feature collections
-@inline function _applyreduce(f::F, op, target, ::GI.FeatureCollectionTrait, fc; threaded, init) where F
+@inline function _applyreduce(f::F, op::O, target, ::GI.FeatureCollectionTrait, fc; threaded, init) where {F, O}
     applyreduce_fc(i) = _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=_False(), init)
     _mapreducetasks(applyreduce_fc, op, 1:GI.nfeature(fc), threaded; init)
 end
 # Features just applyreduce to their geometry
-@inline _applyreduce(f::F, op, target, ::GI.FeatureTrait, feature; threaded, init) where F =
+@inline _applyreduce(f::F, op::O, target, ::GI.FeatureTrait, feature; threaded, init) where {F, O} =
     _applyreduce(f, op, target, GI.geometry(feature); threaded, init)
 # Maybe use threads over components of nested geometries
-@inline function _applyreduce(f::F, op, target, trait, geom; threaded, init) where F
+@inline function _applyreduce(f::F, op::O, target, trait, geom; threaded, init) where {F, O}
     applyreduce_geom(i) = _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=_False(), init)
     _mapreducetasks(applyreduce_geom, op, 1:GI.ngeom(geom), threaded; init)
 end
 # Don't thread over points it won't pay off
 @inline function _applyreduce(
-    f::F, op, target, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom;
+    f::F, op::O, target, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom;
     threaded, init
-) where F
+) where {F, O}
     _applyreduce(f, op, target, GI.getgeom(geom); threaded=_False(), init)
 end
 # Apply f to the target
-@inline function _applyreduce(f::F, op, ::TraitTarget{Target}, ::Trait, x; kw...) where {F,Target,Trait<:Target} 
+@inline function _applyreduce(f::F, op::O, ::TraitTarget{Target}, ::Trait, x; kw...) where {F,O,Target,Trait<:Target} 
     f(x)
 end
 # Fail if we hit PointTrait
@@ -315,7 +366,7 @@ for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString, 
     GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait
 )
-    @eval _applyreduce(f::F, op, ::TraitTarget{<:$T}, trait::$T, x; kw...) where F = f(x)
+    @eval _applyreduce(f::F, op::O, ::TraitTarget{<:$T}, trait::$T, x; kw...) where {F, O} = f(x)
 end
 
 """
