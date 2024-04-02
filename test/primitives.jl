@@ -4,6 +4,7 @@ import GeoInterface as GI
 import GeometryOps as GO
 import GeometryBasics as GB
 import Proj
+import Shapefile, DataFrames
 
 pv1 = [(1, 2), (3, 4), (5, 6), (1, 2)]
 pv2 = [(3, 4), (5, 6), (6, 7), (3, 4)]
@@ -19,7 +20,48 @@ poly = GI.Polygon([lr1, lr2])
 
     @test flipped_poly == GI.Polygon([GI.LinearRing([(2, 1), (4, 3), (6, 5), (2, 1)]), 
                                       GI.LinearRing([(4, 3), (6, 5), (7, 6), (4, 3)])])
+
+    @testset "Tables.jl support" begin
+        mktempdir() do dir
+        cd(dir) do
+
+            download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/v5.1.2/110m_cultural/ne_110m_admin_0_countries.shp", "countries.shp")
+            download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/v5.1.2/110m_cultural/ne_110m_admin_0_countries.shx", "countries.shx")
+            download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/v5.1.2/110m_cultural/ne_110m_admin_0_countries.dbf", "countries.dbf")
+            download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/v5.1.2/110m_cultural/ne_110m_admin_0_countries.prj", "countries.prj")
+            countries_table = Shapefile.Table("countries.shp")
+
+            @testset "Shapefile" begin
+                centroid_table = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_table);
+                centroid_geometry = centroid_table.geometry
+                # Test that the centroids are correct
+                @test all(centroid_geometry .== GO.centroid.(countries_table.geometry))
+                @testset "Columns are preserved" begin  
+                    for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_table))
+                        @test all(GO.Tables.getcolumn(centroid_table, column) .== GO.Tables.getcolumn(countries_table, column))
+                    end
+                end
+            end
+
+            @testset "DataFrames" begin
+                countries_df = DataFrame(countries_table)
+                centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df);
+                @test centroid_df isa DataFrame
+                centroid_geometry = centroid_df.geometry
+                # Test that the centroids are correct
+                @test all(centroid_geometry .== GO.centroid.(countries_df.geometry))
+                @testset "Columns are preserved" begin  
+                    for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_df))
+                        @test all(centroid_df[!, column] .== countries_df[!, column])
+                    end
+                end
+            end
+        end
+        end
+    end
 end
+
+
 
 @testset "unwrap" begin
     flipped_vectors = GO.unwrap(GI.PointTrait, poly) do p
