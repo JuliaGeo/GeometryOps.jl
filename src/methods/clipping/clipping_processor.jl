@@ -571,8 +571,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
                 curr_poly = return_polys[j]
                 remove_poly_idx[j] && continue
-                n_existing_holes = GI.nhole(curr_poly)
-                curr_poly_ext = n_existing_holes > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
+                curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
                 in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; closed_line = true)
                 if in_ext  # hole is at least partially within the polygon's exterior
                     new_hole, new_hole_poly, n_new_pieces = _combine_holes!(T, curr_hole, curr_poly, return_polys, remove_hole_idx)
@@ -585,8 +584,9 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
                     else  # hole is partially within and outside of polygon's exterior
                         new_polys = difference(curr_poly_ext, new_hole_poly, T; target=GI.PolygonTrait())
                         n_new_polys = length(new_polys) - 1
-                        # replace original -> can't have a hole
+                        # replace original
                         curr_poly.geom[1] = GI.getexterior(new_polys[1])
+                        append!(curr_poly.geom, GI.gethole(new_polys[1]))
                         if n_new_polys > 0  # add any extra pieces
                             append!(return_polys, @view new_polys[2:end])
                             append!(remove_poly_idx, falses(n_new_polys))

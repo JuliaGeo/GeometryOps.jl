@@ -47,7 +47,8 @@ function _union(
     a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _union_delay_cross_f, _union_delay_bounce_f)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _union_step)
     n_pieces = length(polys)
-    # Check if one polygon totally within other and if so, return the larger polygon.
+    # Check if one polygon totally within other and if so, return the larger polygon
+    a_in_b, b_in_a = false, false
     if n_pieces == 0 # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
         if a_in_b
@@ -59,18 +60,29 @@ function _union(
             push!(polys, tuples(poly_b))
             return polys
         end
-    elseif n_pieces > 1  # extra polygons are holes (n_pieces == 1 is the desired state)
-        sort!(polys, by = area, rev = true)  # sort so first element is the exterior
+    elseif n_pieces > 1
+        #= extra polygons are holes (n_pieces == 1 is the desired state) and since
+        holes are formed by regions exterior to both poly_a and poly_b, they can't interact
+        with pre-existing holes =#
+        sort!(polys, by = area, rev = true)  # sort by area so first element is the exterior
+        @views append!(polys[1].geom, (GI.getexterior(p) for p in polys[2:end]))
+        keepat!(polys, 1)
     end
     # the first element is the exterior, the rest are holes
-    new_holes = @views (GI.getexterior(p) for p in polys[2:end])
-    polys = n_pieces > 1 ? polys[1:1] : polys
-    remove_idx = falses(length(polys))
-    # Add holes back in for there are any
-    if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0 || n_pieces > 1
-        hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b), new_holes))
-        _add_holes_to_polys!(T, polys, hole_iterator, remove_idx)
+    # new_holes = @views (GI.getexterior(p) for p in polys[2:end])  # what if we just add these holes to the polygon
+    # polys = n_pieces > 1 ? polys[1:1] : polys
+    # remove_idx = [false]
+    # Add in poly_a holes that aren't in poly_b exterior
+    # Add in poly_b holes that aren't in poly_a
+    n_b_holes = GI.nhole(poly_b)
+    if GI.nhole(poly_a) != 0 || n_b_holes != 0
+        _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b)
     end
+    # Add holes back in for there are any
+    # if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0 || n_pieces > 1
+    #     hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b), new_holes))
+    #     _add_holes_to_polys!(T, polys, hole_iterator, remove_idx)
+    # end
     # Remove uneeded collinear points on same edge
     # for p in polys
     #     _remove_collinear_points!(p, remove_idx)
@@ -92,6 +104,89 @@ _union_delay_bounce_f(x, _) = !x
 #= When tracing polygons, step backwards if the most recent intersection point was an entry
 point, else step forwards where x is the entry/exit status. =#
 _union_step(x, _) = x ? (-1) : 1
+
+function _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b)
+    if a_in_b
+        _add_union_holes_contained_polys!(polys, poly_a, poly_b)
+    elseif b_in_a
+        _add_union_holes_contained_polys!(polys, poly_b, poly_a)
+    else
+        n_a_holes = GI.nhole(poly_a)
+        ext_poly_a = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly_a)))
+        ext_poly_b = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly_b)))
+        curr_exterior_poly = n_a_holes > 0 ? ext_poly_b : ext_poly_a
+        # For current_poly, use ext_poly_b to avoid repeating overlapping holes in poly_a and poly_b
+        current_poly = n_a_holes > 0 ? ext_poly_b : poly_a
+        for (i, ih) in enumerate(Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b))))
+            in_ext, _, _ = _line_polygon_interactions(ih, curr_exterior_poly; closed_line = true)
+            if !in_ext
+                push!(polys[1].geom, ih)
+            else
+                h_poly = GI.Polygon(StaticArrays.SVector(ih))
+                new_holes = difference(h_poly, current_poly; target = GI.PolygonTrait())
+                append!(polys[1].geom, (GI.getexterior(new_h) for new_h in new_holes))
+            end
+            if i == n_a_holes
+                curr_exterior_poly = ext_poly_a
+                current_poly = poly_a
+            end
+        end
+    end
+    return
+end
+
+function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly)
+    union_poly = polys[1]
+    ext_int_ring = GI.getexterior(interior_poly)
+    for (i, ih) in enumerate(GI.gethole(exterior_poly))
+        poly_ih = GI.Polygon(StaticArrays.SVector(ih))
+        in_ih, on_ih, out_ih = _line_polygon_interactions(ext_int_ring, poly_ih; closed_line = true)
+        if in_ih  # at least part of interior polygon exterior is within the ith hole
+            if !on_ih && !out_ih
+                #= interior polygon is completly within the ith hole - polygons aren't
+                touching and do not actually form a union =#
+                polys[1] = tuples(interior_poly)
+                push!(polys, tuples(exterior_poly))
+                return polys
+            else
+                #= interior polygon is partially within the ith hole - area of interior
+                polygon reduces the size of the hole =#
+                new_holes = difference(poly_ih, interior_poly; target = GI.PolygonTrait())
+                append!(union_poly.geom, (GI.getexterior(new_h) for new_h in new_holes))
+            end
+        else  # none of interior polygon exterior is within the ith hole
+            if !out_ih
+                #= interior polygon's exterior is the same as the ith hole - polygons do
+                form a union, but do not overlap so all holes stay in final polygon =#
+                append!(union_poly.geom, Iterators.drop(GI.gethole(exterior_poly), i))
+                append!(union_poly.geom, GI.gethole(interior_poly))
+                return polys
+            else
+                #= interior polygon's exterior is outside of the ith hole - the interior
+                polygon could either be disjoint from the hole, or contain the hole =#
+                ext_int_poly = GI.Polygon(StaticArrays.SVector(ext_int_ring))
+                in_int, _, _ = _line_polygon_interactions(ih, ext_int_poly; closed_line = true)
+                if in_int
+                    #= interior polygon contains the hole - overlapping holes between the
+                    interior and exterior polygons will be added =#
+                    for jh in GI.gethole(interior_poly)
+                        poly_jh = GI.Polygon(StaticArrays.SVector(jh))
+                        if intersects(poly_ih, poly_jh)
+                            new_holes = intersection(poly_ih, poly_jh; target = GI.PolygonTrait())
+                            append!(union_poly.geom, (GI.getexterior(new_h) for new_h in new_holes))
+                        end
+                    end
+                else
+                    #= interior polygon and the exterior polygon are disjoint - add the ith
+                    hole as it is not covered by the interior polygon =#
+                    push!(union_poly.geom, ih)
+                end
+            end
+        end
+    end
+    return
+end
+
 
 # Many type and target combos aren't implemented
 function _union(
