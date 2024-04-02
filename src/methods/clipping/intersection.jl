@@ -76,9 +76,9 @@ function _intersection(
         _add_holes_to_polys!(T, polys, hole_iterator, remove_idx)
     end
     # Remove uneeded collinear points on same edge
-    # for p in polys
-    #     _remove_collinear_points!(p, remove_idx)
-    # end
+    for p in polys
+        _remove_collinear_points!(p, remove_idx)
+    end
     return polys
 end
 

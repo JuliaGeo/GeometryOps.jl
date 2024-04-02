@@ -74,9 +74,9 @@ function _difference(
         end
     end
     # Remove uneeded collinear points on same edge
-    # for p in polys
-    #     _remove_collinear_points!(p, remove_idx)
-    # end
+    for p in polys
+        _remove_collinear_points!(p, remove_idx)
+    end
     return polys
 end
 

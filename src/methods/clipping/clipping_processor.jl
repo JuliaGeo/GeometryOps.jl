@@ -557,7 +557,7 @@ end
     _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator)
 
 The holes specified by the hole iterator are added to the polygons in the return_polys list.
-If this creates more polygon, they are added to the end of the list. If this removes
+If this creates more polygons, they are added to the end of the list. If this removes
 polygons, they are removed from the list
 =#
 function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_poly_idx) where T
@@ -655,9 +655,12 @@ function _combine_holes!(::Type{T}, new_hole, curr_poly, return_polys, remove_ho
     return new_hole, new_hole_poly, n_new_polys
 end
 
+#= Remove collinear edge points, other than the first and last edge vertex, to simplify
+polygon - including both the exterior ring and any holes=#
 function _remove_collinear_points!(poly, remove_idx)
     for ring in GI.getring(poly)
         n = length(ring.geom)
+        # resize and reset removing index buffer
         resize!(remove_idx, n)
         fill!(remove_idx, false)
         local p1, p2
@@ -670,17 +673,20 @@ function _remove_collinear_points!(poly, remove_idx)
                 continue
             else
                 p3 = p
+                # check if p2 is on the edge formed by p1 and p3 - remove if so
                 if _signed_area_triangle(p1, p2, p3) == 0
                     remove_idx[i - 1] = true
                 end
             end
             p1, p2 = p2, p3
         end
+        # Check if the first point (which is repeated as the last point) is needed 
         if _signed_area_triangle(ring.geom[end - 1], ring.geom[1], ring.geom[2]) == 0
             remove_idx[1], remove_idx[end] = true, true
         end
+        # Remove unneeded collinear points
         deleteat!(ring.geom, remove_idx)
-        if remove_idx[1]
+        if remove_idx[1]  # make sure the last point is repeated
             push!(ring.geom, ring.geom[1])
         end
     end

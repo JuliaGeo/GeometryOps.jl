@@ -140,12 +140,10 @@ test_pairs = [
     (p46, p47, "p46", "p47", "Intersecting polygons that share one edge and cross through the same edge"),
     (p48, p49, "p48", "p49", "Intersecting polygons that share two edges in a row and cross through the different edge"),
     (p50, p51, "p50", "p51", "Intersection polygons with opposite winding orders and repeated points"),
-    (p52, p53, "p52", "p53", ""),
-    (p52, p54, "p52", "p54", ""),
-    (p52, p55, "p52", "p55", ""),
+    (p52, p53, "p52", "p53", "Polygon with two holes completely inside of one (of three) holes of other polygon"),
+    (p52, p54, "p52", "p54", "Polygon with two holes has exterior equal to one (of three) holes of other polygon"),
+    (p52, p55, "p52", "p55", "Polygon within another polygon, with intersecting and disjoint holes"),
 ]
-
-GO.union(p17, p18; target = GI.PolygonTrait())
 
 const ϵ = 1e-10
 # Compare clipping results from GeometryOps and LibGEOS
@@ -164,12 +162,19 @@ function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         return true
     end
     # Check for unnecessary points
-    # if sum(GI.npoint, GO_result_list; init = 0.0) != GI.npoint(LG_result_geom)
-    #     return false
-    # end
+    if sum(GI.npoint, GO_result_list; init = 0.0) > GI.npoint(LG_result_geom)
+        return false
+    end
+    # Make sure last point is repeated
+    for poly in GO_result_list
+        for ring in GI.getring(poly)
+            GI.getpoint(ring, 1) != GI.getpoint(ring, GI.npoint(ring)) && return false
+        end
+    end
+
     # Check if polygons cover the same area
     local GO_result_geom
-    if length(GO_result_list)==1
+    if length(GO_result_list) == 1
         GO_result_geom = GO_result_list[1]
     else
         GO_result_geom = GI.MultiPolygon(GO_result_list)
@@ -182,7 +187,6 @@ end
 # Test clipping functions and print error message if tests fail
 function test_clipping(GO_f, LG_f, f_name)
     for (p1, p2, sg1, sg2, sdesc) in test_pairs
-        @show sg1, sg2
         pass_test = compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         @test pass_test
         !pass_test && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")
