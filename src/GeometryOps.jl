@@ -4,6 +4,7 @@ module GeometryOps
 
 using GeoInterface
 using GeometryBasics
+import Tables
 using LinearAlgebra, Statistics
 import GeometryBasics.StaticArrays
 import Base.@kwdef

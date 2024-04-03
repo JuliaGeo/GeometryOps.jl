@@ -24,18 +24,19 @@ GeometryOps tries to offer most of the basic geometry operations you'd need, imp
 
 - General geometry methods (OGC methods): `equals`, `extent`, `distance`, `crosses`, `contains`, `intersects`, etc
 - Targeted function application over large nested geometries (`apply`) and reduction over geometries (`applyreduce`)
+    - Both `apply` and `applyreduce` consume arbitrary tables as well, like DataFrames!
 - `signed_area`, `centroid`, `distance`, etc for valid geometries
 - Line and polygon simplification (`simplify`)
 - Polygon clipping, `intersection`, `difference` and `union`
 - Generalized barycentric coordinates in polygons (`barycentric_coordinates`)
 - Projection of geometries between coordinate reference systems using [Proj.jl](https://github.com/JuliaGeo/Proj.jl)
 - Polygonization of raster images by contour detection (`polygonize`)
+- Segmentization/densification of geometry, both linearly and by geodesic paths (`segmentize`)
 
 See the "API" page in the docs for a more complete list!
 
 ### Planned additions
 
-- Arclength interpolation (absolute and relative)
 - Buffering, hulls (convex and otherwise)
 - Checks for valid geometries (empty linestrings, null points, etc) ([#14](https://github.com/asinghvi17/GeometryOps.jl/issues/14))
 - Operations on spherical (non-Euclidean) geometry ([#17](https://github.com/asinghvi17/GeometryOps.jl/issues/17))

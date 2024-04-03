@@ -20,6 +20,8 @@ The `apply` function allows you to decompose a given collection of geometries do
 
 Functionally, it's similar to `map` in the way you apply it to geometries.
 
+`apply` and `applyreduce` take any geometry, vector of geometries, collection of geometries, or table (like `Shapefile.Table`, `DataFrame`, or `GeoTable`)!
+
 ### What's this `GeoInterface.Wrapper` thing?
 
 Write a comment about GeoInterface.Wrapper and why it helps in type stability to guarantee a particular return type.

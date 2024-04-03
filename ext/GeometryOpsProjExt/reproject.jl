@@ -39,11 +39,11 @@ function reproject(geom, source_crs, target_crs;
 end
 function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=nothing, kw...)
     if _is3d(geom)
-        return apply(GI.PointTrait, geom; crs=target_crs, kw...) do p
+        return apply(GI.PointTrait(), geom; crs=target_crs, kw...) do p
             transform(GI.x(p), GI.y(p), GI.z(p))
         end
     else
-        return apply(GI.PointTrait, geom; crs=target_crs, kw...) do p
+        return apply(GI.PointTrait(), geom; crs=target_crs, kw...) do p
             transform(GI.x(p), GI.y(p))
         end
     end
