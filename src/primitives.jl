@@ -244,7 +244,7 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
     # Then, we obtain the schema of the table,
     old_schema = Tables.schema(iterable)
     # filter the geometry column out,
-    new_names = Iterators.filter(Base.Fix1(!==, geometry_column), old_schema.names)
+    new_names = filter(Base.Fix1(!==, geometry_column), old_schema.names)
     # and try to rebuild the same table as the best type - either the original type of `iterable`,
     # or a named tuple which is the default fallback.
     return Tables.materializer(iterable)(
