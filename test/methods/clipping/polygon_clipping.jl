@@ -1,3 +1,6 @@
+import GeometryOps as GO
+import GeoInterface as GI
+
 # Test of polygon clipping
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
 p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
@@ -49,17 +52,17 @@ p25 = GI.Polygon([[(0.0, 0.0), (5.0, 0.0), (5.0, 8.0), (0.0, 8.0), (0.0, 0.0)],
 p26 = GI.Polygon([[(3.0, 1.0), (8.0, 1.0), (8.0, 7.0), (3.0, 7.0), (3.0, 5.0), (6.0, 5.0), (6.0, 3.0), (3.0, 3.0), (3.0, 1.0)],
     [(3.5, 5.5), (6.0, 5.5), (6.0, 6.5), (3.5, 6.5), (3.5, 5.5)],
     [(5.5, 1.5), (5.5, 2.5), (3.5, 2.5), (3.5, 1.5), (5.5, 1.5)]])
-p27 = GI.Polygon([[[0.0, 0.0], [8.0, 0.0], [10.0, -1.0], [8.0, 1.0], [8.0, 2.0], [7.0, 5.0], [6.0, 4.0], [3.0, 5.0], [3.0, 3.0], [0.0, 0.0]]])
-p28 = GI.Polygon([[[1.0, 1.0], [3.0, -1.0], [6.0, 2.0], [8.0, 0.0], [8.0, 4.0], [4.0, 4.0], [1.0, 1.0]]])
-p29 = GI.Polygon([[[0.0, 0.0], [4.0, 0.0], [4.0, 2.0], [3.0, 1.0], [1.0, 1.0], [0.0, 2.0], [0.0, 0.0]]])
-p30 = GI.Polygon([[[4.0, 0.0], [3.0, 1.0], [1.0, 1.0], [0.0, 0.0], [0.0, 2.0], [4.0, 2.0], [4.0, 0.0]]])
-p31 = GI.Polygon([[[0.0, 0.0], [2.0, 1.0], [4.0, 0.0], [2.0, 4.0], [1.0, 2.0], [0.0, 3.0], [0.0, 0.0]]])
-p32 = GI.Polygon([[[4.0, 3.0], [3.0, 2.0], [4.0, 2.0], [4.0, 3.0]]])
-p33 = GI.Polygon([[[0.0, 0.0], [3.0, 0.0], [3.0, 3.0], [0.0, 3.0], [0.0, 0.0]]])
-p34 = GI.Polygon([[[1.0, 0.0], [2.0, 0.0], [2.0, 1.0], [1.0, 1.0], [1.0, 0.0]]])
-p35 = GI.Polygon([[[1.0, 0.0], [2.0, 0.0], [2.0, -1.0], [1.0, -1.0], [1.0, 0.0]]])
-p36 = GI.Polygon([[[2.0, 1.0], [3.0, 0.0], [4.0, 1.0], [3.0, 3.0], [2.0, 1.0]]])
-p37 = GI.Polygon([[[1.0, -1.0], [2.0, -1.0], [2.0, -2.0], [1.0, -2.0], [1.0, -1.0]]])
+p27 = GI.Polygon([[(0.0, 0.0), (8.0, 0.0), (10.0, -1.0), (8.0, 1.0), (8.0, 2.0), (7.0, 5.0), (6.0, 4.0), (3.0, 5.0), (3.0, 3.0), (0.0, 0.0)]])
+p28 = GI.Polygon([[(1.0, 1.0), (3.0, -1.0), (6.0, 2.0), (8.0, 0.0), (8.0, 4.0), (4.0, 4.0), (1.0, 1.0)]])
+p29 = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (4.0, 2.0), (3.0, 1.0), (1.0, 1.0), (0.0, 2.0), (0.0, 0.0)]])
+p30 = GI.Polygon([[(4.0, 0.0), (3.0, 1.0), (1.0, 1.0), (0.0, 0.0), (0.0, 2.0), (4.0, 2.0), (4.0, 0.0)]])
+p31 = GI.Polygon([[(0.0, 0.0), (2.0, 1.0), (4.0, 0.0), (2.0, 4.0), (1.0, 2.0), (0.0, 3.0), (0.0, 0.0)]])
+p32 = GI.Polygon([[(4.0, 3.0), (3.0, 2.0), (4.0, 2.0), (4.0, 3.0)]])
+p33 = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
+p34 = GI.Polygon([[(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0), (1.0, 0.0)]])
+p35 = GI.Polygon([[(1.0, 0.0), (2.0, 0.0), (2.0, -1.0), (1.0, -1.0), (1.0, 0.0)]])
+p36 = GI.Polygon([[(2.0, 1.0), (3.0, 0.0), (4.0, 1.0), (3.0, 3.0), (2.0, 1.0)]])
+p37 = GI.Polygon([[(1.0, -1.0), (2.0, -1.0), (2.0, -2.0), (1.0, -2.0), (1.0, -1.0)]])
 p38 = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0)],
     [(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]])
 p39 = GI.Polygon([[(5.0, 0.0), (8.0, 0.0), (8.0, 3.0), (5.0, 3.0), (5.0, 0.0)],
@@ -83,7 +86,24 @@ p44 = GI.Polygon([[(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0), (0.0, 0.0
 p45 = GI.Polygon([[(3.0, -2.0), (3.0, 8.0), (13.0, 8.0), (13.0, -2.0), (3.0, -2.0)],
     [(5.5, 2.5), (5.5, 3.0), (8.5, 3.0), (8.5, 2.5), (5.5, 2.5)],
     [(5.5, 4.0), (5.5, 4.5), (8.5, 4.5), (8.5, 4.0), (5.5, 4.0)]])
-
+p46 = GI.Polygon([[(0.0, 0.0), (6.0, 0.0), (6.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
+p47 = GI.Polygon([[(1.0, -1.0), (1.0, 1.0), (2.0, 0.0), (3.0, 0.0), (3.0, -1.0), (1.0, -1.0)]])
+p48 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (2.0, 1.0), (3.0, 0.0), (5.0, 0.0), (5.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
+p49 = GI.Polygon([[(1.0, -1.0), (4.0, -1.0), (4.0, 2.0), (3.0, 2.0), (3.0, 0.0), (2.0, 1.0), (1.0, 0.0), (1.0, -1.0)]])
+p50 = GI.Polygon([[(0.0, 0.0), (1.5, 0.0), (1.5, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
+p51 = GI.Polygon([[(1.0, 1.0), (2.0, 1.0), (2.0, -1.0), (1.5, -1.0), (1.5, -1.0), (1.0, -1.0), (1.0, 1.0), (1.0, 1.0)]])
+p52 = GI.Polygon([[(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0), (0.0, 0.0)],
+    [(1.0, 8.0), (2.0, 8.0), (2.0, 9.0), (1.0, 9.0), (1.0, 8.0)],
+    [(2.5, 2.5), (2.5, 7.5), (7.5, 7.5), (7.5, 2.5), (2.5, 2.5)],
+    [(8.0, 1.0), (8.0, 2.0), (9.0, 2.0), (9.0, 1.0), (8.0, 1.0)]])
+p53 = GI.Polygon([[(3.0, 3.0), (3.0, 6.0), (6.0, 6.0), (6.0, 3.0), (3.0, 3.0)],
+    [(4.0, 4.0), (4.0, 5.0), (5.0, 5.0), (5.0, 4.0), (4.0, 4.0)]])
+p54 = GI.Polygon([[(2.5, 2.5), (2.5, 7.5), (7.5, 7.5), (7.5, 2.5), (2.5, 2.5)],
+    [(4.0, 4.0), (4.0, 5.0), (5.0, 5.0), (5.0, 4.0), (4.0, 4.0)]])
+p55 = GI.Polygon([[(5.0, 0.25), (5.0, 5.0), (9.5, 5.0), (9.5, 0.25), (5.0, 0.25)],
+    [(6.0, 3.0), (6.0, 4.0), (7.0, 4.0), (7.0, 3.0), (6.0, 3.0)],
+    [(7.5, 0.5), (7.5, 2.5), (9.25, 2.5), (9.25, 0.5), (7.5, 0.5)]])
+    
 test_pairs = [
     (p1, p1, "p1", "p1", "Same polygon"),
     (p1, p2, "p1", "p2", "Convex polygons that intersect (diamonds, four vertices)"),
@@ -106,7 +126,7 @@ test_pairs = [
     (p23, p24, "p23", "p24", "Polygons are both donuts with intersecting holes"),
     (p25, p26, "p25", "p26", "Polygons both have two holes that intersect in various ways"),
     (p27, p28, "p27", "p28", "Figure 12 from Foster extension for degeneracies"),
-    # (p29, p30, "p29", "p30", "Figure 13 from Foster extension for degeneracies"),  # will be updated to work in next PR as it has "glued edges"
+    (p29, p30, "p29", "p30", "Figure 13 from Foster extension for degeneracies"),
     (p31, p32, "p31", "p32", "Polygons touch at just one point"),
     (p33, p34, "p33", "p34", "One polygon inside of the other, sharing an edge"),
     (p33, p35, "p33", "p35", "Polygons outside of one another, sharing an edge"),
@@ -115,8 +135,14 @@ test_pairs = [
     (p38, p39, "p38", "p39", "Polygons are completly disjoint (both have one hole)"),
     (p40, p41, "p40", "p41", "Two overlapping polygons with three total holes in overlap region"),
     (p42, p43, "p42", "p43", "First polygon 2 holes, second polygon 3 holes. Holes do not overlap"),
-    # (p43, p42, "p43", "p42", "First polygon 3 holes, second polygon 2 holes. Holes do not overlap") # will be updated to work in next PR as it has "glued edges"
+    (p43, p42, "p43", "p42", "First polygon 3 holes, second polygon 2 holes. Holes do not overlap"),
     (p44, p45, "p44", "p45", "Holes form a ring, with an additional hole within that ring of holes"),
+    (p46, p47, "p46", "p47", "Intersecting polygons that share one edge and cross through the same edge"),
+    (p48, p49, "p48", "p49", "Intersecting polygons that share two edges in a row and cross through the different edge"),
+    (p50, p51, "p50", "p51", "Intersection polygons with opposite winding orders and repeated points"),
+    (p52, p53, "p52", "p53", "Polygon with two holes completely inside of one (of three) holes of other polygon"),
+    (p52, p54, "p52", "p54", "Polygon with two holes has exterior equal to one (of three) holes of other polygon"),
+    (p52, p55, "p52", "p55", "Polygon within another polygon, with intersecting and disjoint holes"),
 ]
 
 const ϵ = 1e-10
@@ -131,17 +157,31 @@ function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         end
         LG_result_geom = LG.MultiPolygon(poly_list)
     end
+    # Check if nothing is returned
     if isempty(GO_result_list) && (LG.isEmpty(LG_result_geom) || LG.area(LG_result_geom) == 0)
         return true
     end
+    # Check for unnecessary points
+    if sum(GI.npoint, GO_result_list; init = 0.0) > GI.npoint(LG_result_geom)
+        return false
+    end
+    # Make sure last point is repeated
+    for poly in GO_result_list
+        for ring in GI.getring(poly)
+            GI.getpoint(ring, 1) != GI.getpoint(ring, GI.npoint(ring)) && return false
+        end
+    end
+
+    # Check if polygons cover the same area
     local GO_result_geom
-    if length(GO_result_list)==1
+    if length(GO_result_list) == 1
         GO_result_geom = GO_result_list[1]
     else
         GO_result_geom = GI.MultiPolygon(GO_result_list)
     end
-    diff_area = LG.area(LG.difference(GO_result_geom, LG_result_geom))
-    return diff_area ≤ ϵ
+    diff_1_area = LG.area(LG.difference(GO_result_geom, LG_result_geom))
+    diff_2_area = LG.area(LG.difference(LG_result_geom, GO_result_geom))
+    return diff_1_area ≤ ϵ && diff_2_area ≤ ϵ
 end
 
 # Test clipping functions and print error message if tests fail
