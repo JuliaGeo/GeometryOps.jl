@@ -5,7 +5,6 @@ version = "0.1.1"
 
 [deps]
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
-ExactPredicates = "429591f6-91af-11e9-00e2-59fbe8cec110"
 GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -20,7 +19,6 @@ GeometryOpsProjExt = "Proj"
 
 [compat]
 CoordinateTransformations = "0.5, 0.6"
-ExactPredicates = "2"
 GeoInterface = "1.2"
 GeometryBasics = "0.4.7"
 LinearAlgebra = "1"

@@ -79,7 +79,8 @@ function _cut(::Type{T}, ::GI.PolygonTrait, poly, ::GI.LineTrait, line) where T
     end
     cut_polys = [GI.Polygon([c]) for c in cut_coords]
     # Add original polygon holes back in
-    _add_holes_to_polys!(T, cut_polys, GI.gethole(poly))
+    remove_idx = falses(length(cut_polys))
+    _add_holes_to_polys!(T, cut_polys, GI.gethole(poly), remove_idx)
     return cut_polys
 end
 

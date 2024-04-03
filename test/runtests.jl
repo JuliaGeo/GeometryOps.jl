@@ -16,7 +16,7 @@ const GO = GeometryOps
 
 @testset "GeometryOps.jl" begin
     @testset "Primitives" begin include("primitives.jl") end
-    # # Methods
+    # # # Methods
     @testset "Angles" begin include("methods/angles.jl") end
     @testset "Area" begin include("methods/area.jl") end
     @testset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
@@ -25,7 +25,7 @@ const GO = GeometryOps
     @testset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
     @testset "Distance" begin include("methods/distance.jl") end
     @testset "Equals" begin include("methods/equals.jl") end
-    # # Clipping
+    # # # Clipping
     @testset "Coverage" begin include("methods/clipping/coverage.jl") end
     @testset "Cut" begin include("methods/clipping/cut.jl") end
     @testset "Polygon Clipping" begin include("methods/clipping/polygon_clipping.jl") end

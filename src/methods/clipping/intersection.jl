@@ -46,7 +46,6 @@ _intersection(
     trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b,
 ) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
 
-
 #= Polygon-Polygon Intersections with target Polygon
 The algorithm to determine the intersection was adapted from "Efficient clipping
 of efficient polygons," by Greiner and Hormann (1998).
@@ -60,8 +59,8 @@ function _intersection(
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b)
-    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, (x, y) -> x ? 1 : (-1))
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f)
+    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _inter_step)
     if isempty(polys) # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
         if a_in_b
@@ -70,13 +69,34 @@ function _intersection(
             push!(polys, GI.Polygon([tuples(ext_b)]))
         end
     end
+    remove_idx = falses(length(polys))
     # If the original polygons had holes, take that into account.
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
         hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
-        _add_holes_to_polys!(T, polys, hole_iterator)
-    end    
+        _add_holes_to_polys!(T, polys, hole_iterator, remove_idx)
+    end
+    # Remove uneeded collinear points on same edge
+    for p in polys
+        _remove_collinear_points!(p, remove_idx)
+    end
     return polys
 end
+
+# # Helper functions for Intersections with Greiner and Hormann Polygon Clipping
+
+#= When marking the crossing status of a delayed crossing, the chain start point is bouncing
+when the start point is a entry point and is a crossing point when the start point is an
+exit point. The end of the chain has the opposite crossing / bouncing status. x is the 
+entry/exit status. =#
+_inter_delay_cross_f(x) = (!x, x)
+#= When marking the crossing status of a delayed bouncing, the chain start and end points
+are crossing if the current polygon's adjacent edges are within the non-tracing polygon. If
+the edges are outside then the chain endpoints are marked as bouncing. x is a boolean
+representing if the edges are inside or outside of the polygon. =#
+_inter_delay_bounce_f(x, _) = x
+#= When tracing polygons, step forward if the most recent intersection point was an entry
+point, else step backwards where x is the entry/exit status. =#
+_inter_step(x, _) =  x ? 1 : (-1)
 
 # Many type and target combos aren't implemented
 function _intersection(
@@ -175,17 +195,38 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
     # Second line runs from q to q + s 
     qx, qy = GI.x(b1), GI.y(b1)
     sx, sy = GI.x(b2) - qx, GI.y(b2) - qy
-    # Intersections will be where p + αr = q + βs where 0 < α, β < 1 and
+    # Intersections will be where p + αr = q + βs where 0 < α, β < 1
     r_cross_s = rx * sy - ry * sx
     Δqp_x = qx - px
     Δqp_y = qy - py
     if r_cross_s != 0  # if lines aren't parallel
-        α = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
-        β = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
-        x = px + α * rx
-        y = py + α * ry
-        if 0 ≤ α ≤ 1 && 0 ≤ β ≤ 1
-            intr1 = (T(x), T(y)), (T(α), T(β))
+        #= Calculate α = (Δqp_x * sy - Δqp_y * sx) / r_cross_s where we use approx
+        comparisons due to inexact calculations =#
+        α_num_t1, α_num_t2 = Δqp_x * sy, Δqp_y * sx  # α numerator terms
+        α_num = α_num_t1 - α_num_t2
+        α = if α_num_t1 ≈ α_num_t2  # α = 0
+            zero(T)
+        elseif α_num ≈ r_cross_s  # α = 1
+            one(T)
+        else  # α != 0, 1
+            T(α_num / r_cross_s)
+        end
+         #= Calculate β = (Δqp_x * ry - Δqp_y * rx) / r_cross_s where we use approx
+        comparisons due to inexact calculations =#
+        β_num_t1, β_num_t2 = Δqp_x * ry, Δqp_y * rx
+        β_num = β_num_t1 - β_num_t2
+        β = if β_num_t1 ≈ β_num_t2  # β = 0
+            zero(T)
+        elseif β_num ≈ r_cross_s  # β = 1
+            one(T)
+        else  # β != 0, 1
+            T(β_num / r_cross_s)
+        end
+        # Calculate intersection point using α and β
+        x = T(px + α * rx)
+        y = T(py + α * ry)
+        if 0 ≤ α ≤ 1 && 0 ≤ β ≤ 1  # only a valid intersection is 0 ≤ α, β ≤ 1
+            intr1 = (x, y), (α, β)
             line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
         end
     elseif sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
