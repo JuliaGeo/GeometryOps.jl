@@ -17,6 +17,7 @@ const GB = GeometryBasics
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
+include("types.jl")
 include("primitives.jl")
 include("utils.jl")
 
@@ -54,6 +55,7 @@ include("transformations/tuples.jl")
 include("transformations/transform.jl")
 include("transformations/correction/geometry_correction.jl")
 include("transformations/correction/closed_ring.jl")
+include("transformations/correction/ring_orientation.jl")
 
 # Import all names from GeoInterface and Extents, so users can do `GO.extent` or `GO.trait`.
 for name in names(GeoInterface)
