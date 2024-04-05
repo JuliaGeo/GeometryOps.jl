@@ -19,7 +19,7 @@ complexity involved with handling complex geometry structures.
 For example, a simple way to flip the x and y coordinates of a geometry is:
 
 ```julia
-flipped_geom = GO.apply(GI.PointTrait, geom) do p
+flipped_geom = GO.apply(GI.PointTrait(), geom) do p
     (GI.y(p), GI.x(p))
 end
 ```
@@ -157,7 +157,7 @@ by passing the keyword argument `threaded=true` to `apply`.
 =#
 
 """
-    apply(f, target::Type{<:AbstractTrait}, obj; kw...)
+    apply(f, target::Union{TraitTarget, GI.AbstractTrait}, obj; kw...)
 
 Reconstruct a geometry, feature, feature collection, or nested vectors of
 either using the function `f` on the `target` trait.
@@ -334,7 +334,7 @@ for T in (
 end
 
 """
-    applyreduce(f, op, target::Type{<:AbstractTrait}, obj; threaded)
+    applyreduce(f, op, target::Union{TraitTarget, GI.AbstractTrait}, obj; threaded)
 
 Apply function `f` to all objects with the `target` trait,
 and reduce the result with an `op` like `+`. 
