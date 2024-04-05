@@ -17,7 +17,7 @@ See also [`GeometryCorrection`](@ref).
 """
 struct RingOrientation <: GeometryCorrection end
 
-application_level(::RingOrientation) = GI.PolygonTrait
+application_level(::RingOrientation) = GI.PolygonTrait()
 
 function _check_and_reverse_hole(hole)
     if isclockwise(hole)

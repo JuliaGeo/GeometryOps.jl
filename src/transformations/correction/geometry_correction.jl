@@ -44,18 +44,38 @@ application_level(gc::GeometryCorrection) = error("Not implemented yet for $(gc)
 
 (gc::GeometryCorrection)(trait::GI.AbstractGeometryTrait, geometry) = error("Not implemented yet for $(gc) and $(trait).")
 
-function fix(geometry; corrections = GeometryCorrection[ClosedRing(),], kwargs...)
-    traits = application_level.(corrections)
+fix(geometry) = fix(GI.trait(geometry), geometry)
+
+function fix(trait::Trait, geometry; corrections = GeometryCorrection[ClosedRing(),], kwargs...) where Trait <: GI.AbstractGeometryTrait
+    traits = TraitTarget.(application_level.(corrections))
     final_geometry = geometry
-    for Trait in (GI.PointTrait, GI.MultiPointTrait, GI.LineStringTrait, GI.LinearRingTrait, GI.MultiLineStringTrait, GI.PolygonTrait, GI.MultiPolygonTrait)
-        available_corrections = findall(x -> x == Trait, traits)
-        isempty(available_corrections) && continue
-        @debug "Correcting for $(Trait)"
-        net_function = reduce(∘, corrections[available_corrections])
-        final_geometry = apply(net_function, Trait, final_geometry; kwargs...)
+    for correction in corrections
+        if trait in TraitTarget(application_level(corrections))
+            final_geometry = apply()
+        end
     end
     return final_geometry
 end
+
+# The API application_level exists, so from that we need to derive, given a geometry with a trait, which corrections we can apply to it.
+# We can do this by running through all subtypes (recursively) of 
+
+function _get_subtypes!(vec::Vector{DataType}, type::Type)
+    if isabstracttype(type)
+        for subtype in subtypes(type)
+            _get_subtypes!(vec, subtype)
+        end
+    else # is a concrete type
+        push!(vec, type)
+    end
+end
+
+function _get_subtypes(type::Type)
+    v = Vector{DataType}()
+    _get_subtypes!(v, type)
+    return v
+end
+
 
 # ## Available corrections
 
@@ -64,4 +84,14 @@ end
 Modules = [GeometryOps]
 Filter = t -> typeof(t) === DataType && t <: GeometryOps.GeometryCorrection
 ```
+=#
+
+#=
+
+Old code:
+
+This code was meant to batch corrections across multiple geometries. However, this
+fails when it encounters things like TraitTargets across multiple levels.
+
+
 =#
