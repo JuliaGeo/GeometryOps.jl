@@ -2,3 +2,4 @@
 /docs/build/
 /docs/src/source/
 .vscode/
+.DS_Store
