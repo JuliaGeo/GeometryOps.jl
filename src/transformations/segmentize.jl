@@ -169,7 +169,7 @@ This is useful for plotting geometries with a limited number of vertices, or for
 Returns a geometry of similar type to the input geometry, but resampled.
 """
 function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False())
-    return segmentize(LinearSegments(; max_distance), geom; threaded)
+    return segmentize(LinearSegments(; max_distance), geom; threaded = _booltype(threaded))
 end
 function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = _False())
     @assert method.max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
