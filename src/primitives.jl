@@ -363,7 +363,7 @@ end
     if Tables.istable(iterable)
         _applyreduce_table(f, op, target, iterable; threaded, init)
     else
-        applyreduce_iterable(i) = _applyreduce(f, op, target, x; threaded=_False(), init)
+        applyreduce_iterable(i) = _applyreduce(f, op, target, i; threaded=_False(), init)
         if threaded isa _True # Try to `collect` and reduce over the vector with threads
             _applyreduce(f, op, target, collect(iterable); threaded, init)
         else
