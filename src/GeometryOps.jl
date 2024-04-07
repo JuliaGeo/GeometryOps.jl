@@ -21,6 +21,7 @@ const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 include("types.jl")
 include("primitives.jl")
 include("utils.jl")
+include("not_implemented_yet.jl")
 
 include("methods/angles.jl")
 include("methods/area.jl")
