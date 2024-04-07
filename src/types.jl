@@ -65,3 +65,43 @@ struct _False <: BoolsAsTypes end
 
 @inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
 @inline _booltype(x::BoolsAsTypes)::BoolsAsTypes = x
+
+#=
+
+## `GEOS`
+
+`GEOS` is a struct which instructs the method it's passed to as an algorithm
+to use the appropriate GEOS function via `LibGEOS.jl` for the operation.
+
+It's generally a lot slower than the native Julia implementations, but it's
+useful for two reasons:
+1. Functionality which doesn't exist in GeometryOps can be accessed through the GeometryOps API, but use GEOS in the backend until someone implements a native Julia version.
+2. It's a good way to test the correctness of the native implementations.
+
+=#
+
+"""
+    GEOS(; params...)
+
+A struct which instructs the method it's passed to as an algorithm
+to use the appropriate GEOS function via `LibGEOS.jl` for the operation.
+
+Dispatch is generally carried out using the names of the keyword arguments.
+For example, `segmentize` will only accept a `GEOS` struct with only a 
+`max_distance` keyword, and no other.
+
+It's generally a lot slower than the native Julia implementations, since
+it must convert to the LibGEOS implementation and back - so be warned!
+"""
+struct GEOS{Keys}
+    params::NamedTuple{Keys}
+    function GEOS{Keys}(arg) where Keys
+        return new{Keys}(NamedTuple{Keys}(arg))
+    end
+end
+
+function GEOS(; params...)
+    nt = NamedTuple(params)
+    return GEOS{keys(nt)}(nt)
+end
+
