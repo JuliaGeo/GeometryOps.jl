@@ -38,7 +38,7 @@ Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
 function _union(
     ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
-    ::GI.PolygonTrait, poly_b,
+    ::GI.PolygonTrait, poly_b;
 ) where T
     # First, I get the exteriors of the two polygons
     ext_a = GI.getexterior(poly_a)
@@ -196,6 +196,50 @@ function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly)
     return
 end
 
+function _union(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+) where T
+    polys = [tuples(poly_a, T)]
+    for poly_b in GI.getpolygon(multipoly_b)
+        if intersects(polys[1], poly_b)
+            # If polygons intersect and form a new polygon, swap out polygon
+            new_polys = union(polys[1], poly_b; target = target)
+            polys[1] = new_polys[1]
+        else
+            # If they don't intersect, poly_b is now a part of the union as its own polygon
+            push!(polys, poly_b)
+        end
+    end
+    return polys
+end
+
+_union(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.PolygonTrait, poly_b,
+) where T = union(poly_b, multipoly_a; target = target)
+
+function _union(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.MultiPolygonTrait, multipoly_b,
+) where T
+    n_a_polys, n_b_polys = GI.npolygon(multipoly_a), GI.npolygon(multipoly_b)
+    if n_a_polys == 0  # TODO: do these need to be unioned together?
+        return tuples.(GI.getpolygon(multipoly_b))
+    elseif n_b_polys == 0
+        return tuples.(GI.getpolygon(multipoly_a))
+    end
+    multipolys = multipoly_b
+    local polys
+    for poly_a in GI.getpolygon(multipoly_a)
+        polys = union(poly_a, multipolys; target = target)
+        multipolys = GI.MultiPolygon(polys)
+    end
+    return polys
+end
 
 # Many type and target combos aren't implemented
 function _union(

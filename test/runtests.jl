@@ -39,5 +39,6 @@ const GO = GeometryOps
     @testset "Geometry correction" begin 
         include("transformations/correction/geometry_correction.jl")
         include("transformations/correction/closed_ring.jl") 
+        include("transformations/correction/minimal_multipolygon.jl")
     end
 end
