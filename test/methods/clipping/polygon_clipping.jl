@@ -103,6 +103,11 @@ p54 = GI.Polygon([[(2.5, 2.5), (2.5, 7.5), (7.5, 7.5), (7.5, 2.5), (2.5, 2.5)],
 p55 = GI.Polygon([[(5.0, 0.25), (5.0, 5.0), (9.5, 5.0), (9.5, 0.25), (5.0, 0.25)],
     [(6.0, 3.0), (6.0, 4.0), (7.0, 4.0), (7.0, 3.0), (6.0, 3.0)],
     [(7.5, 0.5), (7.5, 2.5), (9.25, 2.5), (9.25, 0.5), (7.5, 0.5)]])
+
+mp1 = GI.MultiPolygon([p1])
+mp2 = GI.MultiPolygon([p2])
+mp3 = GI.MultiPolygon([p34, p36])
+mp4 = GI.MultiPolygon([p33, p35])
     
 test_pairs = [
     (p1, p1, "p1", "p1", "Same polygon"),
@@ -143,6 +148,16 @@ test_pairs = [
     (p52, p53, "p52", "p53", "Polygon with two holes completely inside of one (of three) holes of other polygon"),
     (p52, p54, "p52", "p54", "Polygon with two holes has exterior equal to one (of three) holes of other polygon"),
     (p52, p55, "p52", "p55", "Polygon within another polygon, with intersecting and disjoint holes"),
+    (p1, mp2, "p1", "mp2", "Polygon overlapping with mutlipolygon with one sub-polygon"),
+    (mp1, p2, "mp1", "p2", "Polygon overlapping with mutlipolygon with one sub-polygon"),
+    (mp1, mp2, "mp1", "mp2", "Two overlapping multipolygons, which each have one sub-polygon"),
+    (mp3, p33, "mp3", "p33", "Mutipolygon, with two sub-polygon, both of which overlap with other polygon"),
+    (p33, mp3, "p33", "mp3", "Polygon overlaps with both sub-polygons of a multipolygon"),
+    (mp3, p34, "mp3", "p34", "Multipolygon, with two sub-polygon, overlaps with polygon equal to sub-polygon"),
+    (p34, mp3, "p34", "mp3", "Polygon overlaps with multipolygon, where on of the sub-polygons is equivalent"),
+    (mp3, p35, "mp3", "p35", "Mulitpolygon where just one sub-polygon touches other polygon"),
+    (p35, mp3, "p35", "mp3", "Polygon that touches just one of the sub-polygons of multipolygon"),
+    (mp4, mp3, "mp4", "mp3", "Two multipolygons, which with two sub-polygons, where some of the sub-polygons intersect and some don't")
 ]
 
 const ϵ = 1e-10

@@ -27,9 +27,9 @@ GI.coordinates.(union_poly)
 ```
 """
 function union(
-    geom_a, geom_b, ::Type{T}=Float64; target=nothing,
+    geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
 ) where {T<:AbstractFloat}
-    _union(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    _union(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; kwargs...)
 end
 
 #= This 'union' implementation returns the union of two polygons. The algorithm to determine
@@ -39,6 +39,7 @@ function _union(
     ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
+    kwargs...,
 ) where T
     # First, I get the exteriors of the two polygons
     ext_a = GI.getexterior(poly_a)
@@ -200,16 +201,24 @@ function _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = true, kwargs...,
 ) where T
+    if fix_multipoly
+        multipoly_b = MinimalMultiPolygon()(multipoly_b)
+    end
     polys = [tuples(poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         if intersects(polys[1], poly_b)
             # If polygons intersect and form a new polygon, swap out polygon
             new_polys = union(polys[1], poly_b; target = target)
-            polys[1] = new_polys[1]
+            if length(new_polys) > 1 # case where they intersect by just one point
+                push!(polys, tuples(poly_b, T))
+            else
+                polys[1] = new_polys[1]
+            end
         else
             # If they don't intersect, poly_b is now a part of the union as its own polygon
-            push!(polys, poly_b)
+            push!(polys, tuples(poly_b, T))
         end
     end
     return polys
@@ -218,24 +227,24 @@ end
 _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
-    ::GI.PolygonTrait, poly_b,
-) where T = union(poly_b, multipoly_a; target = target)
+    ::GI.PolygonTrait, poly_b;
+    kwargs...,
+) where T = union(poly_b, multipoly_a; target = target, kwargs...)
 
 function _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
-    ::GI.MultiPolygonTrait, multipoly_b,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = true, kwargs...,
 ) where T
-    n_a_polys, n_b_polys = GI.npolygon(multipoly_a), GI.npolygon(multipoly_b)
-    if n_a_polys == 0  # TODO: do these need to be unioned together?
-        return tuples.(GI.getpolygon(multipoly_b))
-    elseif n_b_polys == 0
-        return tuples.(GI.getpolygon(multipoly_a))
+    if fix_multipoly
+        multipoly_b = MinimalMultiPolygon()(multipoly_b)
+        fix_multipoly = false
     end
     multipolys = multipoly_b
     local polys
     for poly_a in GI.getpolygon(multipoly_a)
-        polys = union(poly_a, multipolys; target = target)
+        polys = union(poly_a, multipolys; target = target, fix_multipoly = fix_multipoly)
         multipolys = GI.MultiPolygon(polys)
     end
     return polys
@@ -245,7 +254,8 @@ end
 function _union(
     ::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
-    trait_b::GI.AbstractTrait, geom_b,
+    trait_b::GI.AbstractTrait, geom_b;
+    kwargs...
 ) where {Target,T}
     throw(ArgumentError("Union between $trait_a and $trait_b with target $Target isn't implemented yet."))
     return nothing

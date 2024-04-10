@@ -27,9 +27,9 @@ GI.coordinates.(diff_poly)
 ```
 """
 function difference(
-    geom_a, geom_b, ::Type{T} = Float64; target=nothing,
+    geom_a, geom_b, ::Type{T} = Float64; target=nothing, kwargs...,
 ) where {T<:AbstractFloat}
-    return _difference(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    return _difference(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; kwargs...)
 end
 
 #= The 'difference' function returns the difference of two polygons as a list of polygons.
@@ -38,7 +38,8 @@ polygons," by Greiner and Hormann (1998). DOI: https://doi.org/10.1145/274363.27
 function _difference(
     ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
-    ::GI.PolygonTrait, poly_b,
+    ::GI.PolygonTrait, poly_b;
+    kwargs...
 ) where T
     # Get the exterior of the polygons
     ext_a = GI.getexterior(poly_a)
@@ -98,6 +99,56 @@ point and we are currently tracing b_list or if it was an exit point and we are 
 tracing a_list, else step backwards, where x is the entry/exit status and y is a variable
 that is true if we are on a_list and false if we are on b_list. =#
 _diff_step(x, y) = (x ⊻ y) ? 1 : (-1)
+
+function _difference(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    kwargs...,
+) where T
+    polys = [tuples(poly_a, T)]
+    for poly_b in GI.getpolygon(multipoly_b)
+        isempty(polys) && break
+        polys = mapreduce(p -> difference(p, poly_b; target = target), append!, polys)
+    end
+    return polys
+end
+
+function _difference(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.PolygonTrait, poly_b;
+    fix_multipoly = true, kwargs...,
+) where T
+    if fix_multipoly
+        multipoly_a = MinimalMultiPolygon()(multipoly_a)
+    end
+    # TODO: Should we fix multipoly_a -> shouldn't happen every time if called with 2 multipoly
+    polys = Vector{_get_poly_type(T)}()
+    sizehint!(polys, GI.npolygon(multipoly_a))
+    for poly_a in GI.getpolygon(multipoly_a)
+        append!(polys, difference(poly_a, poly_b; target = target))
+    end
+    return polys
+end
+
+function _difference(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = true, kwargs...,
+) where T
+    if fix_multipoly
+        multipoly_a = MinimalMultiPolygon()(multipoly_a)
+        fix_multipoly = false
+    end
+    local polys
+    for (i, poly_b) in enumerate(GI.getpolygon(multipoly_b))
+        polys = difference(i == 1 ? multipoly_a : GI.MultiPolygon(polys), poly_b;
+            target = target, fix_multipoly = fix_multipoly)
+    end
+    return polys
+end
 
 # Many type and target combos aren't implemented
 function _difference(

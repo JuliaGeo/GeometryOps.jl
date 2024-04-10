@@ -34,16 +34,17 @@ GI.coordinates.(inter_points)
 ```
 """
 function intersection(
-    geom_a, geom_b, ::Type{T}=Float64; target=nothing,
+    geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...,
 ) where {T<:AbstractFloat}
-    return _intersection(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    return _intersection(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; kwargs...)
 end
 
 # Curve-Curve Intersections with target Point
 _intersection(
     ::TraitTarget{GI.PointTrait}, ::Type{T},
     trait_a::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_a,
-    trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b,
+    trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b;
+    kwargs...,
 ) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
 
 #= Polygon-Polygon Intersections with target Polygon
@@ -53,7 +54,8 @@ DOI: https://doi.org/10.1145/274363.274364 =#
 function _intersection(
     ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
-    ::GI.PolygonTrait, poly_b,
+    ::GI.PolygonTrait, poly_b;
+    kwargs...,
 ) where {T}
     # First we get the exteriors of 'poly_a' and 'poly_b'
     ext_a = GI.getexterior(poly_a)
@@ -98,11 +100,56 @@ _inter_delay_bounce_f(x, _) = x
 point, else step backwards where x is the entry/exit status. =#
 _inter_step(x, _) =  x ? 1 : (-1)
 
+#= Polygon with multipolygon intersection - note that all intersection regions between
+poly_a and any of the sub-polygons of `multipoly_b` are counted as intersection polygons.
+Unless specified with `fix_multipoly` = false, `multipolygon_b` will be validated using =#
+function _intersection(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = true, kwargs...,
+) where T
+    if fix_multipoly
+        multipoly_b = MinimalMultiPolygon()(multipoly_b)
+    end
+    polys = Vector{_get_poly_type(T)}()
+    for poly_b in GI.getpolygon(multipoly_b)
+        append!(polys, intersection(poly_a, poly_b; target = target))
+    end
+    return polys
+end
+
+_intersection(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.PolygonTrait, poly_b;
+    kwargs...,
+) where T = intersection(poly_b, multipoly_a; target = target, kwargs...)
+
+function _intersection(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = true, kwargs...,
+) where T
+    if fix_multipoly
+        multipoly_a = MinimalMultiPolygon()(multipoly_a)
+        multipoly_b = MinimalMultiPolygon()(multipoly_b)
+        fix_multipoly = false
+    end
+    polys = Vector{_get_poly_type(T)}()
+    for poly_a in GI.getpolygon(multipoly_a)
+        append!(polys, intersection(poly_a, multipoly_b; target = target, fix_multipoly = fix_multipoly))
+    end
+    return polys
+end
+
 # Many type and target combos aren't implemented
 function _intersection(
     ::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
-    trait_b::GI.AbstractTrait, geom_b,
+    trait_b::GI.AbstractTrait, geom_b;
+    kwargs...,
 ) where {Target, T}
     @assert(
         false,
