@@ -101,16 +101,17 @@ point, else step backwards where x is the entry/exit status. =#
 _inter_step(x, _) =  x ? 1 : (-1)
 
 #= Polygon with multipolygon intersection - note that all intersection regions between
-poly_a and any of the sub-polygons of `multipoly_b` are counted as intersection polygons.
-Unless specified with `fix_multipoly` = false, `multipolygon_b` will be validated using =#
+`poly_a` and any of the sub-polygons of `multipoly_b` are counted as intersection polygons.
+Unless specified with `fix_multipoly = false`, `multipolygon_b` will be validated using
+the `UnionIntersectingPolygons` correction. =#
 function _intersection(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
     fix_multipoly = true, kwargs...,
 ) where T
-    if fix_multipoly
-        multipoly_b = MinimalMultiPolygon()(multipoly_b)
+    if fix_multipoly # Fix multipoly_b to prevent duplicated intersection regions
+        multipoly_b = UnionIntersectingPolygons()(multipoly_b)
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_b in GI.getpolygon(multipoly_b)
@@ -119,6 +120,9 @@ function _intersection(
     return polys
 end
 
+#= Multipolygon with polygon intersection is equivalent to taking the intersection of the
+poylgon with the multipolygon and thus simply switches the order of operations and calls the
+above method. =#
 _intersection(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
@@ -126,15 +130,20 @@ _intersection(
     kwargs...,
 ) where T = intersection(poly_b, multipoly_a; target = target, kwargs...)
 
+#= Multipolygon with multipolygon intersection - note that all intersection regions between
+any sub-polygons of `multipoly_a` and any of the sub-polygons of `multipoly_b` are counted
+as intersection polygons. Unless specified with `fix_multipoly = false`, both 
+`multipolygon_a` and `multipolygon_b` will be validated using the
+`UnionIntersectingPolygons` correction. =#
 function _intersection(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
     fix_multipoly = true, kwargs...,
 ) where T
-    if fix_multipoly
-        multipoly_a = MinimalMultiPolygon()(multipoly_a)
-        multipoly_b = MinimalMultiPolygon()(multipoly_b)
+    if fix_multipoly # Fix both multipolygons to prevent duplicated intersection regions
+        multipoly_a = UnionIntersectingPolygons()(multipoly_a)
+        multipoly_b = UnionIntersectingPolygons()(multipoly_b)
         fix_multipoly = false
     end
     polys = Vector{_get_poly_type(T)}()

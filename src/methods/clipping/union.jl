@@ -197,14 +197,18 @@ function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly)
     return
 end
 
+#= Polygon with multipolygon union - note that all sub-polygons of `multipoly_b` will be
+included, unioning these sub-polygons with `poly_a` where they intersect. Unless specified
+with `fix_multipoly = false`, `multipolygon_b` will be validated using the
+`UnionIntersectingPolygons` correction. =#
 function _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
     fix_multipoly = true, kwargs...,
 ) where T
-    if fix_multipoly
-        multipoly_b = MinimalMultiPolygon()(multipoly_b)
+    if fix_multipoly # Fix multipoly_b to prevent repeated regions in the output
+        multipoly_b = UnionIntersectingPolygons()(multipoly_b)
     end
     polys = [tuples(poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
@@ -212,7 +216,7 @@ function _union(
             # If polygons intersect and form a new polygon, swap out polygon
             new_polys = union(polys[1], poly_b; target = target)
             if length(new_polys) > 1 # case where they intersect by just one point
-                push!(polys, tuples(poly_b, T))
+                push!(polys, tuples(poly_b, T))  # add poly_b to list
             else
                 polys[1] = new_polys[1]
             end
@@ -224,6 +228,8 @@ function _union(
     return polys
 end
 
+#= Multipolygon with polygon union is equivalent to taking the union of the poylgon with the
+multipolygon and thus simply switches the order of operations and calls the above method. =#
 _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
@@ -231,14 +237,18 @@ _union(
     kwargs...,
 ) where T = union(poly_b, multipoly_a; target = target, kwargs...)
 
+#= Multipolygon with multipolygon union - note that all of the sub-polygons of `multipoly_a`
+and the sub-polygons of `multipoly_b` are included and combined together where there are
+intersections. Unless specified with `fix_multipoly = false`, `multipolygon_b` will be
+validated using the `UnionIntersectingPolygons` correction. =#
 function _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
     fix_multipoly = true, kwargs...,
 ) where T
-    if fix_multipoly
-        multipoly_b = MinimalMultiPolygon()(multipoly_b)
+    if fix_multipoly # Fix multipoly_b to prevent repeated regions in the output
+        multipoly_b = UnionIntersectingPolygons()(multipoly_b)
         fix_multipoly = false
     end
     multipolys = multipoly_b

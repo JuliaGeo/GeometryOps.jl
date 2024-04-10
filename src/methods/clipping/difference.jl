@@ -100,6 +100,8 @@ tracing a_list, else step backwards, where x is the entry/exit status and y is a
 that is true if we are on a_list and false if we are on b_list. =#
 _diff_step(x, y) = (x ⊻ y) ? 1 : (-1)
 
+#= Polygon with multipolygon difference - note that all intersection regions between
+`poly_a` and any of the sub-polygons of `multipoly_b` are removed from `poly_a`. =#
 function _difference(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
@@ -114,16 +116,19 @@ function _difference(
     return polys
 end
 
+#= Multipolygon with polygon difference - note that all intersection regions between
+sub-polygons of `multipoly_a` and `poly_b` will be removed from the corresponding
+sub-polygon. Unless specified with `fix_multipoly = false`, `multipolygon_a` will be
+validated using the `UnionIntersectingPolygons` correction. =#
 function _difference(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     fix_multipoly = true, kwargs...,
 ) where T
-    if fix_multipoly
-        multipoly_a = MinimalMultiPolygon()(multipoly_a)
+    if fix_multipoly # Fix multipoly_a to prevent returning an invalid multipolygon
+        multipoly_a = UnionIntersectingPolygons()(multipoly_a)
     end
-    # TODO: Should we fix multipoly_a -> shouldn't happen every time if called with 2 multipoly
     polys = Vector{_get_poly_type(T)}()
     sizehint!(polys, GI.npolygon(multipoly_a))
     for poly_a in GI.getpolygon(multipoly_a)
@@ -132,14 +137,18 @@ function _difference(
     return polys
 end
 
+#= Multipolygon with multipolygon difference - note that all intersection regions between
+sub-polygons of `multipoly_a` and sub-polygons of `multipoly_b` will be removed from the
+corresponding sub-polygon of `multipoly_a`. Unless specified with `fix_multipoly = false`,
+`multipolygon_a` will be validated using the `UnionIntersectingPolygons` correction. =#
 function _difference(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
     fix_multipoly = true, kwargs...,
 ) where T
-    if fix_multipoly
-        multipoly_a = MinimalMultiPolygon()(multipoly_a)
+    if fix_multipoly # Fix multipoly_a to prevent returning an invalid multipolygon
+        multipoly_a = UnionIntersectingPolygons()(multipoly_a)
         fix_multipoly = false
     end
     local polys
