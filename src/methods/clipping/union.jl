@@ -2,13 +2,18 @@
 export union
 
 """
-    union(geom_a, geom_b, [::Type{T}]; target::Type)
+    union(geom_a, geom_b, [::Type{T}]; target::Type, fix_multipoly = true)
 
 Return the union between two geometries as a list of geometries. Return an empty list if
 none are found. The type of the list will be constrained as much as possible given the input
 geometries. Furthermore, the user can provide a `taget` type as a keyword argument and a
 list of target geometries found in the difference will be returned. The user can also
-provide a float type 'T' that they would like the points of returned geometries to be. 
+provide a float type 'T' that they would like the points of returned geometries to be. If
+the user is taking a intersection involving one or more multipolygons, and the multipolygon
+might be comprised of polygons that intersect, if `fix_multipoly` is true, then the needed
+multipolygons will be fixed to be valid before performing the intersection to ensure a
+correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
+valid, as it will avoid unneeded computation. 
     
 Calculates the union between two polygons.
 ## Example
