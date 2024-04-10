@@ -19,7 +19,7 @@ _segmentize_geos(geom, max_distance) = _segmentize_geos(GI.convert(LG, geom), ma
 function GO.segmentize(alg::GEOS{(:max_distance,)}, geom; threaded::Union{Bool, GO.BoolsAsTypes} = _False())
     return GO.apply(
         Base.Fix2(_segmentize_geos, alg.params.max_distance), 
-        GO.TraitTarget(GI.MultiPolygonTrait(), GI.PolygonTrait(), GI.MultiLineStringTrait(), GI.LineStringTrait(), GI.LinearRingTrait(), GI.MultiPointTrait(), GI.PointTrait()),
+        GO.TraitTarget(GI.GeometryCollectionTrait(), GI.MultiPolygonTrait(), GI.PolygonTrait(), GI.MultiLineStringTrait(), GI.LineStringTrait(), GI.LinearRingTrait(), GI.MultiPointTrait(), GI.PointTrait()),
         geom; 
         threaded
     )
