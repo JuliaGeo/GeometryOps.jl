@@ -65,7 +65,7 @@ function (::UnionIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
         exclude_first_poly = GI.MultiPolygon(collect(Iterators.drop(GI.getpolygon(multipoly), 1)))
         GI.MultiPolygon(union(first_poly, exclude_first_poly; target = GI.PolygonTrait(), fix_multipoly = nothing))
     else
-        multipoly
+        GO.tuples(multipoly)
     end
     return union_multipoly
 end
