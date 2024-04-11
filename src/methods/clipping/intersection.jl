@@ -10,7 +10,7 @@ Enum for the orientation of a line with respect to a curve. A line can be
 @enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
 """
-    intersection(geom_a, geom_b, [T::Type]; target::Type, fix_multipoly = true)
+    intersection(geom_a, geom_b, [T::Type]; target::Type, fix_multipoly = UnionIntersectingPolygons())
 
 Return the intersection between two geometries as a list of geometries. Return an empty list
 if none are found. The type of the list will be constrained as much as possible given the

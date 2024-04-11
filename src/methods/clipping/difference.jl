@@ -3,7 +3,7 @@ export difference
 
 
 """
-    difference(geom_a, geom_b, [T::Type]; target::Type, fix_multipoly = true)
+    difference(geom_a, geom_b, [T::Type]; target::Type, fix_multipoly = UnionIntersectingPolygons())
 
 Return the difference between two geometries as a list of geometries. Return an empty list
 if none are found. The type of the list will be constrained as much as possible given the
