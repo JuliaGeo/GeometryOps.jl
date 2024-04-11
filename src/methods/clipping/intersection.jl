@@ -10,13 +10,19 @@ Enum for the orientation of a line with respect to a curve. A line can be
 @enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
 """
-    intersection(geom_a, geom_b, [T::Type]; target::Type)
+    intersection(geom_a, geom_b, [T::Type]; target::Type, fix_multipoly = UnionIntersectingPolygons())
 
 Return the intersection between two geometries as a list of geometries. Return an empty list
 if none are found. The type of the list will be constrained as much as possible given the
 input geometries. Furthermore, the user can provide a `target` type as a keyword argument and
 a list of target geometries found in the intersection will be returned. The user can also
-provide a float type that they would like the points of returned geometries to be. 
+provide a float type that they would like the points of returned geometries to be. If the
+user is taking a intersection involving one or more multipolygons, and the multipolygon
+might be comprised of polygons that intersect, if `fix_multipoly` is set to an
+`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
+needed multipolygons will be fixed to be valid before performing the intersection to ensure
+a correct answer. Only set `fix_multipoly` to nothing if you know that the multipolygons are
+valid, as it will avoid unneeded computation. 
 
 ## Example
 
@@ -34,16 +40,17 @@ GI.coordinates.(inter_points)
 ```
 """
 function intersection(
-    geom_a, geom_b, ::Type{T}=Float64; target=nothing,
+    geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...,
 ) where {T<:AbstractFloat}
-    return _intersection(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    return _intersection(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; kwargs...)
 end
 
 # Curve-Curve Intersections with target Point
 _intersection(
     ::TraitTarget{GI.PointTrait}, ::Type{T},
     trait_a::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_a,
-    trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b,
+    trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b;
+    kwargs...,
 ) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
 
 #= Polygon-Polygon Intersections with target Polygon
@@ -53,7 +60,8 @@ DOI: https://doi.org/10.1145/274363.274364 =#
 function _intersection(
     ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
-    ::GI.PolygonTrait, poly_b,
+    ::GI.PolygonTrait, poly_b;
+    kwargs...,
 ) where {T}
     # First we get the exteriors of 'poly_a' and 'poly_b'
     ext_a = GI.getexterior(poly_a)
@@ -98,11 +106,65 @@ _inter_delay_bounce_f(x, _) = x
 point, else step backwards where x is the entry/exit status. =#
 _inter_step(x, _) =  x ? 1 : (-1)
 
+#= Polygon with multipolygon intersection - note that all intersection regions between
+`poly_a` and any of the sub-polygons of `multipoly_b` are counted as intersection polygons.
+Unless specified with `fix_multipoly = nothing`, `multipolygon_b` will be validated using
+the given (default is `UnionIntersectingPolygons()`) correction. =#
+function _intersection(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+) where T
+    if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
+        multipoly_b = fix_multipoly(multipoly_b)
+    end
+    polys = Vector{_get_poly_type(T)}()
+    for poly_b in GI.getpolygon(multipoly_b)
+        append!(polys, intersection(poly_a, poly_b; target))
+    end
+    return polys
+end
+
+#= Multipolygon with polygon intersection is equivalent to taking the intersection of the
+poylgon with the multipolygon and thus simply switches the order of operations and calls the
+above method. =#
+_intersection(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.PolygonTrait, poly_b;
+    kwargs...,
+) where T = intersection(poly_b, multipoly_a; target , kwargs...)
+
+#= Multipolygon with multipolygon intersection - note that all intersection regions between
+any sub-polygons of `multipoly_a` and any of the sub-polygons of `multipoly_b` are counted
+as intersection polygons. Unless specified with `fix_multipoly = nothing`, both 
+`multipolygon_a` and `multipolygon_b` will be validated using the given (default is
+`UnionIntersectingPolygons()`) correction. =#
+function _intersection(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+) where T
+    if !isnothing(fix_multipoly) # Fix both multipolygons to prevent duplicated regions
+        multipoly_a = fix_multipoly(multipoly_a)
+        multipoly_b = fix_multipoly(multipoly_b)
+        fix_multipoly = nothing
+    end
+    polys = Vector{_get_poly_type(T)}()
+    for poly_a in GI.getpolygon(multipoly_a)
+        append!(polys, intersection(poly_a, multipoly_b; target, fix_multipoly))
+    end
+    return polys
+end
+
 # Many type and target combos aren't implemented
 function _intersection(
     ::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
-    trait_b::GI.AbstractTrait, geom_b,
+    trait_b::GI.AbstractTrait, geom_b;
+    kwargs...,
 ) where {Target, T}
     @assert(
         false,

@@ -2,13 +2,19 @@
 export union
 
 """
-    union(geom_a, geom_b, [::Type{T}]; target::Type)
+    union(geom_a, geom_b, [::Type{T}]; target::Type, fix_multipoly = UnionIntersectingPolygons())
 
 Return the union between two geometries as a list of geometries. Return an empty list if
 none are found. The type of the list will be constrained as much as possible given the input
 geometries. Furthermore, the user can provide a `taget` type as a keyword argument and a
 list of target geometries found in the difference will be returned. The user can also
-provide a float type 'T' that they would like the points of returned geometries to be. 
+provide a float type 'T' that they would like the points of returned geometries to be. If
+the user is taking a intersection involving one or more multipolygons, and the multipolygon
+might be comprised of polygons that intersect, if `fix_multipoly` is set to an
+`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
+needed multipolygons will be fixed to be valid before performing the intersection to ensure
+a correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
+valid, as it will avoid unneeded computation. 
     
 Calculates the union between two polygons.
 ## Example
@@ -27,9 +33,9 @@ GI.coordinates.(union_poly)
 ```
 """
 function union(
-    geom_a, geom_b, ::Type{T}=Float64; target=nothing,
+    geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
 ) where {T<:AbstractFloat}
-    _union(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+    _union(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; kwargs...)
 end
 
 #= This 'union' implementation returns the union of two polygons. The algorithm to determine
@@ -38,7 +44,8 @@ Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
 function _union(
     ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
-    ::GI.PolygonTrait, poly_b,
+    ::GI.PolygonTrait, poly_b;
+    kwargs...,
 ) where T
     # First, I get the exteriors of the two polygons
     ext_a = GI.getexterior(poly_a)
@@ -196,12 +203,75 @@ function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly)
     return
 end
 
+#= Polygon with multipolygon union - note that all sub-polygons of `multipoly_b` will be
+included, unioning these sub-polygons with `poly_a` where they intersect. Unless specified
+with `fix_multipoly = nothing`, `multipolygon_b` will be validated using the given (default
+is `UnionIntersectingPolygons()`) correction. =#
+function _union(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+) where T
+    if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
+        multipoly_b = fix_multipoly(multipoly_b)
+    end
+    polys = [tuples(poly_a, T)]
+    for poly_b in GI.getpolygon(multipoly_b)
+        if intersects(polys[1], poly_b)
+            # If polygons intersect and form a new polygon, swap out polygon
+            new_polys = union(polys[1], poly_b; target)
+            if length(new_polys) > 1 # case where they intersect by just one point
+                push!(polys, tuples(poly_b, T))  # add poly_b to list
+            else
+                polys[1] = new_polys[1]
+            end
+        else
+            # If they don't intersect, poly_b is now a part of the union as its own polygon
+            push!(polys, tuples(poly_b, T))
+        end
+    end
+    return polys
+end
+
+#= Multipolygon with polygon union is equivalent to taking the union of the poylgon with the
+multipolygon and thus simply switches the order of operations and calls the above method. =#
+_union(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.PolygonTrait, poly_b;
+    kwargs...,
+) where T = union(poly_b, multipoly_a; target, kwargs...)
+
+#= Multipolygon with multipolygon union - note that all of the sub-polygons of `multipoly_a`
+and the sub-polygons of `multipoly_b` are included and combined together where there are
+intersections. Unless specified with `fix_multipoly = nothing`, `multipolygon_b` will be
+validated using the given (default is `UnionIntersectingPolygons()`) correction. =#
+function _union(
+    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+) where T
+    if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
+        multipoly_b = fix_multipoly(multipoly_b)
+        fix_multipoly = nothing
+    end
+    multipolys = multipoly_b
+    local polys
+    for poly_a in GI.getpolygon(multipoly_a)
+        polys = union(poly_a, multipolys; target, fix_multipoly)
+        multipolys = GI.MultiPolygon(polys)
+    end
+    return polys
+end
 
 # Many type and target combos aren't implemented
 function _union(
     ::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
-    trait_b::GI.AbstractTrait, geom_b,
+    trait_b::GI.AbstractTrait, geom_b;
+    kwargs...
 ) where {Target,T}
     throw(ArgumentError("Union between $trait_a and $trait_b with target $Target isn't implemented yet."))
     return nothing
