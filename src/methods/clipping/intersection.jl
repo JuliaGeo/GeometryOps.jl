@@ -18,9 +18,10 @@ input geometries. Furthermore, the user can provide a `target` type as a keyword
 a list of target geometries found in the intersection will be returned. The user can also
 provide a float type that they would like the points of returned geometries to be. If the
 user is taking a intersection involving one or more multipolygons, and the multipolygon
-might be comprised of polygons that intersect, if `fix_multipoly` is true, then the needed
-multipolygons will be fixed to be valid before performing the intersection to ensure a
-correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
+might be comprised of polygons that intersect, if `fix_multipoly` is set to an
+`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
+needed multipolygons will be fixed to be valid before performing the intersection to ensure
+a correct answer. Only set `fix_multipoly` to nothing if you know that the multipolygons are
 valid, as it will avoid unneeded computation. 
 
 ## Example
@@ -107,20 +108,20 @@ _inter_step(x, _) =  x ? 1 : (-1)
 
 #= Polygon with multipolygon intersection - note that all intersection regions between
 `poly_a` and any of the sub-polygons of `multipoly_b` are counted as intersection polygons.
-Unless specified with `fix_multipoly = false`, `multipolygon_b` will be validated using
-the `UnionIntersectingPolygons` correction. =#
+Unless specified with `fix_multipoly = nothing`, `multipolygon_b` will be validated using
+the given (default is `UnionIntersectingPolygons()`) correction. =#
 function _intersection(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = true, kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
-    if fix_multipoly # Fix multipoly_b to prevent duplicated intersection regions
-        multipoly_b = UnionIntersectingPolygons()(multipoly_b)
+    if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
+        multipoly_b = fix_multipoly(multipoly_b)
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(poly_a, poly_b; target = target))
+        append!(polys, intersection(poly_a, poly_b; target))
     end
     return polys
 end
@@ -133,27 +134,27 @@ _intersection(
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     kwargs...,
-) where T = intersection(poly_b, multipoly_a; target = target, kwargs...)
+) where T = intersection(poly_b, multipoly_a; target , kwargs...)
 
 #= Multipolygon with multipolygon intersection - note that all intersection regions between
 any sub-polygons of `multipoly_a` and any of the sub-polygons of `multipoly_b` are counted
-as intersection polygons. Unless specified with `fix_multipoly = false`, both 
-`multipolygon_a` and `multipolygon_b` will be validated using the
-`UnionIntersectingPolygons` correction. =#
+as intersection polygons. Unless specified with `fix_multipoly = nothing`, both 
+`multipolygon_a` and `multipolygon_b` will be validated using the given (default is
+`UnionIntersectingPolygons()`) correction. =#
 function _intersection(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = true, kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
-    if fix_multipoly # Fix both multipolygons to prevent duplicated intersection regions
-        multipoly_a = UnionIntersectingPolygons()(multipoly_a)
-        multipoly_b = UnionIntersectingPolygons()(multipoly_b)
-        fix_multipoly = false
+    if !isnothing(fix_multipoly) # Fix both multipolygons to prevent duplicated regions
+        multipoly_a = fix_multipoly(multipoly_a)
+        multipoly_b = fix_multipoly(multipoly_b)
+        fix_multipoly = nothing
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(poly_a, multipoly_b; target = target, fix_multipoly = fix_multipoly))
+        append!(polys, intersection(poly_a, multipoly_b; target, fix_multipoly))
     end
     return polys
 end

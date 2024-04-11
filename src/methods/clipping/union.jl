@@ -10,9 +10,10 @@ geometries. Furthermore, the user can provide a `taget` type as a keyword argume
 list of target geometries found in the difference will be returned. The user can also
 provide a float type 'T' that they would like the points of returned geometries to be. If
 the user is taking a intersection involving one or more multipolygons, and the multipolygon
-might be comprised of polygons that intersect, if `fix_multipoly` is true, then the needed
-multipolygons will be fixed to be valid before performing the intersection to ensure a
-correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
+might be comprised of polygons that intersect, if `fix_multipoly` is set to an
+`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
+needed multipolygons will be fixed to be valid before performing the intersection to ensure
+a correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
 valid, as it will avoid unneeded computation. 
     
 Calculates the union between two polygons.
@@ -204,22 +205,22 @@ end
 
 #= Polygon with multipolygon union - note that all sub-polygons of `multipoly_b` will be
 included, unioning these sub-polygons with `poly_a` where they intersect. Unless specified
-with `fix_multipoly = false`, `multipolygon_b` will be validated using the
-`UnionIntersectingPolygons` correction. =#
+with `fix_multipoly = nothing`, `multipolygon_b` will be validated using the given (default
+is `UnionIntersectingPolygons()`) correction. =#
 function _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = true, kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
-    if fix_multipoly # Fix multipoly_b to prevent repeated regions in the output
-        multipoly_b = UnionIntersectingPolygons()(multipoly_b)
+    if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
+        multipoly_b = fix_multipoly(multipoly_b)
     end
     polys = [tuples(poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         if intersects(polys[1], poly_b)
             # If polygons intersect and form a new polygon, swap out polygon
-            new_polys = union(polys[1], poly_b; target = target)
+            new_polys = union(polys[1], poly_b; target)
             if length(new_polys) > 1 # case where they intersect by just one point
                 push!(polys, tuples(poly_b, T))  # add poly_b to list
             else
@@ -240,26 +241,26 @@ _union(
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     kwargs...,
-) where T = union(poly_b, multipoly_a; target = target, kwargs...)
+) where T = union(poly_b, multipoly_a; target, kwargs...)
 
 #= Multipolygon with multipolygon union - note that all of the sub-polygons of `multipoly_a`
 and the sub-polygons of `multipoly_b` are included and combined together where there are
-intersections. Unless specified with `fix_multipoly = false`, `multipolygon_b` will be
-validated using the `UnionIntersectingPolygons` correction. =#
+intersections. Unless specified with `fix_multipoly = nothing`, `multipolygon_b` will be
+validated using the given (default is `UnionIntersectingPolygons()`) correction. =#
 function _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = true, kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
-    if fix_multipoly # Fix multipoly_b to prevent repeated regions in the output
-        multipoly_b = UnionIntersectingPolygons()(multipoly_b)
-        fix_multipoly = false
+    if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
+        multipoly_b = fix_multipoly(multipoly_b)
+        fix_multipoly = nothing
     end
     multipolys = multipoly_b
     local polys
     for poly_a in GI.getpolygon(multipoly_a)
-        polys = union(poly_a, multipolys; target = target, fix_multipoly = fix_multipoly)
+        polys = union(poly_a, multipolys; target, fix_multipoly)
         multipolys = GI.MultiPolygon(polys)
     end
     return polys

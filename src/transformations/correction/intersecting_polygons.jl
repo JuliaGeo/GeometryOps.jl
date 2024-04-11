@@ -63,7 +63,7 @@ function (::UnionIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
         # Combine any sub-polygons that intersect
         first_poly = GI.getpolygon(multipoly, 1)
         exclude_first_poly = GI.MultiPolygon(collect(Iterators.drop(GI.getpolygon(multipoly), 1)))
-        GI.MultiPolygon(union(first_poly, exclude_first_poly; target = GI.PolygonTrait(), fix_multipoly = false))
+        GI.MultiPolygon(union(first_poly, exclude_first_poly; target = GI.PolygonTrait(), fix_multipoly = nothing))
     else
         multipoly
     end

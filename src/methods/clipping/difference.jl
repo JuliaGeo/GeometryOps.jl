@@ -11,9 +11,10 @@ input geometries. Furthermore, the user can provide a `taget` type as a keyword 
 a list of target geometries found in the difference will be returned. The user can also
 provide a float type that they would like the points of returned geometries to be. If the
 user is taking a intersection involving one or more multipolygons, and the multipolygon
-might be comprised of polygons that intersect, if `fix_multipoly` is true, then the needed
-multipolygons will be fixed to be valid before performing the intersection to ensure a
-correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
+might be comprised of polygons that intersect, if `fix_multipoly` is set to an
+`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
+needed multipolygons will be fixed to be valid before performing the intersection to ensure
+a correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
 valid, as it will avoid unneeded computation. 
 
 ## Example 
@@ -116,50 +117,50 @@ function _difference(
     polys = [tuples(poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         isempty(polys) && break
-        polys = mapreduce(p -> difference(p, poly_b; target = target), append!, polys)
+        polys = mapreduce(p -> difference(p, poly_b; target), append!, polys)
     end
     return polys
 end
 
 #= Multipolygon with polygon difference - note that all intersection regions between
 sub-polygons of `multipoly_a` and `poly_b` will be removed from the corresponding
-sub-polygon. Unless specified with `fix_multipoly = false`, `multipolygon_a` will be
-validated using the `UnionIntersectingPolygons` correction. =#
+sub-polygon. Unless specified with `fix_multipoly = nothing`, `multipolygon_a` will be
+validated using the given (default is `UnionIntersectingPolygons()`) correction. =#
 function _difference(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
-    fix_multipoly = true, kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
-    if fix_multipoly # Fix multipoly_a to prevent returning an invalid multipolygon
-        multipoly_a = UnionIntersectingPolygons()(multipoly_a)
+    if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
+        multipoly_a = fix_multipoly(multipoly_a)
     end
     polys = Vector{_get_poly_type(T)}()
     sizehint!(polys, GI.npolygon(multipoly_a))
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, difference(poly_a, poly_b; target = target))
+        append!(polys, difference(poly_a, poly_b; target))
     end
     return polys
 end
 
 #= Multipolygon with multipolygon difference - note that all intersection regions between
 sub-polygons of `multipoly_a` and sub-polygons of `multipoly_b` will be removed from the
-corresponding sub-polygon of `multipoly_a`. Unless specified with `fix_multipoly = false`,
-`multipolygon_a` will be validated using the `UnionIntersectingPolygons` correction. =#
+corresponding sub-polygon of `multipoly_a`. Unless specified with `fix_multipoly = nothing`,
+`multipolygon_a` will be validated using the given (defauly is `UnionIntersectingPolygons()`)
+correction. =#
 function _difference(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = true, kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
-    if fix_multipoly # Fix multipoly_a to prevent returning an invalid multipolygon
-        multipoly_a = UnionIntersectingPolygons()(multipoly_a)
-        fix_multipoly = false
+    if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
+        multipoly_a = fix_multipoly(multipoly_a)
+        fix_multipoly = nothing
     end
     local polys
     for (i, poly_b) in enumerate(GI.getpolygon(multipoly_b))
-        polys = difference(i == 1 ? multipoly_a : GI.MultiPolygon(polys), poly_b;
-            target = target, fix_multipoly = fix_multipoly)
+        polys = difference(i == 1 ? multipoly_a : GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
     end
     return polys
 end
