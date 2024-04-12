@@ -20,7 +20,7 @@ for f in (:extent, :crs)
     @eval GI.$f(t::GI.AbstractTrait, x::Prepared) = GI.$f(t, parent(x))
 end
 for f in (:coordnames, :is3d, :ismeasured, :isempty, :coordinates, :getgeom)
-    @eval GI.$f(t::GI.AbstractGeometryTrait, geom::Prepared, args...) = GI.$f(t, geom, args...)
+    @eval GI.$f(t::GI.AbstractGeometryTrait, geom::Prepared, args...) = GI.$f(t, parent(geom), args...)
 end
 
 for f in (:x, :y, :z, :m, :coordinates, :getcoord, :ngeom, :getgeom)
