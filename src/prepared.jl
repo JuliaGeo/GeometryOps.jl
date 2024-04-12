@@ -43,9 +43,9 @@ end
 getpoint(t::GI.AbstractPolyhedralSurfaceTrait, geom::Prepared) = GI.getpoint(t, parent(geom))
 isclosed(t::GI.AbstractMultiCurveTrait, geom::Prepared) = GI.isclosed(t, parent(geom))
 
-# for f in (:getfeature, :coordinates)
-#     @eval GI.$f(t::GI.AbstractFeatureTrait, geom::Prepared, args...) = $f(t, parent(geom), args...)
-# end
+for f in (:getfeature, :coordinates)
+    @eval GI.$f(t::GI.AbstractFeatureTrait, geom::Prepared, args...) = $f(t, parent(geom), args...)
+end
 
 # Ambiguity
 for T in (:LineTrait, :TriangleTrait, :PentagonTrait, :HexagonTrait, :RectangleTrait, :QuadTrait)
