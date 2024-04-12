@@ -4,7 +4,7 @@ struct Prepared{Pa,Pr}
 end
 
 Base.parent(x::Prepared) = x.parent
-@inline getprep(p::Prepared, x::Symbol) = getpropery(p.preparations, x)
+@inline getprep(p::Prepared, x::Symbol) = getproperty(p.preparations, x)
 
 GI.trait(p::Prepared) = GI.trait(parent(p))
 GI.geomtrait(p::Prepared) = GI.geomtrait(parent(p))
