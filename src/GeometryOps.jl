@@ -19,6 +19,7 @@ const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
 include("primitives.jl")
 include("utils.jl")
+include("prepared.jl")
 
 include("methods/angles.jl")
 include("methods/area.jl")
