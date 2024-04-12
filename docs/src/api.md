@@ -7,7 +7,7 @@ CurrentModule = GeometryOps
 !!! warning
     This page is still very much WIP!
 
-Documentation for [GeometryOps](https://github.com/asinghvi17/GeometryOps.jl)'s full API (only for reference!).
+Documentation for [GeometryOps](https://github.com/JuliaGeo/GeometryOps.jl)'s full API (only for reference!).
 
 ```@index
 ```

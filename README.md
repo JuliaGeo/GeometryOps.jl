@@ -1,9 +1,9 @@
-<img width="400" alt="GeometryOps.jl" src="https://github.com/asinghvi17/GeometryOps.jl/assets/32143268/92c5526d-23a9-4e01-aee0-2fcea99c5001">
+<img width="400" alt="GeometryOps.jl" src="https://github.com/JuliaGeo/GeometryOps.jl/assets/32143268/92c5526d-23a9-4e01-aee0-2fcea99c5001">
 
 ![Lifecycle:Experimental](https://img.shields.io/badge/Lifecycle-Experimental-339999)
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://asinghvi17.github.io/GeometryOps.jl/stable/)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://asinghvi17.github.io/GeometryOps.jl/dev/)
-[![Build Status](https://github.com/asinghvi17/GeometryOps.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/asinghvi17/GeometryOps.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaGeo.github.io/GeometryOps.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaGeo.github.io/GeometryOps.jl/dev/)
+[![Build Status](https://github.com/JuliaGeo/GeometryOps.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/JuliaGeo/GeometryOps.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
 <img src="docs/src/assets/logo.png" alt="GeometryOps logo" width="250">
 
@@ -38,5 +38,5 @@ See the "API" page in the docs for a more complete list!
 ### Planned additions
 
 - Buffering, hulls (convex and otherwise)
-- Checks for valid geometries (empty linestrings, null points, etc) ([#14](https://github.com/asinghvi17/GeometryOps.jl/issues/14))
-- Operations on spherical (non-Euclidean) geometry ([#17](https://github.com/asinghvi17/GeometryOps.jl/issues/17))
+- Checks for valid geometries (empty linestrings, null points, etc) ([#14](https://github.com/JuliaGeo/GeometryOps.jl/issues/14))
+- Operations on spherical (non-Euclidean) geometry ([#17](https://github.com/JuliaGeo/GeometryOps.jl/issues/17))

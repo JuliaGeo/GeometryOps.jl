@@ -77,16 +77,16 @@ end
 makedocs(;
     modules=[GeometryOps],
     authors="Anshul Singhvi <anshulsinghvi@gmail.com> and contributors",
-    repo="https://github.com/asinghvi17/GeometryOps.jl/blob/{commit}{path}#{line}",
+    repo="https://github.com/JuliaGeo/GeometryOps.jl/blob/{commit}{path}#{line}",
     sitename="GeometryOps.jl",
     # format=Documenter.HTML(;
     #     prettyurls=get(ENV, "CI", "false") == "true",
-    #     canonical="https://asinghvi17.github.io/GeometryOps.jl",
+    #     canonical="https://JuliaGeo.github.io/GeometryOps.jl",
     #     edit_link="main",
     #     assets=String[],
     # ),
     format = DocumenterVitepress.MarkdownVitepress(
-        repo = "github.com/asinghvi17/GeometryOps.jl",
+        repo = "github.com/JuliaGeo/GeometryOps.jl",
     ),
     pages=[
         "Introduction" => "introduction.md",
@@ -97,7 +97,7 @@ makedocs(;
 )
 
 deploydocs(;
-    repo="github.com/asinghvi17/GeometryOps.jl",
+    repo="github.com/JuliaGeo/GeometryOps.jl",
     devbranch="main",
     push_preview = true,
 )

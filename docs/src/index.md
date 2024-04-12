@@ -16,7 +16,7 @@ hero:
       link: /introduction
     - theme: alt
       text: View on Github
-      link: https://github.com/asinghvi17/GeometryOps.jl
+      link: https://github.com/JuliaGeo/GeometryOps.jl
     - theme: alt
       text: API Reference
       link: /api
