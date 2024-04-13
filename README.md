@@ -35,6 +35,14 @@ GeometryOps tries to offer most of the basic geometry operations you'd need, imp
 
 See the "API" page in the docs for a more complete list!
 
+## Performance comparison to other packages
+
+From the wonderful [vector-benchmark](https://www.github.com/kadyb/vector-benchmark),
+
+[![download-3](https://github.com/JuliaGeo/GeometryOps.jl/assets/32143268/0be8672c-c90f-4e1d-81c5-8522317c5e29)](https://github.com/kadyb/vector-benchmark/pull/12)
+
+More benchmarks coming soon!
+
 ### Planned additions
 
 - Buffering, hulls (convex and otherwise)
