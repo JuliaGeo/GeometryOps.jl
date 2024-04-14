@@ -571,7 +571,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
                 curr_poly = return_polys[j]
                 remove_poly_idx[j] && continue
-                curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
+                curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(SA.SVector(GI.getexterior(curr_poly))) : curr_poly
                 in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; closed_line = true)
                 if in_ext  # hole is at least partially within the polygon's exterior
                     new_hole, new_hole_poly, n_new_pieces = _combine_holes!(T, curr_hole, curr_poly, return_polys, remove_hole_idx)
@@ -594,7 +594,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
                         end
                     end
                 # polygon is completly within hole
-                elseif coveredby(curr_poly_ext, GI.Polygon(StaticArrays.SVector(curr_hole)))
+                elseif coveredby(curr_poly_ext, GI.Polygon(SA.SVector(curr_hole)))
                     remove_poly_idx[j] = true
                 end
             end
@@ -622,16 +622,16 @@ changes.
 function _combine_holes!(::Type{T}, new_hole, curr_poly, return_polys, remove_hole_idx) where T
     n_new_polys = 0
     empty!(remove_hole_idx)
-    new_hole_poly = GI.Polygon(StaticArrays.SVector(new_hole))
+    new_hole_poly = GI.Polygon(SA.SVector(new_hole))
     # Combine any existing holes in curr_poly with new hole
     for (k, old_hole) in enumerate(GI.gethole(curr_poly))
-        old_hole_poly = GI.Polygon(StaticArrays.SVector(old_hole))
+        old_hole_poly = GI.Polygon(SA.SVector(old_hole))
         if intersects(new_hole_poly, old_hole_poly)
             # If the holes intersect, combine them into a bigger hole
             hole_union = union(new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait())[1]
             push!(remove_hole_idx, k + 1)
             new_hole = GI.getexterior(hole_union)
-            new_hole_poly = GI.Polygon(StaticArrays.SVector(new_hole))
+            new_hole_poly = GI.Polygon(SA.SVector(new_hole))
             n_pieces = GI.nhole(hole_union)
             if n_pieces > 0  # if the hole has a hole, then this is a new polygon piece! 
                 append!(return_polys, [GI.Polygon([h]) for h in GI.gethole(hole_union)])

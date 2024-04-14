@@ -6,13 +6,14 @@ using GeoInterface
 using GeometryBasics
 import Tables
 using LinearAlgebra, Statistics
-import GeometryBasics.StaticArrays
+# import GeometryBasics.StaticArrays
 import Base.@kwdef
 
 using GeoInterface.Extents: Extents
 
 const GI = GeoInterface
 const GB = GeometryBasics
+const SA = GeometryBasics.StaticArrays
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
@@ -50,6 +51,7 @@ include("transformations/flip.jl")
 include("transformations/reproject.jl")
 include("transformations/segmentize.jl")
 include("transformations/simplify.jl")
+include("transformations/svpoints.jl")
 include("transformations/tuples.jl")
 include("transformations/transform.jl")
 include("transformations/correction/geometry_correction.jl")

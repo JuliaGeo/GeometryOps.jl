@@ -1,4 +1,9 @@
 # # Utility functions
+_ismeasured(geom)::Bool = _ismeasured(GI.trait(geom), geom)
+_ismeasured(::GI.AbstractGeometryTrait, geom)::Bool = GI.ismeasured(geom)
+_ismeasured(::GI.FeatureTrait, feature)::Bool = _ismeasured(GI.geometry(feature))
+_ismeasured(::GI.FeatureCollectionTrait, fc)::Bool = _ismeasured(GI.getfeature(fc, 1))
+_ismeasured(::Nothing, geom)::Bool = _ismeasured(first(geom)) # Otherwise step into an itererable
 
 _is3d(geom)::Bool = _is3d(GI.trait(geom), geom)
 _is3d(::GI.AbstractGeometryTrait, geom)::Bool = GI.is3d(geom)

@@ -44,14 +44,18 @@ ctor{2, Int64}[[2, 1], [4, 3], [6, 5], [2, 1]], nothing, nothing), GeoInterface.
 }[[4, 3], [6, 5], [7, 6], [4, 3]], nothing, nothing)], nothing, nothing)
 ```
 """
-function transform(f, geom; kw...) 
-    if _is3d(geom)
+function transform(f, geom, ::Type{T} = Float64; kw...) where T
+    if _ismeasured(geom)
         return apply(PointTrait(), geom; kw...) do p
-            f(StaticArrays.SVector{3}((GI.x(p), GI.y(p), GI.z(p))))
+            GI.Point(T.(f(SA.SVector{4}(GI.x(p), GI.y(p), GI.z(p), GI.m(p)))))
+        end
+    elseif _is3d(geom)
+        return apply(PointTrait(), geom; kw...) do p
+            GI.Point(T.(f(SA.SVector{3}((GI.x(p), GI.y(p), GI.z(p))))))
         end
     else
         return apply(PointTrait(), geom; kw...) do p
-            f(StaticArrays.SVector{2}((GI.x(p), GI.y(p))))
+            GI.Point(T.(f(SA.SVector{2}((GI.x(p), GI.y(p))))))
         end
     end
 end

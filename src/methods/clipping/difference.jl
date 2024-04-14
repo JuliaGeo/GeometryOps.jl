@@ -73,7 +73,7 @@ function _difference(
     end
     if GI.nhole(poly_b) != 0
         for hole in GI.gethole(poly_b)
-            hole_poly = GI.Polygon(StaticArrays.SVector(hole))
+            hole_poly = GI.Polygon(SA.SVector(hole))
             new_polys = intersection(hole_poly, poly_a, T; target = GI.PolygonTrait)
             if length(new_polys) > 0
                 append!(polys, new_polys)

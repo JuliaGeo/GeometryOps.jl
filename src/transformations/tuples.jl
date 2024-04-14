@@ -13,7 +13,11 @@ geometries wrapping `Tuple` points.
 $APPLY_KEYWORDS
 """
 function tuples(geom, ::Type{T} = Float64; kw...) where T
-    if _is3d(geom)
+    if _ismeasured(geom)
+        return apply(PointTrait(), geom; kw...) do p
+            (T(GI.x(p)), T(GI.y(p)), T(GI.z(p)), T(GI.m(p)))
+        end
+    elseif _is3d(geom)
         return apply(PointTrait(), geom; kw...) do p
             (T(GI.x(p)), T(GI.y(p)), T(GI.z(p)))
         end
