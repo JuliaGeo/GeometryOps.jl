@@ -89,6 +89,14 @@ function (::UnionIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
     return union_multipoly
 end
 
+"""
+    DiffIntersectingPolygons() <: GeometryCorrection
+This correction ensures that the polygons included in a multipolygon aren't intersecting.
+If any polygon's are intersecting, they will be made nonintersecting through the [`difference`](@ref) 
+operation to create a unique set of disjoint (other than potentially connections by a single point)
+polygons covering the same area.
+See also [`GeometryCorrection`](@ref), [`UnionIntersectingPolygons`](@ref).
+"""
 struct DiffIntersectingPolygons <: GeometryCorrection end
 
 application_level(::DiffIntersectingPolygons) = GI.MultiPolygonTrait
