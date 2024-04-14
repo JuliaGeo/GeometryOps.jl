@@ -382,6 +382,7 @@ function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, del
     npts = length(pt_list)
     next_idx = start_idx < npts ? (start_idx + 1) : 1
     start_val = (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
+    start_idx = next_idx - 1  # reset for iterating below
     status = !_point_filled_curve_orientation(start_val, poly; in = true, on = false, out = false)
     # Loop over points and mark entry and exit status
     start_chain_idx = 0
