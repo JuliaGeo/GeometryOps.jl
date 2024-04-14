@@ -91,6 +91,10 @@ makedocs(;
     pages=[
         "Introduction" => "introduction.md",
         "API Reference" => "api.md",
+        "Explanations" => [
+            "Paradigms" => "paradigms.md",
+            "Peculiarities" => "peculiarities.md",
+        ],
         "Source code" => literate_pages,
     ],
     warnonly = true,
