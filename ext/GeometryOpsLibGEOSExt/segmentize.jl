@@ -16,9 +16,13 @@ end
 
 _segmentize_geos(geom, max_distance) = _segmentize_geos(GI.convert(LG, geom), max_distance)
 
-function GO.segmentize(alg::GEOS{(:max_distance,)}, geom; threaded::Union{Bool, GO.BoolsAsTypes} = _False())
+# 2 behaviours:
+# - enforce: enforce the presence of a kwargs
+# - fetch: fetch the value of a kwargs, or return a default value
+function GO.segmentize(alg::GEOS, geom; threaded::Union{Bool, GO.BoolsAsTypes} = _False())
+    max_distance = enforce(alg, :max_distance, GO.segmentize)
     return GO.apply(
-        Base.Fix2(_segmentize_geos, alg.params.max_distance), 
+        Base.Fix2(_segmentize_geos, max_distance), 
         GO.TraitTarget(GI.GeometryCollectionTrait(), GI.MultiPolygonTrait(), GI.PolygonTrait(), GI.MultiLineStringTrait(), GI.LineStringTrait(), GI.LinearRingTrait(), GI.MultiPointTrait(), GI.PointTrait()),
         geom; 
         threaded

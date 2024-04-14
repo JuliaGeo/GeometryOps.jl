@@ -93,15 +93,15 @@ For example, `segmentize` will only accept a `GEOS` struct with only a
 It's generally a lot slower than the native Julia implementations, since
 it must convert to the LibGEOS implementation and back - so be warned!
 """
-struct GEOS{Keys}
-    params::NamedTuple{Keys}
-    function GEOS{Keys}(arg) where Keys
-        return new{Keys}(NamedTuple{Keys}(arg))
-    end
+struct GEOS
+    params::NamedTuple
 end
 
 function GEOS(; params...)
     nt = NamedTuple(params)
-    return GEOS{keys(nt)}(nt)
+    return GEOS(nt)
 end
-
+# These are definitions for convenience, so we don't have to type out 
+# `alg.params` every time.
+get(alg::GEOS, key, value) = get(alg.params, key, value)
+get(f::Function, alg::GEOS, key) = get(f, alg.params, key)
