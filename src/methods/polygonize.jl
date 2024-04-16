@@ -77,7 +77,6 @@ function polygonize(xs, ys, A::AbstractMatrix, ::Type{T} = Float64; minpoints=10
             _sv_point((xs[x], ys[y]), T)
         end
     end
-    @show typeof(contours)
     ## If we filter off the minimum points, then it's a hair more efficient
     ## not to convert contours with length < missingpoints to polygons.
     if minpoints > 1
