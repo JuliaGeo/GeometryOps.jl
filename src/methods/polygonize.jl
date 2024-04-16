@@ -67,26 +67,26 @@ If `xs` and `ys` are passed in they are used as the pixel center points.
 # Keywords
 - `minpoints`: ignore polygons with less than `minpoints` points. 
 """
-polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...) 
+polygonize(A::AbstractMatrix, ::Type{T} = Float64; kw...) where T = polygonize(axes(A)..., A, T; kw...) 
 
-function polygonize(xs, ys, A::AbstractMatrix; minpoints=10)
+function polygonize(xs, ys, A::AbstractMatrix, ::Type{T} = Float64; minpoints=10) where T
     ## This function uses a lazy map to get contours.  
     contours = Iterators.map(get_contours(A)) do contour
-        poly = map(contour) do xy
+        map(contour) do xy
             x, y = Tuple(xy)
-            Point2f(xs[x], ys[y])
+            _sv_point((xs[x], ys[y]), T)
         end
     end
+    @show typeof(contours)
     ## If we filter off the minimum points, then it's a hair more efficient
     ## not to convert contours with length < missingpoints to polygons.
     if minpoints > 1
         contours = Iterators.filter(contours) do contour
             length(contour) > minpoints
         end
-       return map(Polygon, contours)
-    else
-        return map(Polygon, contours)
     end
+    return [GI.Polygon([c]) for c in contours]
+    # map(GI.Polygon, contours)
 end
 
 ## rotate direction clockwise
