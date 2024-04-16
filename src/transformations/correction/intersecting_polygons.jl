@@ -58,8 +58,8 @@ struct UnionIntersectingPolygons <: GeometryCorrection end
 
 application_level(::UnionIntersectingPolygons) = GI.MultiPolygonTrait
 
-function (::UnionIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
-    union_multipoly = tuples(multipoly)
+function (::UnionIntersectingPolygons)(::Type{T}, ::GI.MultiPolygonTrait, multipoly) where T
+    union_multipoly = tuples(multipoly, T)
     n_polys = GI.npolygon(multipoly)
     if n_polys > 1
         keep_idx = trues(n_polys)  # keep track of sub-polygons to remove
@@ -101,8 +101,8 @@ struct DiffIntersectingPolygons <: GeometryCorrection end
 
 application_level(::DiffIntersectingPolygons) = GI.MultiPolygonTrait
 
-function (::DiffIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
-    diff_multipoly = tuples(multipoly)
+function (::DiffIntersectingPolygons)(::Type{T}, ::GI.MultiPolygonTrait, multipoly) where T
+    diff_multipoly = tuples(multipoly, T)
     n_starting_polys = GI.npolygon(multipoly)
     n_polys = n_starting_polys
     if n_polys > 1

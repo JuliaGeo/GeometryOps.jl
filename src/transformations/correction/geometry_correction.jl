@@ -40,18 +40,19 @@ abstract type GeometryCorrection end
 
 application_level(gc::GeometryCorrection) = error("Not implemented yet for $(gc)")
 
-(gc::GeometryCorrection)(geometry) = gc(GI.trait(geometry), geometry)
+(gc::GeometryCorrection)(geometry, ::Type{T} = Float64) where T = gc(T, GI.trait(geometry), geometry)
 
-(gc::GeometryCorrection)(trait::GI.AbstractGeometryTrait, geometry) = error("Not implemented yet for $(gc) and $(trait).")
+(gc::GeometryCorrection)(_, trait::GI.AbstractGeometryTrait, geometry) = error("Not implemented yet for $(gc) and $(trait).")
 
-function fix(geometry; corrections = GeometryCorrection[ClosedRing(),], kwargs...)
+function fix(geometry, ::Type{T} = Float64; corrections = GeometryCorrection[ClosedRing(),], kwargs...) where T
     traits = application_level.(corrections)
     final_geometry = geometry
     for Trait in (GI.PointTrait, GI.MultiPointTrait, GI.LineStringTrait, GI.LinearRingTrait, GI.MultiLineStringTrait, GI.PolygonTrait, GI.MultiPolygonTrait)
         available_corrections = findall(x -> x == Trait, traits)
         isempty(available_corrections) && continue
         @debug "Correcting for $(Trait)"
-        net_function = reduce(∘, corrections[available_corrections])
+        @show T
+        net_function = reduce(∘, Base.Fix2.(corrections[available_corrections], T))
         final_geometry = apply(net_function, Trait, final_geometry; kwargs...)
     end
     return final_geometry

@@ -48,26 +48,21 @@ struct ClosedRing <: GeometryCorrection end
 
 application_level(::ClosedRing) = GI.PolygonTrait
 
-function (::ClosedRing)(::GI.PolygonTrait, polygon)
-    exterior = _close_linear_ring(GI.getexterior(polygon))
-
+function (::ClosedRing)(::Type{T}, ::GI.PolygonTrait, polygon) where T
+    exterior = _close_linear_ring(T, GI.getexterior(polygon))
+    
     holes = map(GI.gethole(polygon)) do hole
-        _close_linear_ring(hole) # TODO: make this more efficient, or use tuples!
+        _close_linear_ring(T, hole) # TODO: make this more efficient, or use tuples!
     end
 
     return GI.Wrappers.Polygon([exterior, holes...])
 end
 
-function _close_linear_ring(ring)
-    if GI.getpoint(ring, 1) == GI.getpoint(ring, GI.npoint(ring))
-        # the ring is closed, all hail the ring
-        return ring
-    else
-        # Assemble the ring as a vector
-        tups = tuples.(GI.getpoint(ring))
+function _close_linear_ring(::Type{T}, ring) where T
+    ring = svpoints(ring, T)
+    if !equals(GI.getpoint(ring, 1), GI.getpoint(ring, GI.npoint(ring)))
         # Close the ring
-        push!(tups, tups[1])
-        # Return an actual ring
-        return GI.LinearRing(tups)
+        push!(ring.geom, ring.geom[1])
     end
+    return ring
 end
