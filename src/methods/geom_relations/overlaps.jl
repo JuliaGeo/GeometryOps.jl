@@ -216,7 +216,7 @@ end
 outside of the other edge, return true. Else false. =#
 function _overlaps(
     (a1, a2)::Edge,
-    (b1, b2)::Edge,
+    (b1, b2)::Edge
 )
     # meets in more than one point
     seg_val, _, _ = _intersection_point(Float64, (a1, a2), (b1, b2))

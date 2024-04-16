@@ -86,7 +86,6 @@ function polygonize(xs, ys, A::AbstractMatrix, ::Type{T} = Float64; minpoints=10
         end
     end
     return [GI.Polygon([c]) for c in contours]
-    # map(GI.Polygon, contours)
 end
 
 ## rotate direction clockwise
