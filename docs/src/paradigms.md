@@ -7,7 +7,7 @@ Below, we'll describe some of the foundational paradigms of GeometryOps, and why
 ## `apply`
 
 
-The `apply` function allows you to decompose a given collection of geometries down to a certain level, and then operate on it.  In general, its invocation is:
+The `apply` function allows you to decompose a given collection of geometries down to a certain level,  operate on it, and reconstruct it back to the same nested form as the original.  In general, its invocation is:
 
 ```julia
 apply(f, trait::Trait, geom)
