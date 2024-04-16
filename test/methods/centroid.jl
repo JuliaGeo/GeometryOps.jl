@@ -3,16 +3,16 @@
     l1 = LG.LineString([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]])
     c1, len1 = GO.centroid_and_length(l1)
     c1_from_LG = LG.centroid(l1)
-    @test c1[1] ≈ GI.x(c1_from_LG)
-    @test c1[2] ≈ GI.y(c1_from_LG)
+    @test GI.x(c1) ≈ GI.x(c1_from_LG)
+    @test GI.y(c1) ≈ GI.y(c1_from_LG)
     @test len1 ≈ 20.0
 
     # Spiral line string
     l2 = LG.LineString([[0.0, 0.0], [2.5, -2.5], [-5.0, -3.0], [-4.0, 6.0], [10.0, 10.0], [12.0, -14.56]])
     c2, len2 = GO.centroid_and_length(l2)
     c2_from_LG = LG.centroid(l2)
-    @test c2[1] ≈ GI.x(c2_from_LG) 
-    @test c2[2] ≈ GI.y(c2_from_LG)
+    @test GI.x(c2) ≈ GI.x(c2_from_LG) 
+    @test GI.y(c2) ≈ GI.y(c2_from_LG)
     @test len2 ≈ 59.3090856788928
 
     # Test that non-closed line strings throw an error for centroid_and_area
@@ -22,15 +22,14 @@
     r1 = LG.LinearRing([[0.0, 0.0], [3456.0, 7894.0], [6291.0, 1954.0], [0.0, 0.0]])
     c3 = GO.centroid(r1)
     c3_from_LG = LG.centroid(r1)
-    @test c3[1] ≈ GI.x(c3_from_LG) 
-    @test c3[2] ≈ GI.y(c3_from_LG)
+    @test GI.x(c3) ≈ GI.x(c3_from_LG) 
+    @test GI.y(c3) ≈ GI.y(c3_from_LG)
 end
 
 @testset "Polygons" begin
     # Basic rectangle
     p1 = AG.fromWKT("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))")
     c1 = GO.centroid(p1)
-    c1 .≈ (5, 5)
     @test GI.x(c1) ≈ 5
     @test GI.y(c1) ≈ 5
 
@@ -41,8 +40,8 @@ end
     ]])
     c2, area2 = GO.centroid_and_area(p2)
     c2_from_LG = LG.centroid(p2)
-    @test c2[1] ≈ GI.x(c2_from_LG)
-    @test c2[2] ≈ GI.y(c2_from_LG)
+    @test GI.x(c2) ≈ GI.x(c2_from_LG)
+    @test GI.y(c2) ≈ GI.y(c2_from_LG)
     @test area2 ≈ LG.area(p2)
 
     # Randomly generated polygon with lots of sides
@@ -55,8 +54,8 @@ end
     ]])
     c3, area3 = GO.centroid_and_area(p3)
     c3_from_LG = LG.centroid(p3)
-    @test c3[1] ≈ GI.x(c3_from_LG)
-    @test c3[2] ≈ GI.y(c3_from_LG)
+    @test GI.x(c3) ≈ GI.x(c3_from_LG)
+    @test GI.y(c3) ≈ GI.y(c3_from_LG)
     @test area3 ≈ LG.area(p3)
 
     # Polygon with one hole
@@ -66,8 +65,8 @@ end
     ])
     c4, area4 = GO.centroid_and_area(p4)
     c4_from_LG = LG.centroid(p4)
-    @test c4[1] ≈ GI.x(c4_from_LG)
-    @test c4[2] ≈ GI.y(c4_from_LG)
+    @test GI.x(c4) ≈ GI.x(c4_from_LG)
+    @test GI.y(c4) ≈ GI.y(c4_from_LG)
     @test area4 ≈ LG.area(p4)
 
     # Polygon with two holes
@@ -78,8 +77,8 @@ end
     ])
     c5 = GO.centroid(p5)
     c5_from_LG = LG.centroid(p5)
-    @test c5[1] ≈ GI.x(c5_from_LG)
-    @test c5[2] ≈ GI.y(c5_from_LG)
+    @test GI.x(c5) ≈ GI.x(c5_from_LG)
+    @test GI.y(c5) ≈ GI.y(c5_from_LG)
 
     # Same polygon as P5 but using a GeoInterface polygon
     p6 = GI.Polygon([
@@ -88,7 +87,8 @@ end
         [(-3.0, -9.0), (3.0, -9.0), (3.0, -8.5), (-3.0, -8.5), (-3.0, -9.0)],
     ])
     c6 = GO.centroid(p6)
-    @test all(c5 .≈ c6)
+    @test GI.x(c5) ≈ GI.x(c6)
+    @test GI.y(c5) ≈ GI.y(c6)
 end
 @testset "MultiPolygons" begin
     # Combine poylgons made above
@@ -104,7 +104,7 @@ end
     ])
     c1, area1 = GO.centroid_and_area(m1)
     c1_from_LG = LG.centroid(m1)
-    @test c1[1] ≈ GI.x(c1_from_LG)
-    @test c1[2] ≈ GI.y(c1_from_LG)
+    @test GI.x(c1) ≈ GI.x(c1_from_LG)
+    @test GI.y(c1) ≈ GI.y(c1_from_LG)
     @test area1 ≈ LG.area(m1)
 end
