@@ -17,7 +17,7 @@ Functionally, it's similar to `map` in the way you apply it to geometries - exce
 
 `apply` will start by decomposing the geometry, feature, featurecollection, iterable, or table that you pass to it, and stop when it encounters a geometry for which `GI.trait(geom) isa Trait`.  This encompasses unions of traits especially, but beware that any geometry which is not explicitly handled, and hits `GI.PointTrait`, will cause an error.
 
-`apply` is unlike `map` in that it returns reconstructed geometries, instead of the raw output of the function.  If you want a purely map-like behaviour, like calculating the length of each linestring in your feature collection, then call `map` on the result of `GO.flatten(trait, geom)`, which will decompose each geometry to the given `trait` level and return that decomposition as a flattened vector.
+`apply` is unlike `map` in that it returns reconstructed geometries, instead of the raw output of the function.  If you want a purely map-like behaviour, like calculating the length of each linestring in your feature collection, then call  `GO.flatten(f, trait, geom)`, which will decompose each geometry to the given `trait` and apply `f` to it, returning the decomposition as a flattened vector.
 
 ### `applyreduce`
 
