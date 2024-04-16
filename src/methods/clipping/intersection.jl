@@ -72,9 +72,9 @@ function _intersection(
     if isempty(polys) # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
         if a_in_b
-            push!(polys, GI.Polygon([tuples(ext_a)]))
+            push!(polys, GI.Polygon([svpoints(ext_a, T)]))
         elseif b_in_a
-            push!(polys, GI.Polygon([tuples(ext_b)]))
+            push!(polys, GI.Polygon([svpoints(ext_b, T)]))
         end
     end
     remove_idx = falses(length(polys))
@@ -117,11 +117,11 @@ function _intersection(
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
-        multipoly_b = fix_multipoly(multipoly_b)
+        multipoly_b = fix_multipoly(multipoly_b, T)
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(poly_a, poly_b; target))
+        append!(polys, intersection(poly_a, poly_b, T; target))
     end
     return polys
 end
@@ -134,7 +134,7 @@ _intersection(
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     kwargs...,
-) where T = intersection(poly_b, multipoly_a; target , kwargs...)
+) where T = intersection(poly_b, multipoly_a, T; target , kwargs...)
 
 #= Multipolygon with multipolygon intersection - note that all intersection regions between
 any sub-polygons of `multipoly_a` and any of the sub-polygons of `multipoly_b` are counted
@@ -148,13 +148,13 @@ function _intersection(
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix both multipolygons to prevent duplicated regions
-        multipoly_a = fix_multipoly(multipoly_a)
-        multipoly_b = fix_multipoly(multipoly_b)
+        multipoly_a = fix_multipoly(multipoly_a, T)
+        multipoly_b = fix_multipoly(multipoly_b, T)
         fix_multipoly = nothing
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(poly_a, multipoly_b; target, fix_multipoly))
+        append!(polys, intersection(poly_a, multipoly_b, T; target, fix_multipoly))
     end
     return polys
 end
@@ -196,7 +196,7 @@ were possible given geometry extents or if none are found, return an empty list 
 GI.Points. =#
 function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b) where T
     # Initialize an empty list of points
-    result = GI.Point[]
+    result = Vector{_get_point_type(T)}()
     # Check if the geometries extents even overlap
     Extents.intersects(GI.extent(a), GI.extent(b)) || return result
     # Create a list of edges from the two input geometries
@@ -220,7 +220,7 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
                 on_b_edge = (!b_closed && j == npoints_b && 0 <= β <= 1) ||
                     (0 <= β < 1)
                 if on_a_edge && on_b_edge
-                    push!(result, GI.Point(point))
+                    push!(result, point)
                 end
             end
         end
@@ -241,9 +241,9 @@ second isn't. Finally, if the intersection is line_over, then both points are va
 are the two points that define the endpoints of the overlapping region between the two
 lines.
 
-Also note again that each intersection is a tuple of two tuples. The first is the
-intersection point (x,y) while the second is the ratio along the initial lines (α, β) for
-that point. 
+Also note again that each intersection is a tuple of two elements. The first is the
+intersection point GI.Point(SV[x,y]) while the second is the ratio along the initial lines
+(α, β) for that point. 
 
 Calculation derivation can be found here: https://stackoverflow.com/questions/563198/ =#
 function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
@@ -285,10 +285,10 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
             T(β_num / r_cross_s)
         end
         # Calculate intersection point using α and β
-        x = T(px + α * rx)
-        y = T(py + α * ry)
+        x = px + α * rx
+        y = py + α * ry
         if 0 ≤ α ≤ 1 && 0 ≤ β ≤ 1  # only a valid intersection is 0 ≤ α, β ≤ 1
-            intr1 = (x, y), (α, β)
+            intr1 = _sv_point((x, y), T), (α, β)
             line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
         end
     elseif sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
@@ -304,23 +304,23 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         n_intrs = 0
         if 0 ≤ a1_β ≤ 1
             n_intrs += 1
-            intr1 = (T.(a1), (zero(T), T(a1_β)))
+            intr1 = (_sv_point(a1, T), (zero(T), T(a1_β)))
         end
         if 0 ≤ a2_β ≤ 1
             n_intrs += 1
-            new_intr = (T.(a2), (one(T), T(a2_β)))
+            new_intr = (_sv_point(a2, T), (one(T), T(a2_β)))
             n_intrs == 1 && (intr1 = new_intr)
             n_intrs == 2 && (intr2 = new_intr)
         end
         if 0 < b1_α < 1 
             n_intrs += 1
-            new_intr = (T.(b1), (T(b1_α), zero(T)))
+            new_intr = (_sv_point(b1, T), (T(b1_α), zero(T)))
             n_intrs == 1 && (intr1 = new_intr)
             n_intrs == 2 && (intr2 = new_intr)
         end
         if 0 < b2_α < 1
             n_intrs += 1
-            new_intr = (T.(b2), (T(b2_α), one(T)))
+            new_intr = (_sv_point(b2, T), (T(b2_α), one(T)))
             n_intrs == 1 && (intr1 = new_intr)
             n_intrs == 2 && (intr2 = new_intr)
         end

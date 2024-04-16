@@ -16,7 +16,12 @@ const GB = GeometryBasics
 const SA = GeometryBasics.StaticArrays
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
-const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
+const TupleEdge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
+
+const SVPoint{T} = GI.Point{false, false, SA.SVector{2, T}, Nothing} where T <: AbstractFloat
+const SVEdge{T} = Tuple{SVPoint{T}, SVPoint{T}} where T
+
+const Edge{T} = Union{TupleEdge{T}, SVEdge{T}} where T
 
 include("primitives.jl")
 include("utils.jl")

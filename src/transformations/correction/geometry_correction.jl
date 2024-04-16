@@ -51,7 +51,6 @@ function fix(geometry, ::Type{T} = Float64; corrections = GeometryCorrection[Clo
         available_corrections = findall(x -> x == Trait, traits)
         isempty(available_corrections) && continue
         @debug "Correcting for $(Trait)"
-        @show T
         net_function = reduce(∘, Base.Fix2.(corrections[available_corrections], T))
         final_geometry = apply(net_function, Trait, final_geometry; kwargs...)
     end

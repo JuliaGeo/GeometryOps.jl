@@ -69,7 +69,7 @@ function _cut(::Type{T}, ::GI.PolygonTrait, poly, ::GI.LineTrait, line) where T
     n_intr_pts = length(intr_list)
     # If an impossible number of intersection points, return original polygon
     if n_intr_pts < 2 || isodd(n_intr_pts)
-        return [tuples(poly)]
+        return [svpoints(poly, T)]
     end
     # Cut polygon by line
     cut_coords = _cut(T, ext_poly, line, poly_list, intr_list, n_intr_pts)
@@ -103,7 +103,7 @@ function _cut(::Type{T}, geom, line, geom_list, intr_list, n_intr_pts) where T
     _flag_ent_exit!(GI.LineTrait(), line, geom_list)
     # Add first point to output list
     return_coords = [[geom_list[1].point]]
-    cross_backs = [(T(Inf),T(Inf))]
+    cross_backs = [_sv_point((Inf, Inf), T)]
     poly_idx = 1
     n_polys = 1
     # Walk around original polygon to find split polygons

@@ -59,7 +59,7 @@ struct UnionIntersectingPolygons <: GeometryCorrection end
 application_level(::UnionIntersectingPolygons) = GI.MultiPolygonTrait
 
 function (::UnionIntersectingPolygons)(::Type{T}, ::GI.MultiPolygonTrait, multipoly) where T
-    union_multipoly = tuples(multipoly, T)
+    union_multipoly = svpoints(multipoly, T)
     n_polys = GI.npolygon(multipoly)
     if n_polys > 1
         keep_idx = trues(n_polys)  # keep track of sub-polygons to remove
@@ -72,7 +72,7 @@ function (::UnionIntersectingPolygons)(::Type{T}, ::GI.MultiPolygonTrait, multip
                 for (next_idx, _) in Iterators.filter(last, Iterators.drop(Iterators.enumerate(keep_idx), curr_idx))
                     next_poly = union_multipoly.geom[next_idx]
                     if intersects(curr_poly, next_poly)  # if two polygons intersect
-                        new_polys = union(curr_poly, next_poly; target = GI.PolygonTrait())
+                        new_polys = union(curr_poly, next_poly, T; target = GI.PolygonTrait())
                         n_new_polys = length(new_polys)
                         if n_new_polys == 1  # if polygons combined
                             poly_disjoint = false
@@ -102,7 +102,7 @@ struct DiffIntersectingPolygons <: GeometryCorrection end
 application_level(::DiffIntersectingPolygons) = GI.MultiPolygonTrait
 
 function (::DiffIntersectingPolygons)(::Type{T}, ::GI.MultiPolygonTrait, multipoly) where T
-    diff_multipoly = tuples(multipoly, T)
+    diff_multipoly = svpoints(multipoly, T)
     n_starting_polys = GI.npolygon(multipoly)
     n_polys = n_starting_polys
     if n_polys > 1
@@ -119,7 +119,7 @@ function (::DiffIntersectingPolygons)(::Type{T}, ::GI.MultiPolygonTrait, multipo
                     !keep_idx[curr_piece_idx] && continue
                     curr_poly = diff_multipoly.geom[curr_piece_idx]
                     if intersects(curr_poly, next_poly)  # if two polygons intersect
-                        new_polys = difference(curr_poly, next_poly; target = GI.PolygonTrait())
+                        new_polys = difference(curr_poly, next_poly, T; target = GI.PolygonTrait())
                         n_new_pieces = length(new_polys) - 1
                         if n_new_pieces < 0  # current polygon is covered by next_polygon
                             keep_idx[curr_piece_idx] = false

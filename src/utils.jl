@@ -62,7 +62,7 @@ Convert any geometry or collection of geometries into a flat
 vector of `Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}` edges.
 """
 function to_edges(x, ::Type{T} = Float64) where T
-    edges = Vector{Edge{T}}(undef, _nedge(x))
+    edges = Vector{TupleEdge{T}}(undef, _nedge(x))
     _to_edges!(edges, x, 1)
     return edges
 end
@@ -95,7 +95,7 @@ end
 _tuple_point(p) = GI.x(p), GI.y(p)
 _tuple_point(p, ::Type{T}) where T = T(GI.x(p)), T(GI.y(p))
 
-function to_extent(edges::Vector{Edge})
+function to_extent(edges::Vector{<:Edge})
     x, y = extrema(first, edges)
     Extents.Extent(X=x, Y=y)
 end
@@ -140,5 +140,5 @@ _sv_point(p, ::Type{T}) where T = GI.Point(SA.SVector{2, T}(GI.x(p), GI.y(p)))
 # Get type of polygons that will be made
 # TODO: Increase type options
 _get_poly_type(::Type{T}) where T =
-    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
+    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{_get_point_type(T)}, Nothing, Nothing}}, Nothing, Nothing}
 

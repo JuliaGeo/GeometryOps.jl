@@ -15,7 +15,7 @@ polygons, or not an endpoint of a chain. =#
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
 @kwdef struct PolyNode{T <: AbstractFloat}
-    point::Tuple{T,T}          # (x, y) values of given point
+    point::GI.Point{false, false, SA.SVector{2, T}, Nothing} # GI.Point(SV[x y]) point values
     inter::Bool = false        # If ipt, true, else 0
     neighbor::Int = 0          # If ipt, index of equivalent point in a_list or b_list, else 0
     idx::Int = 0               # If crossing point, index within sorted a_idx_list
@@ -86,7 +86,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
     # Loop through points of poly_a
     local a_pt1
     for (i, a_p2) in enumerate(GI.getpoint(poly_a))
-        a_pt2 = (T(GI.x(a_p2)), T(GI.y(a_p2)))
+        a_pt2 = _sv_point(a_p2, T)
         if i <= 1 || (a_pt1 == a_pt2)  # don't repeat points
             a_pt1 = a_pt2
             continue
@@ -99,7 +99,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
         local b_pt1
         prev_counter = a_count
         for (j, b_p2) in enumerate(GI.getpoint(poly_b))
-            b_pt2 = _tuple_point(b_p2, T)
+            b_pt2 = _sv_point(b_p2, T)
             if j <= 1 || (b_pt1 == b_pt2)  # don't repeat points
                 b_pt1 = b_pt2
                 continue
@@ -190,7 +190,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
     # Loop over points in poly_b and add each point and intersection point
     local b_pt1
     for (i, b_p2) in enumerate(GI.getpoint(poly_b))
-        b_pt2 = _tuple_point(b_p2, T)
+        b_pt2 = _sv_point(b_p2, T)
         if i ≤ 1 || (b_pt1 == b_pt2)  # don't repeat points
             b_pt1 = b_pt2
             continue
@@ -381,7 +381,9 @@ function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, del
     # Determine if non-overlapping line midpoint is inside or outside of polygon
     npts = length(pt_list)
     next_idx = start_idx < npts ? (start_idx + 1) : 1
-    start_val = (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
+    start_x = (GI.x(pt_list[start_idx].point) + GI.x(pt_list[next_idx].point)) / 2
+    start_y = (GI.y(pt_list[start_idx].point) + GI.y(pt_list[next_idx].point)) / 2
+    start_val = _sv_point((start_x, start_y))
     start_idx = next_idx - 1  # reset for iterating below
     status = !_point_filled_curve_orientation(start_val, poly; in = true, on = false, out = false)
     # Loop over points and mark entry and exit status
@@ -400,7 +402,9 @@ function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, del
                     start_crossing, end_crossing = delay_cross_f(status)
                 else  # delayed bouncing
                     next_idx = ii < npts ? (ii + 1) : 1
-                    next_val = (curr_pt.point .+ pt_list[next_idx].point) ./ 2
+                    next_x = (GI.x(curr_pt.point) + GI.x(pt_list[next_idx].point)) / 2
+                    next_y = (GI.y(curr_pt.point) + GI.y(pt_list[next_idx].point)) / 2
+                    next_val = _sv_point((next_x, next_y))
                     pt_in_poly = _point_filled_curve_orientation(next_val, poly; in = true, on = false, out = false)
                     #= start and end crossing status are the same and depend on if adjacent
                     edges of pt_list are within poly =#
@@ -562,7 +566,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
     # Remove set of holes from all polygons
     for i in 1:n_polys
         n_new_per_poly = 0
-        for curr_hole in Iterators.map(tuples, hole_iterator) # loop through all holes
+        for curr_hole in Iterators.map(Base.Fix2(svpoints, T), hole_iterator) # loop through all holes
             # loop through all pieces of original polygon (new pieces added to end of list)
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
                 curr_poly = return_polys[j]
