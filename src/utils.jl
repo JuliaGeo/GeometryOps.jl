@@ -131,3 +131,14 @@ function point_in_extent(p, extent::Extents.Extent)
     (x1, x2), (y1, y1) = extent.X, extent.Y
     return x1 <= GI.x(p) && y1 <= GI.y(p) && x2 >= GI.x(p) && y2 >= GI.y(p)
 end
+
+_get_point_type(::Type{T}) where T =
+    GI.Point{false, false, SA.SVector{2, T}, Nothing}
+
+_sv_point(p) = GI.Point(SA.SVector{2, Float64}(GI.x(p), GI.y(p)))
+_sv_point(p, ::Type{T}) where T = GI.Point(SA.SVector{2, T}(GI.x(p), GI.y(p)))
+# Get type of polygons that will be made
+# TODO: Increase type options
+_get_poly_type(::Type{T}) where T =
+    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
+

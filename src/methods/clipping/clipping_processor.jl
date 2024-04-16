@@ -526,11 +526,6 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
     return return_polys
 end
 
-# Get type of polygons that will be made
-# TODO: Increase type options
-_get_poly_type(::Type{T}) where T =
-    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
-
 #=
     _find_non_cross_orientation(a_list, b_list, a_poly, b_poly)
 

@@ -168,47 +168,47 @@ This is useful for plotting geometries with a limited number of vertices, or for
 
 Returns a geometry of similar type to the input geometry, but resampled.
 """
-function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False())
-    return segmentize(LinearSegments(; max_distance), geom; threaded = _booltype(threaded))
+function segmentize(geom, ::Type{T} = Float64; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False()) where T <: AbstractFloat
+    return segmentize(LinearSegments(; max_distance), geom, T; threaded = _booltype(threaded))
 end
-function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = _False())
+function segmentize(method::SegmentizeMethod, geom, ::Type{T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where T <: AbstractFloat
     @assert method.max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
-    segmentize_function = Base.Fix1(_segmentize, method)
+    segmentize_function(g) = _segmentize(T, method, g)
     return apply(segmentize_function, Union{GI.LinearRingTrait, GI.LineStringTrait}, geom; threaded)
 end
 
-_segmentize(method, geom) = _segmentize(method, geom, GI.trait(geom))
+_segmentize(::Type{T}, method, geom) where T = _segmentize(T, method, geom, GI.trait(geom))
 #= 
 This is a method which performs the common functionality for both linear and geodesic algorithms, 
 and calls out to the "kernel" function which we've defined per linesegment.
 =#
-function _segmentize(method::Union{LinearSegments, GeodesicSegments}, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+function _segmentize(::Type{T}, method::Union{LinearSegments, GeodesicSegments}, geom, ::Union{GI.LineStringTrait, GI.LinearRingTrait}) where T
     first_coord = GI.getpoint(geom, 1)
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
-    new_coords = NTuple{2, Float64}[]
+    new_coords = _get_point_type(T)[] #NTuple{2, Float64}[]
     sizehint!(new_coords, GI.npoint(geom))
-    push!(new_coords, (x1, y1))
+    push!(new_coords, _sv_point((x1, y1), T))
     for coord in Iterators.drop(GI.getpoint(geom), 1)
         x2, y2 = GI.x(coord), GI.y(coord)
-        _fill_linear_kernel!(method, new_coords, x1, y1, x2, y2)
+        _fill_linear_kernel!(T, method, new_coords, x1, y1, x2, y2)
         x1, y1 = x2, y2
     end 
     return rebuild(geom, new_coords)
 end
 
-function _fill_linear_kernel!(method::LinearSegments, new_coords::Vector, x1, y1, x2, y2)
+function _fill_linear_kernel!(::Type{T}, method::LinearSegments, new_coords::Vector, x1, y1, x2, y2) where T
     dx, dy = x2 - x1, y2 - y1
     distance = hypot(dx, dy) # this is a more stable way to compute the Euclidean distance
     if distance > method.max_distance
         n_segments = ceil(Int, distance / method.max_distance)
         for i in 1:(n_segments - 1)
             t = i / n_segments
-            push!(new_coords, (x1 + t * dx, y1 + t * dy))
+            push!(new_coords, _sv_point((x1 + t * dx, y1 + t * dy), T))
         end
     end
     # End the line with the original coordinate,
     # to avoid any multiplication errors.
-    push!(new_coords, (x2, y2))
+    push!(new_coords, _sv_point((x2, y2), T))
     return nothing
 end
 #=

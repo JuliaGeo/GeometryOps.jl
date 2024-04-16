@@ -1,7 +1,7 @@
-# # SVector conversion
+# # SVector Points conversion
 
 """
-    sv_points(obj)
+    svpoints(obj)
 
 Convert all points in `obj` to GI.Points wrapping StaticVectors, wherever the are nested.
 
@@ -12,7 +12,7 @@ GI.Points containing a StaticVector.
 
 $APPLY_KEYWORDS
 """
-function sv_points(geom, ::Type{T} = Float64; kw...) where T
+function svpoints(geom, ::Type{T} = Float64; kw...) where T
     if _ismeasured(geom)
         return apply(PointTrait(), geom; kw...) do p
             GI.Point(SA.SVector{4}(T(GI.x(p)), T(GI.y(p)), T(GI.z(p)), T(GI.m(p))))

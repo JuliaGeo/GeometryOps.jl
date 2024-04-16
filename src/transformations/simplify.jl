@@ -184,43 +184,43 @@ GI.npoint(simple)
 6
 ```
 """
-simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
+simplify(alg::SimplifyAlg, data, ::Type{T} = Float64; kw...) where T = _simplify(T, alg, data; kw...)
 # Default algorithm is DouglasPeucker
 simplify(
-    data; prefilter_alg = nothing,
+    data, ::Type{T} = Float64; prefilter_alg = nothing,
     calc_extent=false, threaded=false, crs=nothing, kw...,
- ) = _simplify(DouglasPeucker(; kw...), data; prefilter_alg, calc_extent, threaded, crs)
+ ) where T = _simplify(T, DouglasPeucker(; kw...), data; prefilter_alg, calc_extent, threaded, crs)
 
 
 #= For each algorithm, apply simplication to all curves, multipoints, and
 points, reconstructing everything else around them. =#
-function _simplify(alg::SimplifyAlg, data; prefilter_alg=nothing, kw...)
-    simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg)
+function _simplify(::Type{T}, alg::SimplifyAlg, data; prefilter_alg=nothing, kw...) where T
+    simplifier(geom) = _simplify(T, GI.trait(geom), alg, geom; prefilter_alg)
     return apply(simplifier, _SIMPLIFY_TARGET, data; kw...)
 end
 
 
 ## For Point and MultiPoint traits we do nothing
-_simplify(::GI.PointTrait, alg, geom; kw...) = geom
-_simplify(::GI.MultiPointTrait, alg, geom; kw...) = geom
+_simplify(::Type{T}, ::GI.PointTrait, alg, geom; kw...) where T = svpoints(geom, T)
+_simplify(::Type{T}, ::GI.MultiPointTrait, alg, geom; kw...) where T = svpoints(geom, T)
 
 ## For curves, rings, and polygon we simplify
 function _simplify(
-    ::GI.AbstractCurveTrait, alg, geom;
+    ::Type{T}, ::GI.AbstractCurveTrait, alg, geom;
     prefilter_alg, preserve_endpoint = true,
-)
+) where T
     points = if isnothing(prefilter_alg)
-        tuple_points(geom)
+        _sv_points(T, geom)
     else
-        _simplify(prefilter_alg, tuple_points(geom), preserve_endpoint)
+        _simplify(prefilter_alg, _sv_points(T, geom), preserve_endpoint)
     end
     return rebuild(geom, _simplify(alg, points, preserve_endpoint))
 end
 
-function _simplify(::GI.PolygonTrait, alg, geom;  kw...)
+function _simplify(::Type{T}, ::GI.PolygonTrait, alg, geom;  kw...) where T
     ## Force treating children as LinearRing
     simplifier(g) = _simplify(
-        GI.LinearRingTrait(), alg, g;
+        T, GI.LinearRingTrait(), alg, g;
         kw..., preserve_endpoint = false,
     )
     rebuilder(g) = rebuild(g, simplifier(g))
@@ -435,7 +435,7 @@ end
 
 # Calculates double the area of a triangle given its vertices
 _triangle_double_area(p1, p2, p3) =
-    abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2]))
+    abs(GI.x(p1) * (GI.y(p2) - GI.y(p3)) + GI.x(p2) * (GI.y(p3) - GI.y(p1)) + GI.x(p3) * (GI.y(p1) - GI.y(p2)))
 
 
 # # Shared utils
@@ -494,10 +494,10 @@ function _build_tolerances(f, points)
     return real_tolerances
 end
 
-function tuple_points(geom)
-    points = Array{Tuple{Float64,Float64}}(undef, GI.npoint(geom))
+function _sv_points(::Type{T}, geom) where T
+    points = Array{_get_point_type(T)}(undef, GI.npoint(geom))
     for (i, p) in enumerate(GI.getpoint(geom))
-        points[i] = (GI.x(p), GI.y(p))
+        points[i] = _sv_point(p)
     end
     return points
 end
