@@ -33,12 +33,12 @@ using FlexiJoins, DataFrames
 
 using CairoMakie, GeoInterfaceMakie
 
-Makie.set_theme!(Attributes(; Axis = (; aspect = DataAspect()))) # hide
-
 pl = GI.Polygon([GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 0)])])
 pu = GI.Polygon([GI.LinearRing([(0, 0), (0, 1), (1, 1), (0, 0)])])
 poly_df = DataFrame(geometry = [pl, pu], color = [:red, :blue])
+f, a, p = Makie.with_theme(Attributes(; Axis = (; aspect = DataAspect()))) do # hide
 f, a, p = poly(poly_df.geometry; color = tuple.(poly_df.color, 0.3))
+end # hide
 ```
 
 Here, the upper polygon is blue, and the lower polygon is red.  Keep this in mind!
