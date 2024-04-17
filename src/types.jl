@@ -58,6 +58,8 @@ Note that if we didn't include the parent abstract type, this would have been re
 type unstable, since the compiler couldn't tell what would be returned!
 
 We had to add the type annotation on the `_booltype(::Bool)` method for this reason as well.
+
+TODO: should we switch to `Static.jl`?
 =#
 abstract type BoolsAsTypes end
 struct _True <: BoolsAsTypes end
@@ -103,5 +105,21 @@ function GEOS(; params...)
 end
 # These are definitions for convenience, so we don't have to type out 
 # `alg.params` every time.
-get(alg::GEOS, key, value) = get(alg.params, key, value)
-get(f::Function, alg::GEOS, key) = get(f, alg.params, key)
+Base.get(alg::GEOS, key, value) = Base.get(alg.params, key, value)
+Base.get(f::Function, alg::GEOS, key) = Base.get(f, alg.params, key)
+
+"""
+    enforce(alg::GO.GEOS, kw::Symbol, f)
+
+Enforce the presence of a keyword argument in a `GEOS` algorithm, and return `alg.params[kw]`.
+
+Throws an error if the key is not present, and mentions `f` in the error message (since there isn't 
+a good way to get the name of the function that called this method).
+"""
+function enforce(alg::GEOS, kw::Symbol, f)
+    if haskey(alg.params, kw)
+        return alg.params[kw]
+    else
+        error("$(f) requires a `$(kw)` keyword argument to the `GEOS` algorithm, which was not provided.")
+    end
+end
