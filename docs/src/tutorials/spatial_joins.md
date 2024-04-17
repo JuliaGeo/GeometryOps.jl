@@ -6,8 +6,8 @@ In this tutorial, we will show how to perform a spatial join on first a toy data
 
 In order to perform the spatial join, we use [FlexiJoins.jl](https://github.com/JuliaAPlavin/FlexiJoins.jl) to perform the join, specifically using its `by_pred` joining method.  This allows the user to specify a predicate in the following manner:
 ```julia
-[inner/left/outer/...]join((table1, table1),
-    by_pred(:table1_column, predicate_function, :table2_column)
+[inner/left/right/outer/...]join((table1, table1),
+    by_pred(:table1_column, predicate_function, :table2_column) # & add other conditions here
 )
 ```
 
@@ -16,6 +16,9 @@ We have enabled the use of all of GeometryOps' boolean comparisons here.  These 
 ```julia
 GO.contains, GO.within, GO.intersects, GO.touches, GO.crosses, GO.disjoint, GO.overlaps, GO.covers, GO.coveredby, GO.equals
 ```
+
+!!! tip
+    Always place the dataframe with more complex geometries second, as that is the one which will be sorted into a tree.
 
 ## Simple example
 
@@ -46,7 +49,7 @@ Here, the upper polygon is blue, and the lower polygon is red.  Keep this in min
 Now, we generate the points.
 
 ```@example spatialjoins
-points = tuple.(rand(100), rand(100))
+points = tuple.(rand(1000), rand(1000))
 points_df = DataFrame(geometry = points)
 scatter!(points_df.geometry)
 f
@@ -54,19 +57,20 @@ f
 
 You can see that they are evenly distributed around the box.  But how do we know which points are in which polygons?
 
-The answer here is to perform a spatial join.
+We have to join the two dataframes based on which polygon (if any) each point lies within.
 
 Now, we can perform the "spatial join" using FlexiJoins.  We are performing an outer join here
 
 ```@example spatialjoins
-joined_df = FlexiJoins.innerjoin(
-    (poly_df, points_df), 
-    by_pred(:geometry, GO.contains, :geometry)
+@time joined_df = FlexiJoins.innerjoin(
+    (points_df, poly_df), 
+    by_pred(:geometry, GO.within, :geometry)
 )
 ```
 
 ```@example spatialjoins
-scatter(joined_df.geometry_1; color = joined_df.color)
+scatter!(a, joined_df.geometry; color = joined_df.color)
+f
 ```
 
 Here, you can see that the colors were assigned appropriately to the scattered points!
@@ -75,3 +79,33 @@ Here, you can see that the colors were assigned appropriately to the scattered p
 
 Suppose I have a list of polygons representing administrative regions (or mining sites, or what have you), and I have a list of polygons for each country.  I want to find the country each region is in.
 
+```julia real
+import GeoInterface as GI, GeometryOps as GO
+using FlexiJoins, DataFrames, GADM # GADM gives us country and sublevel geometry
+
+using CairoMakie, GeoInterfaceMakie
+
+country_df = GADM.get.(["JPN", "USA", "IND", "DEU", "FRA"]) |> DataFrame
+country_df.geometry = GI.GeometryCollection.(GO.tuples.(country_df.geom))
+
+state_doublets = [
+    ("USA", "New York"),
+    ("USA", "California"),
+    ("IND", "Karnataka"),
+    ("DEU", "Berlin"),
+    ("FRA", "Grand Est"),
+    ("JPN", "Tokyo"),
+]
+
+state_full_df = (x -> GADM.get(x...)).(state_doublets) |> DataFrame
+state_full_df.geom = GO.tuples.(only.(state_full_df.geom))
+state_compact_df = state_full_df[:, [:geom, :NAME_1]]
+```
+
+```julia real
+innerjoin((state_compact_df, country_df), by_pred(:geom, GO.within, :geometry))
+innerjoin((state_compact_df,  view(country_df, 1:1, :)), by_pred(:geom, GO.within, :geometry))
+```
+
+!!! warning
+    This is how you would do this, but it doesn't work yet, since the GeometryOps predicates are quite slow on large polygons.  If you try this, the code will continue to run for a very, very long time (it took 12 hours on my laptop, but with minimal CPU usage).
