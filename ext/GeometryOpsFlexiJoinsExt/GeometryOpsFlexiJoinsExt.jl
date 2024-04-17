@@ -26,11 +26,11 @@ FlexiJoins.supports_mode(::FlexiJoins.Mode.Tree, ::FlexiJoins.ByPred{F}, datas) 
 
 # In theory, one could extract the tree from e.g a GeoPackage or some future GeoDataFrame.
 
-FlexiJoins.prepare_for_join(::FlexiJoins.Mode.Tree, X, cond::FlexiJoins.ByPred{<: GO_DE9IM_FUNCS}) = (X, SortTileRecursiveTree.STRtree(cond.Rf(X)))
+FlexiJoins.prepare_for_join(::FlexiJoins.Mode.Tree, X, cond::FlexiJoins.ByPred{<: GO_DE9IM_FUNCS}) = (X, SortTileRecursiveTree.STRtree(map(cond.Rf, X)))
 function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{F}, ix_a, a, (B, tree)::Tuple, multi::typeof(identity)) where F <: GO_DE9IM_FUNCS
-    idxs = SortTileRecursiveTree.query(tree, a)
-    intersecting_idxs = filter(idxs) do idx
-        cond.pred(a, cond.Rf(B)[idx])
+    idxs = SortTileRecursiveTree.query(tree, cond.Lf(a))
+    intersecting_idxs = filter!(idxs) do idx
+        cond.pred(a, cond.Rf(B[idx]))
     end
     return intersecting_idxs
 end
