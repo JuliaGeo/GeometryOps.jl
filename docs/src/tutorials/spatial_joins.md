@@ -58,11 +58,14 @@ The answer here is to perform a spatial join.
 
 Now, we can perform the "spatial join" using FlexiJoins.  We are performing an outer join here
 
-```@example spatialjoin
-joined_df = FlexiJoins.innerjoin((poly_df, points_df), by_pred(:geometry, GO.contains, :geometry))
+```@example spatialjoins
+joined_df = FlexiJoins.innerjoin(
+    (poly_df, points_df), 
+    by_pred(:geometry, GO.contains, :geometry)
+)
 ```
 
-```@example spatialjoin
+```@example spatialjoins
 scatter(joined_df.geometry_1; color = joined_df.color)
 ```
 
