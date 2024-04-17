@@ -1,8 +1,21 @@
 # Spatial joins
 
-Spatial joins are joins which are based not on equality, but on some predicate ``p(x, y)``, which takes two geometries, and returns a value of either `true` or `false`.  For geometries, the `DE
+Spatial joins are joins which are based not on equality, but on some predicate ``p(x, y)``, which takes two geometries, and returns a value of either `true` or `false`.  For geometries, the [`DE-9IM`](https://en.wikipedia.org/wiki/DE-9IM) spatial relationship model is used to determine the spatial relationship between two geometries.  
 
 In this tutorial, we will show how to perform a spatial join on first a toy dataset and then two Natural Earth datasets, to show how this can be used in the real world.
+
+In order to perform the spatial join, we use [FlexiJoins.jl](https://github.com/JuliaAPlavin/FlexiJoins.jl) to perform the join, specifically using its `by_pred` joining method.  This allows the user to specify a predicate in the following manner:
+```julia
+[inner/left/outer/...]join((table1, table1),
+    by_pred(:table1_column, predicate_function, :table2_column)
+)
+```
+
+We have enabled the use of all of GeometryOps' boolean comparisons here.  These are:
+
+```julia
+GO.contains, GO.within, GO.intersects, GO.touches, GO.crosses, GO.disjoint, GO.overlaps, GO.covers, GO.coveredby, GO.equals
+```
 
 ## Simple example
 
@@ -25,7 +38,7 @@ Makie.set_theme!(Attributes(; Axis = (; aspect = DataAspect()))) # hide
 pl = GI.Polygon([GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 0)])])
 pu = GI.Polygon([GI.LinearRing([(0, 0), (0, 1), (1, 1), (0, 0)])])
 poly_df = DataFrame(geometry = [pl, pu], color = [:red, :blue])
-f, a, p = poly(poly_df.geometry; color = tuple.(poly_df.color, 0.7))
+f, a, p = poly(poly_df.geometry; color = tuple.(poly_df.color, 0.3))
 ```
 
 Here, the upper polygon is blue, and the lower polygon is red.  Keep this in mind!
