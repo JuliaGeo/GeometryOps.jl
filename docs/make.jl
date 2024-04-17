@@ -91,6 +91,9 @@ makedocs(;
     pages=[
         "Introduction" => "introduction.md",
         "API Reference" => "api.md",
+        "Tutorials" => [
+            "Spatial Joins" => "tutorials/spatial_joins.md",
+        ],
         "Source code" => literate_pages,
     ],
     warnonly = true,
