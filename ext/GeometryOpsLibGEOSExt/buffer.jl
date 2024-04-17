@@ -4,7 +4,7 @@ const _GEOS_CAPSTYLE_LOOKUP = Dict{Symbol, LG.GEOSBufCapStyles}(
     :square => LG.GEOSBUF_CAP_SQUARE,
 )
 
-const _GEOS_JOINSTYLE_LOOKUP = Dict{Symbol, LG.GEOSBufCapStyles}(
+const _GEOS_JOINSTYLE_LOOKUP = Dict{Symbol, LG.GEOSBufJoinStyles}(
     :round => LG.GEOSBUF_JOIN_ROUND,
     :mitre => LG.GEOSBUF_JOIN_MITRE,
     :bevel => LG.GEOSBUF_JOIN_BEVEL,
@@ -22,7 +22,7 @@ function GO.buffer(alg::GEOS, geom, distance)
     return LG.bufferWithStyle(
         GI.convert(LG, geom), distance; 
         quadsegs = get(alg, :quadsegs, 8),
-        endCapStyle = to_join_style(get(alg, :joinStyle, :round)),
+        endCapStyle = to_cap_style(get(alg, :endCapStyle, :round)),
         joinStyle = to_join_style(get(alg, :joinStyle, :round)),
         mitreLimit = get(alg, :mitreLimit, 5.0),
     )
