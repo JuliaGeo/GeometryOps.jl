@@ -20,6 +20,7 @@ FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::FlexiJoins.ByPred{t
 FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::FlexiJoins.ByPred{typeof(GO.overlaps)}, datas) = true
 FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::FlexiJoins.ByPred{typeof(GO.covers)}, datas) = true
 FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::FlexiJoins.ByPred{typeof(GO.coveredby)}, datas) = true
+FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::FlexiJoins.ByPred{typeof(GO.equals)}, datas) = true
 
 # Next, just in case, we define the `swap_sides` function for those predicates which are defined as inversions.
 
