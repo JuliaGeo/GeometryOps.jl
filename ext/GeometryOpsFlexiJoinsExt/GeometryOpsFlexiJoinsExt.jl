@@ -1,15 +1,18 @@
 module GeometryOpsFlexiJoinsExt
 
 using GeometryOps
-import GeometryOps as GO
 using FlexiJoins
+
+import GeometryOps as GO, GeoInterface as GI
+using SortTileRecursiveTree, Tables
+
 
 # This module defines the FlexiJoins APIs for GeometryOps' boolean comparison functions, taken from DE-9IM.
 
-# For now, we only allow regular n^2 loops for the predicates, primarily because I'm not entirely sure how to do the "fast" mode for these.
-# TODO: fix that and allow faster joins.
-
-# First, we define that FlexiJoins supports the "NestedLoopFast" mode for the predicates.
+# First, we define the joining modes (Tree, NestedLoopFast) that the GO DE-9IM functions support.
+const GO_DE9IM_FUNCS = Union{typeof(GO.contains), typeof(GO.within), typeof(GO.intersects), typeof(GO.disjoint), typeof(GO.touches), typeof(GO.crosses), typeof(GO.overlaps), typeof(GO.covers), typeof(GO.coveredby), typeof(GO.equals)}
+# NestedLoopFast is the naive fallback method
+FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::FlexiJoins.ByPred{F}, datas) where F <: GO_DE9IM_FUNCS = true
 
 FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::FlexiJoins.ByPred{typeof(GO.contains)}, datas) = true
 FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::FlexiJoins.ByPred{typeof(GO.within)}, datas) = true
