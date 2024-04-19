@@ -12,6 +12,8 @@ When dispatch can be controlled by the value of a boolean variable, this introdu
 
 ## Why do you want me to provide a `target` in set operations?
 
-@skygering
+In polygon set operations like `intersection`, `difference`, and `union`, many different geometry types may be obtained - depending on the relationship between the polygons.  For example, when performing an union on two nonintersecting polygons, one would technically have two disjoint polygons as an output.
 
-Mainly type stability reasons.
+We use the `target` keyword to allow the user to control which kinds of geometry they want back.  For example, setting `target` to `PolygonTrait` will cause a vector of polygons to be returned (this is the only currently supported behaviour).  In future, we may implement `MultiPolygonTrait` or `GeometryCollectionTrait` targets which will return a single geometry, as LibGEOS and ArchGDAL do.
+
+This also allows for a lot more type stability - when you ask for polygons, we won't return a geometrycollection with line segments.  Especially in simulation workflows, this is excellent for simplified data processing.
