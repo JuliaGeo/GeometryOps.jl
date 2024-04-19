@@ -1,10 +1,12 @@
 # Spatial joins
 
-Spatial joins are joins which are based not on equality, but on some predicate ``p(x, y)``, which takes two geometries, and returns a value of either `true` or `false`.  For geometries, the [`DE-9IM`](https://en.wikipedia.org/wiki/DE-9IM) spatial relationship model is used to determine the spatial relationship between two geometries.  
+Spatial joins are [table joins](https://www.geeksforgeeks.org/sql-join-set-1-inner-left-right-and-full-joins/) which are based not on equality, but on some predicate ``p(x, y)``, which takes two geometries, and returns a value of either `true` or `false`.  For geometries, the [`DE-9IM`](https://en.wikipedia.org/wiki/DE-9IM) spatial relationship model is used to determine the spatial relationship between two geometries.  
+
+Spatial joins can be done between any geometry types (from geometrycollections to points), just as geometrical predicates can be evaluated on any geometries.
 
 In this tutorial, we will show how to perform a spatial join on first a toy dataset and then two Natural Earth datasets, to show how this can be used in the real world.
 
-In order to perform the spatial join, we use [FlexiJoins.jl](https://github.com/JuliaAPlavin/FlexiJoins.jl) to perform the join, specifically using its `by_pred` joining method.  This allows the user to specify a predicate in the following manner:
+In order to perform the spatial join, we use **[FlexiJoins.jl](https://github.com/JuliaAPlavin/FlexiJoins.jl)** to perform the join, specifically using its `by_pred` joining method.  This allows the user to specify a predicate in the following manner:
 ```julia
 [inner/left/right/outer/...]join((table1, table1),
     by_pred(:table1_column, predicate_function, :table2_column) # & add other conditions here
@@ -109,3 +111,25 @@ innerjoin((state_compact_df,  view(country_df, 1:1, :)), by_pred(:geom, GO.withi
 
 !!! warning
     This is how you would do this, but it doesn't work yet, since the GeometryOps predicates are quite slow on large polygons.  If you try this, the code will continue to run for a very, very long time (it took 12 hours on my laptop, but with minimal CPU usage).
+
+## Enabling custom predicates
+
+In case you want to use a custom predicate, you only need to define a method to tell FlexiJoins how to use it.
+
+For example, let's suppose you wanted to perform a spatial join on geometries which are some distance away from each other:
+
+```julia
+my_predicate_function = <(5) ∘ abs ∘ GO.distance
+```
+
+You would need to define `FlexiJoins.supports_mode` on your predicate:
+
+```julia{3}
+FlexiJoins.supports_mode(
+    ::FlexiJoins.Mode.NestedLoopFast, 
+    ::FlexiJoins.ByPred{typeof(my_predicate_function)}, 
+    datas
+) = true
+```
+
+This will enable FlexiJoins to support your custom function, when it's passed to `by_pred(:geometry, my_predicate_function, :geometry)`.
