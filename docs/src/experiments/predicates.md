@@ -9,6 +9,8 @@ using CairoMakie
 import GeometryOps as GO, GeoInterface as GI, LibGEOS as LG
 import ExactPredicates
 using MultiFloats
+using Chairmarks: @be
+using BenchmarkTools: prettytime
 
 function orient_f64(p, q, r)
     return sign((GI.x(p) - GI.x(r))*(GI.y(q) - GI.y(r)) - (GI.y(p) - GI.y(r))*(GI.x(q) - GI.x(r)))
