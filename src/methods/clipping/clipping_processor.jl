@@ -471,15 +471,18 @@ A list of GeoInterface polygons is returned from this function.
 =#
 function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
     n_a_pts, n_b_pts = length(a_list), length(b_list)
+    total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
     return_polys = Vector{_get_poly_type(T)}(undef, 0)
     # Keep track of number of processed intersection points
+    visited_pts = 0
     processed_pts = 0
     first_idx = 1
     while processed_pts < n_cross_pts
         curr_list, curr_npoints = a_list, n_a_pts
         on_a_list = true
         # Find first unprocessed intersecting point in subject polygon
+        visited_pts += 1
         processed_pts += 1
         first_idx = findnext(x -> x != 0, a_idx_list, first_idx)
         idx = a_idx_list[first_idx]
@@ -496,6 +499,7 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
             # changed curr_not_intr to curr_not_same_ent_flag
             same_status, prev_status = true, curr.ent_exit
             while same_status
+                @assert visited_pts < total_pts "Clipping tracing hit every point - clipping error. Please open an issue."
                 # Traverse polygon either forwards or backwards
                 idx += step
                 idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
@@ -514,6 +518,7 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
                         a_idx_list[curr.idx] = 0
                     end
                 end
+                visited_pts += 1
             end
             # Switch to next list and next point
             curr_list, curr_npoints = on_a_list ? (b_list, n_b_pts) : (a_list, n_a_pts)
@@ -661,6 +666,7 @@ polygon - including both the exterior ring and any holes=#
 function _remove_collinear_points!(poly, remove_idx)
     for ring in GI.getring(poly)
         n = length(ring.geom)
+        @assert n ≥ 3 "Polygon doesn't have enough points - clipping error. Please open an issue."
         # resize and reset removing index buffer
         resize!(remove_idx, n)
         fill!(remove_idx, false)

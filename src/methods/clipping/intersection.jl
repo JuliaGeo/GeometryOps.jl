@@ -291,7 +291,7 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
             intr1 = (x, y), (α, β)
             line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
         end
-    elseif sx * Δqp_y == sy * Δqp_x  # if parallel lines are collinear
+    elseif sx * Δqp_y ≈ sy * Δqp_x  # if parallel lines are collinear
         # Determine overlap fractions
         r_dot_r = (rx^2 + ry^2)
         s_dot_s = (sx^2 + sy^2)
@@ -312,13 +312,13 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
             n_intrs == 1 && (intr1 = new_intr)
             n_intrs == 2 && (intr2 = new_intr)
         end
-        if 0 < b1_α < 1 
+        if n_intrs < 2 && 0 < b1_α < 1 
             n_intrs += 1
             new_intr = (T.(b1), (T(b1_α), zero(T)))
             n_intrs == 1 && (intr1 = new_intr)
             n_intrs == 2 && (intr2 = new_intr)
         end
-        if 0 < b2_α < 1
+        if n_intrs < 2 && 0 < b2_α < 1
             n_intrs += 1
             new_intr = (T.(b2), (T(b2_α), one(T)))
             n_intrs == 1 && (intr1 = new_intr)
@@ -326,7 +326,7 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         end
         if n_intrs == 1
             line_orient = line_hinge
-        elseif n_intrs == 2
+        elseif n_intrs > 1
             line_orient = line_over
         end
     end
