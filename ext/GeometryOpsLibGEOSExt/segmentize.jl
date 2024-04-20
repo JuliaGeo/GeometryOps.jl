@@ -19,7 +19,7 @@ _segmentize_geos(geom, max_distance) = _segmentize_geos(GI.convert(LG, geom), ma
 # 2 behaviours:
 # - enforce: enforce the presence of a kwargs
 # - fetch: fetch the value of a kwargs, or return a default value
-function GO.segmentize(alg::GEOS, geom; threaded::Union{Bool, GO.BoolsAsTypes} = _False())
+@inline function GO.segmentize(alg::GEOS, geom; threaded::Union{Bool, GO.BoolsAsTypes} = _False())
     max_distance = enforce(alg, :max_distance, GO.segmentize)
     return GO.apply(
         Base.Fix2(_segmentize_geos, max_distance), 
