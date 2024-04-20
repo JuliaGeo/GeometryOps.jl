@@ -28,27 +28,15 @@ c1 = GI.GeometryCollection([pt1, l2, p2])
         @testset "Buffer" begin
             @test GO.buffer(p1, 1.0) == LG.buffer(p1, 1.0)
         end
-        # @testset "DE-9IM"
-        #     function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
-        #         for (g1, g2, sg1, sg2, sdesc) in test_pairs
-        #             if swap_points
-        #                 g1, g2 = g2, g1
-        #                 sg1, sg2 = sg2, sg1
-        #             end
-        #             go_val = GO_f(g1, g2)
-        #             lg_val = LG_f(g1, g2)
-        #             @test go_val == lg_val
-        #             go_val != lg_val && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")
-        #         end
-        #     end
-            
-        #     @testset "Contains" begin test_geom_relation(GO.contains, LG.contains, "contains"; swap_points = true) end
-        #     @testset "Covered By" begin test_geom_relation(GO.coveredby, LG.coveredby, "coveredby") end
-        #     @testset "Covers" begin test_geom_relation(GO.covers, LG.covers, "covers"; swap_points = true) end
-        #     @testset "Disjoint" begin test_geom_relation(GO.disjoint, LG.disjoint, "disjoint")end
-        #     @testset "Intersect" begin test_geom_relation(GO.intersects, LG.intersects, "intersects") end
-        #     @testset "Touches" begin test_geom_relation(GO.touches, LG.touches, "touches") end
-        #     @testset "Within" begin test_geom_relation(GO.within, LG.within, "within") end
-        # end
+        # DE-9IM functions are tested in methods/geom_relations.jl, through the GO.GEOS wrapper.
+        # Now, we test polygon intersection functions:
+        @testset "Polygon clipping" begin
+            @test GO.intersection(p1, p2) == GO.intersection(GO.GEOS(), p1, p2)
+            @test GO.union(p1, p2) == GO.union(GO.GEOS(), p1, p2)
+            @test GO.difference(p1, p2) == GO.difference(GO.GEOS(), p1, p2)
+        end
+        @testset "Segmentize" begin
+            @test GI.npoint(GO.segmentize(GO.GEOS(; max_distance = 0.1), l1)) == GI.npoint(GO.segmentize(l1; max_distance = 0.1))
+        end
     end
 end

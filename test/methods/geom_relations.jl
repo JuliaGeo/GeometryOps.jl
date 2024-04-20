@@ -171,14 +171,13 @@ function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
     end
 end
 
-@testset "Contains" begin test_geom_relation(GO.contains, LG.contains, "contains"; swap_points = true) end
-@testset "Covered By" begin test_geom_relation(GO.coveredby, LG.coveredby, "coveredby") end
-@testset "Covers" begin test_geom_relation(GO.covers, LG.covers, "covers"; swap_points = true) end
-@testset "Disjoint" begin test_geom_relation(GO.disjoint, LG.disjoint, "disjoint")end
-@testset "Intersect" begin test_geom_relation(GO.intersects, LG.intersects, "intersects") end
-@testset "Touches" begin test_geom_relation(GO.touches, LG.touches, "touches") end
-@testset "Within" begin test_geom_relation(GO.within, LG.within, "within") end
-
+@testset "Covered By" begin test_geom_relation(GO.coveredby, Base.Fix1(GO.coveredby, GO.GEOS()), "coveredby") end
+@testset "Contains" begin test_geom_relation(GO.contains, Base.Fix1(GO.contains, GO.GEOS()), "contains"; swap_points = true) end
+@testset "Covers" begin test_geom_relation(GO.covers, Base.Fix1(GO.covers, GO.GEOS()), "covers"; swap_points = true) end
+@testset "Disjoint" begin test_geom_relation(GO.disjoint, Base.Fix1(GO.disjoint, GO.GEOS()), "disjoint")end
+@testset "Intersect" begin test_geom_relation(GO.intersects, Base.Fix1(GO.intersects, GO.GEOS()), "intersects") end
+@testset "Touches" begin test_geom_relation(GO.touches, Base.Fix1(GO.touches, GO.GEOS()), "touches") end
+@testset "Within" begin test_geom_relation(GO.within, Base.Fix1(GO.within, GO.GEOS()), "within") end
 
 @testset "Overlaps" begin
     @testset "Points/MultiPoints" begin
