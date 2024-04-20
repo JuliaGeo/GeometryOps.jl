@@ -73,6 +73,9 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
     # TODO: We should probably fix the above in `process_literate_recursive!`.
 end
 
+# Now that the Literate stuff is done, we also download the call notes from HackMD:
+download("https://hackmd.io/kpIqAR8YRJOZQDJjUKVAUQ/download", joinpath(@__DIR__, "src", "call_notes.md"))
+
 # Finally, make the docs!
 makedocs(;
     modules=[GeometryOps],
