@@ -1,8 +1,6 @@
 using Test
 
-import GeoInterface as GI
-import GeometryOps as GO
-import GeometryBasics as GB
+import GeoInterface as GI, GeometryOps as GO, GeometryBasics as GB
 import Proj
 import Shapefile, DataFrames
 

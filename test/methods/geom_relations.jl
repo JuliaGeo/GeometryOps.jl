@@ -1,3 +1,4 @@
+using Test
 import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG

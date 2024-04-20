@@ -1,3 +1,7 @@
+using Test
+
+import GeoInterface as GI, GeometryOps as GO
+
 l1 = GI.Line([(5.0, -5.0), (5.0, 15.0)])
 l2 = GI.Line([(-1.0, 8.0), (2.0, 11.0)])
 l3 = GI.Line([(-1.0, 6.0), (11.0, 6.0)])

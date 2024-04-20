@@ -1,7 +1,6 @@
 using Test
 
-import GeoInterface as GI
-import GeometryOps as GO
+import GeoInterface as GI, GeometryOps as GO
 
 open_rectangle = GI.Wrappers.Polygon([collect.([(0, 0), (10, 0), (10, 10), (0, 10)])])
 
