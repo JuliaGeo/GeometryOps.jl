@@ -21,9 +21,29 @@ function orient_adaptive(p, q, r)
     return sign((px - rx)*(qy - ry) - (py - ry)*(qx - rx))
 end
 # Create an interactive Makie dashboard which can show what is done here
+labels = ["Float64", "Adaptive", "Exact"]
+funcs = [orient_f64, orient_adaptive, ExactPredicates.orient]
 fig = Figure()
-axs = [Axis(fig[1, i]; aspect = DataAspect(), title) for (i, title) in enumerate(["Float64", "Adaptive", "Exact"])]
-# function generate_heatmap()
+axs = [Axis(fig[1, i]; aspect = DataAspect(), xticklabelrotation = pi/4, title) for (i, title) in enumerate(labels)]
+w, r, q, p = 42.0, 0.95, 18.0, 16.8
+function generate_heatmap_args(func, w, r, q, p, heatmap_size = 1000)
+    w_range = LinRange(0, 0+2.0^(-w), heatmap_size)
+    orient_field = [func((p, p), (q, q), (r+x, r+y)) for x in w_range, y in w_range]
+    return (w_range, w_range, orient_field)
+end
+for (i, (ax, func)) in enumerate(zip(axs, funcs))
+    heatmap!(ax, generate_heatmap_args(func, w, r, q, p)...)
+    # now get timing
+    w_range = LinRange(0, 0+2.0^(-w), 5) # for timing - we want to sample stable + unstable points
+    @time timings = [@be $(func)($((p, p)), $((q, q)), $((r+x, r+y))) for x in w_range, y in w_range]
+    median_timings = map.(x -> getproperty(x, :time), getproperty.(timings, :samples)) |> Iterators.flatten |> collect
+    ax.subtitle = BenchmarkTools.prettytime(Statistics.median(median_timings)*10^9)
+    # create time histogram plot
+    # hist(fig[2, i], median_timings; axis = (; xticklabelrotation = pi/4))
+    display(fig)
+end
+resize!(fig, 1000, 450)
+fig
 ```
 
 
@@ -72,7 +92,7 @@ fig
 
 ```julia
 
-import GeoInterface as GI, GeometryOps as GO
+import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
 using MultiFloats
 c1 = [[-28083.868447876892, -58059.13401805979], [-9833.052704767595, -48001.726711609794], [-16111.439295815226, -2.856614689791036e-11], [-76085.95770326033, -2.856614689791036e-11], [-28083.868447876892, -58059.13401805979]]
 c2 = [[-53333.333333333336, 0.0], [0.0, 0.0], [0.0, -80000.0], [-60000.0, -80000.0], [-53333.333333333336, 0.0]]
@@ -91,6 +111,7 @@ f, a, p__1 = poly(p1; label = "p1")
 p__2 = poly!(a, p2; label = "p2")
 
 GO.intersection(p1_m, p2_m; target = GI.PolygonTrait(), fix_multipoly = nothing)
+LG.intersection(p1_m, p2_m)
 
 
 ```
