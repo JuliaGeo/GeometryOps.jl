@@ -7,8 +7,8 @@
 
 <img src="docs/src/assets/logo.png" alt="GeometryOps logo" width="250">
 
-> [!CAUTION]
-> This package is still under very heavy development!  Use with care.
+> [!WARNING]
+> This package is still under heavy development!  Use with care.
 
 GeometryOps.jl is a package for geometric calculations on (primarily 2D) geometries.
 
