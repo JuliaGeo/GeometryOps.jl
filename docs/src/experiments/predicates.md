@@ -11,6 +11,7 @@ import ExactPredicates
 using MultiFloats
 using Chairmarks: @be
 using BenchmarkTools: prettytime
+using Statistics
 
 function orient_f64(p, q, r)
     return sign((GI.x(p) - GI.x(r))*(GI.y(q) - GI.y(r)) - (GI.y(p) - GI.y(r))*(GI.x(q) - GI.x(r)))
@@ -39,7 +40,7 @@ for (i, (ax, func)) in enumerate(zip(axs, funcs))
     w_range = LinRange(0, 0+2.0^(-w), 5) # for timing - we want to sample stable + unstable points
     @time timings = [@be $(func)($((p, p)), $((q, q)), $((r+x, r+y))) for x in w_range, y in w_range]
     median_timings = map.(x -> getproperty(x, :time), getproperty.(timings, :samples)) |> Iterators.flatten |> collect
-    ax.subtitle = BenchmarkTools.prettytime(Statistics.median(median_timings)*10^9)
+    ax.subtitle = prettytime(Statistics.median(median_timings)*10^9)
     # create time histogram plot
     # hist(fig[2, i], median_timings; axis = (; xticklabelrotation = pi/4))
     display(fig)
