@@ -18,9 +18,9 @@ Stepwise, here's what is going on:
 
 =#
 
-using CairoMakie, MakieTeX
+using CairoMakie, MakieTeX, SwarmMakie
 
-using CSV, DataFrames
+using CSV, DataFrames, CategoricalArrays
 using DataToolkit
 
 path_to_makietex_datatoml = joinpath(dirname(dirname(@__DIR__)), "MakieTeX", "docs", "Data.toml")
@@ -83,10 +83,6 @@ timings_df = CSV.read(joinpath(path_to_vector_benchmark, "timings.csv"), DataFra
 replace!(timings_df.package, "sf-project" => "sf", "sf-transform" => "sf")
 
 # now plot
-
-using SwarmMakie
-
-using CategoricalArrays
 
 task_ca = CategoricalArray(timings_df.task)
 
