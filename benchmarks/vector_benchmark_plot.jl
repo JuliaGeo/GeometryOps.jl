@@ -1,3 +1,23 @@
+#=
+# `vector-benchmark` result plot
+
+This code plots the results of the `kadyb/vector-benchmark` repository,
+and needs the MakieTeX SVG pr for now.
+
+The unique feature (and what takes up so many lines of code) is that 
+the scatter markers for each language are SVGs of the logo!  This 
+makes the plot eye-catching and allows users to quickly grasp language
+wise performance.
+
+Stepwise, here's what is going on:
+1. It loads the benchmark data from a CSV file into a DataFrame.
+2. It defines color and marker mappings for each package, where the markers are SVG logos of the respective programming languages.
+3. It uses the beeswarm function from the SwarmMakie package to create a scatter plot, where the x-axis represents the different benchmark tasks, and the y-axis represents the median execution time (in seconds) on a log scale.
+4. The scatter points are colored and marked according to the package and programming language, using the predefined color and marker mappings.
+5. It adds a legend to the plot, displaying the package names and their corresponding language logos.
+
+=#
+
 using CairoMakie, MakieTeX
 
 using CSV, DataFrames
