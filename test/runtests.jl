@@ -41,4 +41,6 @@ const GO = GeometryOps
         include("transformations/correction/closed_ring.jl") 
         include("transformations/correction/intersecting_polygons.jl")
     end
+    # # Extensions
+    @testset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 end
