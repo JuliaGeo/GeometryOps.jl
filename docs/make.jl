@@ -94,6 +94,9 @@ makedocs(;
     pages=[
         "Introduction" => "introduction.md",
         "API Reference" => "api.md",
+        "Tutorials" => [
+            "Spatial Joins" => "tutorials/spatial_joins.md",
+        ],
         "Explanations" => [
             "Paradigms" => "paradigms.md",
             "Peculiarities" => "peculiarities.md",
