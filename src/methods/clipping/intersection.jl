@@ -270,8 +270,8 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         elseif a2_orient == 0  # α = 1
             one(T)
         elseif a1_orient != a2_orient  # 0 < α < 1
-            α_val = T((Δqp_x * sy - Δqp_y * sx) / r_cross_s)
-            clamp(α_val, zero(T), one(T))
+            α_val = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
+            clamp(T(α_val), zero(T), one(T))
         else
             return line_orient, intr1, intr2
         end
@@ -283,8 +283,8 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         elseif b2_orient == 0  # β = 1
             one(T)
         elseif b1_orient != b2_orient  # 0 < β < 1
-            β_val = T((Δqp_x * ry - Δqp_y * rx) / r_cross_s)
-            clamp(β_val, zero(T), one(T))
+            β_val = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
+            clamp(T(β_val), zero(T), one(T))
         else
             return line_orient, intr1, intr2
         end
@@ -300,56 +300,52 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         b1_side = ExactPredicates.sameside(b1, a1, a2)
         b2_side = ExactPredicates.sameside(b2, a1, a2)
         # Lines touch or overlap if endpoints of line a are on/in line b and visa versa
-        r_dot_r = (rx^2 + ry^2)
-        s_dot_s = (sx^2 + sy^2)
         r_dot_s = rx * sx + ry * sy
-        b1_α = (Δqp_x * rx + Δqp_y * ry) / r_dot_r
-        b2_α = b1_α + r_dot_s / r_dot_r
-        a1_β = -(Δqp_x * sx + Δqp_y * sy) / s_dot_s
-        a2_β = a1_β + r_dot_s / s_dot_s
         # Determine which endpoints start and end the overlapping region
         n_intrs = 0
-        if a1_side != 1 #0 ≤ a1_β ≤ 1
-            n_intrs += 1
-            a1_β = if a1_side == 0
-                equals(a1, b1) ? zero(T) : one(T)
-            else
-                clamp(a1_β, zero(T), one(T))
+        if a1_side != 1 || a2_side != 1  # at least one endpoint of line a is in/on line b
+            s_dot_s = sx^2 + sy^2
+            a1_β = T(-(Δqp_x * sx + Δqp_y * sy) / s_dot_s)
+            if a1_side != 1  # 0 ≤ a1_β ≤ 1
+                n_intrs += 1
+                a1_β = if a1_side == 0  # a1_β == 0 or  a1_β == 1
+                    equals(a1, b1) ? zero(T) : one(T)
+                else  # 0 < a1_β < 1
+                    clamp(a1_β, zero(T), one(T))
+                end
+                intr1 = (T.(a1), (zero(T), a1_β))
             end
-            intr1 = (T.(a1), (zero(T), T(a1_β)))
+            if a2_side != 1  # 0 ≤ a2_β ≤ 1
+                n_intrs += 1
+                a2_β = if a2_side == 0  # a2_β == 0 or  a2_β == 1
+                    equals(a2, b1) ? zero(T) : one(T)
+                else  # 0 < a2_β < 1
+                    β_val = a1_β + r_dot_s / s_dot_s
+                    clamp(T(β_val), zero(T), one(T))
+                end
+                new_intr = (T.(a2), (one(T), a2_β))
+                n_intrs == 1 && (intr1 = new_intr)
+                n_intrs == 2 && (intr2 = new_intr)
+            end
         end
-        if a2_side != 1 #0 ≤ a2_β ≤ 1
-            n_intrs += 1
-            a2_β = if a2_side == 0
-                equals(a2, b1) ? zero(T) : one(T)
-            else
-                clamp(a1_β, zero(T), one(T))
+        if b1_side == -1 || b2_side == -1  # at least one endpoint of line b is in line a
+            r_dot_r = (rx^2 + ry^2)
+            b1_α = T((Δqp_x * rx + Δqp_y * ry) / r_dot_r)
+            if b1_side == -1   # 0 < b1_α < 1
+                n_intrs += 1
+                b1_α = clamp(b1_α, zero(T), one(T))
+                new_intr = (T.(b1), (b1_α, zero(T)))
+                n_intrs == 1 && (intr1 = new_intr)
+                n_intrs == 2 && (intr2 = new_intr)
             end
-            new_intr = (T.(a2), (one(T), T(a2_β)))
-            n_intrs == 1 && (intr1 = new_intr)
-            n_intrs == 2 && (intr2 = new_intr)
-        end
-        if n_intrs < 2 && b1_side == -1 #0 < b1_α < 1 
-            n_intrs += 1
-            b1_α = if b1_side == 0
-                equals(a1, b1) ? zero(T) : one(T)
-            else
-                clamp(b1_α, zero(T), one(T))
+            if b2_side == -1  # 0 < b2_α < 1
+                n_intrs += 1
+                b2_α = T(b1_α + r_dot_s / r_dot_r)
+                b2_α = clamp(b2_α, zero(T), one(T))
+                new_intr = (T.(b2), (b2_α, one(T)))
+                n_intrs == 1 && (intr1 = new_intr)
+                n_intrs == 2 && (intr2 = new_intr)
             end
-            new_intr = (T.(b1), (T(b1_α), zero(T)))
-            n_intrs == 1 && (intr1 = new_intr)
-            n_intrs == 2 && (intr2 = new_intr)
-        end
-        if n_intrs < 2 && b2_side == -1 #0 < b2_α < 1
-            n_intrs += 1
-            b2_α = if b2_side == 0
-                equals(a1, b2) ? zero(T) : one(T)
-            else
-                clamp(b2_α, zero(T), one(T))
-            end
-            new_intr = (T.(b2), (T(b2_α), one(T)))
-            n_intrs == 1 && (intr1 = new_intr)
-            n_intrs == 2 && (intr2 = new_intr)
         end
         if n_intrs == 1
             line_orient = line_hinge
