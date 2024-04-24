@@ -8,23 +8,43 @@ module Predicates
 
     # This is the implementation of r_cross_s from 2 points in the `_intersection_points` file.
     # 0 == parallel
-    @genpredicate function isparallel(a1 :: 2, a2 :: 2, b1 :: 2, b2 :: 2)
+    function isparallel(a1, a2, b1, b2)
         r = a2 - a1
         s = b2 - b1
+        isparallel(r, s)
+    end
+
+    @genpredicate function isparallel(r :: 2, s :: 2)
         group!(r...)
         group!(s...)
         ext(r, s)
     end
     # This is the implementation of `iscollinear` from `intersection_points`.
     # 0 == parallel.
-    @genpredicate function iscollinear(a1::2, a2::2, b1::2, b2::2)
+    function iscollinear(a1, a2, b1, b2)
         Δqp = b1 - a1
         s = b2 - b1
+        iscollinear(Δqp, s)
+    end
+
+    @genpredicate function iscollinear(Δqp :: 2, s :: 2)
         group!(Δqp...)
         group!(s...)
         ext(s, Δqp)
-    end
+    end 
 
+    function istouching(a1, a2, b1, b2)
+        pqa = orient(p, q, a)
+        pqb = orient(p, q, b)
+        touch = if pqa == 0 || pqb == 0
+            0
+        elseif opposite_signs(pqa, pqb)
+            1
+        else
+            -1
+        end
+        return touch
+    end
 end
 
 import .Predicates

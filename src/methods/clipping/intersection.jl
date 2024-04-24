@@ -258,41 +258,48 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
     qx, qy = GI.x(b1), GI.y(b1)
     sx, sy = GI.x(b2) - qx, GI.y(b2) - qy
     # Intersections will be where p + αr = q + βs where 0 < α, β < 1
-    r_cross_s = rx * sy - ry * sx
     Δqp_x = qx - px
     Δqp_y = qy - py
-    if r_cross_s != 0  # if lines aren't parallel
-        #= Calculate α = (Δqp_x * sy - Δqp_y * sx) / r_cross_s where we use approx
-        comparisons due to inexact calculations =#
-        α_num_t1, α_num_t2 = Δqp_x * sy, Δqp_y * sx  # α numerator terms
-        α_num = α_num_t1 - α_num_t2
-        α = if α_num_t1 ≈ α_num_t2  # α = 0
+    r_cross_s = rx * sy - ry * sx
+    if Predicates.isparallel((rx, ry), (sx, sy)) != 0  # non-parallel lines
+        # Calculate α ratio if lines cross or touch
+        a1_orient = ExactPredicates.orient(b1, b2, a1)
+        a2_orient = ExactPredicates.orient(b1, b2, a2)
+        α = if a1_orient == 0  # α = 0
             zero(T)
-        elseif α_num ≈ r_cross_s  # α = 1
+        elseif a2_orient == 0  # α = 1
             one(T)
-        else  # α != 0, 1
-            T(α_num / r_cross_s)
+        elseif a1_orient != a2_orient  # 0 < α < 1
+            α_val = T((Δqp_x * sy - Δqp_y * sx) / r_cross_s)
+            clamp(α_val, zero(T), one(T))
+        else
+            return line_orient, intr1, intr2
         end
-         #= Calculate β = (Δqp_x * ry - Δqp_y * rx) / r_cross_s where we use approx
-        comparisons due to inexact calculations =#
-        β_num_t1, β_num_t2 = Δqp_x * ry, Δqp_y * rx
-        β_num = β_num_t1 - β_num_t2
-        β = if β_num_t1 ≈ β_num_t2  # β = 0
+        # Calculate β ratio if lines touch or cross
+        b1_orient = ExactPredicates.orient(a1, a2, b1)
+        b2_orient = ExactPredicates.orient(a1, a2, b2)
+        β = if b1_orient == 0  # β = 0
             zero(T)
-        elseif β_num ≈ r_cross_s  # β = 1
+        elseif b2_orient == 0  # β = 1
             one(T)
-        else  # β != 0, 1
-            T(β_num / r_cross_s)
+        elseif b1_orient != b2_orient  # 0 < β < 1
+            β_val = T((Δqp_x * ry - Δqp_y * rx) / r_cross_s)
+            clamp(β_val, zero(T), one(T))
+        else
+            return line_orient, intr1, intr2
         end
         # Calculate intersection point using α and β
         x = T(px + α * rx)
         y = T(py + α * ry)
-        if 0 ≤ α ≤ 1 && 0 ≤ β ≤ 1  # only a valid intersection is 0 ≤ α, β ≤ 1
-            intr1 = (x, y), (α, β)
-            line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
-        end
-    elseif sx * Δqp_y ≈ sy * Δqp_x  # if parallel lines are collinear
-        # Determine overlap fractions
+        intr1 = (x, y), (α, β)
+        line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
+    elseif Predicates.iscollinear((Δqp_x, Δqp_y), (sx, sy)) == 0 # collinear parallel lines
+        # Determine if lines touch or overlap and with what α and β values
+        a1_side = ExactPredicates.sameside(a1, b1, b2)
+        a2_side = ExactPredicates.sameside(a2, b1, b2)
+        b1_side = ExactPredicates.sameside(b1, a1, a2)
+        b2_side = ExactPredicates.sameside(b2, a1, a2)
+        # Lines touch or overlap if endpoints of line a are on/in line b and visa versa
         r_dot_r = (rx^2 + ry^2)
         s_dot_s = (sx^2 + sy^2)
         r_dot_s = rx * sx + ry * sy
@@ -302,24 +309,44 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         a2_β = a1_β + r_dot_s / s_dot_s
         # Determine which endpoints start and end the overlapping region
         n_intrs = 0
-        if 0 ≤ a1_β ≤ 1
+        if a1_side != 1 #0 ≤ a1_β ≤ 1
             n_intrs += 1
+            a1_β = if a1_side == 0
+                equals(a1, b1) ? zero(T) : one(T)
+            else
+                clamp(a1_β, zero(T), one(T))
+            end
             intr1 = (T.(a1), (zero(T), T(a1_β)))
         end
-        if 0 ≤ a2_β ≤ 1
+        if a2_side != 1 #0 ≤ a2_β ≤ 1
             n_intrs += 1
+            a2_β = if a2_side == 0
+                equals(a2, b1) ? zero(T) : one(T)
+            else
+                clamp(a1_β, zero(T), one(T))
+            end
             new_intr = (T.(a2), (one(T), T(a2_β)))
             n_intrs == 1 && (intr1 = new_intr)
             n_intrs == 2 && (intr2 = new_intr)
         end
-        if n_intrs < 2 && 0 < b1_α < 1 
+        if n_intrs < 2 && b1_side == -1 #0 < b1_α < 1 
             n_intrs += 1
+            b1_α = if b1_side == 0
+                equals(a1, b1) ? zero(T) : one(T)
+            else
+                clamp(b1_α, zero(T), one(T))
+            end
             new_intr = (T.(b1), (T(b1_α), zero(T)))
             n_intrs == 1 && (intr1 = new_intr)
             n_intrs == 2 && (intr2 = new_intr)
         end
-        if n_intrs < 2 && 0 < b2_α < 1
+        if n_intrs < 2 && b2_side == -1 #0 < b2_α < 1
             n_intrs += 1
+            b2_α = if b2_side == 0
+                equals(a1, b2) ? zero(T) : one(T)
+            else
+                clamp(b2_α, zero(T), one(T))
+            end
             new_intr = (T.(b2), (T(b2_α), one(T)))
             n_intrs == 1 && (intr1 = new_intr)
             n_intrs == 2 && (intr2 = new_intr)
