@@ -666,7 +666,6 @@ polygon - including both the exterior ring and any holes=#
 function _remove_collinear_points!(poly, remove_idx)
     for ring in GI.getring(poly)
         n = length(ring.geom)
-        @assert n ≥ 3 "Polygon doesn't have enough points - clipping error. Please open an issue."
         # resize and reset removing index buffer
         resize!(remove_idx, n)
         fill!(remove_idx, false)
@@ -693,6 +692,8 @@ function _remove_collinear_points!(poly, remove_idx)
         end
         # Remove unneeded collinear points
         deleteat!(ring.geom, remove_idx)
+        # Check if enough points are left to form a polygon
+        @assert length(ring.geom) ≥ 3 "Polygon doesn't have enough points - clipping error. Please open an issue."
         if remove_idx[1]  # make sure the last point is repeated
             push!(ring.geom, ring.geom[1])
         end
