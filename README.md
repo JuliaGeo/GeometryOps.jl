@@ -7,8 +7,8 @@
 
 <img src="docs/src/assets/logo.png" alt="GeometryOps logo" width="250">
 
-> [!CAUTION]
-> This package is still under very heavy development!  Use with care.
+> [!WARNING]
+> This package is still under heavy development!  Use with care.
 
 GeometryOps.jl is a package for geometric calculations on (primarily 2D) geometries.
 
@@ -34,6 +34,14 @@ GeometryOps tries to offer most of the basic geometry operations you'd need, imp
 - Segmentization/densification of geometry, both linearly and by geodesic paths (`segmentize`)
 
 See the "API" page in the docs for a more complete list!
+
+## Performance comparison to other packages
+
+From the wonderful [vector-benchmark](https://www.github.com/kadyb/vector-benchmark),
+
+[![download-3](https://github.com/JuliaGeo/GeometryOps.jl/assets/32143268/0be8672c-c90f-4e1d-81c5-8522317c5e29)](https://github.com/kadyb/vector-benchmark/pull/12)
+
+More benchmarks coming soon!
 
 ### Planned additions
 

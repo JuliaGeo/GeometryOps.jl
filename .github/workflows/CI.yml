@@ -41,12 +41,15 @@ jobs:
     permissions:
       contents: write
       statuses: write
+      actions: write
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/cache@v1
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1'
+      - name: Add custom versions of packages
+        run: julia --project=docs -e 'using Pkg; Pkg.add(PackageSpec(; url = "https://github.com/JuliaGeo/NaturalEarth.jl", rev = "as/scratchspaces"))'
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-docdeploy@v1
         env:
