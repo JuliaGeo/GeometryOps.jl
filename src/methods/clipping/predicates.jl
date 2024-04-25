@@ -6,6 +6,9 @@ module Predicates
 
     using ExactPredicates: ext, inp
 
+    orient(args...) = ExactPredicates.orient(args...)
+    sameside(args...) = ExactPredicates.sameside(args...)
+
     # This is the implementation of r_cross_s from 2 points in the `_intersection_points` file.
     # 0 == parallel
     function isparallel(a1, a2, b1, b2)

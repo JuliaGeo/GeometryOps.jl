@@ -263,8 +263,8 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
     r_cross_s = rx * sy - ry * sx
     if Predicates.isparallel((rx, ry), (sx, sy)) != 0  # non-parallel lines
         # Calculate α ratio if lines cross or touch
-        a1_orient = ExactPredicates.orient(b1, b2, a1)
-        a2_orient = ExactPredicates.orient(b1, b2, a2)
+        a1_orient = Predicates.orient(b1, b2, a1)
+        a2_orient = Predicates.orient(b1, b2, a2)
         α = if a1_orient == 0  # α = 0
             zero(T)
         elseif a2_orient == 0  # α = 1
@@ -276,8 +276,8 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
             return line_orient, intr1, intr2
         end
         # Calculate β ratio if lines touch or cross
-        b1_orient = ExactPredicates.orient(a1, a2, b1)
-        b2_orient = ExactPredicates.orient(a1, a2, b2)
+        b1_orient = Predicates.orient(a1, a2, b1)
+        b2_orient = Predicates.orient(a1, a2, b2)
         β = if b1_orient == 0  # β = 0
             zero(T)
         elseif b2_orient == 0  # β = 1
@@ -295,10 +295,10 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
     elseif Predicates.iscollinear((Δqp_x, Δqp_y), (sx, sy)) == 0 # collinear parallel lines
         # Determine if lines touch or overlap and with what α and β values
-        a1_side = ExactPredicates.sameside(a1, b1, b2)
-        a2_side = ExactPredicates.sameside(a2, b1, b2)
-        b1_side = ExactPredicates.sameside(b1, a1, a2)
-        b2_side = ExactPredicates.sameside(b2, a1, a2)
+        a1_side = Predicates.sameside(a1, b1, b2)
+        a2_side = Predicates.sameside(a2, b1, b2)
+        b1_side = Predicates.sameside(b1, a1, a2)
+        b2_side = Predicates.sameside(b2, a1, a2)
         # Lines touch or overlap if endpoints of line a are on/in line b and visa versa
         r_dot_s = rx * sx + ry * sy
         # Determine which endpoints start and end the overlapping region

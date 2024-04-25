@@ -5,8 +5,9 @@ module GeometryOps
 using GeoInterface
 using GeometryBasics
 import Tables
-using ExactPredicates, LinearAlgebra, Statistics
+using LinearAlgebra, Statistics
 import GeometryBasics.StaticArrays
+import ExactPredicates
 import Base.@kwdef
 
 using GeoInterface.Extents: Extents
