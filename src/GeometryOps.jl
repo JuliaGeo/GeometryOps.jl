@@ -19,7 +19,11 @@ const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
 include("primitives.jl")
 include("utils.jl")
-include("prepared.jl")
+
+include("preparations/prepared_geometries.jl")
+include("preparations/monotone_chain.jl")
+include("preparations/sorted_edge_list.jl")
+include("preparations/rtree.jl")
 
 include("methods/angles.jl")
 include("methods/area.jl")
