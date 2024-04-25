@@ -35,24 +35,9 @@ module Predicates
         group!(s...)
         ext(s, Δqp)
     end 
-
-    function istouching(a1, a2, b1, b2)
-        pqa = orient(p, q, a)
-        pqb = orient(p, q, b)
-        touch = if pqa == 0 || pqb == 0
-            0
-        elseif opposite_signs(pqa, pqb)
-            1
-        else
-            -1
-        end
-        return touch
-    end
 end
 
 import .Predicates
-
-# Predicates.r_cross_s(...)
 
 #=
 # If we want to inject adaptivity, we would do:
