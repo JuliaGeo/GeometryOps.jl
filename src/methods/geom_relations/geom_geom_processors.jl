@@ -482,19 +482,20 @@ function _point_filled_curve_orientation(
         if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
             u1 = GI.x(p_start) - x
             u2 = GI.x(p_end) - x
-            c1 = u1 * v2  # first element of cross product summation
-            c2 = u2 * v1  # second element of cross product summation
-            f = c1 - c2
+            # c1 = u1 * v2  # first element of cross product summation
+            # c2 = u2 * v1  # second element of cross product summation
+            # f = c1 - c2
+            f = Predicates.isparallel((u1, u2), (v1, v2))
             if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
-                (c1 ≈ c2) && return on         # Case 16 or 21
+                f == 0 && return on         # Case 16 or 21
                 f > 0 && (k += 1)              # Case 3 or 9
             elseif v1 > 0 && v2 ≤ 0            # Case 4, 10, 19, 20, 12, or 25
-                (c1 ≈ c2) && return on         # Case 19 or 20
+                f == 0 && return on         # Case 19 or 20
                 f < 0 && (k += 1)              # Case 4 or 10
             elseif v2 == 0 && v1 < 0           # Case 7, 14, or 17
-                (c1 ≈ c2) && return on         # Case 17
+                f == 0 && return on         # Case 17
             elseif v1 == 0 && v2 < 0           # Case 8, 15, or 18
-                (c1 ≈ c2) && return on         # Case 18
+                f == 0 && return on         # Case 18
             elseif v1 == 0 && v2 == 0          # Case 1, 2, 5, 6, 22, or 23
                 u2 ≤ 0 && u1 ≥ 0 && return on  # Case 1
                 u1 ≤ 0 && u2 ≥ 0 && return on  # Case 2
