@@ -265,22 +265,29 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         # Calculate α ratio if lines cross or touch
         a1_orient = Predicates.orient(b1, b2, a1)
         a2_orient = Predicates.orient(b1, b2, a2)
-        α = if a1_orient == 0  # α = 0
-            zero(T)
-        elseif a2_orient == 0  # α = 1
-            one(T)
-        elseif a1_orient != a2_orient  # 0 < α < 1
-            α_val = (Δqp_x * sy - Δqp_y * sx) / r_cross_s
-            clamp(T(α_val), zero(T), one(T))
-        else
+        x, y, α = T(px), T(py), zero(T)  # default values for if α = 0
+        if a2_orient == 0  # α = 1
+            α = one(T)
+            x, y = T(GI.x(a2)), T(GI.y(a2))
+        elseif a1_orient != 0 && a1_orient != a2_orient  # 0 < α < 1
+            α = T((Δqp_x * sy - Δqp_y * sx) / r_cross_s)
+            α = clamp(α, zero(T), one(T))
+            x += T(α * rx)
+            y += T(α * ry)
+            if x == px && y == py  # intersection is within floating percision of endpoints
+                α = zero(T)
+            elseif x == GI.x(a2) && y == GI.y(a2)
+                α = one(T)
+            end
+        elseif a1_orient != 0
             return line_orient, intr1, intr2
         end
         # Calculate β ratio if lines touch or cross
         b1_orient = Predicates.orient(a1, a2, b1)
         b2_orient = Predicates.orient(a1, a2, b2)
-        β = if b1_orient == 0  # β = 0
+        β = if b1_orient == 0 || (x == qx && y == qy)  # β = 0
             zero(T)
-        elseif b2_orient == 0  # β = 1
+        elseif b2_orient == 0 || (x == GI.x(b2) && y == GI.y(b2))  # β = 1
             one(T)
         elseif b1_orient != b2_orient  # 0 < β < 1
             β_val = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
@@ -289,8 +296,6 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
             return line_orient, intr1, intr2
         end
         # Calculate intersection point using α and β
-        x = T(px + α * rx)
-        y = T(py + α * ry)
         intr1 = (x, y), (α, β)
         line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
     elseif Predicates.iscollinear((Δqp_x, Δqp_y), (sx, sy)) == 0 # collinear parallel lines
