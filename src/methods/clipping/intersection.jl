@@ -265,38 +265,57 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         # Calculate α ratio if lines cross or touch
         a1_orient = Predicates.orient(b1, b2, a1)
         a2_orient = Predicates.orient(b1, b2, a2)
-        x, y, α = T(px), T(py), zero(T)  # default values for if α = 0
-        if a2_orient == 0  # α = 1
-            α = one(T)
-            x, y = T(GI.x(a2)), T(GI.y(a2))
-        elseif a1_orient != 0 && a1_orient != a2_orient  # 0 < α < 1
-            α = T((Δqp_x * sy - Δqp_y * sx) / r_cross_s)
-            α = clamp(α, zero(T), one(T))
-            x += T(α * rx)
-            y += T(α * ry)
-            if x == px && y == py  # intersection is within floating percision of endpoints
-                α = zero(T)
-            elseif x == GI.x(a2) && y == GI.y(a2)
-                α = one(T)
-            end
-        elseif a1_orient != 0
-            return line_orient, intr1, intr2
+        # Lines don't cross α < 0 or α > 1
+        a1_orient != 0 && a1_orient == a2_orient && return (line_orient, intr1, intr2)
+        # Determine α value
+        α, pt = if a1_orient == 0  # α = 0
+            zero(T), (T(px), T(py))
+        elseif a2_orient == 0  # α = 1
+            one(T), (T(GI.x(a2)), T(GI.y(a2)))
+        else # 0 < α < 1
+            α_val = T((Δqp_x * sy - Δqp_y * sx) / r_cross_s)
+            α_val = clamp(α_val, zero(T), one(T))
+            α_val, (T(px + α_val * rx),  T(py + α_val * ry))
         end
         # Calculate β ratio if lines touch or cross
         b1_orient = Predicates.orient(a1, a2, b1)
         b2_orient = Predicates.orient(a1, a2, b2)
-        β = if b1_orient == 0 || (x == qx && y == qy)  # β = 0
-            zero(T)
-        elseif b2_orient == 0 || (x == GI.x(b2) && y == GI.y(b2))  # β = 1
-            one(T)
-        elseif b1_orient != b2_orient  # 0 < β < 1
-            β_val = (Δqp_x * ry - Δqp_y * rx) / r_cross_s
-            clamp(T(β_val), zero(T), one(T))
-        else
-            return line_orient, intr1, intr2
+        # Lines don't cross β < 0 or β > 1
+        b1_orient != 0 && b1_orient == b2_orient && return (line_orient, intr1, intr2)
+        β, pt = if b1_orient == 0  # β = 0
+            zero(T), (T(qx), T(qy))
+        elseif b2_orient == 0  # β = 1
+            one(T), (T(GI.x(b2)), T(GI.y(b2)))
+        else  # 0 < β < 1
+            β_val = T((Δqp_x * ry - Δqp_y * rx) / r_cross_s)
+            β_val = clamp(β_val, zero(T), one(T))
+            #= Floating point limitations could make intersection be endpoint if α≈0 or α≈1.
+            In this case, see if multiplication by β gives a distinct number. Otherwise,
+            replace with closest floating point number to endpoint.=#
+            if (α != 0 && equals(a1, pt)) || (α != 1 && equals(a2, pt)) || equals(b1, pt) || equals(b2, pt)
+                pt = (T(qx + β_val * sx), T(qy + β_val * sy))
+                if equals(a1, pt)
+                    α_min = max(eps(px) / rx, eps(py) / ry)
+                    pt = (T(px + α_min * rx), T(py + α_min * ry))
+                elseif equals(a2, pt)
+                    α_max = 1 - max(eps(GI.x(a2)) / rx, eps(GI.y(a2)) / ry)
+                    pt = (T(px + α_max * rx), T(py + α_max * ry))
+                elseif equals(b1, pt)
+                    β_min = max(eps(qx) / sx, eps(qy) / sy)
+                    pt = (T(qx + β_min * sx), T(qy + β_min * sy))
+                elseif equals(b2, pt)
+                    β_max = 1 - max(eps(GI.x(b2)) / sx, eps(GI.y(b2)) / sy)
+                    pt = (T(qx + β_max * sx), T(qy + β_max * sy))
+                end
+            end
+            β_val, pt
         end
         # Calculate intersection point using α and β
-        intr1 = (x, y), (α, β)
+        # x, y = T(px + α * rx),  T(py + α * ry)
+        # if (x == px && y == py) || (x == GI.x(a2) && y == GI.y(a2))
+        #     x, y =  T(qx + β * sx),  T(qy + β * sy)
+        # end
+        intr1 = pt, (α, β)
         line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
     elseif Predicates.iscollinear((Δqp_x, Δqp_y), (sx, sy)) == 0 # collinear parallel lines
         # Determine if lines touch or overlap and with what α and β values
