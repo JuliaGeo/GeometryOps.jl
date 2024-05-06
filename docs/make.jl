@@ -102,6 +102,7 @@ makedocs(;
             "Peculiarities" => "peculiarities.md",
         ],
         "Source code" => literate_pages,
+        "Paper" => "paper.md",
     ],
     warnonly = true,
 )
