@@ -1,6 +1,6 @@
 using Test, GeoInterface, ArchGDAL, GeometryBasics, LibGEOS
 
-# Macro to run a block of `code` for muliple modules, 
+# Macro to run a block of `code` for multiple modules, 
 # using GeoInterface.convert for each var in `args`
 macro test_all_implementations(args, code)
     _test_all_implementations_inner("", args, code)
@@ -9,7 +9,7 @@ macro test_all_implementations(title::String, args, code)
     _test_all_implementations_inner(string(title, " "), args, code)
 end
 
-function _test_all_implementations_inner(args, code)
+function _test_all_implementations_inner(title, args, code)
     args = esc(args)
     code = esc(code)
 
@@ -28,7 +28,7 @@ function _test_all_implementations_inner(args, code)
     end
     quote
         for mod in (GeoInterface, ArchGDAL, GeometryBasics, LibGEOS)
-            @testset "$title : $mod" begin
+            @testset "$(isempty(title) ? "" : "$title : " )$mod" begin
                 $let_expr
             end
         end
