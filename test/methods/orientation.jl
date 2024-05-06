@@ -18,18 +18,21 @@ import GeometryOps as GO
         (-109.97863769531249, 24.617057340809524)
     ])
 
-    # @test isparallel(line1, line2) == true
-	# @test isparallel(line3, line4) == false
-
 	poly1 = GI.Polygon([[[0, 0], [1, 0], [1, 1], [0.5, 0.5], [0, 1], [0, 0]]])
 	poly2 = GI.Polygon([[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]])
-
-	@test isconcave(poly1) == true
-	@test isconcave(poly2) == false
 
 	l1 = GI.LineString([[0, 0], [1, 1], [1, 0], [0, 0]])
 	l2 = GI.LineString([[0, 0], [1, 0], [1, 1], [0, 0]])
 
-	@test isclockwise(l1) == true
-	@test isclockwise(l2) == false
+    @test_all_implementations (poly1, poly2, l1, l2) begin
+
+        # @test isparallel(line1, line2) == true
+        # @test isparallel(line3, line4) == false
+        
+        @test isconcave(poly1) == true
+        @test isconcave(poly2) == false
+
+        @test isclockwise(l1) == true
+        @test isclockwise(l2) == false
+    end
 end

@@ -14,6 +14,8 @@ const AG = ArchGDAL
 const LG = LibGEOS
 const GO = GeometryOps
 
+include("helpers.jl")
+
 @testset "GeometryOps.jl" begin
     @testset "Primitives" begin include("primitives.jl") end
     # Methods

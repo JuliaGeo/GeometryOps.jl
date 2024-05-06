@@ -27,85 +27,86 @@ mp1 = LG.MultiPolygon([p1, p2])
 
 c1 = LG.GeometryCollection([pt1, r1, p1])
 
-# Point and Point
+@test_all_implementations (pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8, pt9, pt10, pt11, mpt1, l1, r1, r2, r3, r4, r5, p1, p2, mp1, c1) begin
+    # Point and Point
+    
+    # Distance from point to same point
+    @test GO.distance(pt1, pt1) == LG.distance(pt1, pt1)
+    # Distance from point to different point
+    @test GO.distance(pt1, pt2) ≈ GO.distance(pt2, pt1) ≈ LG.distance(pt1, pt2)
+    # Return types
+    @test GO.distance(pt1, pt1) isa Float64
+    @test GO.distance(pt1, pt1, Float32) isa Float32
 
-# Distance from point to same point
-@test GO.distance(pt1, pt1) == LG.distance(pt1, pt1)
-# Distance from point to different point
-@test GO.distance(pt1, pt2) ≈ GO.distance(pt2, pt1) ≈ LG.distance(pt1, pt2)
-# Return types
-@test GO.distance(pt1, pt1) isa Float64
-@test GO.distance(pt1, pt1, Float32) isa Float32
+    # Point and Line
 
-# Point and Line
+    #Point on line vertex
+    @test GO.distance(pt1, l1) ==  GO.distance(l1, pt1) == LG.distance(pt1, l1)
+    # Point on line edge
+    @test GO.distance(pt2, l1) ==  GO.distance(l1, pt2) == LG.distance(pt2, l1)
+    # Point equidistant from both segments
+    @test GO.distance(pt3, l1) ≈  GO.distance(l1, pt3) ≈ LG.distance(pt3, l1)
+    # Point closer to one segment than another
+    @test GO.distance(pt4, l1) ≈  GO.distance(l1, pt4) ≈ LG.distance(pt4, l1)
+    # Return types
+    @test GO.distance(pt1, l1) isa Float64
+    @test GO.distance(pt1, l1, Float32) isa Float32
 
-#Point on line vertex
-@test GO.distance(pt1, l1) ==  GO.distance(l1, pt1) == LG.distance(pt1, l1)
-# Point on line edge
-@test GO.distance(pt2, l1) ==  GO.distance(l1, pt2) == LG.distance(pt2, l1)
-# Point equidistant from both segments
-@test GO.distance(pt3, l1) ≈  GO.distance(l1, pt3) ≈ LG.distance(pt3, l1)
-# Point closer to one segment than another
-@test GO.distance(pt4, l1) ≈  GO.distance(l1, pt4) ≈ LG.distance(pt4, l1)
-# Return types
-@test GO.distance(pt1, l1) isa Float64
-@test GO.distance(pt1, l1, Float32) isa Float32
+    # Point and Ring
 
-# Point and Ring
+    # Point on linear ring
+    @test GO.distance(pt1, r1) == LG.distance(pt1, r1)
+    @test GO.distance(pt3, r1) == LG.distance(pt3, r1)
+    # Point outside of linear ring
+    @test GO.distance(pt5, r1) ≈ LG.distance(pt5, r1)
+    # Point inside of hole created by linear ring
+    @test GO.distance(pt3, r1) ≈ LG.distance(pt3, r1)
+    @test GO.distance(pt4, r1) ≈ LG.distance(pt4, r1)
 
-# Point on linear ring
-@test GO.distance(pt1, r1) == LG.distance(pt1, r1)
-@test GO.distance(pt3, r1) == LG.distance(pt3, r1)
-# Point outside of linear ring
-@test GO.distance(pt5, r1) ≈ LG.distance(pt5, r1)
-# Point inside of hole created by linear ring
-@test GO.distance(pt3, r1) ≈ LG.distance(pt3, r1)
-@test GO.distance(pt4, r1) ≈ LG.distance(pt4, r1)
+    # Point and Polygon
+    # Point on polygon exterior edge
+    @test GO.distance(pt1, p1) == LG.distance(pt1, p1)
+    @test GO.signed_distance(pt1, p1) == 0
+    @test GO.distance(pt2, p1) == LG.distance(pt2, p1)
+    # Point on polygon hole edge
+    @test GO.distance(pt4, p1) == LG.distance(pt4, p1)
+    @test GO.signed_distance(pt4, p1) == 0
+    @test GO.distance(pt6, p1) == LG.distance(pt6, p1)
+    # Point inside of polygon
+    @test GO.distance(pt3, p1) == LG.distance(pt3, p1)
+    @test GO.signed_distance(pt3, p1) ≈
+        -(min(LG.distance(pt3, r2), LG.distance(pt3, r3), LG.distance(pt3, r4)))
+    @test GO.distance(pt7, p1) == LG.distance(pt7, p1)
+    @test GO.signed_distance(pt7, p1) ≈
+        -(min(LG.distance(pt7, r2), LG.distance(pt7, r3), LG.distance(pt7, r4)))
+    # Point outside of polyon exterior
+    @test GO.distance(pt5, p1) ≈ LG.distance(pt5, p1)
+    @test GO.signed_distance(pt5, p1) ≈ LG.distance(pt5, p1)
+    # Point inside of polygon hole
+    @test GO.distance(pt8, p1) ≈ LG.distance(pt8, p1)
+    @test GO.signed_distance(pt8, p1) ≈ LG.distance(pt8, p1)
+    @test GO.distance(pt9, p1) ≈ LG.distance(pt9, p1)
+    # Return types
+    @test GO.distance(pt1, p1) isa Float64
+    @test GO.distance(pt1, p1, Float32) isa Float32
 
-# Point and Polygon
-# Point on polygon exterior edge
-@test GO.distance(pt1, p1) == LG.distance(pt1, p1)
-@test GO.signed_distance(pt1, p1) == 0
-@test GO.distance(pt2, p1) == LG.distance(pt2, p1)
-# Point on polygon hole edge
-@test GO.distance(pt4, p1) == LG.distance(pt4, p1)
-@test GO.signed_distance(pt4, p1) == 0
-@test GO.distance(pt6, p1) == LG.distance(pt6, p1)
-# Point inside of polygon
-@test GO.distance(pt3, p1) == LG.distance(pt3, p1)
-@test GO.signed_distance(pt3, p1) ≈
-    -(min(LG.distance(pt3, r2), LG.distance(pt3, r3), LG.distance(pt3, r4)))
-@test GO.distance(pt7, p1) == LG.distance(pt7, p1)
-@test GO.signed_distance(pt7, p1) ≈
-    -(min(LG.distance(pt7, r2), LG.distance(pt7, r3), LG.distance(pt7, r4)))
-# Point outside of polyon exterior
-@test GO.distance(pt5, p1) ≈ LG.distance(pt5, p1)
-@test GO.signed_distance(pt5, p1) ≈ LG.distance(pt5, p1)
-# Point inside of polygon hole
-@test GO.distance(pt8, p1) ≈ LG.distance(pt8, p1)
-@test GO.signed_distance(pt8, p1) ≈ LG.distance(pt8, p1)
-@test GO.distance(pt9, p1) ≈ LG.distance(pt9, p1)
-# Return types
-@test GO.distance(pt1, p1) isa Float64
-@test GO.distance(pt1, p1, Float32) isa Float32
+    # Point and MultiPoint
+    @test GO.distance(pt4, mpt1) == LG.distance(pt4, mpt1)
+    @test GO.distance(pt4, mpt1) isa Float64
+    @test GO.distance(pt4, mpt1, Float32) isa Float32
 
-# Point and MultiPoint
-@test GO.distance(pt4, mpt1) == LG.distance(pt4, mpt1)
-@test GO.distance(pt4, mpt1) isa Float64
-@test GO.distance(pt4, mpt1, Float32) isa Float32
+    # Point and MultiPolygon
+    # Point outside of either polygon
+    @test GO.distance(pt5, mp1) ≈ LG.distance(pt5, mp1)
+    @test GO.distance(pt10, mp1) ≈ LG.distance(pt10, mp1)
+    # Point within one polygon
+    @test GO.distance(pt3, mp1) == LG.distance(pt3, mp1)
+    @test GO.signed_distance(pt3, mp1) ≈
+        -(min(LG.distance(pt3, r2), LG.distance(pt3, r3), LG.distance(pt3, r4), LG.distance(pt3, r5)))
+    @test GO.distance(pt11, mp1) == LG.distance(pt11, mp1)
+    @test GO.signed_distance(pt11, mp1) ≈
+        -(min(LG.distance(pt11, r2), LG.distance(pt11, r3), LG.distance(pt11, r4), LG.distance(pt11, r5)))
 
-# Point and MultiPolygon
-# Point outside of either polygon
-@test GO.distance(pt5, mp1) ≈ LG.distance(pt5, mp1)
-@test GO.distance(pt10, mp1) ≈ LG.distance(pt10, mp1)
-# Point within one polygon
-@test GO.distance(pt3, mp1) == LG.distance(pt3, mp1)
-@test GO.signed_distance(pt3, mp1) ≈
-    -(min(LG.distance(pt3, r2), LG.distance(pt3, r3), LG.distance(pt3, r4), LG.distance(pt3, r5)))
-@test GO.distance(pt11, mp1) == LG.distance(pt11, mp1)
-@test GO.signed_distance(pt11, mp1) ≈
-    -(min(LG.distance(pt11, r2), LG.distance(pt11, r3), LG.distance(pt11, r4), LG.distance(pt11, r5)))
-
-# Point and Geometry Collection
-@test GO.distance(pt1, c1) == LG.distance(pt1, c1)
-
+    # Point and Geometry Collection
+    @test GO.distance(pt1, c1) == LG.distance(pt1, c1)
+end
