@@ -168,10 +168,11 @@ if the outer object has `MultiPolygonTrait`, but should work if it has `FeatureT
 
 Objects "shallower" than the target trait are always completely rebuilt, like
 a `Vector` of `FeatureCollectionTrait` of `FeatureTrait` when the target
-has `PolygonTrait` and is held in the features. But "deeper" objects may remain
-unchanged - such as points and linear rings if the target is the same `PolygonTrait`.
+has `PolygonTrait` and is held in the features. These will always be GeoInterface 
+geometries/feature/feature collections. But "deeper" objects may remain
+unchanged or be whatever GeoInterface compatible objects `f` returns.
 
-The result is a functionally similar geometry with values depending on `f`
+The result is a functionally similar geometry with values depending on `f`.
 
 $APPLY_KEYWORDS
 
