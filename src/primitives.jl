@@ -571,21 +571,11 @@ rebuild(geom, child_geoms; kw...) = rebuild(GI.trait(geom), geom, child_geoms; k
 function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom), extent=nothing)
     T = GI.geointerface_geomtype(trait)
     if GI.is3d(geom)
-        # The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.
+        # The Boolean type parameters here indicate "3d-ness" and "measure" coordinate, respectively.
         return T{true,false}(child_geoms; crs, extent)
     else
         return T{false,false}(child_geoms; crs, extent)
     end
-end
-# So that GeometryBasics geoms rebuild as themselves
-function rebuild(trait::GI.AbstractTrait, geom::BasicsGeoms, child_geoms; crs=nothing)
-    GB.geointerface_geomtype(trait)(child_geoms)
-end
-function rebuild(trait::GI.AbstractTrait, geom::Union{GB.LineString,GB.MultiPoint}, child_geoms; crs=nothing)
-    GB.geointerface_geomtype(trait)(GI.convert.(GB.Point, child_geoms))
-end
-function rebuild(trait::GI.PolygonTrait, geom::GB.Polygon, child_geoms; crs=nothing)
-    Polygon(child_geoms[1], child_geoms[2:end])
 end
 
 using Base.Threads: nthreads, @threads, @spawn
