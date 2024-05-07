@@ -28,7 +28,7 @@ function _test_all_implementations_inner(title, args, code)
     end
     quote
         for mod in (GeoInterface, ArchGDAL, GeometryBasics, LibGEOS)
-            @testset "$(isempty(title) ? "" : "$title : " )$mod" begin
+            @testset "$($(isempty(title) ? "" : "$title : " ))$mod" begin
                 $let_expr
             end
         end
