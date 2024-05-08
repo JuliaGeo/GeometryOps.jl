@@ -4,15 +4,17 @@ module GeometryOps
 
 using GeoInterface
 using GeometryBasics
-import Tables
 using LinearAlgebra, Statistics
-import GeometryBasics.StaticArrays
-import Base.@kwdef
 
-using GeoInterface.Extents: Extents
+import GeometryBasics.StaticArrays
+import Tables # for Tables.jl support in `apply` and `applyreduce`
+import DelaunayTriangulation # for convex hull and triangulation
+import Base.@kwdef
+import GeoInterface.Extents: Extents
 
 const GI = GeoInterface
 const GB = GeometryBasics
+const DelTri = DelaunayTriangulation
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
@@ -24,6 +26,7 @@ include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
 include("methods/centroid.jl")
+include("methods/convex_hull.jl")
 include("methods/distance.jl")
 include("methods/equals.jl")
 include("methods/clipping/clipping_processor.jl")
