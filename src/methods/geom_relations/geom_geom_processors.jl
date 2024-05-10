@@ -666,8 +666,3 @@ function _line_polygon_interactions(
     end
     return in_poly, on_poly, out_poly
 end
-
-function _point_in_extent(p, extent::Extents.Extent)
-    (x1, x2), (y1, y2) = extent.X, extent.Y
-    return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
-end
