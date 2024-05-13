@@ -235,7 +235,7 @@ _within(
     g1, g2;
     WITHIN_POLYGON_ALLOWS...,
     WITHIN_REQUIRES...,
-    TOUCHES_EXACT...,
+    WITHIN_EXACT...,
 )
 
 # Polygons cannot be within any curves
