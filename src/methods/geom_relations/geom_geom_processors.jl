@@ -114,6 +114,11 @@ function _line_curve_process(
     closed_line = false,
     closed_curve = false,
 )
+    skip, returnval = _maybe_skip_disjoint_extents(line, curve;
+        in_allow, on_allow, out_allow, in_require, on_require, out_require,
+    )
+    skip && return returnval
+
     # Set up requirments
     in_req_met = !in_require
     on_req_met = !on_require
@@ -252,6 +257,11 @@ function _line_polygon_process(
     in_require, on_require, out_require,
     closed_line = false,
 )
+    skip, returnval = _maybe_skip_disjoint_extents(line, polygon;
+        in_allow, on_allow, out_allow, in_require, on_require, out_require,
+    )
+    skip && return returnval
+
     in_req_met = !in_require
     on_req_met = !on_require
     out_req_met = !out_require
@@ -320,6 +330,11 @@ function _polygon_polygon_process(
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
 )
+    skip, returnval = _maybe_skip_disjoint_extents(poly1, poly2;
+        in_allow, on_allow, out_allow, in_require, on_require, out_require,
+    )
+    skip && return returnval
+
     in_req_met = !in_require
     on_req_met = !on_require
     out_req_met = !out_require
@@ -641,6 +656,7 @@ function _line_polygon_interactions(
     line, polygon;
     closed_line = false,
 )
+
     in_poly, on_poly, out_poly = _line_filled_curve_interactions(
         line, GI.getexterior(polygon);
         closed_line = closed_line,
@@ -669,4 +685,25 @@ end
 function _point_in_extent(p, extent::Extents.Extent)
     (x1, x2), (y1, y2) = extent.X, extent.Y
     return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
+end
+
+# Disjoint extent optimisation: skip work based on geom extent intersection
+# returns Tuple{Bool, Bool} for (skip, returnval)
+function _maybe_skip_disjoint_extents(a, b;
+    in_allow, on_allow, out_allow, in_require, on_require, out_require,
+)
+    if (in_allow || in_require || on_allow || on_require)
+        # If we need line or interior and no exterior
+        if !(out_require || out_allow) && Extents.disjoint(GI.extent(a), GI.extent(b))
+            # Return false for disjoint geometries
+            return true, false
+        end
+    else
+        # If we need no line or interior, but need exterior
+        if (out_require || out_allow) && Extents.disjoint(GI.extent(a), GI.extent(b))
+            # Return true for disjoint geometries
+            return true, true
+        end
+    end
+    return false, false
 end

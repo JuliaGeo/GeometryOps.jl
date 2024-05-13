@@ -197,20 +197,15 @@ _coveredby(
 
 #= Linearring is coveredby a polygon if all vertices and edges of the ring are
 in the polygon interior or on the polygon edges, inlcuding hole edges. =# 
-function _coveredby(::GI.LinearRingTrait, g1, ::GI.PolygonTrait, g2) 
-    # This can be a *massive* performance gain
-    # Maybe it should be inside `_line_polygon_process` but I'm not sure how yet.
-    if Extents.intersects(GI.extent(g1), GI.extent(g2))
-        _line_polygon_process(
-            g1, g2;
-            COVEREDBY_ALLOWS...,
-            COVEREDBY_CURVE_REQUIRES...,
-            closed_line = true,
-        )
-    else
-        false
-    end
-end
+_coveredby(
+    ::GI.LinearRingTrait, g1,
+    ::GI.PolygonTrait, g2,
+) = _line_polygon_process(
+    g1, g2;
+    COVEREDBY_ALLOWS...,
+    COVEREDBY_CURVE_REQUIRES...,
+    closed_line = true,
+)
 
 
 # # Polygons covered by geometries
@@ -245,7 +240,8 @@ function _coveredby(
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g2,
 )
-    g1e = GI.geointerface_geomtype(t1)(g1; exten=GI.extent(g1))
+    # Calculate the outer extent before looping
+    g1e = GI.geointerface_geomtype(t1)(g1; extent=GI.extent(g1))
     for sub_g2 in GI.getgeom(g2)
         coveredby(g1e, sub_g2) && return true
     end
@@ -263,9 +259,10 @@ function _coveredby(
     }, g1,
     t2::GI.AbstractGeometryTrait, g2,
 )
-    g1e = GI.geointerface_geomtype(t1)(g1; exten=GI.extent(g1))
-    for sub_g1 in GI.getgeom(g1e)
-        !coveredby(sub_g1, g2) && return false
+    # Calculate the outer extent before looping
+    g2e = GI.geointerface_geomtype(t2)(g2; extent=GI.extent(g2))
+    for sub_g1 in GI.getgeom(g1)
+        !coveredby(sub_g1, g2e) && return false
     end
     return true
 end

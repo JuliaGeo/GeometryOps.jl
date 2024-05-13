@@ -197,14 +197,14 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
         isclockwise.(linearrings)
     end
     holes = linearrings[.!exterior_inds]
-    polygons = map(x -> GI.Polygon([x]), linearrings[exterior_inds])
+    polygons = map(x -> GI.Polygon([x]; extent=GI.extent(x)), linearrings[exterior_inds])
 
     # Then we add the holes to the polygons they are inside of
     used_indices = Set{Int}()
     for poly in polygons
         exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
         for i in eachindex(holes)
-            # i in used_indices && continue
+            i in used_indices && continue
             hole = holes[i]
             if covers(poly, hole)
                 # Hole is in the exterior, so add it to the ring list
