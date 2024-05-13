@@ -101,12 +101,10 @@ function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::A
     end
     return _polygonize(f, xvec, yvec, A; kw...)
 end
-polygonize(f::Base.Callable, xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix; kw...) =
-    _polygonize(f, xs, ys, A; kw...)
 
 function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
     minpoints=0,
-) where T
+) where T<:Tuple{Number,Number}
     # Define buffers for edges and rings
     edges = Tuple{T,T}[]
     rings = Vector{T}[]
