@@ -81,10 +81,10 @@ If they are `Vector` of `Tuple` they are used as the lower and upper bounds of e
 
 ```julia
 using GeometryOps
-multipolygon = polygonize(>(0.6), rand(100, 100), minpoints=3)
+multipolygon = polygonize(>(0.6), rand(100), minpoints=3)
 
 using GeometryOps
-featurecollection = polygonize(rand(Int, 100, 100))
+featurecollection = polygonize(rand(1:4, 100) * (fill(1, 100))')
 
 ```
 """
@@ -129,49 +129,68 @@ end
 
 function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
     minpoints=0,
-) where T<:Tuple{Number,Number}
+) where T
     # Define buffers for edges and rings
-    edges = Tuple{T,T}[]
+    edges = Dict{T,Vector{T}}()
     rings = Vector{T}[]
+
+    @assert (length(xs), length(ys)) == size(A)
 
     # First get all the valid edges between filled and empty pixels
     si, sj = map(last, axes(A))
-    for i in axes(A, 1), j in axes(A, 2)
+    @inbounds for i in axes(A, 1), j in axes(A, 2)
         if f(A[i, j]) # This is a pixel inside a polygon
             # xs and ys hold pixel bounds
             x1, x2 = xs[i]
             y1, y2 = ys[j]
             # We check the Von Neumann neighborhood to
             # decide what edges are needed, if any.
-            (j == 1 || !f(A[i, j-1])) && push!(edges, ((x1, y1), (x2, y1)))
-            (i == 1 || !f(A[i-1, j])) && push!(edges, ((x1, y2), (x1, y1)))
-            (j == sj || !f(A[i, j+1])) && push!(edges, ((x2, y2), (x1, y2)))
-            (i == si || !f(A[i+1, j])) && push!(edges, ((x2, y1), (x2, y2)))
+
+            (j == 1 || !f(A[i, j-1])) && push!(get!(() -> T[], edges, (x1, y1)), (x2, y1))
+            (i == 1 || !f(A[i-1, j])) && push!(get!(() -> T[], edges, (x1, y2)), (x1, y1))
+            (j == sj || !f(A[i, j+1])) && push!(get!(() -> T[], edges, (x2, y2)), (x1, y2))
+            (i == si || !f(A[i+1, j])) && push!(get!(() -> T[], edges, (x2, y1)), (x2, y2))
         end
     end
 
     # Then we join the edges into rings
     # Sorting now lets us use `searchsortedlast` for speed later
-    sort!(edges)
+    edgekeys = collect(keys(edges))
     while length(edges) > 0
-        # Take the last edge from the array
-        edge = pop!(edges)
-        firstpoint::T = first(edge)
-        nextpoint::T = last(edge)
-        ring = [firstpoint, nextpoint]
+        found = false
+        local firstpoint
+        while found == false && length(edgekeys) > 0
+            # Take the first edge from the array
+            firstpoint::T = last(edgekeys)
+            if haskey(edges, firstpoint) && !isempty(edges[firstpoint])
+                found = true
+            else
+                pop!(edgekeys)
+            end
+        end
+        found == false && break
+        nextpoints = edges[firstpoint]
+        nextpoint = pop!(nextpoints)
+        if length(nextpoints) == 1
+            pop!(edgekeys)
+        end
+        edge = (firstpoint, nextpoint)
+        ring = T[firstpoint, nextpoint]
         push!(rings, ring)
         while length(edges) > 0
             # Find an edge that matches the next point
-            i = searchsortedlast(edges, (nextpoint, nextpoint); by=first)
-            newedge = edges[i]
+            candidates = edges[nextpoint]
             # When there are two possible edges, 
             # choose the edge that has turned a corner
-            if (i > 1) && (otheredge = edges[i - 1]; otheredge[1] == newedge[1]) &&
-                (edge[2][1] == newedge[2][1] || edge[2][2] == newedge[2][2]) 
-                newedge = otheredge
-                deleteat!(edges, i - 1)
+            if length(candidates) > 1 
+                if (nextpoint[1] == candidates[2][1] || nextpoint[2] == candidates[2][2]) 
+                    newedge = (nextpoint, pop!(candidates))
+                else
+                    newedge = (nexpoint, popfirst!(candidates))
+                end
             else
-                deleteat!(edges, i)
+                newedge = (nextpoint, candidates[1])
+                delete!(edges, nextpoint)
             end
             edge = newedge
             # TODO: Here we actually need to check which edge maintains
@@ -182,17 +201,19 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
                 push!(ring, nextpoint)
                 break
             # Split off another ring if we touch the current ring anywhere else
-            elseif nextpoint in ring
-                i = findfirst(==(nextpoint), ring)
-                splitring = ring[i:lastindex(ring)]
-                deleteat!(ring, i:lastindex(ring))
-                push!(ring, nextpoint)
-                push!(splitring, nextpoint)
-                push!(rings, splitring)
-                continue
-            # Otherwise keep adding points to the ring
             else
-                push!(ring, nextpoint)
+                i = findfirst(==(nextpoint), ring)
+                if isnothing(i)
+                    # Keep adding points to the ring
+                    push!(ring, nextpoint)
+                else
+                    splitring = ring[i:lastindex(ring)]
+                    deleteat!(ring, i:lastindex(ring))
+                    push!(ring, nextpoint)
+                    push!(splitring, nextpoint)
+                    push!(rings, splitring)
+                    continue
+                end
             end
         end
     end
@@ -212,20 +233,22 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
         isclockwise.(linearrings)
     end
     holes = linearrings[.!exterior_inds]
-    polygons = map(x -> GI.Polygon([x]; extent=GI.extent(x)), linearrings[exterior_inds])
+    polygons = map(view(linearrings, exterior_inds)) do lr
+        GI.Polygon([lr]; extent=GI.extent(lr))
+    end
 
     # Then we add the holes to the polygons they are inside of
-    used_indices = Set{Int}()
+    unused = fill(true, length(holes))
     for poly in polygons
         exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
         for i in eachindex(holes)
-            i in used_indices && continue
+            unused[i] || continue
             hole = holes[i]
             if covers(poly, hole)
                 # Hole is in the exterior, so add it to the ring list
                 push!(poly.geom, hole)
-                # And blacklist it so we don't check it again
-                push!(used_indices, i)
+                # remove i
+                unused[i] = false
                 break
             end
         end
