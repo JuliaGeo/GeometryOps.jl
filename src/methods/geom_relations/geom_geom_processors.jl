@@ -59,14 +59,17 @@ If in_allow is true, the point can be within the polygon interior
 If on_allow is true, the point can be on the polygon boundary.
 If out_allow is true, the point can be disjoint from the polygon.
 
+If exact is true then ExactPredicates is used for determining point placement, else
+float calculations are used, which inevitably has floating point errors.
+
 If the point is in an "allowed" location, return true. Else, return false.
 =#
 function _point_polygon_process(
     point, polygon;
-    in_allow, on_allow, out_allow,
+    in_allow, on_allow, out_allow, exact,
 )
     # Check interaction of geom with polygon's exterior boundary
-    ext_val = _point_filled_curve_orientation(point, GI.getexterior(polygon))
+    ext_val = _point_filled_curve_orientation(point, GI.getexterior(polygon); exact)
     # If a point is outside, it isn't interacting with any holes
     ext_val == point_out && return out_allow
     # if a point is on an external boundary, it isn't interacting with any holes
@@ -74,7 +77,7 @@ function _point_polygon_process(
     
     # If geom is within the polygon, need to check interactions with holes
     for hole in GI.gethole(polygon)
-        hole_val = _point_filled_curve_orientation(point, hole)
+        hole_val = _point_filled_curve_orientation(point, hole; exact)
         # If a point in in a hole, it is outside of the polygon
         hole_val == point_in && return out_allow
         # If a point in on a hole edge, it is on the edge of the polygon
@@ -111,8 +114,8 @@ function _line_curve_process(
     line, curve;
     over_allow, cross_allow, on_allow, out_allow,
     in_require, on_require, out_require,
-    closed_line = false,
-    closed_curve = false,
+    closed_line = false, closed_curve = false,
+    exact,
 )
     # Set up requirments
     in_req_met = !in_require
@@ -137,7 +140,7 @@ function _line_curve_process(
         for j in (closed_curve ? 1 : 2):nc
             c_end = _tuple_point(GI.getpoint(curve, j))
             # Check if line and curve segments meet
-            seg_val, intr1, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end))
+            seg_val, intr1, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end); exact)
             # If segments are co-linear
             if seg_val == line_over
                 !over_allow && return false
@@ -171,7 +174,7 @@ function _line_curve_process(
                                 α, β, l_start, l_end, c_start, c_end,
                                 i, line, j, curve,
                             )
-                            next_val, _, _ = _intersection_point(Float64, l, c)
+                            next_val, _, _ = _intersection_point(Float64, l, c; exact)
                             if next_val == line_hinge
                                 !cross_allow && return false
                             else
@@ -250,7 +253,7 @@ function _line_polygon_process(
     line, polygon;
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
-    closed_line = false,
+    exact, closed_line = false,
 )
     in_req_met = !in_require
     on_req_met = !on_require
@@ -258,7 +261,7 @@ function _line_polygon_process(
     # Check interaction of line with polygon's exterior boundary
     in_curve, on_curve, out_curve = _line_filled_curve_interactions(
         line, GI.getexterior(polygon);
-        closed_line = closed_line,
+        exact, closed_line = closed_line,
     )
     if on_curve
         !on_allow && return false
@@ -275,7 +278,7 @@ function _line_polygon_process(
     for hole in GI.gethole(polygon)
         in_hole, on_hole, out_hole =_line_filled_curve_interactions(
             line, hole;
-            closed_line = closed_line,
+            exact, closed_line = closed_line,
         )
         if in_hole  # line in hole is equivalent to being out of polygon
             !out_allow && return false
@@ -319,6 +322,7 @@ function _polygon_polygon_process(
     poly1, poly2;
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
+    exact,
 )
     in_req_met = !in_require
     on_req_met = !on_require
@@ -329,7 +333,7 @@ function _polygon_polygon_process(
     # Check if exterior of poly1 is in polygon 2
     e1_in_p2, e1_on_p2, e1_out_p2 = _line_polygon_interactions(
         ext1, poly2;
-        closed_line = true,
+        exact, closed_line = true,
     )
     if e1_on_p2
         !on_allow && return false
@@ -344,7 +348,7 @@ function _polygon_polygon_process(
         # if exterior ring isn't in poly2, check if it surrounds poly2
         _, _, e2_out_e1 = _line_filled_curve_interactions(
             ext2, ext1;
-            closed_line = true,
+            exact, closed_line = true,
         )  # if they really are disjoint, we are done
         e2_out_e1 && return in_req_met && on_req_met && out_req_met
     end
@@ -352,7 +356,7 @@ function _polygon_polygon_process(
     for h1 in GI.gethole(poly1)
         h1_in_p2, h1_on_p2, h1_out_p2 = _line_polygon_interactions(
             h1, poly2;
-            closed_line = true,
+            exact, closed_line = true,
         )
         if h1_on_p2
             !on_allow && return false
@@ -366,7 +370,7 @@ function _polygon_polygon_process(
             # If hole isn't in poly2, see if poly2 is in hole
             _, _, e2_out_h1 = _line_filled_curve_interactions(
                 ext2, h1;
-                closed_line = true,
+                exact, closed_line = true,
             )
             # hole encompasses all of poly2
             !e2_out_h1 && return in_req_met && on_req_met && out_req_met
@@ -384,7 +388,7 @@ function _polygon_polygon_process(
     for h2 in GI.gethole(poly2)
         h2_in_p1, h2_on_p1, _ = _line_polygon_interactions(
             h2, poly1;
-            closed_line = true,
+            exact, closed_line = true,
         )
         if h2_on_p1
             !on_allow && return false
@@ -468,7 +472,7 @@ See paper for more information on cases denoted in comments.
 =#
 function _point_filled_curve_orientation(
     point, curve;
-    in::T = point_in, on::T = point_on, out::T = point_out,
+    in::T = point_in, on::T = point_on, out::T = point_out, exact,
 ) where {T}
     x, y = GI.x(point), GI.y(point)
     n = GI.npoint(curve)
@@ -485,7 +489,7 @@ function _point_filled_curve_orientation(
             # c1 = u1 * v2  # first element of cross product summation
             # c2 = u2 * v1  # second element of cross product summation
             # f = c1 - c2
-            f = Predicates.isparallel((u1, u2), (v1, v2))
+            f = Predicates.cross((u1, u2), (v1, v2); exact)
             if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
                 f == 0 && return on         # Case 16 or 21
                 f > 0 && (k += 1)              # Case 3 or 9
@@ -523,7 +527,7 @@ last point are connected by a segment.
 =#
 function _line_filled_curve_interactions(
     line, curve;
-    closed_line = false,
+    exact, closed_line = false,
 )
     in_curve = false
     on_curve = false
@@ -540,7 +544,7 @@ function _line_filled_curve_interactions(
 
     # See if first point is in an acceptable orientation
     l_start = _tuple_point(GI.getpoint(line, closed_line ? nl : 1))
-    point_val = _point_filled_curve_orientation(l_start, curve)
+    point_val = _point_filled_curve_orientation(l_start, curve; exact)
     if point_val == point_in
         in_curve = true
     elseif point_val == point_on
@@ -559,7 +563,7 @@ function _line_filled_curve_interactions(
         for j in 1:nc
             c_end = _tuple_point(GI.getpoint(curve, j))
             # Check if two line and curve segments meet
-            seg_val, _, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end))
+            seg_val, _, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end); exact)
             if seg_val != line_out
                 # If line and curve meet, then at least one point is on boundary
                 on_curve = true
@@ -586,10 +590,7 @@ function _line_filled_curve_interactions(
                         so calculate if segment endpoints and intersections are
                         in/out of filled curve
                         =#
-                        ipoints = intersection_points(
-                            GI.Line([l_start, l_end]),
-                            curve
-                        )
+                        ipoints = intersection_points(GI.Line([l_start, l_end]), curve)
                         npoints = length(ipoints)  # since hinge, at least one
                         dist_from_lstart = let l_start = l_start
                             x -> _euclid_distance(Float64, x, l_start)
@@ -597,13 +598,8 @@ function _line_filled_curve_interactions(
                         sort!(ipoints, by = dist_from_lstart)
                         p_start = _tuple_point(l_start)
                         for i in 1:(npoints + 1)
-                            p_end = i ≤ npoints ?
-                                _tuple_point(ipoints[i]) :
-                                l_end
-                            mid_val = _point_filled_curve_orientation(
-                                (p_start .+ p_end) ./ 2,
-                                curve,
-                            )
+                            p_end = i ≤ npoints ? _tuple_point(ipoints[i]) : l_end
+                            mid_val = _point_filled_curve_orientation((p_start .+ p_end) ./ 2, curve; exact)
                             if mid_val == point_in
                                 in_curve = true
                             elseif mid_val == point_out
@@ -640,18 +636,18 @@ last point are connected by a segment.
 =#
 function _line_polygon_interactions(
     line, polygon;
-    closed_line = false,
+    exact, closed_line = false,
 )
     in_poly, on_poly, out_poly = _line_filled_curve_interactions(
         line, GI.getexterior(polygon);
-        closed_line = closed_line,
+        exact, closed_line = closed_line,
     )
     !in_poly && return (in_poly, on_poly, out_poly)
     # Loop over polygon holes
     for hole in GI.gethole(polygon)
         in_hole, on_hole, out_hole =_line_filled_curve_interactions(
             line, hole;
-            closed_line = closed_line,
+            exact, closed_line = closed_line,
         )
         if in_hole
             out_poly = true

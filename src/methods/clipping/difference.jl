@@ -35,7 +35,10 @@ GI.coordinates.(diff_poly)
 function difference(
     geom_a, geom_b, ::Type{T} = Float64; target=nothing, kwargs...,
 ) where {T<:AbstractFloat}
-    return _difference(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; kwargs...)
+    return _difference(
+        TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
+        exact = _True(), kwargs...,
+    )
 end
 
 #= The 'difference' function returns the difference of two polygons as a list of polygons.
@@ -45,17 +48,17 @@ function _difference(
     ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
-    kwargs...
+    exact, kwargs...
 ) where T
     # Get the exterior of the polygons
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Find the difference of the exterior of the polygons
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f)
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f; exact)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _diff_step)
     # if no crossing points, determine if either poly is inside of the other
     if isempty(polys)
-        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
+        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b; exact)
         # add case for if they polygons are the same (all intersection points!)
         # add a find_first check to find first non-inter poly!
         if b_in_a && !a_in_b  # b in a and can't be the same polygon
@@ -69,7 +72,7 @@ function _difference(
     remove_idx = falses(length(polys))
     # If the original polygons had holes, take that into account.
     if GI.nhole(poly_a) != 0
-        _add_holes_to_polys!(T, polys, GI.gethole(poly_a), remove_idx)
+        _add_holes_to_polys!(T, polys, GI.gethole(poly_a), remove_idx; exact)
     end
     if GI.nhole(poly_b) != 0
         for hole in GI.gethole(poly_b)

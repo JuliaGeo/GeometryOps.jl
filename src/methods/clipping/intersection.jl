@@ -42,7 +42,10 @@ GI.coordinates.(inter_points)
 function intersection(
     geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...,
 ) where {T<:AbstractFloat}
-    return _intersection(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; kwargs...)
+    return _intersection(
+        TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
+        exact = _True(), kwargs...,
+    )
 end
 
 # Curve-Curve Intersections with target Point
@@ -61,16 +64,16 @@ function _intersection(
     ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
-    kwargs...,
+    exact, kwargs...,
 ) where {T}
     # First we get the exteriors of 'poly_a' and 'poly_b'
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f)
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _inter_step)
     if isempty(polys) # no crossing points, determine if either poly is inside the other
-        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
+        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
             push!(polys, GI.Polygon([tuples(ext_a)]))
         elseif b_in_a
@@ -81,7 +84,7 @@ function _intersection(
     # If the original polygons had holes, take that into account.
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
         hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
-        _add_holes_to_polys!(T, polys, hole_iterator, remove_idx)
+        _add_holes_to_polys!(T, polys, hole_iterator, remove_idx; exact)
     end
     # Remove uneeded collinear points on same edge
     for p in polys
@@ -194,7 +197,7 @@ intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloa
 segments, line strings, linear rings, polygons, and multipolygons. If no intersection points
 were possible given geometry extents or if none are found, return an empty list of
 GI.Points. =#
-function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b) where T
+function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _False()) where T
     # Initialize an empty list of points
     result = GI.Point[]
     # Check if the geometries extents even overlap
@@ -207,7 +210,7 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
     if npoints_a > 0 && npoints_b > 0
         # Loop over pairs of edges and add any intersection points to results
         for i in eachindex(edges_a), j in eachindex(edges_b)
-            line_orient, intr1, _ = _intersection_point(T, edges_a[i], edges_b[j])
+            line_orient, intr1, _ = _intersection_point(T, edges_a[i], edges_b[j]; exact)
             # TODO: Add in degenerate intersection points when line_over
             if line_orient == line_cross || line_orient == line_hinge
                 #=
@@ -246,7 +249,7 @@ intersection point (x,y) while the second is the ratio along the initial lines (
 that point. 
 
 Calculation derivation can be found here: https://stackoverflow.com/questions/563198/ =#
-function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
+function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T
     # Return line orientation and 2 intersection points + fractions (nothing if don't exist)
     line_orient = line_out
     intr1 = ((zero(T), zero(T)), (zero(T), zero(T)))
@@ -261,7 +264,7 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
     Δqp_x = qx - px
     Δqp_y = qy - py
     r_cross_s = rx * sy - ry * sx
-    if Predicates.isparallel((rx, ry), (sx, sy)) != 0  # non-parallel lines
+    if Predicates.cross((rx, ry), (sx, sy); exact) != 0  # non-parallel lines
         # Calculate α ratio if lines cross or touch
         a1_orient = Predicates.orient(b1, b2, a1)
         a2_orient = Predicates.orient(b1, b2, a2)
@@ -317,7 +320,7 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge) where T
         # end
         intr1 = pt, (α, β)
         line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
-    elseif Predicates.iscollinear((Δqp_x, Δqp_y), (sx, sy)) == 0 # collinear parallel lines
+    elseif Predicates.cross((Δqp_x, Δqp_y), (sx, sy); exact) == 0 # collinear parallel lines
         # Determine if lines touch or overlap and with what α and β values
         a1_side = Predicates.sameside(a1, b1, b2)
         a2_side = Predicates.sameside(a2, b1, b2)

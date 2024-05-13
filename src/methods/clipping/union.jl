@@ -35,7 +35,10 @@ GI.coordinates.(union_poly)
 function union(
     geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
 ) where {T<:AbstractFloat}
-    _union(TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; kwargs...)
+    return _union(
+        TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
+        exact = _True(), kwargs...,
+    )
 end
 
 #= This 'union' implementation returns the union of two polygons. The algorithm to determine
@@ -45,19 +48,19 @@ function _union(
     ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
-    kwargs...,
+    exact, kwargs...,
 ) where T
     # First, I get the exteriors of the two polygons
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Then, I get the union of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _union_delay_cross_f, _union_delay_bounce_f)
+    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _union_delay_cross_f, _union_delay_bounce_f; exact)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _union_step)
     n_pieces = length(polys)
     # Check if one polygon totally within other and if so, return the larger polygon
     a_in_b, b_in_a = false, false
     if n_pieces == 0 # no crossing points, determine if either poly is inside the other
-        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b)
+        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
             push!(polys, GI.Polygon([tuples(ext_b)]))
         elseif b_in_a
@@ -78,7 +81,7 @@ function _union(
     end
     # Add in holes
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
-        _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b)
+        _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b; exact)
     end
     # Remove uneeded collinear points on same edge
     for p in polys
@@ -107,11 +110,11 @@ _union_step(x, _) = x ? (-1) : 1
 #= Add holes from two polygons to the exterior polygon formed by their union. If adding the
 the holes reveals that the polygons aren't actually intersecting, return the original
 polygons. =#
-function _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b)
+function _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b; exact)
     if a_in_b
-        _add_union_holes_contained_polys!(polys, poly_a, poly_b)
+        _add_union_holes_contained_polys!(polys, poly_a, poly_b; exact)
     elseif b_in_a
-        _add_union_holes_contained_polys!(polys, poly_b, poly_a)
+        _add_union_holes_contained_polys!(polys, poly_b, poly_a; exact)
     else  # Polygons intersect, but neither is contained in the other
         n_a_holes = GI.nhole(poly_a)
         ext_poly_a = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly_a)))
@@ -123,7 +126,7 @@ function _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b)
         current_poly = n_a_holes > 0 ? ext_poly_b : poly_a
         # Loop over all holes in both original polygons
         for (i, ih) in enumerate(Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b))))
-            in_ext, _, _ = _line_polygon_interactions(ih, curr_exterior_poly; closed_line = true)
+            in_ext, _, _ = _line_polygon_interactions(ih, curr_exterior_poly; exact, closed_line = true)
             if !in_ext
                 #= if the hole isn't in the overlapping region between the two polygons, add
                 the hole to the resulting polygon as we know it can't interact with any
@@ -151,12 +154,12 @@ end
 #= Add holes holes to the union of two polygons where one of the original polygons was
 inside of the other. If adding the the holes reveal that the polygons aren't actually
 intersecting, return the original polygons.=#
-function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly)
+function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly; exact)
     union_poly = polys[1]
     ext_int_ring = GI.getexterior(interior_poly)
     for (i, ih) in enumerate(GI.gethole(exterior_poly))
         poly_ih = GI.Polygon(StaticArrays.SVector(ih))
-        in_ih, on_ih, out_ih = _line_polygon_interactions(ext_int_ring, poly_ih; closed_line = true)
+        in_ih, on_ih, out_ih = _line_polygon_interactions(ext_int_ring, poly_ih; exact, closed_line = true)
         if in_ih  # at least part of interior polygon exterior is within the ith hole
             if !on_ih && !out_ih
                 #= interior polygon is completly within the ith hole - polygons aren't
@@ -181,7 +184,7 @@ function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly)
                 #= interior polygon's exterior is outside of the ith hole - the interior
                 polygon could either be disjoint from the hole, or contain the hole =#
                 ext_int_poly = GI.Polygon(StaticArrays.SVector(ext_int_ring))
-                in_int, _, _ = _line_polygon_interactions(ih, ext_int_poly; closed_line = true)
+                in_int, _, _ = _line_polygon_interactions(ih, ext_int_poly; exact, closed_line = true)
                 if in_int
                     #= interior polygon contains the hole - overlapping holes between the
                     interior and exterior polygons will be added =#

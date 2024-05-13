@@ -1,39 +1,34 @@
 module Predicates
-
-    using ExactPredicates
-    using ExactPredicates.Codegen
-    using ExactPredicates.Codegen: group!, coord, @genpredicate
-
-    using ExactPredicates: ext, inp
+    using ExactPredicates, ExactPredicates.Codegen
+    import ExactPredicates: ext
+    import ExactPredicates.Codegen: group!, coord, @genpredicate
+    import GeometryOps: _False, _True, _booltype
+    import GeoInterface as GI
 
     orient(args...) = ExactPredicates.orient(args...)
+
     sameside(args...) = ExactPredicates.sameside(args...)
 
-    # This is the implementation of r_cross_s from 2 points in the `_intersection_points` file.
-    # 0 == parallel
-    function isparallel(a1, a2, b1, b2)
-        r = a2 - a1
-        s = b2 - b1
-        isparallel(r, s)
+    cross(a, b; exact = _False()) = cross(_booltype(exact), a, b)
+
+    function cross(::_False, a, b)
+        c_t1 = GI.x(a) * GI.y(b)
+        c_t2 = GI.x(b) * GI.x(a)
+        c_val = if c_t1 ≈ c_t2
+            0
+        else
+            c = c_t1 - c_t2
+            c > 0 ? 1 : -1
+        end
+        return c_val
     end
 
-    @genpredicate function isparallel(r :: 2, s :: 2)
-        group!(r...)
-        group!(s...)
-        ext(r, s)
-    end
-    # This is the implementation of `iscollinear` from `intersection_points`.
-    # 0 == parallel.
-    function iscollinear(a1, a2, b1, b2)
-        Δqp = b1 - a1
-        s = b2 - b1
-        iscollinear(Δqp, s)
-    end
+    cross(::_True, a, b) = cross_exact(a, b)
 
-    @genpredicate function iscollinear(Δqp :: 2, s :: 2)
-        group!(Δqp...)
-        group!(s...)
-        ext(s, Δqp)
+    @genpredicate function cross_exact(a :: 2, b :: 2)
+        group!(a...)
+        group!(b...)
+        ext(a, b)
     end 
 end
 

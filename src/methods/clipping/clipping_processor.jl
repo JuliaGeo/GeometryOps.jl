@@ -36,7 +36,8 @@ PolyNode(node::PolyNode{T};
     crossing = crossing, endpoint = endpoint, fracs = fracs)
 
 #=
-    _build_ab_list(::Type{T}, poly_a, poly_b) -> (a_list, b_list, a_idx_list)
+    _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f; exact) ->
+        (a_list, b_list, a_idx_list)
 
 This function takes in two polygon rings and calls '_build_a_list', '_build_b_list', and
 '_flag_ent_exit' in order to fully form a_list and b_list. The 'a_list' and 'b_list' that it
@@ -44,17 +45,17 @@ returns are the fully updated vectors of PolyNodes that represent the rings 'pol
 'poly_b', respectively. This function also returns 'a_idx_list', which at its "ith" index
 stores the index in 'a_list' at which the "ith" intersection point lies.
 =#
-function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_bounce_f::F2) where {T, F1, F2}
+function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_bounce_f::F2; exact) where {T, F1, F2}
     # Make a list for nodes of each polygon
-    a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b)
+    a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b; exact)
     b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
 
     # Flag crossings
     _classify_crossing!(T, a_list, b_list)
 
     # Flag the entry and exits
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, Base.Fix2(delay_bounce_f, true))
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list, delay_cross_f, Base.Fix2(delay_bounce_f, false))
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, Base.Fix2(delay_bounce_f, true); exact)
+    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list, delay_cross_f, Base.Fix2(delay_bounce_f, false); exact)
 
     # Set node indices and filter a_idx_list to just crossing points
     _index_crossing_intrs!(a_list, b_list, a_idx_list)
@@ -76,7 +77,7 @@ not update the entry and exit flags for a_list.
 The a_idx_list is a list of the indicies of intersection points in a_list. The value at
 index i of a_idx_list is the location in a_list where the ith intersection point lies.
 =#
-function _build_a_list(::Type{T}, poly_a, poly_b) where T
+function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
     n_a_edges = _nedge(poly_a)
     a_list = PolyNode{T}[]  # list of points in poly_a
     sizehint!(a_list, n_a_edges)
@@ -105,7 +106,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b) where T
                 continue
             end
             # Determine if edges intersect and how they intersect
-            line_orient, intr1, intr2 = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2))
+            line_orient, intr1, intr2 = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2); exact)
             if line_orient != line_out  # edges intersect
                 if line_orient == line_cross  # Intersection point that isn't a vertex
                     int_pt, fracs = intr1
@@ -359,7 +360,7 @@ end
 _next_edge_off(pt) = !pt.inter || (pt.endpoint == end_chain) || (pt.crossing && pt.endpoint == not_endpoint)
 
 #=
-    _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f)
+    _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f; exact)
 
 This function flags all the intersection points as either an 'entry' or 'exit' point in
 relation to the given polygon. For non-delayed crossings we simply alternate the enter/exit
@@ -374,7 +375,7 @@ bounce will be the same.
 
 Used for clipping polygons by other polygons.
 =#
-function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f)
+function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f; exact)
     # Find starting index if there is one
     start_idx = findfirst(_next_edge_off, pt_list)
     isnothing(start_idx) && return
@@ -383,7 +384,7 @@ function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, del
     next_idx = start_idx < npts ? (start_idx + 1) : 1
     start_val = (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
     start_idx = next_idx - 1  # reset for iterating below
-    status = !_point_filled_curve_orientation(start_val, poly; in = true, on = false, out = false)
+    status = !_point_filled_curve_orientation(start_val, poly; in = true, on = false, out = false, exact)
     # Loop over points and mark entry and exit status
     start_chain_idx = 0
     for ii in Iterators.flatten((next_idx:npts, 1:start_idx))
@@ -401,7 +402,7 @@ function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, del
                 else  # delayed bouncing
                     next_idx = ii < npts ? (ii + 1) : 1
                     next_val = (curr_pt.point .+ pt_list[next_idx].point) ./ 2
-                    pt_in_poly = _point_filled_curve_orientation(next_val, poly; in = true, on = false, out = false)
+                    pt_in_poly = _point_filled_curve_orientation(next_val, poly; in = true, on = false, out = false, exact)
                     #= start and end crossing status are the same and depend on if adjacent
                     edges of pt_list are within poly =#
                     start_crossing = delay_bounce_f(pt_in_poly)
@@ -421,7 +422,7 @@ function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, del
 end
 
 #=
-    _flag_ent_exit!(::GI.LineTrait, line, pt_list)
+    _flag_ent_exit!(::GI.LineTrait, line, pt_list; exact)
 
 This function flags all the intersection points as either an 'entry' or 'exit' point in
 relation to the given line. Returns true if there are crossing points to classify, else
@@ -429,8 +430,8 @@ returns false. Used for cutting polygons by lines.
 
 Assumes that the first point is outside of the polygon and not on an edge.
 =#
-function _flag_ent_exit!(::GI.LineTrait, poly, pt_list)
-    status = !_point_filled_curve_orientation(pt_list[1].point, poly; in = true, on = false, out = false)
+function _flag_ent_exit!(::GI.LineTrait, poly, pt_list; exact)
+    status = !_point_filled_curve_orientation(pt_list[1].point, poly; in = true, on = false, out = false, exact)
     # Loop over points and mark entry and exit status
     for (ii, curr_pt) in enumerate(pt_list)
         if curr_pt.crossing
@@ -537,7 +538,7 @@ _get_poly_type(::Type{T}) where T =
     GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
 
 #=
-    _find_non_cross_orientation(a_list, b_list, a_poly, b_poly)
+    _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)
 
 For polygns with no crossing intersection points, either one polygon is inside of another,
 or they are seperate polygons with no intersection (other than an edge or point).
@@ -545,28 +546,28 @@ or they are seperate polygons with no intersection (other than an edge or point)
 Return two booleans that represent if a is inside b (potentially with shared edges / points)
 and visa versa if b is inside of a.
 =#
-function _find_non_cross_orientation(a_list, b_list, a_poly, b_poly)
+function _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)
     non_intr_a_idx = findfirst(x -> !x.inter, a_list)
     non_intr_b_idx = findfirst(x -> !x.inter, b_list)
     #= Determine if non-intersection point is in or outside of polygon - if there isn't A
     non-intersection point, then all points are on the polygon edge =#
     a_pt_orient = isnothing(non_intr_a_idx) ? point_on :
-        _point_filled_curve_orientation(a_list[non_intr_a_idx].point, b_poly)
+        _point_filled_curve_orientation(a_list[non_intr_a_idx].point, b_poly; exact)
     b_pt_orient = isnothing(non_intr_b_idx) ? point_on :
-        _point_filled_curve_orientation(b_list[non_intr_b_idx].point, a_poly)
+        _point_filled_curve_orientation(b_list[non_intr_b_idx].point, a_poly; exact)
     a_in_b = a_pt_orient != point_out && b_pt_orient != point_in
     b_in_a = b_pt_orient != point_out && a_pt_orient != point_in
     return a_in_b, b_in_a
 end
 
 #=
-    _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator)
+    _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_poly_idx; exact)
 
 The holes specified by the hole iterator are added to the polygons in the return_polys list.
 If this creates more polygons, they are added to the end of the list. If this removes
 polygons, they are removed from the list
 =#
-function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_poly_idx) where T
+function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_poly_idx; exact) where T
     n_polys = length(return_polys)
     remove_hole_idx = Int[]
     # Remove set of holes from all polygons
@@ -578,7 +579,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
                 curr_poly = return_polys[j]
                 remove_poly_idx[j] && continue
                 curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
-                in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; closed_line = true)
+                in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; exact, closed_line = true)
                 if in_ext  # hole is at least partially within the polygon's exterior
                     new_hole, new_hole_poly, n_new_pieces = _combine_holes!(T, curr_hole, curr_poly, return_polys, remove_hole_idx)
                     if n_new_pieces > 0

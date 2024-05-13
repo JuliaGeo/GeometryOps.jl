@@ -56,6 +56,7 @@ const WITHIN_POINT_ALLOWS = (in_allow = true, on_allow = false, out_allow = fals
 const WITHIN_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = false)
 const WITHIN_POLYGON_ALLOWS = (in_allow = true, on_allow = true, out_allow = false)
 const WITHIN_REQUIRES = (in_require = true, on_require = false, out_require = false)
+const WITHIN_EXACT = (exact = _False(),)
 
 """
     within(geom1, geom2)::Bool
@@ -124,6 +125,7 @@ _within(
 ) = _point_polygon_process(
     g1, g2;
     WITHIN_POINT_ALLOWS...,
+    WITHIN_EXACT...,
 )
 
 # No geometries other than points can be within points
@@ -144,6 +146,7 @@ _within(
     g1, g2;
     WITHIN_CURVE_ALLOWS...,
     WITHIN_REQUIRES...,
+    WITHIN_EXACT...,
     closed_line = false,
     closed_curve = false,
 )
@@ -157,6 +160,7 @@ _within(
     g1, g2;
     WITHIN_CURVE_ALLOWS...,
     WITHIN_REQUIRES...,
+    WITHIN_EXACT...,
     closed_line = false,
     closed_curve = true,
 )
@@ -170,6 +174,7 @@ _within(
     g1, g2;
     WITHIN_POLYGON_ALLOWS...,
     WITHIN_REQUIRES...,
+    WITHIN_EXACT...,
     closed_line = false,
 )
 
@@ -185,6 +190,7 @@ _within(
     g1, g2;
     WITHIN_CURVE_ALLOWS...,
     WITHIN_REQUIRES...,
+    WITHIN_EXACT...,
     closed_line = true,
     closed_curve = false,
 )
@@ -198,6 +204,7 @@ _within(
     g1, g2;
     WITHIN_CURVE_ALLOWS...,
     WITHIN_REQUIRES...,
+    WITHIN_EXACT...,
     closed_line = true,
     closed_curve = true,
 )
@@ -211,6 +218,7 @@ _within(
     g1, g2;
     WITHIN_POLYGON_ALLOWS...,
     WITHIN_REQUIRES...,
+    WITHIN_EXACT...,
     closed_line = true,
 )
 
@@ -227,6 +235,7 @@ _within(
     g1, g2;
     WITHIN_POLYGON_ALLOWS...,
     WITHIN_REQUIRES...,
+    TOUCHES_EXACT...,
 )
 
 # Polygons cannot be within any curves
