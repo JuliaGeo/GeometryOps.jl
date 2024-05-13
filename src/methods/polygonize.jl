@@ -109,7 +109,6 @@ polygonize(f::Base.Callable, xs::AbstractVector, ys::AbstractVector, A::Abstract
 
 function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
     minpoints=0,
-    method::PolygonizeMethod=Pixels(),
 ) where T
     # Define buffers for edges and rings
     edges = Tuple{T,T}[]
