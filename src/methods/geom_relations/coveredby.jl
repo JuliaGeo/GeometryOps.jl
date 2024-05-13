@@ -234,16 +234,14 @@ _coveredby(
 #= Geometry is covered by a multi-geometry or a collection if one of the elements
 of the collection cover the geometry. =#
 function _coveredby(
-    t1::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
-    t2::Union{
+    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g2,
 )
-    # Calculate the outer extent before looping
-    g1e = GI.geointerface_geomtype(t1)(g1; extent=GI.extent(g1))
     for sub_g2 in GI.getgeom(g2)
-        coveredby(g1e, sub_g2) && return true
+        coveredby(g1, sub_g2) && return true
     end
     return false
 end
@@ -253,16 +251,14 @@ end
 #= Multi-geometry or a geometry collection is covered by a geometry if all
 elements of the collection are covered by the geometry. =#
 function _coveredby(
-    t1::Union{
+    ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g1,
-    t2::GI.AbstractGeometryTrait, g2,
+    ::GI.AbstractGeometryTrait, g2,
 )
-    # Calculate the outer extent before looping
-    g2e = GI.geointerface_geomtype(t2)(g2; extent=GI.extent(g2))
     for sub_g1 in GI.getgeom(g1)
-        !coveredby(sub_g1, g2e) && return false
+        !coveredby(sub_g1, g2) && return false
     end
     return true
 end
