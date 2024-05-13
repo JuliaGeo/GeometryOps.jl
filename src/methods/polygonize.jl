@@ -51,35 +51,60 @@ The implementation follows:
 =# 
 
 """
-    polygonize(A::AbstractMatrix{Bool}; minpoints=10)
-    polygonize(f, A::AbstractMatrix; minpoints=10)
-    polygonize(xs, ys, A::AbstractMatrix{Bool}; minpoints=10)
-    polygonize(f, xs, ys, A::AbstractMatrix; minpoints=10)
+    polygonize(A::AbstractMatrix{Bool}; kw...)
+    polygonize(f, A::AbstractMatrix; kw...)
+    polygonize(xs, ys, A::AbstractMatrix{Bool}; kw...)
+    polygonize(f, xs, ys, A::AbstractMatrix; kw...)
 
 Polygonize an `AbstractMatrix` of values, currently to a single class of polygons.
 
-For `Bool` eltype, a function is not needed. For other matrix eltypes, 
-function `f` should return `true` or `false` based on the matrix values, 
-translating to inside or outside the polygons.
+For `AbstractArray{Bool}` function `f` is not needed. 
 
-If `xs` and `ys` are passed in they are used as the pixel center points.
+For other matrix eltypes, function `f` should return `true` or `false` 
+based on the matrix values, translating to inside or outside the polygons.
+These will return a single `MultiPolygon` of the `true` values. 
 
+For `AbtractArray{<:Integer}` multiple `multipolygon`s are calculated
+for each value in the array (or passed in `values` keyword), and returned
+as a `FeatureCollection`.
+
+If `xs` and `ys` are ranges, they are used as the pixel center points.
+If they are `Vector` of `Tuple` they are used as the lower and upper bounds of each pixel.
 
 # Keywords
 
 - `minpoints`: ignore polygons with less than `minpoints` points.
+- `values`: the values to turn into polygons for `Integer` arrays. 
+    By default these are `union(A)`
 
 # Example
 
 ```julia
 using GeometryOps
 multipolygon = polygonize(>(0.6), rand(100, 100), minpoints=3)
+
+using GeometryOps
+featurecollection = polygonize(rand(Int, 100, 100))
+
 ```
 """
 polygonize(A::AbstractMatrix{Bool}; kw...) = polygonize(identity, A; kw...)
 polygonize(f::Base.Callable, A::AbstractMatrix; kw...) = polygonize(f, axes(A)..., A; kw...)
-polygonize(xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix{Bool}; kw...) =
+polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...)
+polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix{Bool}; kw...) =
     polygonize(identity, xs, ys, A)
+function polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix{<:Integer}; 
+    values=Base.union(A),
+    kw...
+)
+    # Create one feature per value
+    features = map(values) do value
+        multipolygon = polygonize(==(value), xs, ys, A)
+        GI.Feature(multipolygon; properties=(; value))
+    end 
+
+    return GI.FeatureCollection(features)
+end
 function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
     kw...
 )
@@ -99,10 +124,10 @@ function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::A
     for i in eachindex(yvec)
         yvec[i] = ybounds[i], ybounds[i+1]
     end
-    return _polygonize(f, xvec, yvec, A; kw...)
+    return polygonize(f, xvec, yvec, A; kw...)
 end
 
-function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
+function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
     minpoints=0,
 ) where T<:Tuple{Number,Number}
     # Define buffers for edges and rings
