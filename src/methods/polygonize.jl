@@ -50,10 +50,6 @@ f
 The implementation follows:
 =# 
 
-abstract type PolygonizeMethod end
-struct Pixels <: PolygonizeMethod end
-struct Angled <: PolygonizeMethod end
-
 """
     polygonize(A::AbstractMatrix{Bool}; minpoints=10)
     polygonize(f, A::AbstractMatrix; minpoints=10)
@@ -112,7 +108,7 @@ polygonize(f::Base.Callable, xs::AbstractVector, ys::AbstractVector, A::Abstract
     _polygonize(f, xs, ys, A; kw...)
 
 function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
-    minpoints=10,
+    minpoints=0,
     method::PolygonizeMethod=Pixels(),
 ) where T
     # Define buffers for edges and rings
