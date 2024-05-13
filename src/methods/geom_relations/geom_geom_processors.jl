@@ -115,7 +115,8 @@ function _line_curve_process(
     closed_curve = false,
 )
     skip, returnval = _maybe_skip_disjoint_extents(line, curve;
-        in_allow, on_allow, out_allow, in_require, on_require, out_require,
+        in_allow=over_allow || cross_allow, on_allow, out_allow, 
+        in_require, on_require, out_require,
     )
     skip && return returnval
 
@@ -258,7 +259,8 @@ function _line_polygon_process(
     closed_line = false,
 )
     skip, returnval = _maybe_skip_disjoint_extents(line, polygon;
-        in_allow, on_allow, out_allow, in_require, on_require, out_require,
+        in_allow, on_allow, out_allow, 
+        in_require, on_require, out_require,
     )
     skip && return returnval
 
@@ -331,7 +333,8 @@ function _polygon_polygon_process(
     in_require, on_require, out_require,
 )
     skip, returnval = _maybe_skip_disjoint_extents(poly1, poly2;
-        in_allow, on_allow, out_allow, in_require, on_require, out_require,
+        in_allow, on_allow, out_allow, 
+        in_require, on_require, out_require,
     )
     skip && return returnval
 
@@ -690,7 +693,8 @@ end
 # Disjoint extent optimisation: skip work based on geom extent intersection
 # returns Tuple{Bool, Bool} for (skip, returnval)
 function _maybe_skip_disjoint_extents(a, b;
-    in_allow, on_allow, out_allow, in_require, on_require, out_require,
+    in_allow, on_allow, out_allow, 
+    in_require=false, on_require=false, out_require=false,
 )
     if (in_allow || in_require || on_allow || on_require)
         # If we need line or interior and no exterior
