@@ -73,10 +73,7 @@ If `xs` and `ys` are passed in they are used as the pixel center points.
 
 ```julia
 using GeometryOps
-x = polygonize(>(0.6), rand(100, 100), minpoints=3); 
-using GLMakie
-using Shapefile
-Makie.plot(x)
+multipolygon = polygonize(>(0.6), rand(100, 100), minpoints=3)
 ```
 """
 polygonize(A::AbstractMatrix{Bool}; kw...) = polygonize(identity, A; kw...)
