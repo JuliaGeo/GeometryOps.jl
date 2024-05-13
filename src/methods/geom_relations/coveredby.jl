@@ -197,15 +197,20 @@ _coveredby(
 
 #= Linearring is coveredby a polygon if all vertices and edges of the ring are
 in the polygon interior or on the polygon edges, inlcuding hole edges. =# 
-_coveredby(
-    ::GI.LinearRingTrait, g1,
-    ::GI.PolygonTrait, g2,
-) = _line_polygon_process(
-    g1, g2;
-    COVEREDBY_ALLOWS...,
-    COVEREDBY_CURVE_REQUIRES...,
-    closed_line = true,
-)
+function _coveredby(::GI.LinearRingTrait, g1, ::GI.PolygonTrait, g2) 
+    # This can be a *massive* performance gain
+    # Maybe it should be inside `_line_polygon_process` but I'm not sure how yet.
+    if Extents.intersects(GI.extent(g1), GI.extent(g2))
+        _line_polygon_process(
+            g1, g2;
+            COVEREDBY_ALLOWS...,
+            COVEREDBY_CURVE_REQUIRES...,
+            closed_line = true,
+        )
+    else
+        false
+    end
+end
 
 
 # # Polygons covered by geometries
@@ -234,14 +239,15 @@ _coveredby(
 #= Geometry is covered by a multi-geometry or a collection if one of the elements
 of the collection cover the geometry. =#
 function _coveredby(
-    ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
-    ::Union{
+    t1::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
+    t2::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g2,
 )
+    g1e = GI.geointerface_geomtype(t1)(g1; exten=GI.extent(g1))
     for sub_g2 in GI.getgeom(g2)
-        coveredby(g1, sub_g2) && return true
+        coveredby(g1e, sub_g2) && return true
     end
     return false
 end
@@ -251,13 +257,14 @@ end
 #= Multi-geometry or a geometry collection is covered by a geometry if all
 elements of the collection are covered by the geometry. =#
 function _coveredby(
-    ::Union{
+    t1::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g1,
-    ::GI.AbstractGeometryTrait, g2,
+    t2::GI.AbstractGeometryTrait, g2,
 )
-    for sub_g1 in GI.getgeom(g1)
+    g1e = GI.geointerface_geomtype(t1)(g1; exten=GI.extent(g1))
+    for sub_g1 in GI.getgeom(g1e)
         !coveredby(sub_g1, g2) && return false
     end
     return true

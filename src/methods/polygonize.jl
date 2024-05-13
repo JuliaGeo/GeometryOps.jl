@@ -50,46 +50,88 @@ f
 The implementation follows:
 =# 
 
-"""
-    polygonize(A; minpoints=10)
-    polygonize(xs, ys, A; minpoints=10)
+abstract type PolygonizeMethod end
+struct Pixels <: PolygonizeMethod end
+struct Angled <: PolygonizeMethod end
 
-Convert matrix `A` to polygons.
+"""
+    polygonize(A::AbstractMatrix{Bool}; minpoints=10)
+    polygonize(f, A::AbstractMatrix; minpoints=10)
+    polygonize(xs, ys, A::AbstractMatrix{Bool}; minpoints=10)
+    polygonize(f, xs, ys, A::AbstractMatrix; minpoints=10)
+
+Polygonize an `AbstractMatrix` of values, currently to a single class of polygons.
+
+For `Bool` eltype, a function is not needed. For other matrix eltypes, 
+function `f` should return `true` or `false` based on the matrix values, 
+translating to inside or outside the polygons.
 
 If `xs` and `ys` are passed in they are used as the pixel center points.
 
-# Keywords
-- `minpoints`: ignore polygons with less than `minpoints` points.
-"""
-polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...)
-function polygonize(xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix{Bool})
-    # Make ranges of pixel bounds
-    xbounds = first(xs) - step(xs) / 2 : step(xs) : last(xs) + step(xs) / 2 
-    ybounds = first(ys) - step(ys) / 2 : step(ys) : last(ys) + step(ys) / 2 
-    return _polygonize(xbounds, ybounds, A)
-end
-function polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix{Bool})
-    _polygonize(xs, ys, A)
-end
 
-function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix{Bool}) where T
+# Keywords
+
+- `minpoints`: ignore polygons with less than `minpoints` points.
+
+# Example
+
+```julia
+using GeometryOps
+x = polygonize(>(0.6), rand(100, 100), minpoints=3); 
+using GLMakie
+using Shapefile
+Makie.plot(x)
+```
+"""
+polygonize(A::AbstractMatrix{Bool}; kw...) = polygonize(identity, A; kw...)
+polygonize(f::Base.Callable, A::AbstractMatrix; kw...) = polygonize(f, axes(A)..., A; kw...)
+polygonize(xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix{Bool}; kw...) =
+    polygonize(identity, xs, ys, A)
+function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+    kw...
+)
+    # Make vectors of pixel bounds
+    xhalf = step(xs) / 2
+    yhalf = step(ys) / 2
+    # Make bounds ranges first to avoid floating point error making gaps or overlaps
+    xbounds = first(xs) - xhalf : step(xs) : last(xs) + xhalf
+    ybounds = first(ys) - yhalf : step(ys) : last(ys) + yhalf
+    Tx = eltype(xbounds)
+    Ty = eltype(ybounds)
+    xvec = Vector{Tuple{Tx,Tx}}(undef, length(xs))
+    yvec = Vector{Tuple{Ty,Ty}}(undef, length(ys))
+    for i in eachindex(xvec)
+        xvec[i] = xbounds[i], xbounds[i+1]
+    end
+    for i in eachindex(yvec)
+        yvec[i] = ybounds[i], ybounds[i+1]
+    end
+    return _polygonize(f, xvec, yvec, A; kw...)
+end
+polygonize(f::Base.Callable, xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix; kw...) =
+    _polygonize(f, xs, ys, A; kw...)
+
+function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
+    minpoints=10,
+    method::PolygonizeMethod=Pixels(),
+) where T
     # Define buffers for edges and rings
-    edges = Tuple{Tuple{T,T},Tuple{T,T}}[]
-    rings = Vector{Tuple{T,T}}[]
+    edges = Tuple{T,T}[]
+    rings = Vector{T}[]
 
     # First get all the valid edges between filled and empty pixels
     si, sj = map(last, axes(A))
     for i in axes(A, 1), j in axes(A, 2)
-        if A[i, j] # This is a pixel inside a polygon
+        if f(A[i, j]) # This is a pixel inside a polygon
             # xs and ys hold pixel bounds
-            x1, x2 = xs[i], xs[i + 1] 
-            y1, y2 = ys[j], ys[j + 1] 
+            x1, x2 = xs[i]
+            y1, y2 = ys[j]
             # We check the Von Neumann neighborhood to
             # decide what edges are needed, if any.
-            (j == 1 || !A[i, j-1]) && push!(edges, ((x1, y1), (x2, y1)))
-            (i == 1 || !A[i-1, j]) && push!(edges, ((x1, y2), (x1, y1)))
-            (j == sj || !A[i, j+1]) && push!(edges, ((x2, y2), (x1, y2)))
-            (i == si || !A[i+1, j]) && push!(edges, ((x2, y1), (x2, y2)))
+            (j == 1 || !f(A[i, j-1])) && push!(edges, ((x1, y1), (x2, y1)))
+            (i == 1 || !f(A[i-1, j])) && push!(edges, ((x1, y2), (x1, y1)))
+            (j == sj || !f(A[i, j+1])) && push!(edges, ((x2, y2), (x1, y2)))
+            (i == si || !f(A[i+1, j])) && push!(edges, ((x2, y1), (x2, y2)))
         end
     end
 
@@ -99,8 +141,8 @@ function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMa
     while length(edges) > 0
         # Take the last edge from the array
         edge = pop!(edges)
-        firstpoint::Tuple{T,T} = first(edge)
-        nextpoint::Tuple{T,T} = last(edge)
+        firstpoint::T = first(edge)
+        nextpoint::T = last(edge)
         ring = [firstpoint, nextpoint]
         push!(rings, ring)
         while length(edges) > 0
@@ -148,33 +190,40 @@ function _polygonize(xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMa
     end
 
     # Separate exteriors from holes by winding direction
-    direction = last(xs) - first(xs) * last(ys) - first(ys)
+    direction = last(last(xs)) - first(first(xs)) * last(last(ys)) - first(first(ys))
     exterior_inds = if direction > 0 
         .!isclockwise.(linearrings)
     else
         isclockwise.(linearrings)
     end
-    holes = map(x -> x, linearrings[.!exterior_inds])
-    exteriors = map(x -> x, linearrings[exterior_inds])
-    polygons = map(x -> [x], linearrings[exterior_inds])
+    holes = linearrings[.!exterior_inds]
+    polygons = map(x -> GI.Polygon([x]), linearrings[exterior_inds])
 
     # Then we add the holes to the polygons they are inside of
-    blacklist = Set{Int}()
-    for rings in polygons
-        exterior = rings[1]
+    used_indices = Set{Int}()
+    for poly in polygons
+        exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
         for i in eachindex(holes)
-            i in blacklist && continue
+            # i in used_indices && continue
             hole = holes[i]
-            if polygon_in_polygon(hole, exterior)
+            if covers(poly, hole)
                 # Hole is in the exterior, so add it to the ring list
-                push!(rings, hole)
+                push!(poly.geom, hole)
                 # And blacklist it so we don't check it again
-                push!(blacklist, i)
+                push!(used_indices, i)
+                break
             end
         end
     end
 
-    # Finally, return wrapped Polygons
-    return GI.Polygon.(polygons)
+    if isempty(polygons)
+        # TODO: this really should return an emtpty MultiPolygon but
+        # GeoInterface wrappers cant do that yet, which is not ideal...
+        @warn "No polgons found, check your data or try another function for `f`"
+        return nothing
+    else
+        # Otherwise return a wrapped MultiPolygon
+        return GI.MultiPolygon(polygons)
+    end
 end
 
