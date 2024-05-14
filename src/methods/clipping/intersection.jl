@@ -356,69 +356,19 @@ function _find_hinge_intersection(::Type{T}, a1, a2, b1, b2, a1_orient, a2_orien
     elseif equals(a2, b2)
         _tuple_point(a2, T), one(T), one(T)
     elseif a1_orient == 0
-        β_val = _clamped_frac(distance(b1, a1, T), distance(b1, b2, T), eps(T))
+        β_val = _clamped_frac(distance(b1, a1, T), distance(b1, b2, T), 2eps(T))
         _tuple_point(a1, T), zero(T), β_val
     elseif a2_orient == 0
-        β_val = _clamped_frac(distance(b1, a2, T), distance(b1, b2, T), eps(T))
+        β_val = _clamped_frac(distance(b1, a2, T), distance(b1, b2, T), 2eps(T))
         _tuple_point(a2, T), one(T), β_val
     elseif b1_orient == 0
-        α_val = _clamped_frac(distance(a1, b1, T), distance(a1, a2, T), eps(T))
+        α_val = _clamped_frac(distance(a1, b1, T), distance(a1, a2, T), 2eps(T))
         _tuple_point(b1, T), α_val, zero(T)
     else  # b2_orient == 0
-        α_val = _clamped_frac(distance(a1, b2, T), distance(a1, a2, T), eps(T))
+        α_val = _clamped_frac(distance(a1, b2, T), distance(a1, a2, T), 2eps(T))
         _tuple_point(b2, T), α_val, one(T)
     end
     return pt, (α, β)
-end
-
-function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where T
-    # First line runs from a to a + Δa
-    (a1x, a1y), (a2x, a2y) = _tuple_point(a1, T), _tuple_point(a2, T)
-    Δax, Δay = a2x - a1x, a2y - a1y
-    # Second line runs from b to b + Δb 
-    (b1x, b1y), (b2x, b2y) = _tuple_point(b1, T), _tuple_point(b2, T)
-    Δbx, Δby = b2x - b1x, b2y - b1y
-    # Intersections will be where p + αr = q + βs where 0 < α, β < 1
-    # Differences between starting points
-    Δbax = b1x - a1x
-    Δbay = b1y - a1y
-    a_cross_b = Δax * Δby - Δay * Δbx
-    # Determine α value where 0 < α < 1
-    α = T((Δbax * Δby - Δbay * Δbx) / a_cross_b)
-    α = clamp(α, zero(T), one(T))
-    # Determine β value where 0 < β < 1
-    β = T((Δbax * Δay - Δbay * Δax) / a_cross_b)
-    β = clamp(β, zero(T), one(T))
-    # Intersections will be where a1 + α * Δa = b1 + β * Δb where 0 < α, β < 1
-    pt = (T(a1x + α * Δax),  T(a1y + α * Δay))
-    #= Floating point limitations could make intersection be endpoint if α≈0 or α≈1.
-    In this case, see if multiplication by β gives a distinct number. Otherwise,
-    replace with closest floating point number to endpoint.=#
-    invalid_pt = !_point_in_extent(pt, a_ext) || !_point_in_extent(pt, b_ext) 
-    invalid_pt |= (equals(pt, a1) || equals(pt, a2) || equals(pt, b1) || equals(pt, b2))
-    invalid_pt |= (α ≤ 0 || α ≥ 1 || β ≤ 0 || β ≥ 1)
-    if invalid_pt
-       pt, α, β = _adjust_crossing_intersection(T, pt, α, β, a1, a2, b1, b2, a1x, a1y, Δax, Δay, b1x, b1y, Δbx, Δby)
-    end
-    return (pt, (α, β))
-end
-
-function _adjust_crossing_intersection(::Type{T}, pt, α, β, a1, a2, b1, b2, a1x, a1y, Δax, Δay, b1x, b1y, Δbx, Δby) where T
-    pt = (T(b1x + β * Δbx), T(b1y + β * Δby))
-    if equals(a1, pt)
-        α_min = max(eps(a1x) / Δax, eps(a1y) / Δay)
-        pt = (T(a1x + α_min * Δax), T(a1y + α_min * Δay))
-    elseif equals(a2, pt)
-        α_max = 1 - max(eps(a2x) / Δax, eps(a2y) / Δay)
-        pt = (T(a1x + α_max * Δax), T(a1y + α_max * Δay))
-    elseif equals(b1, pt)
-        β_min = max(eps(b1x) / Δbx, eps(b1y) / Δby)
-        pt = (T(b1x + β_min * Δbx), T(b1y + β_min * Δby))
-    elseif equals(b2, pt)
-        β_max = 1 - max(eps(b2x) / Δbx, eps(b2y) / Δby)
-        pt = (T(b1x + β_max * Δbx), T(b1y + β_max * Δby))
-    end
-    return pt, α, β
 end
 
 _clamped_frac(x::T, y::T, ϵ = zero(T)) where T = clamp(x / y, ϵ, one(T) - ϵ)
@@ -428,3 +378,101 @@ _set_ab_collinear_intrs(::Type{T}, a_pt, b_pt, a_pt_α, b_pt_β, a1, b1, a_dist,
         (_tuple_point(a_pt, T), (a_pt_α, _clamped_frac(distance(a_pt, b1, T), b_dist))),
         (_tuple_point(b_pt, T), (_clamped_frac(distance(b_pt, a1, T), a_dist), b_pt_β))
     )
+
+function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where T
+    # First line runs from a to a + Δa
+    (a1x, a1y), (a2x, a2y) = _tuple_point(a1, T), _tuple_point(a2, T)
+    Δax, Δay = a2x - a1x, a2y - a1y
+    # Second line runs from b to b + Δb 
+    (b1x, b1y), (b2x, b2y) = _tuple_point(b1, T), _tuple_point(b2, T)
+    Δbx, Δby = b2x - b1x, b2y - b1y
+    # Differences between starting points
+    Δbax = b1x - a1x
+    Δbay = b1y - a1y
+    a_cross_b = Δax * Δby - Δay * Δbx
+    #= Determine α value where 0 < α < 1 and β value where 0 < β < 1. Floating point
+    limitations could make intersection be endpoint if α≈0 or α≈1. Make sure α and β point
+    calculations result in an intersection distinct from the endpoint.=#
+    α = T((Δbax * Δby - Δbay * Δbx) / a_cross_b)
+    β = T((Δbax * Δay - Δbay * Δax) / a_cross_b)
+    α_min = 2eps(T)
+    β_min = α_min
+    α_max = one(T) - α_min
+    β_max = α_max
+    if Δax != 0
+        α_min = max(α_min,  2eps(a1x) / Δax)
+        α_max = max(α_max, one(T) - eps(a2x) / Δax)
+    end
+    if Δay != 0
+        α_min = max(α_min,  2eps(a1y) / Δay)
+        α_max = max(α_max, one(T) - eps(a2y) / Δay)
+    end
+    if Δbx != 0
+        β_min = max(β_min,  2eps(b1x) / Δbx)
+        β_max = max(β_max, one(T) - eps(b2x) / Δbx)
+    end
+    if Δby != 0
+        β_min = max(β_min,  2eps(b1y) / Δby)
+        β_max = max(β_max, one(T) - eps(b2y) / Δby)
+    end
+    α = clamp(α, α_min, α_max)
+    β = clamp(β, β_min, β_max)
+    #= Intersection will be where a1 + α * Δa = b1 + β * Δb. However, due to floating point
+    innacurracies, α and β calculations may yeild different intersection points. Average
+    both points together to minimize difference from real value. =#
+    x = (a1x + α * Δax + b1x + β * Δbx) / 2
+    y = (a1y + α * Δay + b1y + β * Δby) / 2
+    return ((x, y), (α, β))
+end
+
+# function _find_nearest_endpoint(::Type{T}, a1, a2, b1, b2, a_dist, b_dist) where T
+#     a1_t, a2_t = _tuple_point(a1, T), _tuple_point(a2, T)
+#     b1_t, b2_t = _tuple_point(b1, T), _tuple_point(b2, T)
+#     a_line = GI.Line(StaticArrays.SVector(a1_t, a2_t))
+#     b_line = GI.Line(StaticArrays.SVector(b1_t, b2_t))
+#     local nearest_pt, nearest_α, nearest_β,  min_dist
+#     for (i, e) in enumerate((a1_t, a2_t, b1_t, b2_t))
+#         ϵ_dist = sqrt(sum(2 .* eps.(e)).^2)
+#         ϵ_frac = ϵ_dist / (i < 3 ? a_dist : b_dist)
+#         ϵ_frac = max(ϵ_frac, 2eps(T))
+#         if iseven(i)
+#             ϵ_frac = 1 - ϵ_frac
+#         end
+#         near_pt, near_α, near_β, dist = if i < 3
+#             pt = a1_t .+ (ϵ_frac .* (a2_t .- a1_t))
+#             α = ϵ_frac
+#             β = distance(pt, b1_t, T) / b_dist
+#             d = distance(pt, b_line, T)
+#             pt, α, β, d
+#         else
+#             pt = b1_t .+ (ϵ_frac .* (b2_t .- b1_t))
+#             α = distance(pt, a1_t, T) / a_dist
+#             β = ϵ_frac
+#             d = distance(pt, a_line, T)
+#             pt, α, β, d
+#         end
+#         if i == 1 || dist < min_dist
+#             nearest_pt, nearest_α, nearest_β, min_dist = near_pt,  near_α, near_β, dist
+#         end
+#     end
+#     return nearest_pt, nearest_α, nearest_β
+# end
+
+# function _adjust_crossing_intersection(::Type{T}, pt, α, β, a1, a2, b1, b2, a1x, a1y, Δax, Δay, b1x, b1y, Δbx, Δby) where T
+#     # pt = (T(b1x + β * Δbx), T(b1y + β * Δby))
+#     println("WOOHOO BIG SUMMER BLOWOUT")
+#     if equals(a1, pt)
+#         α_min = max(eps(a1x) / Δax, eps(a1y) / Δay)
+#         pt = (T(a1x + α_min * Δax), T(a1y + α_min * Δay))
+#     elseif equals(a2, pt)
+#         α_max = 1 - max(eps(a2x) / Δax, eps(a2y) / Δay)
+#         pt = (T(a1x + α_max * Δax), T(a1y + α_max * Δay))
+#     elseif equals(b1, pt)
+#         β_min = max(eps(b1x) / Δbx, eps(b1y) / Δby)
+#         pt = (T(b1x + β_min * Δbx), T(b1y + β_min * Δby))
+#     elseif equals(b2, pt)
+#         β_max = 1 - max(eps(b2x) / Δbx, eps(b2y) / Δby)
+#         pt = (T(b1x + β_max * Δbx), T(b1y + β_max * Δby))
+#     end
+#     return pt, α, β
+# end
