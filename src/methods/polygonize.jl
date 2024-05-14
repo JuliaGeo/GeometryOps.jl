@@ -80,11 +80,14 @@ If they are `Vector` of `Tuple` they are used as the lower and upper bounds of e
 # Example
 
 ```julia
-using GeometryOps
-multipolygon = polygonize(>(0.6), rand(100, 100); minpoints=3)
+using GeometryOps, Makie
+A = rand(100, 100)
+multipolygon = polygonize(>(0.7), A)
+Makie.heatmap(A .> 0.7)
+Makie.plot!(multipolygon)
 
 using GeometryOps
-featurecollection = polygonize(rand(1:4, 100) * (fill(1, 100))')
+@time featurecollection = polygonize(rand(1:4, 1000) * (fill(1, 1000))')
 
 ```
 """
@@ -129,11 +132,11 @@ end
 
 function updateval(dict, key, val)
     if haskey(dict, key)
-        existingval = dict[key][1][1]
-        newval = ((existingval, val), (true, true))
+        existingval = dict[key][1]
+        newval = (existingval, val)
         dict[key] = newval 
     else
-        newval = ((val, val), (true, false))
+        newval = (val, map(typemax, val))
         dict[key] = newval 
     end
 end
@@ -142,11 +145,10 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
     minpoints=0,
 ) where T
     # Define buffers for edges and rings
-    edges = Dict{T,Tuple{Tuple{T,T},Tuple{Bool,Bool}}}()
+    edges = Dict{T,Tuple{T,T}}()
     rings = Vector{T}[]
 
     @assert (length(xs), length(ys)) == size(A)
-
 
     # First we collect all the edges around target pixels
     fi, fj = map(first, axes(A))
@@ -159,10 +161,10 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
 
             # We check the Von Neumann neighborhood to
             # decide what edges are needed, if any.
-            (j == fi || !f(A[i, j-1])) && updateval(edges, (x1, y1), (x2, y1))
-            (i == fj || !f(A[i-1, j])) && updateval(edges, (x1, y2), (x1, y1))
-            (j == lj || !f(A[i, j+1])) && updateval(edges, (x2, y2), (x1, y2))
-            (i == li || !f(A[i+1, j])) && updateval(edges, (x2, y1), (x2, y2))
+            (j == fi || !f(A[i, j-1])) && updateval(edges, (x1, y1), (x2, y1)) # S
+            (i == fj || !f(A[i-1, j])) && updateval(edges, (x1, y2), (x1, y1)) # W
+            (j == lj || !f(A[i, j+1])) && updateval(edges, (x2, y2), (x1, y2)) # N
+            (i == li || !f(A[i+1, j])) && updateval(edges, (x2, y1), (x2, y2)) # E
         end
     end
 
@@ -182,7 +184,9 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
         while nkeys > 0
             # Take the first edge from the array
             firstpoint::T = edgekeys[nkeys]
-            nextpoints, pointstatus = edges[firstpoint]
+            nextpoints = edges[firstpoint]
+            pointstatus = map(!=(typemax(first(firstpoint))) ∘ first, nextpoints)
+            # @show nextpoints pointstatus
             if any(pointstatus)
                 found = true
                 break
@@ -198,22 +202,23 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
         # and take one of them, then update the status
         if pointstatus[2]
             nextpoint = nextpoints[2]
-            edges[firstpoint] = ((nextpoints[1], map(zero, nextpoint)), (true, false))
+            edges[firstpoint] = (nextpoints[1], map(typemax, nextpoint))
         else
             nkeys -= 1
             nextpoint = nextpoints[1]
-            edges[firstpoint] = ((map(zero, nextpoint), map(zero, nextpoint)), (false, false))
+            edges[firstpoint] = (map(typemax, nextpoint), map(typemax, nextpoint))
         end
         currentpoint = firstpoint
         ring = T[currentpoint, nextpoint]
         push!(rings, ring)
-        # println()
         # @show currentpoint, nextpoint, pointstatus
         
         # Loop until we close a the ring and break
         while true
             # Find an edge that matches the next point
-            (c1, c2), pointstatus = edges[nextpoint]
+            (c1, c2) = possiblepoints = edges[nextpoint]
+            pointstatus = map(!=(typemax(first(firstpoint))) ∘ first, possiblepoints)
+            # @show possiblepoints pointstatus
             # @show c1, c2, pointstatus
             # When there are two possible edges, 
             # choose the edge that has turned the furthest right
@@ -221,51 +226,47 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
                 selectedpoint, remainingpoint = if currentpoint[1] == nextpoint[1] # vertical
                     wasincreasing = nextpoint[2] > currentpoint[2]
                     firstisstraight = nextpoint[1] == c1[1]
-                    firstisleft = nextpoint[1] < c1[1]
+                    firstisleft = nextpoint[1] > c1[1]
                     if firstisstraight
                         secondisleft = nextpoint[1] > c2[1]
-                        xor(wasincreasing, secondisleft) ? (c1, c2) : (c2, c1)
+                        if secondisleft 
+                            wasincreasing ? (c2, c1) : (c1, c2)
+                        else
+                            wasincreasing ? (c1, c2) : (c2, c1) 
+                        end
                     elseif firstisleft
-                        wasincreasing ? (c2, c1) : (c1, c2)
-                    else # firstisright
                         wasincreasing ? (c1, c2) : (c2, c1)
+                    else # firstisright
+                        wasincreasing ? (c2, c1) : (c1, c2)
                     end
                 else # horizontal
                     wasincreasing = nextpoint[1] > currentpoint[1]
                     firstisstraight = nextpoint[2] == c1[2]
-                    firstisleft = nextpoint[2] < c1[2]
+                    firstisleft = nextpoint[2] > c1[2]
                     if firstisstraight
                         secondisleft = nextpoint[2] > c2[2]
-                        xor(wasincreasing, secondisleft) ? (c1, c2) : (c2, c1)
+                        if secondisleft 
+                            wasincreasing ? (c1, c2) : (c2, c1) 
+                        else
+                            wasincreasing ? (c2, c1) : (c1, c2)
+                        end
                     elseif firstisleft
                         wasincreasing ? (c2, c1) : (c1, c2)
                     else # firstisright
                         wasincreasing ? (c1, c2) : (c2, c1)
                     end
                 end
-                edges[nextpoint] = ((remainingpoint, map(zero, remainingpoint)), (true, false))
+                edges[nextpoint] = (remainingpoint, map(typemax, remainingpoint))
                 currentpoint, nextpoint = nextpoint, selectedpoint
             else
-                edges[nextpoint] = ((map(zero, c1), map(zero, c1)), (false, false))
+                edges[nextpoint] = (map(typemax, c1), map(typemax, c1))
                 currentpoint, nextpoint = nextpoint, c1
                 # Write empty points, they are cleaned up later
             end
             # @show currentpoint, nextpoint, pointstatus
-            # Close the ring if we get to the start
-            if nextpoint == firstpoint
-                push!(ring, nextpoint)
+            push!(ring, nextpoint)
+            if nextpoint == firstpoint # Close the ring if we get to the start
                 break
-            else
-                i = findfirst(==(nextpoint), ring)
-                if !isnothing(i)
-                    # We found a touching point in the middle, 
-                    # so we need to split the ring into two rings
-                    splitring = ring[i:lastindex(ring)]
-                    deleteat!(ring, i:lastindex(ring))
-                    push!(splitring, nextpoint)
-                    push!(rings, splitring)
-                end
-                push!(ring, nextpoint)
             end
         end
     end
@@ -279,7 +280,7 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
 
     # Separate exteriors from holes by winding direction
     direction = last(last(xs)) - first(first(xs)) * last(last(ys)) - first(first(ys))
-    exterior_inds = if direction > 0 
+    exterior_inds = if direction < 0 
         .!isclockwise.(linearrings)
     else
         isclockwise.(linearrings)
@@ -292,6 +293,7 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
     # Then we add the holes to the polygons they are inside of
     unused = fill(true, length(holes))
     foundholes = 0
+    @show length(holes) length(polygons)
     for poly in polygons
         exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
         for i in eachindex(holes)
@@ -307,8 +309,9 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
             end
         end
     end
-    @show foundholes length(holes) length(polygons)
+    @show foundholes
 
+    # Add missing holes as polygons for now, to understand the error
     # holepolygons = map(view(holes, unused)) do lr
     #     GI.Polygon([lr]; extent=GI.extent(lr))
     # end
