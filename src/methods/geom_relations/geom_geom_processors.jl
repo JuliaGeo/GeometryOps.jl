@@ -484,11 +484,7 @@ function _point_filled_curve_orientation(
         v1 = GI.y(p_start) - y
         v2 = GI.y(p_end) - y
         if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
-            u1 = GI.x(p_start) - x
-            u2 = GI.x(p_end) - x
-            # c1 = u1 * v2  # first element of cross product summation
-            # c2 = u2 * v1  # second element of cross product summation
-            # f = c1 - c2
+            u1, u2 = GI.x(p_start) - x, GI.x(p_end) - x
             f = Predicates.cross((u1, u2), (v1, v2); exact)
             if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
                 f == 0 && return on         # Case 16 or 21

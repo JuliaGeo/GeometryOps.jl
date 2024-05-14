@@ -1,5 +1,8 @@
-# Tests of DE-9IM Methods
+import GeometryOps as GO
+import GeoInterface as GI
+import LibGEOS as LG
 
+# Tests of DE-9IM Methods
 pt1 = LG.Point([0.0, 0.0])
 pt2 = LG.Point([5.0, 5.0])
 pt3 = LG.Point([1.0, 0.0])
@@ -235,7 +238,7 @@ end
         # Linear rings that intersect but don't overlap
         r1 = LG.LinearRing([[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]])
         r2 = LG.LinearRing([[1.0, 1.0], [1.0, 6.0], [6.0, 6.0], [6.0, 1.0], [1.0, 1.0]])
-        @test LG.overlaps(r1, r2) == LG.overlaps(r1, r2)
+        @test GO.overlaps(r1, r2) == LG.overlaps(r1, r2)
     end
     
     @testset "Polygons/MultiPolygons" begin

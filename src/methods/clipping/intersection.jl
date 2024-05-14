@@ -250,10 +250,128 @@ that point.
 
 Calculation derivation can be found here: https://stackoverflow.com/questions/563198/ =#
 function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T
-    # Return line orientation and 2 intersection points + fractions (nothing if don't exist)
+    # Default answer for no intersection
     line_orient = line_out
     intr1 = ((zero(T), zero(T)), (zero(T), zero(T)))
     intr2 = intr1
+    no_intr_result = (line_orient, intr1, intr2)
+    # Seperate out line segment points
+    (a1x, a1y), (a2x, a2y) = _tuple_point(a1, T), _tuple_point(a2, T)
+    (b1x, b1y), (b2x, b2y) = _tuple_point(b1, T), _tuple_point(b2, T)
+    # Check if envalopes of lines intersect
+    a_ext = Extent(X = minmax(a1x, a2x), Y = minmax(a1y, a2y))
+    b_ext = Extent(X = minmax(b1x, b2x), Y = minmax(b1y, b2y))
+    !Extents.intersects(a_ext, b_ext) && return no_intr_result
+    # Check orientation of two line segments with respect to one another
+    a1_orient = Predicates.orient(b1, b2, a1)
+    a2_orient = Predicates.orient(b1, b2, a2)
+    a1_orient != 0 && a1_orient == a2_orient && return no_intr_result  # α < 0 or α > 1
+    b1_orient = Predicates.orient(a1, a2, b1)
+    b2_orient = Predicates.orient(a1, a2, b2)
+    b1_orient != 0 && b1_orient == b2_orient && return no_intr_result  # β < 0 or β > 1
+    # Determine intersection type and intersection point(s)
+    if a1_orient == a2_orient == b1_orient == b2_orient == 0
+        # Intersection is collinear if all endpoints lie on the same line
+        line_orient, intr1, intr2 = _find_collinear_intersection(T, a1, a2, b1, b2, a_ext, b_ext)
+    elseif a1_orient == 0 || a2_orient == 0 || b1_orient == 0 || b2_orient == 0
+        # Intersection is a hinge if the intersection point is an endpoint
+        line_orient = line_hinge
+        intr1 = _find_hinge_intersection(T, a1, a2, b1, b2, a1_orient, a2_orient, b1_orient)
+    else
+        # Intersection is a cross if there is only one non-endpoint intersection point
+        line_orient = line_cross
+        intr1 = _find_cross_intersection(T, a1, a2, b1, b2)
+    end
+    return line_orient, intr1, intr2
+end
+
+function _find_collinear_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where T
+    # Define default return for no intersection points
+    line_orient = line_out
+    intr1 = (zero(T), zero(T)), (zero(T), zero(T))
+    intr2 = intr1
+    # Determine collinear line overlaps
+    a1_in_b = _point_in_extent(a1, b_ext)
+    a2_in_b = _point_in_extent(a2, b_ext)
+    b1_in_a = _point_in_extent(b1, a_ext)
+    b2_in_a = _point_in_extent(b2, a_ext)
+    # Determine line distances
+    a_dist, b_dist = distance(a1, a2, T), distance(b1, b2, T)
+    # Set collinear intersection points if they exist
+    if a1_in_b && a2_in_b      # 1st vertex of a and 2nd vertex of a form overlap
+        line_orient = line_over
+        β1 = _clamped_frac(distance(a1, b1, T), b_dist)
+        β2 = _clamped_frac(distance(a2, b1, T), b_dist)
+        intr1 = (_tuple_point(a1, T), (zero(T), β1))
+        intr2 = (_tuple_point(a2, T), (one(T), β2))
+    elseif b1_in_a && b2_in_a  # 1st vertex of b and 2nd vertex of b form overlap
+        line_orient = line_over
+        α1 = _clamped_frac(distance(b1, a1, T), a_dist)
+        α2 = _clamped_frac(distance(b2, a1, T), a_dist)
+        intr1 = (_tuple_point(b1, T), (α1, zero(T)))
+        intr2 = (_tuple_point(b2, T), (α2, one(T)))
+    elseif a1_in_b && b1_in_a  # 1st vertex of a and 1st vertex of b form overlap
+        if equals(a1, b1)
+            line_orient = line_hinge
+            intr1 = (_tuple_point(a1, T), (zero(T), zero(T)))
+        else
+            line_orient = line_over
+            intr1, intr2 = _set_ab_collinear_intrs(T, a1, b1, zero(T), zero(T), a1, b1, a_dist, b_dist)
+        end
+    elseif a1_in_b && b2_in_a  # 1st vertex of a and 2nd vertex of b form overlap
+        if equals(a1, b2)
+            line_orient = line_hinge
+            intr1 = (_tuple_point(a1, T), (zero(T), one(T)))
+        else
+            line_orient = line_over
+            intr1, intr2 = _set_ab_collinear_intrs(T, a1, b2, zero(T), one(T), a1, b1, a_dist, b_dist) 
+        end
+    elseif a2_in_b && b1_in_a  # 2nd vertex of a and 1st vertex of b form overlap
+        if equals(a2, b1)
+            line_orient = line_hinge
+            intr1 = (_tuple_point(a2, T), (one(T), zero(T)))
+        else
+            line_orient = line_over
+            intr1, intr2 = _set_ab_collinear_intrs(T, a2, b1, one(T), zero(T), a1, b1, a_dist, b_dist)
+        end
+    elseif a2_in_b && b2_in_a  # 2nd vertex of a and 2nd vertex of b form overlap
+        if equals(a2, b2)
+            line_orient = line_hinge
+            intr1 = (_tuple_point(a2, T), (one(T), one(T)))
+        else
+            line_orient = line_over
+            intr1, intr2 = _set_ab_collinear_intrs(T, a2, b2, one(T), one(T), a1, b1, a_dist, b_dist)
+        end
+    end
+    return line_orient, intr1, intr2
+end
+
+function _find_hinge_intersection(::Type{T}, a1, a2, b1, b2, a1_orient, a2_orient, b1_orient) where T
+    pt, α, β = if equals(a1, b1)
+        _tuple_point(a1, T), zero(T), zero(T)
+    elseif equals(a1, b2)
+        _tuple_point(a1, T), zero(T), one(T)
+    elseif equals(a2, b1)
+        _tuple_point(a2, T), one(T), zero(T)
+    elseif equals(a2, b2)
+        _tuple_point(a2, T), one(T), one(T)
+    elseif a1_orient == 0
+        β_val = _clamped_frac(distance(b1, a1, T), distance(b1, b2, T), eps(T))
+        _tuple_point(a1, T), zero(T), β_val
+    elseif a2_orient == 0
+        β_val = _clamped_frac(distance(b1, a2, T), distance(b1, b2, T), eps(T))
+        _tuple_point(a2, T), one(T), β_val
+    elseif b1_orient == 0
+        α_val = _clamped_frac(distance(a1, b1, T), distance(a1, a2, T), eps(T))
+        _tuple_point(b1, T), α_val, zero(T)
+    else  # b2_orient == 0
+        α_val = _clamped_frac(distance(a1, b2, T), distance(a1, a2, T), eps(T))
+        _tuple_point(b2, T), α_val, one(T)
+    end
+    return pt, (α, β)
+end
+
+function _find_cross_intersection(::Type{T}, a1, a2, b1, b2) where T
     # First line runs from p to p + r
     px, py = GI.x(a1), GI.y(a1)
     rx, ry = GI.x(a2) - px, GI.y(a2) - py
@@ -264,121 +382,37 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) w
     Δqp_x = qx - px
     Δqp_y = qy - py
     r_cross_s = rx * sy - ry * sx
-    if Predicates.cross((rx, ry), (sx, sy); exact) != 0  # non-parallel lines
-        # Calculate α ratio if lines cross or touch
-        a1_orient = Predicates.orient(b1, b2, a1)
-        a2_orient = Predicates.orient(b1, b2, a2)
-        # Lines don't cross α < 0 or α > 1
-        a1_orient != 0 && a1_orient == a2_orient && return (line_orient, intr1, intr2)
-        # Determine α value
-        α, pt = if a1_orient == 0  # α = 0
-            zero(T), (T(px), T(py))
-        elseif a2_orient == 0  # α = 1
-            one(T), (T(GI.x(a2)), T(GI.y(a2)))
-        else # 0 < α < 1
-            α_val = T((Δqp_x * sy - Δqp_y * sx) / r_cross_s)
-            α_val = clamp(α_val, zero(T), one(T))
-            α_val, (T(px + α_val * rx),  T(py + α_val * ry))
-        end
-        # Calculate β ratio if lines touch or cross
-        b1_orient = Predicates.orient(a1, a2, b1)
-        b2_orient = Predicates.orient(a1, a2, b2)
-        # Lines don't cross β < 0 or β > 1
-        b1_orient != 0 && b1_orient == b2_orient && return (line_orient, intr1, intr2)
-        β, pt = if b1_orient == 0  # β = 0
-            zero(T), (T(qx), T(qy))
-        elseif b2_orient == 0  # β = 1
-            one(T), (T(GI.x(b2)), T(GI.y(b2)))
-        else  # 0 < β < 1
-            β_val = T((Δqp_x * ry - Δqp_y * rx) / r_cross_s)
-            β_val = clamp(β_val, zero(T), one(T))
-            #= Floating point limitations could make intersection be endpoint if α≈0 or α≈1.
-            In this case, see if multiplication by β gives a distinct number. Otherwise,
-            replace with closest floating point number to endpoint.=#
-            if (α != 0 && equals(a1, pt)) || (α != 1 && equals(a2, pt)) || equals(b1, pt) || equals(b2, pt)
-                pt = (T(qx + β_val * sx), T(qy + β_val * sy))
-                if equals(a1, pt)
-                    α_min = max(eps(px) / rx, eps(py) / ry)
-                    pt = (T(px + α_min * rx), T(py + α_min * ry))
-                elseif equals(a2, pt)
-                    α_max = 1 - max(eps(GI.x(a2)) / rx, eps(GI.y(a2)) / ry)
-                    pt = (T(px + α_max * rx), T(py + α_max * ry))
-                elseif equals(b1, pt)
-                    β_min = max(eps(qx) / sx, eps(qy) / sy)
-                    pt = (T(qx + β_min * sx), T(qy + β_min * sy))
-                elseif equals(b2, pt)
-                    β_max = 1 - max(eps(GI.x(b2)) / sx, eps(GI.y(b2)) / sy)
-                    pt = (T(qx + β_max * sx), T(qy + β_max * sy))
-                end
-            end
-            β_val, pt
-        end
-        # Calculate intersection point using α and β
-        # x, y = T(px + α * rx),  T(py + α * ry)
-        # if (x == px && y == py) || (x == GI.x(a2) && y == GI.y(a2))
-        #     x, y =  T(qx + β * sx),  T(qy + β * sy)
-        # end
-        intr1 = pt, (α, β)
-        line_orient = (α == 0 || α == 1 || β == 0 || β == 1) ? line_hinge : line_cross
-    elseif Predicates.cross((Δqp_x, Δqp_y), (sx, sy); exact) == 0 # collinear parallel lines
-        # Determine if lines touch or overlap and with what α and β values
-        a1_side = Predicates.sameside(a1, b1, b2)
-        a2_side = Predicates.sameside(a2, b1, b2)
-        b1_side = Predicates.sameside(b1, a1, a2)
-        b2_side = Predicates.sameside(b2, a1, a2)
-        # Lines touch or overlap if endpoints of line a are on/in line b and visa versa
-        r_dot_s = rx * sx + ry * sy
-        # Determine which endpoints start and end the overlapping region
-        n_intrs = 0
-        if a1_side != 1 || a2_side != 1  # at least one endpoint of line a is in/on line b
-            s_dot_s = sx^2 + sy^2
-            a1_β = T(-(Δqp_x * sx + Δqp_y * sy) / s_dot_s)
-            if a1_side != 1  # 0 ≤ a1_β ≤ 1
-                n_intrs += 1
-                a1_β = if a1_side == 0  # a1_β == 0 or  a1_β == 1
-                    equals(a1, b1) ? zero(T) : one(T)
-                else  # 0 < a1_β < 1
-                    clamp(a1_β, zero(T), one(T))
-                end
-                intr1 = (T.(a1), (zero(T), a1_β))
-            end
-            if a2_side != 1  # 0 ≤ a2_β ≤ 1
-                n_intrs += 1
-                a2_β = if a2_side == 0  # a2_β == 0 or  a2_β == 1
-                    equals(a2, b1) ? zero(T) : one(T)
-                else  # 0 < a2_β < 1
-                    β_val = a1_β + r_dot_s / s_dot_s
-                    clamp(T(β_val), zero(T), one(T))
-                end
-                new_intr = (T.(a2), (one(T), a2_β))
-                n_intrs == 1 && (intr1 = new_intr)
-                n_intrs == 2 && (intr2 = new_intr)
-            end
-        end
-        if b1_side == -1 || b2_side == -1  # at least one endpoint of line b is in line a
-            r_dot_r = (rx^2 + ry^2)
-            b1_α = T((Δqp_x * rx + Δqp_y * ry) / r_dot_r)
-            if b1_side == -1   # 0 < b1_α < 1
-                n_intrs += 1
-                b1_α = clamp(b1_α, zero(T), one(T))
-                new_intr = (T.(b1), (b1_α, zero(T)))
-                n_intrs == 1 && (intr1 = new_intr)
-                n_intrs == 2 && (intr2 = new_intr)
-            end
-            if b2_side == -1  # 0 < b2_α < 1
-                n_intrs += 1
-                b2_α = T(b1_α + r_dot_s / r_dot_r)
-                b2_α = clamp(b2_α, zero(T), one(T))
-                new_intr = (T.(b2), (b2_α, one(T)))
-                n_intrs == 1 && (intr1 = new_intr)
-                n_intrs == 2 && (intr2 = new_intr)
-            end
-        end
-        if n_intrs == 1
-            line_orient = line_hinge
-        elseif n_intrs > 1
-            line_orient = line_over
+    α = T((Δqp_x * sy - Δqp_y * sx) / r_cross_s)
+    α = clamp(α, zero(T), one(T))
+    pt = (T(px + α * rx),  T(py + α * ry))
+    β = T((Δqp_x * ry - Δqp_y * rx) / r_cross_s)
+    β = clamp(β, zero(T), one(T))
+    #= Floating point limitations could make intersection be endpoint if α≈0 or α≈1.
+    In this case, see if multiplication by β gives a distinct number. Otherwise,
+    replace with closest floating point number to endpoint.=#
+    if (α != 0 && equals(a1, pt)) || (α != 1 && equals(a2, pt)) || equals(b1, pt) || equals(b2, pt)
+        pt = (T(qx + β * sx), T(qy + β * sy))
+        if equals(a1, pt)
+            α_min = max(eps(px) / rx, eps(py) / ry)
+            pt = (T(px + α_min * rx), T(py + α_min * ry))
+        elseif equals(a2, pt)
+            α_max = 1 - max(eps(GI.x(a2)) / rx, eps(GI.y(a2)) / ry)
+            pt = (T(px + α_max * rx), T(py + α_max * ry))
+        elseif equals(b1, pt)
+            β_min = max(eps(qx) / sx, eps(qy) / sy)
+            pt = (T(qx + β_min * sx), T(qy + β_min * sy))
+        elseif equals(b2, pt)
+            β_max = 1 - max(eps(GI.x(b2)) / sx, eps(GI.y(b2)) / sy)
+            pt = (T(qx + β_max * sx), T(qy + β_max * sy))
         end
     end
-    return line_orient, intr1, intr2
+    return (pt, (α, β))
 end
+
+_clamped_frac(x::T, y::T, ϵ = zero(T)) where T = clamp(x / y, ϵ, one(T) - ϵ)
+
+_set_ab_collinear_intrs(::Type{T}, a_pt, b_pt, a_pt_α, b_pt_β, a1, b1, a_dist, b_dist) where T =
+    (
+        (_tuple_point(a_pt, T), (a_pt_α, _clamped_frac(distance(a_pt, b1, T), b_dist))),
+        (_tuple_point(b_pt, T), (_clamped_frac(distance(b_pt, a1, T), a_dist), b_pt_β))
+    )
