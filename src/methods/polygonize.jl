@@ -81,7 +81,7 @@ If they are `Vector` of `Tuple` they are used as the lower and upper bounds of e
 
 ```julia
 using GeometryOps
-multipolygon = polygonize(>(0.6), rand(100), minpoints=3)
+multipolygon = polygonize(>(0.6), rand(100, 100); minpoints=3)
 
 using GeometryOps
 featurecollection = polygonize(rand(1:4, 100) * (fill(1, 100))')
@@ -127,93 +127,145 @@ function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::A
     return polygonize(f, xvec, yvec, A; kw...)
 end
 
+function updateval(dict, key, val)
+    if haskey(dict, key)
+        existingval = dict[key][1][1]
+        newval = ((existingval, val), (true, true))
+        dict[key] = newval 
+    else
+        newval = ((val, val), (true, false))
+        dict[key] = newval 
+    end
+end
+
 function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
     minpoints=0,
 ) where T
     # Define buffers for edges and rings
-    edges = Dict{T,Vector{T}}()
+    edges = Dict{T,Tuple{Tuple{T,T},Tuple{Bool,Bool}}}()
     rings = Vector{T}[]
 
     @assert (length(xs), length(ys)) == size(A)
 
-    # First get all the valid edges between filled and empty pixels
-    si, sj = map(last, axes(A))
+
+    # First we collect all the edges around target pixels
+    fi, fj = map(first, axes(A))
+    li, lj = map(last, axes(A))
     @inbounds for i in axes(A, 1), j in axes(A, 2)
         if f(A[i, j]) # This is a pixel inside a polygon
             # xs and ys hold pixel bounds
             x1, x2 = xs[i]
             y1, y2 = ys[j]
+
             # We check the Von Neumann neighborhood to
             # decide what edges are needed, if any.
-
-            (j == 1 || !f(A[i, j-1])) && push!(get!(() -> T[], edges, (x1, y1)), (x2, y1))
-            (i == 1 || !f(A[i-1, j])) && push!(get!(() -> T[], edges, (x1, y2)), (x1, y1))
-            (j == sj || !f(A[i, j+1])) && push!(get!(() -> T[], edges, (x2, y2)), (x1, y2))
-            (i == si || !f(A[i+1, j])) && push!(get!(() -> T[], edges, (x2, y1)), (x2, y2))
+            (j == fi || !f(A[i, j-1])) && updateval(edges, (x1, y1), (x2, y1))
+            (i == fj || !f(A[i-1, j])) && updateval(edges, (x1, y2), (x1, y1))
+            (j == lj || !f(A[i, j+1])) && updateval(edges, (x2, y2), (x1, y2))
+            (i == li || !f(A[i+1, j])) && updateval(edges, (x2, y1), (x2, y2))
         end
     end
 
-    # Then we join the edges into rings
-    # Sorting now lets us use `searchsortedlast` for speed later
+    # Keep dict keys separately in a vector for performance
     edgekeys = collect(keys(edges))
-    while length(edges) > 0
+    # We don't delete keys we just reduce length with nkeys
+    nkeys = length(edgekeys)
+
+    # Now create rings from the edges, 
+    # looping until there are no edge keys left
+    while nkeys > 0
         found = false
-        local firstpoint
-        while found == false && length(edgekeys) > 0
+        local firstpoint, nextpoints, pointstatus
+
+        # Loop until we find a key that hasn't been removed,
+        # decrementing nkeys as we go.
+        while nkeys > 0
             # Take the first edge from the array
-            firstpoint::T = last(edgekeys)
-            if haskey(edges, firstpoint) && !isempty(edges[firstpoint])
+            firstpoint::T = edgekeys[nkeys]
+            nextpoints, pointstatus = edges[firstpoint]
+            if any(pointstatus)
                 found = true
+                break
             else
-                pop!(edgekeys)
+                nkeys -= 1
             end
         end
+
+        # If we found nothing this time, we are done
         found == false && break
-        nextpoints = edges[firstpoint]
-        nextpoint = pop!(nextpoints)
-        if length(nextpoints) == 1
-            pop!(edgekeys)
+
+        # Check if there are one or two lines going through this node
+        # and take one of them, then update the status
+        if pointstatus[2]
+            nextpoint = nextpoints[2]
+            edges[firstpoint] = ((nextpoints[1], map(zero, nextpoint)), (true, false))
+        else
+            nkeys -= 1
+            nextpoint = nextpoints[1]
+            edges[firstpoint] = ((map(zero, nextpoint), map(zero, nextpoint)), (false, false))
         end
-        edge = (firstpoint, nextpoint)
-        ring = T[firstpoint, nextpoint]
+        currentpoint = firstpoint
+        ring = T[currentpoint, nextpoint]
         push!(rings, ring)
-        while length(edges) > 0
+        # println()
+        # @show currentpoint, nextpoint, pointstatus
+        
+        # Loop until we close a the ring and break
+        while true
             # Find an edge that matches the next point
-            candidates = edges[nextpoint]
+            (c1, c2), pointstatus = edges[nextpoint]
+            # @show c1, c2, pointstatus
             # When there are two possible edges, 
-            # choose the edge that has turned a corner
-            if length(candidates) > 1 
-                if (nextpoint[1] == candidates[2][1] || nextpoint[2] == candidates[2][2]) 
-                    newedge = (nextpoint, pop!(candidates))
-                else
-                    newedge = (nexpoint, popfirst!(candidates))
+            # choose the edge that has turned the furthest right
+            if pointstatus[2]
+                selectedpoint, remainingpoint = if currentpoint[1] == nextpoint[1] # vertical
+                    wasincreasing = nextpoint[2] > currentpoint[2]
+                    firstisstraight = nextpoint[1] == c1[1]
+                    firstisleft = nextpoint[1] < c1[1]
+                    if firstisstraight
+                        secondisleft = nextpoint[1] > c2[1]
+                        xor(wasincreasing, secondisleft) ? (c1, c2) : (c2, c1)
+                    elseif firstisleft
+                        wasincreasing ? (c2, c1) : (c1, c2)
+                    else # firstisright
+                        wasincreasing ? (c1, c2) : (c2, c1)
+                    end
+                else # horizontal
+                    wasincreasing = nextpoint[1] > currentpoint[1]
+                    firstisstraight = nextpoint[2] == c1[2]
+                    firstisleft = nextpoint[2] < c1[2]
+                    if firstisstraight
+                        secondisleft = nextpoint[2] > c2[2]
+                        xor(wasincreasing, secondisleft) ? (c1, c2) : (c2, c1)
+                    elseif firstisleft
+                        wasincreasing ? (c2, c1) : (c1, c2)
+                    else # firstisright
+                        wasincreasing ? (c1, c2) : (c2, c1)
+                    end
                 end
+                edges[nextpoint] = ((remainingpoint, map(zero, remainingpoint)), (true, false))
+                currentpoint, nextpoint = nextpoint, selectedpoint
             else
-                newedge = (nextpoint, candidates[1])
-                delete!(edges, nextpoint)
+                edges[nextpoint] = ((map(zero, c1), map(zero, c1)), (false, false))
+                currentpoint, nextpoint = nextpoint, c1
+                # Write empty points, they are cleaned up later
             end
-            edge = newedge
-            # TODO: Here we actually need to check which edge maintains
-            # the winding direction
-            nextpoint = last(edge)
+            # @show currentpoint, nextpoint, pointstatus
             # Close the ring if we get to the start
             if nextpoint == firstpoint
                 push!(ring, nextpoint)
                 break
-            # Split off another ring if we touch the current ring anywhere else
             else
                 i = findfirst(==(nextpoint), ring)
-                if isnothing(i)
-                    # Keep adding points to the ring
-                    push!(ring, nextpoint)
-                else
+                if !isnothing(i)
+                    # We found a touching point in the middle, 
+                    # so we need to split the ring into two rings
                     splitring = ring[i:lastindex(ring)]
                     deleteat!(ring, i:lastindex(ring))
-                    push!(ring, nextpoint)
                     push!(splitring, nextpoint)
                     push!(rings, splitring)
-                    continue
                 end
+                push!(ring, nextpoint)
             end
         end
     end
@@ -239,12 +291,14 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
 
     # Then we add the holes to the polygons they are inside of
     unused = fill(true, length(holes))
+    foundholes = 0
     for poly in polygons
         exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
         for i in eachindex(holes)
             unused[i] || continue
             hole = holes[i]
             if covers(poly, hole)
+                foundholes += 1
                 # Hole is in the exterior, so add it to the ring list
                 push!(poly.geom, hole)
                 # remove i
@@ -253,6 +307,13 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
             end
         end
     end
+    @show foundholes length(holes) length(polygons)
+
+    # holepolygons = map(view(holes, unused)) do lr
+    #     GI.Polygon([lr]; extent=GI.extent(lr))
+    # end
+    # append!(polygons, holepolygons) 
+    # @assert foundholes == length(holes)
 
     if isempty(polygons)
         # TODO: this really should return an emtpty MultiPolygon but

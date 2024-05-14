@@ -107,19 +107,26 @@ Else, return false.
 If closed_line is true, line is treated as a closed line where the first and
 last point are connected by a segment. Same with closed_curve.
 =#
-function _line_curve_process(
+@inline function _line_curve_process(line, curve; 
+    over_allow, cross_allow, kw...
+)
+    skip, returnval = _maybe_skip_disjoint_extents(line, curve;
+        in_allow=(over_allow | cross_allow), kw...
+    )
+    if skip 
+        return returnval
+    else
+        return _inner_line_curve_process(line, curve; over_allow, cross_allow, kw...)
+    end
+end
+
+function _inner_line_curve_process(
     line, curve;
     over_allow, cross_allow, on_allow, out_allow,
     in_require, on_require, out_require,
     closed_line = false,
     closed_curve = false,
 )
-    skip, returnval = _maybe_skip_disjoint_extents(line, curve;
-        in_allow=over_allow || cross_allow, on_allow, out_allow, 
-        in_require, on_require, out_require,
-    )
-    skip && return returnval
-
     # Set up requirments
     in_req_met = !in_require
     on_req_met = !on_require
@@ -252,17 +259,21 @@ Else, return false.
 If closed_line is true, line is treated as a closed line where the first and
 last point are connected by a segment.
 =#
-function _line_polygon_process(
+@inline function _line_polygon_process(line, polygon; kw...)
+    skip, returnval = _maybe_skip_disjoint_extents(line, polygon; kw...)
+    if skip 
+        return returnval
+    else
+        return _inner_line_polygon_process(line, polygon; kw...)
+    end
+end
+
+function _inner_line_polygon_process(
     line, polygon;
+    closed_line=false,
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
-    closed_line = false,
 )
-    skip, returnval = _maybe_skip_disjoint_extents(line, polygon;
-        in_allow, on_allow, out_allow, 
-        in_require, on_require, out_require,
-    )
-    skip && return returnval
 
     in_req_met = !in_require
     on_req_met = !on_require
@@ -327,7 +338,16 @@ If out_require is true, the first polygon must have at least one interior point
 If the point is in an "allowed" location and meets all requirments, return true.
 Else, return false.
 =#
-function _polygon_polygon_process(
+@inline function _polygon_polygon_process(poly1, poly2; kw...)
+    skip, returnval = _maybe_skip_disjoint_extents(poly1, poly2; kw...)
+    if skip 
+        return returnval
+    else
+        return _polygon_polygon_process(poly1, poly2; kw...)
+    end
+end
+
+function _inner_polygon_polygon_process(
     poly1, poly2;
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
@@ -337,7 +357,6 @@ function _polygon_polygon_process(
         in_require, on_require, out_require,
     )
     skip && return returnval
-
     in_req_met = !in_require
     on_req_met = !on_require
     out_req_met = !out_require
@@ -692,9 +711,10 @@ end
 
 # Disjoint extent optimisation: skip work based on geom extent intersection
 # returns Tuple{Bool, Bool} for (skip, returnval)
-function _maybe_skip_disjoint_extents(a, b;
+@inline function _maybe_skip_disjoint_extents(a, b;
     in_allow, on_allow, out_allow, 
-    in_require=false, on_require=false, out_require=false,
+    in_require, on_require, out_require,
+    kw...
 )
     if (in_allow || in_require || on_allow || on_require)
         # If we need line or interior and no exterior
