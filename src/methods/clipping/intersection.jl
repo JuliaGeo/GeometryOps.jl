@@ -280,7 +280,7 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) w
     else
         # Intersection is a cross if there is only one non-endpoint intersection point
         line_orient = line_cross
-        intr1 = _find_cross_intersection(T, a1, a2, b1, b2)
+        intr1 = _find_cross_intersection(T, a1, a2, b1, b2, a_ext, b_ext)
     end
     return line_orient, intr1, intr2
 end
@@ -371,42 +371,54 @@ function _find_hinge_intersection(::Type{T}, a1, a2, b1, b2, a1_orient, a2_orien
     return pt, (α, β)
 end
 
-function _find_cross_intersection(::Type{T}, a1, a2, b1, b2) where T
-    # First line runs from p to p + r
-    px, py = GI.x(a1), GI.y(a1)
-    rx, ry = GI.x(a2) - px, GI.y(a2) - py
-    # Second line runs from q to q + s 
-    qx, qy = GI.x(b1), GI.y(b1)
-    sx, sy = GI.x(b2) - qx, GI.y(b2) - qy
+function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where T
+    # First line runs from a to a + Δa
+    (a1x, a1y), (a2x, a2y) = _tuple_point(a1, T), _tuple_point(a2, T)
+    Δax, Δay = a2x - a1x, a2y - a1y
+    # Second line runs from b to b + Δb 
+    (b1x, b1y), (b2x, b2y) = _tuple_point(b1, T), _tuple_point(b2, T)
+    Δbx, Δby = b2x - b1x, b2y - b1y
     # Intersections will be where p + αr = q + βs where 0 < α, β < 1
-    Δqp_x = qx - px
-    Δqp_y = qy - py
-    r_cross_s = rx * sy - ry * sx
-    α = T((Δqp_x * sy - Δqp_y * sx) / r_cross_s)
+    # Differences between starting points
+    Δbax = b1x - a1x
+    Δbay = b1y - a1y
+    a_cross_b = Δax * Δby - Δay * Δbx
+    # Determine α value where 0 < α < 1
+    α = T((Δbax * Δby - Δbay * Δbx) / a_cross_b)
     α = clamp(α, zero(T), one(T))
-    pt = (T(px + α * rx),  T(py + α * ry))
-    β = T((Δqp_x * ry - Δqp_y * rx) / r_cross_s)
+    # Determine β value where 0 < β < 1
+    β = T((Δbax * Δay - Δbay * Δax) / a_cross_b)
     β = clamp(β, zero(T), one(T))
+    # Intersections will be where a1 + α * Δa = b1 + β * Δb where 0 < α, β < 1
+    pt = (T(a1x + α * Δax),  T(a1y + α * Δay))
     #= Floating point limitations could make intersection be endpoint if α≈0 or α≈1.
     In this case, see if multiplication by β gives a distinct number. Otherwise,
     replace with closest floating point number to endpoint.=#
-    if (α != 0 && equals(a1, pt)) || (α != 1 && equals(a2, pt)) || equals(b1, pt) || equals(b2, pt)
-        pt = (T(qx + β * sx), T(qy + β * sy))
-        if equals(a1, pt)
-            α_min = max(eps(px) / rx, eps(py) / ry)
-            pt = (T(px + α_min * rx), T(py + α_min * ry))
-        elseif equals(a2, pt)
-            α_max = 1 - max(eps(GI.x(a2)) / rx, eps(GI.y(a2)) / ry)
-            pt = (T(px + α_max * rx), T(py + α_max * ry))
-        elseif equals(b1, pt)
-            β_min = max(eps(qx) / sx, eps(qy) / sy)
-            pt = (T(qx + β_min * sx), T(qy + β_min * sy))
-        elseif equals(b2, pt)
-            β_max = 1 - max(eps(GI.x(b2)) / sx, eps(GI.y(b2)) / sy)
-            pt = (T(qx + β_max * sx), T(qy + β_max * sy))
-        end
+    invalid_pt = !_point_in_extent(pt, a_ext) || !_point_in_extent(pt, b_ext) 
+    invalid_pt |= (equals(pt, a1) || equals(pt, a2) || equals(pt, b1) || equals(pt, b2))
+    invalid_pt |= (α ≤ 0 || α ≥ 1 || β ≤ 0 || β ≥ 1)
+    if invalid_pt
+       pt, α, β = _adjust_crossing_intersection(T, pt, α, β, a1, a2, b1, b2, a1x, a1y, Δax, Δay, b1x, b1y, Δbx, Δby)
     end
     return (pt, (α, β))
+end
+
+function _adjust_crossing_intersection(::Type{T}, pt, α, β, a1, a2, b1, b2, a1x, a1y, Δax, Δay, b1x, b1y, Δbx, Δby) where T
+    pt = (T(b1x + β * Δbx), T(b1y + β * Δby))
+    if equals(a1, pt)
+        α_min = max(eps(a1x) / Δax, eps(a1y) / Δay)
+        pt = (T(a1x + α_min * Δax), T(a1y + α_min * Δay))
+    elseif equals(a2, pt)
+        α_max = 1 - max(eps(a2x) / Δax, eps(a2y) / Δay)
+        pt = (T(a1x + α_max * Δax), T(a1y + α_max * Δay))
+    elseif equals(b1, pt)
+        β_min = max(eps(b1x) / Δbx, eps(b1y) / Δby)
+        pt = (T(b1x + β_min * Δbx), T(b1y + β_min * Δby))
+    elseif equals(b2, pt)
+        β_max = 1 - max(eps(b2x) / Δbx, eps(b2y) / Δby)
+        pt = (T(b1x + β_max * Δbx), T(b1y + β_max * Δby))
+    end
+    return pt, α, β
 end
 
 _clamped_frac(x::T, y::T, ϵ = zero(T)) where T = clamp(x / y, ϵ, one(T) - ϵ)
