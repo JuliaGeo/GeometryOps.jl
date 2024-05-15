@@ -3,7 +3,6 @@
 export polygonize
 
 #=
-
 The methods in this file convert a raster image into a set of polygons, 
 by contour detection using a clockwise Moore neighborhood method.
 
