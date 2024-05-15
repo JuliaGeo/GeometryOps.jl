@@ -1,4 +1,5 @@
 using GeometryOps, GeoInterface, Test
+import OffsetArrays, DimensionalData, Rasters
 
 # Missing holes throw a warning, so testing there are
 # no warnings in a range of randomisation is one way to test 
@@ -35,5 +36,34 @@ for i in (100, 300), j in (100, 300)
         @test map(GeoInterface.getfeature(fc)) do f
             GeoInterface.properties(f).value
         end == [1, 2, 3]
+    end
+end
+
+
+@testset "Polygonize with exotic arrays" begin
+    @testset "OffsetArrays" begin
+        data = rand(1:4, 100, 100) .== 1
+        evil = OffsetArrays.Origin(-100, -100)(data)
+        data_mp = polygonize(data)
+        evil_mp = @test_nowarn polygonize(evil)
+        evil_in_data_space_mp = GO.transform(evil_mp) do point
+            point .- evil.offsets # undo the offset from the OffsetArray
+        end
+        @test GO.equals(data_mp, evil_in_data_space_mp)
+    end
+    @testset "DimensionalData" begin
+        data = rand(1:4, 100, 100) .== 1
+        evil = DimensionalData.DimArray(data, (DimensionalData.X(1:100), DimensionalData.Y(1:100)))
+        data_mp = polygonize(data)
+        evil_mp = @test_nowarn polygonize(evil)
+        @test GO.equals(data_mp, evil_mp)
+    end
+    @testset "Rasters" begin
+        data = rand(1:4, 100, 100) .== 1
+        evil = Rasters.Raster(data; dims = (DimensionalData.X(1:100), DimensionalData.Y(1:100)), crs = Rasters.GeoFormatTypes.EPSG(4326))
+        data_mp = polygonize(data)
+        evil_mp = @test_nowarn polygonize(evil)
+        @test GO.equals(data_mp, evil_mp)
+        @test GI.crs(evil_mp) == GI.crs(evil)
     end
 end
