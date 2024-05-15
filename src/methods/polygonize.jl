@@ -2,14 +2,20 @@
 
 export polygonize
 
-# The methods in this file are able to convert a raster image into a set of polygons,
-# by contour detection using a clockwise Moore neighborhood method.
+#= 
+
+The methods in this file convert a raster image into a set of polygons, 
+by contour detection using a clockwise Moore neighborhood method.
+
+The main entry point is the [`polygonize`](@ref) function.
+
+```@docs
+polygonize
+```
 
 ## Example
 
-#=
 Here's a basic example, using the `Makie.peaks()` function.  First, let's investigate the nature of the function:
-
 ```@example polygonize
 using Makie, GeometryOps
 n = 49
