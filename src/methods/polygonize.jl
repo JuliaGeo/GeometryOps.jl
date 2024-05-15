@@ -137,13 +137,13 @@ function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::
     ybounds = first(ys) - yhalf : step(ys) : last(ys) + yhalf
     Tx = eltype(xbounds)
     Ty = eltype(ybounds)
-    xvec = Vector{Tuple{Tx,Tx}}(undef, length(xs))
-    yvec = Vector{Tuple{Ty,Ty}}(undef, length(ys))
-    for i in eachindex(xvec)
-        xvec[i] = xbounds[i], xbounds[i+1]
+    xvec = similar(Vector{Tuple{Tx,Tx}}, xs)
+    yvec = similar(Vector{Tuple{Ty,Ty}}, ys)
+    for (xind, i) in enumerate(eachindex(xvec))
+        xvec[i] = xbounds[xind], xbounds[xind+1]
     end
-    for i in eachindex(yvec)
-        yvec[i] = ybounds[i], ybounds[i+1]
+    for (yind, i) in enumerate(eachindex(yvec))
+        yvec[i] = ybounds[yind], ybounds[yind+1]
     end
     return _polygonize(f, xvec, yvec, A; kw...)
 end
