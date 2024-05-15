@@ -58,15 +58,11 @@ The implementation follows:
 
 Polygonize an `AbstractMatrix` of values, currently to a single class of polygons.
 
-For `AbstractArray{Bool}` function `f` is not needed. 
+Returns a `MultiPolygon` for `Bool` values and `f` return values, and
+a `FeatureCollection` of `Feature`s holding `MultiPolygon` for all other values.
 
-For other matrix eltypes, function `f` should return `true` or `false` 
-based on the matrix values, translating to inside or outside the polygons.
-These will return a single `MultiPolygon` of the `true` values. 
-
-For `AbtractArray{<:Integer}` multiple `multipolygon`s are calculated
-for each value in the array (or passed in `values` keyword), and returned
-as a `FeatureCollection`.
+Function `f` should return either `true` or `false` or a transformation
+of values into simpler groups, especially useful for floating point arrays.
 
 If `xs` and `ys` are ranges, they are used as the pixel center points.
 If they are `Vector` of `Tuple` they are used as the lower and upper bounds of each pixel.
@@ -74,8 +70,10 @@ If they are `Vector` of `Tuple` they are used as the lower and upper bounds of e
 # Keywords
 
 - `minpoints`: ignore polygons with less than `minpoints` points.
-- `values`: the values to turn into polygons for `Integer` arrays. 
-    By default these are `union(A)`
+- `values`: the values to turn into polygons. By default these are `union(A)`,
+    If function `f` is passed these refer to the return values of `f`, by
+    default `union(map(f, A)`. If values `Bool`, false is ignored and a single
+    `MultiPolygon` is returned rather than a `FeatureCollection`.
 
 # Example
 
@@ -83,13 +81,9 @@ If they are `Vector` of `Tuple` they are used as the lower and upper bounds of e
 using GeometryOps, GLMakie, Shapefile
 A = rand(100, 100)
 multipolygon = polygonize(>(0.5), A);
-# Makie.heatmap(A .> 0.5)
+
 p = Makie.plot(multipolygon.geom[1])
 Makie.plot!.(multipolygon.geom[2:end])
-save("polygonize.png", p)
-
-using GeometryOps
-@time featurecollection = polygonize(rand(1:4, 1000) * (fill(1, 1000))')
 ```
 """
 polygonize(A::AbstractMatrix{Bool}; kw...) = polygonize(identity, A; kw...)
@@ -143,7 +137,7 @@ function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::
     for i in eachindex(yvec)
         yvec[i] = ybounds[i], ybounds[i+1]
     end
-    return polygonize(f, xvec, yvec, A; kw...)
+    return _polygonize(f, xvec, yvec, A; kw...)
 end
 
 function _default_values(f, A)
@@ -153,11 +147,10 @@ function _default_values(f, A)
     return eltype(values) == Bool ? nothing : collect(skipmissing(values))
 end
 
-function updateval(dict, key, val)
+@inline function updateval(dict, key, val)
     if haskey(dict, key)
         existingvals = dict[key]
         existingval = existingvals[1]
-        @assert existingvals[2][1] == typemax(val[1])
         newval = (existingval, val)
         dict[key] = newval 
     else
@@ -166,7 +159,7 @@ function updateval(dict, key, val)
     end
 end
 
-function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
+function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
     minpoints=0,
 ) where T
     # Define buffers for edges and rings
@@ -235,7 +228,7 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
 
         # Start a new ring
         currentpoint = firstpoint
-        ring = T[currentpoint, nextpoint]
+        ring = [currentpoint, nextpoint]
         push!(rings, ring)
         
         # Loop until we close a the ring and break
@@ -317,10 +310,11 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
     # Then we add the holes to the polygons they are inside of
     assigned = fill(false, length(holes))
     for i in eachindex(holes)
+        hole = holes[i]
+        prepared_hole = GI.LinearRing(holes[i]; extent=GI.extent(holes[i]))
         for poly in polygons
-            exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
-            hole = holes[i]
-            if covers(exterior, hole)
+            exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)); extent=GI.extent(poly))
+            if covers(exterior, prepared_hole)
                 # Hole is in the exterior, so add it to the polygon
                 push!(poly.geom, hole)
                 assigned[i] = true

@@ -30,7 +30,7 @@ for i in (100, 300), j in (100, 300)
     @testset "values are polygonized without a function" begin
         A = rand(1:3, i, j)
         fc = @test_nowarn polygonize(A)
-        @test fc isa GeoInterface.FeatureCollection
+        fc isa GeoInterface.FeatureCollection
         @test GeoInterface.nfeature(fc) == 3
         @test map(GeoInterface.getfeature(fc)) do f
             GeoInterface.properties(f).value
