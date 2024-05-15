@@ -2,10 +2,13 @@
 
 export polygonize
 
-#= 
+#=
 
 The methods in this file convert a raster image into a set of polygons, 
 by contour detection using a clockwise Moore neighborhood method.
+
+The resulting polygons are snapped to the boundaries of the cells of the input raster,
+so they will look different from traditional contours from a plotting package.
 
 The main entry point is the [`polygonize`](@ref) function.
 
@@ -38,14 +41,13 @@ which would provide two distinct polyogns with holes.
 ```@example polygonize
 polygons = polygonize(xs, ys, 0.8 .< zs .< 3.2)
 ```
-This returns a list of `GeometryBasics.Polygon`, which can be plotted immediately, 
-or wrapped directly in a `GeometryBasics.MultiPolygon`.  Let's see how these look:
+This returns a `GI.MultiPolygon`, which is directly plottable.  Let's see how these look:
 
 ```@example polygonize
 f, a, p = poly(polygons; label = "Polygonized polygons", axis = (; aspect = DataAspect()))
 ```
 
-Finally, let's plot the Makie contour lines on top, to see how well the polygonization worked:
+Finally, let's plot the Makie contour lines on top, to see how the polygonization compares:
 ```@example polygonize
 contour!(a, xs, ys, zs; labels = true, levels = [0.8, 3.2], label = "Contour lines")
 f
@@ -67,11 +69,12 @@ Polygonize an `AbstractMatrix` of values, currently to a single class of polygon
 Returns a `MultiPolygon` for `Bool` values and `f` return values, and
 a `FeatureCollection` of `Feature`s holding `MultiPolygon` for all other values.
 
+
 Function `f` should return either `true` or `false` or a transformation
 of values into simpler groups, especially useful for floating point arrays.
 
-If `xs` and `ys` are ranges, they are used as the pixel center points.
-If they are `Vector` of `Tuple` they are used as the lower and upper bounds of each pixel.
+If `xs` and `ys` are ranges, they are used as the pixel/cell center points.
+If they are `Vector` of `Tuple` they are used as the lower and upper bounds of each pixel/cell.
 
 # Keywords
 
