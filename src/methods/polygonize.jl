@@ -90,27 +90,41 @@ save("polygonize.png", p)
 
 using GeometryOps
 @time featurecollection = polygonize(rand(1:4, 1000) * (fill(1, 1000))')
-
 ```
 """
 polygonize(A::AbstractMatrix{Bool}; kw...) = polygonize(identity, A; kw...)
 polygonize(f::Base.Callable, A::AbstractMatrix; kw...) = polygonize(f, axes(A)..., A; kw...)
 polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...)
 polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix{Bool}; kw...) =
-    polygonize(identity, xs, ys, A)
-function polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix{<:Integer}; 
-    values=Base.union(A),
-    kw...
+    _polygonize(identity, xs, ys, A)
+function polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix; 
+    values=sort!(Base.union(A)), kw...
+)
+    _polygonize_featurecollection(identity, xs, ys, A; values, kw...) 
+end
+function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+    values=_default_values(f, A), kw...
+)
+    if isnothing(values)
+        _polygonize(f, xs, ys, A; kw...) 
+    else
+        _polygonize_featurecollection(f, xs, ys, A; kw...) 
+    end
+end
+
+function _polygonize_featurecollection(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+    values=_default_values(f, A), kw...
 )
     # Create one feature per value
     features = map(values) do value
-        multipolygon = polygonize(==(value), xs, ys, A)
+        multipolygon = _polygonize(x -> isequal(f(x), value), xs, ys, A; kw...)
         GI.Feature(multipolygon; properties=(; value))
     end 
 
     return GI.FeatureCollection(features)
 end
-function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+
+function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
     kw...
 )
     # Make vectors of pixel bounds
@@ -132,9 +146,18 @@ function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::A
     return polygonize(f, xvec, yvec, A; kw...)
 end
 
+function _default_values(f, A)
+    # Get union of f return values with resolved eltype
+    values = map(identity, sort!(Base.union(Iterators.map(f, A))))
+    # We ignore pure Bool
+    return eltype(values) == Bool ? nothing : collect(skipmissing(values))
+end
+
 function updateval(dict, key, val)
     if haskey(dict, key)
-        existingval = dict[key][1]
+        existingvals = dict[key]
+        existingval = existingvals[1]
+        @assert existingvals[2][1] == typemax(val[1])
         newval = (existingval, val)
         dict[key] = newval 
     else
@@ -150,12 +173,12 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
     edges = Dict{T,Tuple{T,T}}()
     rings = Vector{T}[]
 
-    @assert (length(xs), length(ys)) == size(A)
+    (length(xs), length(ys)) == size(A) || throw(ArgumentError("length of xs and ys must match the array size"))
 
     # First we collect all the edges around target pixels
     fi, fj = map(first, axes(A))
     li, lj = map(last, axes(A))
-    @inbounds for i in axes(A, 1), j in axes(A, 2)
+    for i in axes(A, 1), j in axes(A, 2)
         if f(A[i, j]) # This is a pixel inside a polygon
             # xs and ys hold pixel bounds
             x1, x2 = xs[i]
@@ -280,7 +303,7 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
     end
 
     # Separate exteriors from holes by winding direction
-    direction = last(last(xs)) - first(first(xs)) * last(last(ys)) - first(first(ys))
+    direction = (last(last(xs)) - first(first(xs))) * (last(last(ys)) - first(first(ys)))
     exterior_inds = if direction > 0 
         .!isclockwise.(linearrings)
     else
@@ -293,10 +316,9 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
 
     # Then we add the holes to the polygons they are inside of
     assigned = fill(false, length(holes))
-    for poly in polygons
-        exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
-        for i in eachindex(holes)
-            assigned[i] && continue
+    for i in eachindex(holes)
+        for poly in polygons
+            exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
             hole = holes[i]
             if covers(exterior, hole)
                 # Hole is in the exterior, so add it to the polygon
@@ -307,13 +329,8 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
         end
     end
 
-    # Add missing holes as polygons for now, to understand the error
-    holepolygons = map(view(holes, .!(assigned))) do lr
-        GI.Polygon([lr]; extent=GI.extent(lr))
-    end
-    append!(polygons, holepolygons)
     assigned_holes = count(assigned)
-    assigned_holes == length(holes) || @warn "Not all holes were assigned to polygons, $(length(holes) - assigned_holes) where missed from $assigned_holes holes and $(length(polygons)) polygons"
+    assigned_holes == length(holes) || @warn "Not all holes were assigned to polygons, $(length(holes) - assigned_holes) where missed from $(length(holes)) holes and $(length(polygons)) polygons"
 
     if isempty(polygons)
         # TODO: this really should return an emtpty MultiPolygon but
