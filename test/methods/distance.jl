@@ -27,7 +27,7 @@ mp1 = LG.MultiPolygon([p1, p2])
 
 c1 = LG.GeometryCollection([pt1, r1, p1])
 
-@test_all_implementations (pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8, pt9, pt10, pt11, mpt1, l1, r1, r2, r3, r4, r5, p1, p2, mp1, c1) begin
+@test_all_implementations (pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8, pt9, pt10, pt11, mpt1, l1, r1, r2, r3, r4, r5, p1, p2, mp1#=, c1 =#) begin
     # Point and Point
     
     # Distance from point to same point
@@ -106,7 +106,7 @@ c1 = LG.GeometryCollection([pt1, r1, p1])
     @test GO.distance(pt11, mp1) == LG.distance(pt11, mp1)
     @test GO.signed_distance(pt11, mp1) ≈
         -(min(LG.distance(pt11, r2), LG.distance(pt11, r3), LG.distance(pt11, r4), LG.distance(pt11, r5)))
-
-    # Point and Geometry Collection
-    @test GO.distance(pt1, c1) == LG.distance(pt1, c1)
 end
+
+# Point and Geometry Collection: convert doesn't work yet
+@test GO.distance(pt1, c1) == LG.distance(pt1, c1)

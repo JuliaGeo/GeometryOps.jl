@@ -11,9 +11,9 @@
 
     # 
     l2 = LG.LineString([[0.0, 0.0], [2.5, -2.5], [-5.0, -3.0], [-4.0, 6.0], [10.0, 10.0], [12.0, -14.56]])
-    c2, len2 = GO.centroid_and_length(l2)
     c2_from_LG = LG.centroid(l2)
-    @test_all_implementations "Spiral line string" c2 begin
+    @test_all_implementations "Spiral line string" l2 begin
+        c2, len2 = GO.centroid_and_length(l2)
         @test c2[1] ≈ GI.x(c2_from_LG) 
         @test c2[2] ≈ GI.y(c2_from_LG)
         @test len2 ≈ 59.3090856788928
@@ -24,10 +24,10 @@
 
     # Basic linear ring - note that this still uses weighting by length
     r1 = LG.LinearRing([[0.0, 0.0], [3456.0, 7894.0], [6291.0, 1954.0], [0.0, 0.0]])
-    c3 = GO.centroid(r1)
     c3_from_LG = LG.centroid(r1)
 
-    @test_all_implementations "Basic linear ring" c3 begin
+    @test_all_implementations "Basic linear ring" r1 begin
+        c3 = GO.centroid(r1)
         @test c3[1] ≈ GI.x(c3_from_LG) 
         @test c3[2] ≈ GI.y(c3_from_LG)
     end
