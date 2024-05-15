@@ -170,6 +170,8 @@ end
 function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
     minpoints=0,
 ) where T
+    # Extract the CRS of the array (if it is some kind of geo array / raster)
+    crs = GI.crs(A)
     # Define buffers for edges and rings
     edges = Dict{T,Tuple{T,T}}()
     rings = Vector{T}[]
@@ -300,7 +302,7 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
     # so we only calculate them once
     linearrings = map(rings) do ring
         extent = GI.extent(GI.LinearRing(ring))
-        GI.LinearRing(ring; extent)
+        GI.LinearRing(ring; extent, crs)
     end
 
     # Separate exteriors from holes by winding direction
@@ -312,16 +314,16 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
     end
     holes = linearrings[.!exterior_inds]
     polygons = map(view(linearrings, exterior_inds)) do lr
-        GI.Polygon([lr]; extent=GI.extent(lr))
+        GI.Polygon([lr]; extent=GI.extent(lr), crs)
     end
 
     # Then we add the holes to the polygons they are inside of
     assigned = fill(false, length(holes))
     for i in eachindex(holes)
         hole = holes[i]
-        prepared_hole = GI.LinearRing(holes[i]; extent=GI.extent(holes[i]))
+        prepared_hole = GI.LinearRing(holes[i]; extent=GI.extent(holes[i]), crs)
         for poly in polygons
-            exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)); extent=GI.extent(poly))
+            exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)); extent=GI.extent(poly), crs)
             if covers(exterior, prepared_hole)
                 # Hole is in the exterior, so add it to the polygon
                 push!(poly.geom, hole)
