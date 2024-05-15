@@ -113,11 +113,9 @@ last point are connected by a segment. Same with closed_curve.
     skip, returnval = _maybe_skip_disjoint_extents(line, curve;
         in_allow=(over_allow | cross_allow), kw...
     )
-    if skip 
-        return returnval
-    else
-        return _inner_line_curve_process(line, curve; over_allow, cross_allow, kw...)
-    end
+    skip && return returnval
+
+    return _inner_line_curve_process(line, curve; over_allow, cross_allow, kw...)
 end
 
 function _inner_line_curve_process(
@@ -261,11 +259,8 @@ last point are connected by a segment.
 =#
 @inline function _line_polygon_process(line, polygon; kw...)
     skip, returnval = _maybe_skip_disjoint_extents(line, polygon; kw...)
-    if skip 
-        return returnval
-    else
-        return _inner_line_polygon_process(line, polygon; kw...)
-    end
+    skip && return returnval
+    return _inner_line_polygon_process(line, polygon; kw...)
 end
 
 function _inner_line_polygon_process(
@@ -274,7 +269,6 @@ function _inner_line_polygon_process(
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
 )
-
     in_req_met = !in_require
     on_req_met = !on_require
     out_req_met = !out_require
@@ -340,11 +334,8 @@ Else, return false.
 =#
 @inline function _polygon_polygon_process(poly1, poly2; kw...)
     skip, returnval = _maybe_skip_disjoint_extents(poly1, poly2; kw...)
-    if skip 
-        return returnval
-    else
-        return _polygon_polygon_process(poly1, poly2; kw...)
-    end
+    skip && return returnval
+    return _inner_polygon_polygon_process(poly1, poly2; kw...)
 end
 
 function _inner_polygon_polygon_process(
@@ -352,11 +343,6 @@ function _inner_polygon_polygon_process(
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
 )
-    skip, returnval = _maybe_skip_disjoint_extents(poly1, poly2;
-        in_allow, on_allow, out_allow, 
-        in_require, on_require, out_require,
-    )
-    skip && return returnval
     in_req_met = !in_require
     on_req_met = !on_require
     out_req_met = !out_require
@@ -716,18 +702,19 @@ end
     in_require, on_require, out_require,
     kw...
 )
-    if (in_allow || in_require || on_allow || on_require)
-        # If we need line or interior and no exterior
-        if !(out_require || out_allow) && Extents.disjoint(GI.extent(a), GI.extent(b))
-            # Return false for disjoint geometries
-            return true, false
+    ext_disjoint = Extents.disjoint(GI.extent(a), GI.extent(b))
+    skip, returnval = if !ext_disjoint
+        # can't tell anything about this case
+        false, false
+    elseif out_allow # && ext_disjoint
+        if in_require || on_require
+            true, false
+        else
+            true, true
         end
-    else
-        # If we need no line or interior, but need exterior
-        if (out_require || out_allow) && Extents.disjoint(GI.extent(a), GI.extent(b))
-            # Return true for disjoint geometries
-            return true, true
-        end
+    else  # !out_allow && ext_disjoint
+        # points not allowed in exterior, but geoms are disjoint
+        true, false
     end
-    return false, false
+    return skip, returnval
 end

@@ -3,16 +3,22 @@
 export polygonize
 
 #=
-The methods in this file are able to convert a raster image into a set of polygons,
+
+The methods in this file convert a raster image into a set of polygons, 
 by contour detection using a clockwise Moore neighborhood method.
 
 The resulting polygons are snapped to the boundaries of the cells of the input raster,
 so they will look different from traditional contours from a plotting package.
 
+The main entry point is the [`polygonize`](@ref) function.
+
+```@docs
+polygonize
+```
+
 ## Example
 
 Here's a basic example, using the `Makie.peaks()` function.  First, let's investigate the nature of the function:
-
 ```@example polygonize
 using Makie, GeometryOps
 n = 49
@@ -60,17 +66,12 @@ The implementation follows:
 
 Polygonize an `AbstractMatrix` of values, currently to a single class of polygons.
 
-For `AbstractArray{Bool}` function `f` is not needed. 
+Returns a `MultiPolygon` for `Bool` values and `f` return values, and
+a `FeatureCollection` of `Feature`s holding `MultiPolygon` for all other values.
 
-For other matrix eltypes, function `f` should return `true` or `false` 
-based on the matrix values, translating to inside or outside the polygons.
-These will return a single `MultiPolygon` of the `true` values. 
 
-For `AbtractArray{<:Integer}`, a `multipolygon` is calculated
-for each value in the array (or passed in `values` keyword), 
-and these multipolygons and their associated values are returned
-as a `FeatureCollection`.  You can convert this into a DataFrame
-by calling `DataFrame(polygonize(...))`.
+Function `f` should return either `true` or `false` or a transformation
+of values into simpler groups, especially useful for floating point arrays.
 
 If `xs` and `ys` are ranges, they are used as the pixel/cell center points.
 If they are `Vector` of `Tuple` they are used as the lower and upper bounds of each pixel/cell.
@@ -78,38 +79,55 @@ If they are `Vector` of `Tuple` they are used as the lower and upper bounds of e
 # Keywords
 
 - `minpoints`: ignore polygons with less than `minpoints` points.
-- `values`: the values to turn into polygons for `Integer` arrays. 
-    By default these are `unique(A)`.
+- `values`: the values to turn into polygons. By default these are `union(A)`,
+    If function `f` is passed these refer to the return values of `f`, by
+    default `union(map(f, A)`. If values `Bool`, false is ignored and a single
+    `MultiPolygon` is returned rather than a `FeatureCollection`.
 
 # Example
 
 ```julia
-using GeometryOps
-multipolygon = polygonize(>(0.6), rand(100, 100); minpoints=3)
+using GeometryOps, GLMakie, Shapefile
+A = rand(100, 100)
+multipolygon = polygonize(>(0.5), A);
 
-using GeometryOps
-featurecollection = polygonize(rand(1:4, 100) * (fill(1, 100))')
-
+p = Makie.plot(multipolygon.geom[1])
+Makie.plot!.(multipolygon.geom[2:end])
 ```
 """
 polygonize(A::AbstractMatrix{Bool}; kw...) = polygonize(identity, A; kw...)
 polygonize(f::Base.Callable, A::AbstractMatrix; kw...) = polygonize(f, axes(A)..., A; kw...)
 polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...)
 polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix{Bool}; kw...) =
-    polygonize(identity, xs, ys, A)
-function polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix{<:Integer}; 
-    values=Base.union(A),
-    kw...
+    _polygonize(identity, xs, ys, A)
+function polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix; 
+    values=sort!(Base.union(A)), kw...
+)
+    _polygonize_featurecollection(identity, xs, ys, A; values, kw...) 
+end
+function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+    values=_default_values(f, A), kw...
+)
+    if isnothing(values)
+        _polygonize(f, xs, ys, A; kw...) 
+    else
+        _polygonize_featurecollection(f, xs, ys, A; kw...) 
+    end
+end
+
+function _polygonize_featurecollection(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+    values=_default_values(f, A), kw...
 )
     # Create one feature per value
     features = map(values) do value
-        multipolygon = polygonize(==(value), xs, ys, A)
+        multipolygon = _polygonize(x -> isequal(f(x), value), xs, ys, A; kw...)
         GI.Feature(multipolygon; properties=(; value))
     end 
 
     return GI.FeatureCollection(features)
 end
-function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+
+function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
     kw...
 )
     # Make vectors of pixel bounds
@@ -128,34 +146,41 @@ function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::A
     for i in eachindex(yvec)
         yvec[i] = ybounds[i], ybounds[i+1]
     end
-    return polygonize(f, xvec, yvec, A; kw...)
+    return _polygonize(f, xvec, yvec, A; kw...)
 end
 
-function updateval(dict, key, val)
+function _default_values(f, A)
+    # Get union of f return values with resolved eltype
+    values = map(identity, sort!(Base.union(Iterators.map(f, A))))
+    # We ignore pure Bool
+    return eltype(values) == Bool ? nothing : collect(skipmissing(values))
+end
+
+@inline function updateval(dict, key, val)
     if haskey(dict, key)
-        existingval = dict[key][1][1]
-        newval = ((existingval, val), (true, true))
+        existingvals = dict[key]
+        existingval = existingvals[1]
+        newval = (existingval, val)
         dict[key] = newval 
     else
-        newval = ((val, val), (true, false))
+        newval = (val, map(typemax, val))
         dict[key] = newval 
     end
 end
 
-function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
+function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
     minpoints=0,
 ) where T
     # Define buffers for edges and rings
-    edges = Dict{T,Tuple{Tuple{T,T},Tuple{Bool,Bool}}}()
+    edges = Dict{T,Tuple{T,T}}()
     rings = Vector{T}[]
 
-    @assert (length(xs), length(ys)) == size(A)
-
+    (length(xs), length(ys)) == size(A) || throw(ArgumentError("length of xs and ys must match the array size"))
 
     # First we collect all the edges around target pixels
     fi, fj = map(first, axes(A))
     li, lj = map(last, axes(A))
-    @inbounds for i in axes(A, 1), j in axes(A, 2)
+    for i in axes(A, 1), j in axes(A, 2)
         if f(A[i, j]) # This is a pixel inside a polygon
             # xs and ys hold pixel bounds
             x1, x2 = xs[i]
@@ -163,10 +188,10 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
 
             # We check the Von Neumann neighborhood to
             # decide what edges are needed, if any.
-            (j == fi || !f(A[i, j-1])) && updateval(edges, (x1, y1), (x2, y1))
-            (i == fj || !f(A[i-1, j])) && updateval(edges, (x1, y2), (x1, y1))
-            (j == lj || !f(A[i, j+1])) && updateval(edges, (x2, y2), (x1, y2))
-            (i == li || !f(A[i+1, j])) && updateval(edges, (x2, y1), (x2, y2))
+            (j == fi || !f(A[i, j-1])) && updateval(edges, (x1, y1), (x2, y1)) # S
+            (i == fj || !f(A[i-1, j])) && updateval(edges, (x1, y2), (x1, y1)) # W
+            (j == lj || !f(A[i, j+1])) && updateval(edges, (x2, y2), (x1, y2)) # N
+            (i == li || !f(A[i+1, j])) && updateval(edges, (x2, y1), (x2, y2)) # E
         end
     end
 
@@ -186,7 +211,8 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
         while nkeys > 0
             # Take the first edge from the array
             firstpoint::T = edgekeys[nkeys]
-            nextpoints, pointstatus = edges[firstpoint]
+            nextpoints = edges[firstpoint]
+            pointstatus = map(!=(typemax(first(firstpoint))) ∘ first, nextpoints)
             if any(pointstatus)
                 found = true
                 break
@@ -202,75 +228,72 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
         # and take one of them, then update the status
         if pointstatus[2]
             nextpoint = nextpoints[2]
-            edges[firstpoint] = ((nextpoints[1], map(zero, nextpoint)), (true, false))
+            edges[firstpoint] = (nextpoints[1], map(typemax, nextpoint))
         else
             nkeys -= 1
             nextpoint = nextpoints[1]
-            edges[firstpoint] = ((map(zero, nextpoint), map(zero, nextpoint)), (false, false))
+            edges[firstpoint] = (map(typemax, nextpoint), map(typemax, nextpoint))
         end
+
+        # Start a new ring
         currentpoint = firstpoint
-        ring = T[currentpoint, nextpoint]
+        ring = [currentpoint, nextpoint]
         push!(rings, ring)
-        # println()
-        # @show currentpoint, nextpoint, pointstatus
         
         # Loop until we close a the ring and break
         while true
             # Find an edge that matches the next point
-            (c1, c2), pointstatus = edges[nextpoint]
-            # @show c1, c2, pointstatus
+            (c1, c2) = possiblepoints = edges[nextpoint]
+            pointstatus = map(!=(typemax(first(firstpoint))) ∘ first, possiblepoints)
             # When there are two possible edges, 
             # choose the edge that has turned the furthest right
             if pointstatus[2]
                 selectedpoint, remainingpoint = if currentpoint[1] == nextpoint[1] # vertical
                     wasincreasing = nextpoint[2] > currentpoint[2]
                     firstisstraight = nextpoint[1] == c1[1]
-                    firstisleft = nextpoint[1] < c1[1]
+                    firstisleft = nextpoint[1] > c1[1]
                     if firstisstraight
                         secondisleft = nextpoint[1] > c2[1]
-                        xor(wasincreasing, secondisleft) ? (c1, c2) : (c2, c1)
+                        if secondisleft 
+                            wasincreasing ? (c2, c1) : (c1, c2)
+                        else
+                            wasincreasing ? (c1, c2) : (c2, c1) 
+                        end
                     elseif firstisleft
-                        wasincreasing ? (c2, c1) : (c1, c2)
-                    else # firstisright
                         wasincreasing ? (c1, c2) : (c2, c1)
+                    else # firstisright
+                        wasincreasing ? (c2, c1) : (c1, c2)
                     end
                 else # horizontal
                     wasincreasing = nextpoint[1] > currentpoint[1]
                     firstisstraight = nextpoint[2] == c1[2]
-                    firstisleft = nextpoint[2] < c1[2]
+                    firstisleft = nextpoint[2] > c1[2]
                     if firstisstraight
                         secondisleft = nextpoint[2] > c2[2]
-                        xor(wasincreasing, secondisleft) ? (c1, c2) : (c2, c1)
+                        if secondisleft 
+                            wasincreasing ? (c1, c2) : (c2, c1) 
+                        else
+                            wasincreasing ? (c2, c1) : (c1, c2)
+                        end
                     elseif firstisleft
                         wasincreasing ? (c2, c1) : (c1, c2)
                     else # firstisright
                         wasincreasing ? (c1, c2) : (c2, c1)
                     end
                 end
-                edges[nextpoint] = ((remainingpoint, map(zero, remainingpoint)), (true, false))
+
+                # Update edges
+                edges[nextpoint] = (remainingpoint, map(typemax, remainingpoint))
                 currentpoint, nextpoint = nextpoint, selectedpoint
             else
-                edges[nextpoint] = ((map(zero, c1), map(zero, c1)), (false, false))
+                # Update edges
+                edges[nextpoint] = (map(typemax, c1), map(typemax, c1))
                 currentpoint, nextpoint = nextpoint, c1
                 # Write empty points, they are cleaned up later
             end
-            # @show currentpoint, nextpoint, pointstatus
-            # Close the ring if we get to the start
-            if nextpoint == firstpoint
-                push!(ring, nextpoint)
-                break
-            else
-                i = findfirst(==(nextpoint), ring)
-                if !isnothing(i)
-                    # We found a touching point in the middle, 
-                    # so we need to split the ring into two rings
-                    splitring = ring[i:lastindex(ring)]
-                    deleteat!(ring, i:lastindex(ring))
-                    push!(splitring, nextpoint)
-                    push!(rings, splitring)
-                end
-                push!(ring, nextpoint)
-            end
+            push!(ring, nextpoint)
+            # If the ring is closed, start a new one
+            nextpoint == firstpoint && break
         end
     end
 
@@ -282,7 +305,7 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
     end
 
     # Separate exteriors from holes by winding direction
-    direction = last(last(xs)) - first(first(xs)) * last(last(ys)) - first(first(ys))
+    direction = (last(last(xs)) - first(first(xs))) * (last(last(ys)) - first(first(ys)))
     exterior_inds = if direction > 0 
         .!isclockwise.(linearrings)
     else
@@ -294,30 +317,23 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
     end
 
     # Then we add the holes to the polygons they are inside of
-    unused = fill(true, length(holes))
-    foundholes = 0
-    for poly in polygons
-        exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
-        for i in eachindex(holes)
-            unused[i] || continue
-            hole = holes[i]
-            if covers(poly, hole)
-                foundholes += 1
-                # Hole is in the exterior, so add it to the ring list
+    assigned = fill(false, length(holes))
+    for i in eachindex(holes)
+        hole = holes[i]
+        prepared_hole = GI.LinearRing(holes[i]; extent=GI.extent(holes[i]))
+        for poly in polygons
+            exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)); extent=GI.extent(poly))
+            if covers(exterior, prepared_hole)
+                # Hole is in the exterior, so add it to the polygon
                 push!(poly.geom, hole)
-                # remove i
-                unused[i] = false
+                assigned[i] = true
                 break
             end
         end
     end
-    @show foundholes length(holes) length(polygons)
 
-    # holepolygons = map(view(holes, unused)) do lr
-    #     GI.Polygon([lr]; extent=GI.extent(lr))
-    # end
-    # append!(polygons, holepolygons) 
-    # @assert foundholes == length(holes)
+    assigned_holes = count(assigned)
+    assigned_holes == length(holes) || @warn "Not all holes were assigned to polygons, $(length(holes) - assigned_holes) where missed from $(length(holes)) holes and $(length(polygons)) polygons"
 
     if isempty(polygons)
         # TODO: this really should return an emtpty MultiPolygon but
