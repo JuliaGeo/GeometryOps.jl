@@ -80,11 +80,13 @@ If they are `Vector` of `Tuple` they are used as the lower and upper bounds of e
 # Example
 
 ```julia
-using GeometryOps, Makie
+using GeometryOps, GLMakie, Shapefile
 A = rand(100, 100)
-multipolygon = polygonize(>(0.7), A)
-Makie.heatmap(A .> 0.7)
-Makie.plot!(multipolygon)
+multipolygon = polygonize(>(0.5), A);
+# Makie.heatmap(A .> 0.5)
+p = Makie.plot(multipolygon.geom[1])
+Makie.plot!.(multipolygon.geom[2:end])
+save("polygonize.png", p)
 
 using GeometryOps
 @time featurecollection = polygonize(rand(1:4, 1000) * (fill(1, 1000))')
@@ -186,7 +188,6 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
             firstpoint::T = edgekeys[nkeys]
             nextpoints = edges[firstpoint]
             pointstatus = map(!=(typemax(first(firstpoint))) ∘ first, nextpoints)
-            # @show nextpoints pointstatus
             if any(pointstatus)
                 found = true
                 break
@@ -208,18 +209,17 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
             nextpoint = nextpoints[1]
             edges[firstpoint] = (map(typemax, nextpoint), map(typemax, nextpoint))
         end
+
+        # Start a new ring
         currentpoint = firstpoint
         ring = T[currentpoint, nextpoint]
         push!(rings, ring)
-        # @show currentpoint, nextpoint, pointstatus
         
         # Loop until we close a the ring and break
         while true
             # Find an edge that matches the next point
             (c1, c2) = possiblepoints = edges[nextpoint]
             pointstatus = map(!=(typemax(first(firstpoint))) ∘ first, possiblepoints)
-            # @show possiblepoints pointstatus
-            # @show c1, c2, pointstatus
             # When there are two possible edges, 
             # choose the edge that has turned the furthest right
             if pointstatus[2]
@@ -256,18 +256,19 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
                         wasincreasing ? (c1, c2) : (c2, c1)
                     end
                 end
+
+                # Update edges
                 edges[nextpoint] = (remainingpoint, map(typemax, remainingpoint))
                 currentpoint, nextpoint = nextpoint, selectedpoint
             else
+                # Update edges
                 edges[nextpoint] = (map(typemax, c1), map(typemax, c1))
                 currentpoint, nextpoint = nextpoint, c1
                 # Write empty points, they are cleaned up later
             end
-            # @show currentpoint, nextpoint, pointstatus
             push!(ring, nextpoint)
-            if nextpoint == firstpoint # Close the ring if we get to the start
-                break
-            end
+            # If the ring is closed, start a new one
+            nextpoint == firstpoint && break
         end
     end
 
@@ -280,7 +281,7 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
 
     # Separate exteriors from holes by winding direction
     direction = last(last(xs)) - first(first(xs)) * last(last(ys)) - first(first(ys))
-    exterior_inds = if direction < 0 
+    exterior_inds = if direction > 0 
         .!isclockwise.(linearrings)
     else
         isclockwise.(linearrings)
@@ -291,32 +292,28 @@ function polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstract
     end
 
     # Then we add the holes to the polygons they are inside of
-    unused = fill(true, length(holes))
-    foundholes = 0
-    @show length(holes) length(polygons)
+    assigned = fill(false, length(holes))
     for poly in polygons
         exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)))
         for i in eachindex(holes)
-            unused[i] || continue
+            assigned[i] && continue
             hole = holes[i]
-            if covers(poly, hole)
-                foundholes += 1
-                # Hole is in the exterior, so add it to the ring list
+            if covers(exterior, hole)
+                # Hole is in the exterior, so add it to the polygon
                 push!(poly.geom, hole)
-                # remove i
-                unused[i] = false
+                assigned[i] = true
                 break
             end
         end
     end
-    @show foundholes
 
     # Add missing holes as polygons for now, to understand the error
-    # holepolygons = map(view(holes, unused)) do lr
-    #     GI.Polygon([lr]; extent=GI.extent(lr))
-    # end
-    # append!(polygons, holepolygons) 
-    # @assert foundholes == length(holes)
+    holepolygons = map(view(holes, .!(assigned))) do lr
+        GI.Polygon([lr]; extent=GI.extent(lr))
+    end
+    append!(polygons, holepolygons)
+    assigned_holes = count(assigned)
+    assigned_holes == length(holes) || @warn "Not all holes were assigned to polygons, $(length(holes) - assigned_holes) where missed from $assigned_holes holes and $(length(polygons)) polygons"
 
     if isempty(polygons)
         # TODO: this really should return an emtpty MultiPolygon but
