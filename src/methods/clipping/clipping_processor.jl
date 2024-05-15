@@ -54,8 +54,8 @@ function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_boun
     _classify_crossing!(T, a_list, b_list)
 
     # Flag the entry and exits
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, Base.Fix2(delay_bounce_f, true); exact)
-    _flag_ent_exit!(GI.LinearRingTrait(), poly_a, b_list, delay_cross_f, Base.Fix2(delay_bounce_f, false); exact)
+    _flag_ent_exit!(T, GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, Base.Fix2(delay_bounce_f, true); exact)
+    _flag_ent_exit!(T, GI.LinearRingTrait(), poly_a, b_list, delay_cross_f, Base.Fix2(delay_bounce_f, false); exact)
 
     # Set node indices and filter a_idx_list to just crossing points
     _index_crossing_intrs!(a_list, b_list, a_idx_list)
@@ -357,10 +357,26 @@ function _signed_area_triangle(P, Q, R)
 end
 
 # True if the edge with pt as the starting endpoint is not shared between polygons
-_next_edge_off(pt) = !pt.inter || (pt.endpoint == end_chain) || (pt.crossing && pt.endpoint == not_endpoint)
+function _pt_off_edge_status(::Type{T}, pt_list, poly, npts; exact) where T
+    start_idx, is_non_intr_pt = findfirst(_is_not_intr, pt_list), true
+    if isnothing(start_idx)
+        start_idx, is_non_intr_pt = findfirst(_next_edge_off, pt_list), false
+        isnothing(start_idx) && return (start_idx, false)
+    end
+    next_idx = start_idx < npts ? (start_idx + 1) : 1
+    start_pt = if is_non_intr_pt
+        pt_list[start_idx].point
+    else
+        (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
+    end
+    start_status = !_point_filled_curve_orientation(start_pt, poly; in = true, on = false, out = false, exact)
+    return next_idx, start_status
+end
+_is_not_intr(pt) = !pt.inter
+_next_edge_off(pt) = (pt.endpoint == end_chain) || (pt.crossing && pt.endpoint == not_endpoint)
 
 #=
-    _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f; exact)
+    _flag_ent_exit!(::Type{T}, ::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f; exact)
 
 This function flags all the intersection points as either an 'entry' or 'exit' point in
 relation to the given polygon. For non-delayed crossings we simply alternate the enter/exit
@@ -375,16 +391,12 @@ bounce will be the same.
 
 Used for clipping polygons by other polygons.
 =#
-function _flag_ent_exit!(::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f; exact)
-    # Find starting index if there is one
-    start_idx = findfirst(_next_edge_off, pt_list)
-    isnothing(start_idx) && return
-    # Determine if non-overlapping line midpoint is inside or outside of polygon
+function _flag_ent_exit!(::Type{T}, ::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f; exact) where T
     npts = length(pt_list)
-    next_idx = start_idx < npts ? (start_idx + 1) : 1
-    start_val = (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
-    start_idx = next_idx - 1  # reset for iterating below
-    status = !_point_filled_curve_orientation(start_val, poly; in = true, on = false, out = false, exact)
+    # Find starting index if there is one
+    next_idx, status = _pt_off_edge_status(T, pt_list, poly, npts; exact)
+    isnothing(next_idx) && return
+    start_idx = next_idx - 1 
     # Loop over points and mark entry and exit status
     start_chain_idx = 0
     for ii in Iterators.flatten((next_idx:npts, 1:start_idx))
