@@ -401,19 +401,19 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     β_max = α_max
     if Δax != 0
         α_min = max(α_min,  2eps(a1x) / Δax)
-        α_max = max(α_max, one(T) - eps(a2x) / Δax)
+        α_max = min(α_max, one(T) - eps(a2x) / Δax)
     end
     if Δay != 0
         α_min = max(α_min,  2eps(a1y) / Δay)
-        α_max = max(α_max, one(T) - eps(a2y) / Δay)
+        α_max = min(α_max, one(T) - eps(a2y) / Δay)
     end
     if Δbx != 0
         β_min = max(β_min,  2eps(b1x) / Δbx)
-        β_max = max(β_max, one(T) - eps(b2x) / Δbx)
+        β_max = min(β_max, one(T) - eps(b2x) / Δbx)
     end
     if Δby != 0
         β_min = max(β_min,  2eps(b1y) / Δby)
-        β_max = max(β_max, one(T) - eps(b2y) / Δby)
+        β_max = min(β_max, one(T) - eps(b2y) / Δby)
     end
     α = clamp(α, α_min, α_max)
     β = clamp(β, β_min, β_max)
