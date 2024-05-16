@@ -86,12 +86,9 @@ If they are `Vector` of `Tuple` they are used as the lower and upper bounds of e
 # Example
 
 ```julia
-using GeometryOps, GLMakie, Shapefile
+using GeometryOps
 A = rand(100, 100)
 multipolygon = polygonize(>(0.5), A);
-
-p = Makie.plot(multipolygon.geom[1])
-Makie.plot!.(multipolygon.geom[2:end])
 ```
 """
 polygonize(A::AbstractMatrix{Bool}; kw...) = polygonize(identity, A; kw...)
@@ -113,20 +110,6 @@ function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::A
         _polygonize_featurecollection(f, xs, ys, A; kw...) 
     end
 end
-
-function _polygonize_featurecollection(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
-    values=_default_values(f, A), kw...
-)
-    crs = GI.crs(A)
-    # Create one feature per value
-    features = map(values) do value
-        multipolygon = _polygonize(x -> isequal(f(x), value), xs, ys, A; kw...)
-        GI.Feature(multipolygon; properties=(; value), extent = GI.extent(multipolygon), crs)
-    end 
-
-    return GI.FeatureCollection(features; extent = mapreduce(GI.extent, Extents.union, features), crs)
-end
-
 function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
     kw...
 )
@@ -148,58 +131,21 @@ function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::
     end
     return _polygonize(f, xvec, yvec, A; kw...)
 end
-
-function _default_values(f, A)
-    # Get union of f return values with resolved eltype
-    values = map(identity, sort!(Base.union(Iterators.map(f, A))))
-    # We ignore pure Bool
-    return eltype(values) == Bool ? nothing : collect(skipmissing(values))
-end
-
-@inline function updateval(dict, key, val)
-    if haskey(dict, key)
-        existingvals = dict[key]
-        existingval = existingvals[1]
-        newval = (existingval, val)
-        dict[key] = newval 
-    else
-        newval = (val, map(typemax, val))
-        dict[key] = newval 
-    end
-end
-
 function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
     minpoints=0,
-) where T
+) where T<:Tuple
+    (length(xs), length(ys)) == size(A) || throw(ArgumentError("length of xs and ys must match the array size"))
+
     # Extract the CRS of the array (if it is some kind of geo array / raster)
     crs = GI.crs(A)
     # Define buffers for edges and rings
-    edges = Dict{T,Tuple{T,T}}()
     rings = Vector{T}[]
 
     strait = true
     turning = false
 
-    (length(xs), length(ys)) == size(A) || throw(ArgumentError("length of xs and ys must match the array size"))
-
-    # First we collect all the edges around target pixels
-    fi, fj = map(first, axes(A))
-    li, lj = map(last, axes(A))
-    for i in axes(A, 1), j in axes(A, 2)
-        if f(A[i, j]) # This is a pixel inside a polygon
-            # xs and ys hold pixel bounds
-            x1, x2 = xs[i]
-            y1, y2 = ys[j]
-
-            # We check the Von Neumann neighborhood to
-            # decide what edges are needed, if any.
-            (j == fi || !f(A[i, j-1])) && updateval(edges, (x1, y1), (x2, y1)) # S
-            (i == fj || !f(A[i-1, j])) && updateval(edges, (x1, y2), (x1, y1)) # W
-            (j == lj || !f(A[i, j+1])) && updateval(edges, (x2, y2), (x1, y2)) # N
-            (i == li || !f(A[i+1, j])) && updateval(edges, (x2, y1), (x2, y2)) # E
-        end
-    end
-
+    # Get edges from the array A
+    edges = _pixel_edges(f, xs, ys, A)
     # Keep dict keys separately in a vector for performance
     edgekeys = collect(keys(edges))
     # We don't delete keys we just reduce length with nkeys
@@ -331,7 +277,7 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
                 edges[nextnode] = (map(typemax, c1), map(typemax, c1))
                 # Check if we are on a straight line
                 straightline = currentnode[1] == nextnode[1] == c1[1] || 
-                              currentnode[2] == nextnode[2] == c1[2]
+                               currentnode[2] == nextnode[2] == c1[2]
             end
 
             # Update the current and next nodes with the next and selected nodes
@@ -397,4 +343,58 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
         return GI.MultiPolygon(polygons; crs, extent = mapreduce(GI.extent, Extents.union, polygons))
     end
 end
+
+function _polygonize_featurecollection(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+    values=_default_values(f, A), kw...
+)
+    crs = GI.crs(A)
+    # Create one feature per value
+    features = map(values) do value
+        multipolygon = _polygonize(x -> isequal(f(x), value), xs, ys, A; kw...)
+        GI.Feature(multipolygon; properties=(; value), extent = GI.extent(multipolygon), crs)
+    end 
+
+    return GI.FeatureCollection(features; extent = mapreduce(GI.extent, Extents.union, features), crs)
+end
+
+function _default_values(f, A)
+    # Get union of f return values with resolved eltype
+    values = map(identity, sort!(Base.union(Iterators.map(f, A))))
+    # We ignore pure Bool
+    return eltype(values) == Bool ? nothing : collect(skipmissing(values))
+end
+
+function update_edge!(dict, key, node)
+    newnodes = (node, map(typemax, node))
+    # Get or write in one go, to skip a hash lookup
+    existingnodes = get!(() -> newnodes, dict, key)
+    # If we actually fetched an existing node, update it
+    if existingnodes[1] != node
+        dict[key] = (existingnodes[1], node)
+    end
+end
+
+function _pixel_edges(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A) where T<:Tuple
+    edges = Dict{T,Tuple{T,T}}()
+    # First we collect all the edges around target pixels
+    fi, fj = map(first, axes(A))
+    li, lj = map(last, axes(A))
+    for j in axes(A, 2)
+        y1, y2 = ys[j]
+        for i in axes(A, 1) 
+            if f(A[i, j]) # This is a pixel inside a polygon
+                # xs and ys hold pixel bounds
+                x1, x2 = xs[i]
+                # We check the Von Neumann neighborhood to
+                # decide what edges are needed, if any.
+                (j == fi || !f(A[i, j-1])) && update_edge!(edges, (x1, y1), (x2, y1)) # S
+                (i == fj || !f(A[i-1, j])) && update_edge!(edges, (x1, y2), (x1, y1)) # W
+                (j == lj || !f(A[i, j+1])) && update_edge!(edges, (x2, y2), (x1, y2)) # N
+                (i == li || !f(A[i+1, j])) && update_edge!(edges, (x2, y1), (x2, y2)) # E
+            end
+        end
+    end
+    return edges
+end
+
 
