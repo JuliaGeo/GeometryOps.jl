@@ -14,7 +14,7 @@ poly = GI.Polygon([lr1, lr2])
 
 @testset "apply" begin
 
-    @test_all_integrations "simple flip to tuple" poly begin
+    @test_all_implementations "simple flip to tuple" poly begin
         flipped_poly = GO.apply(GI.PointTrait, poly) do p
             (GI.y(p), GI.x(p))
         end
@@ -65,7 +65,7 @@ end
 
 
 
-@test_all_integrations "unwrap" poly begin
+@test_all_implementations "unwrap" poly begin
     flipped_vectors = GO.unwrap(GI.PointTrait, poly) do p
         (GI.y(p), GI.x(p))
     end
@@ -73,7 +73,7 @@ end
     @test flipped_vectors == [[(2, 1), (4, 3), (6, 5), (2, 1)], [(4, 3), (6, 5), (7, 6), (4, 3)]]
 end
 
-@test_all_integrations "flatten" poly begin
+@test_all_implementations "flatten" poly begin
     very_wrapped = [[GI.FeatureCollection([GI.Feature(poly; properties=(;))])]]
     @test collect(GO.flatten(GI.PointTrait, very_wrapped)) == vcat(pv1, pv2)
     @test collect(GO.flatten(GI.LinearRingTrait, [poly])) == [lr1, lr2]
@@ -81,7 +81,7 @@ end
     @test collect(GO.flatten(GI.x, GI.PointTrait, very_wrapped)) == first.(vcat(pv1, pv2))
 end
 
-# TODO test_all_integrations
+# TODO test_all_implementations
 @testset "reconstruct" begin
     revlr1 =  GI.LinearRing(reverse(pv2))
     revlr2 = GI.LinearRing(reverse(pv1))
