@@ -107,7 +107,18 @@ Else, return false.
 If closed_line is true, line is treated as a closed line where the first and
 last point are connected by a segment. Same with closed_curve.
 =#
-function _line_curve_process(
+@inline function _line_curve_process(line, curve; 
+    over_allow, cross_allow, kw...
+)
+    skip, returnval = _maybe_skip_disjoint_extents(line, curve;
+        in_allow=(over_allow | cross_allow), kw...
+    )
+    skip && return returnval
+
+    return _inner_line_curve_process(line, curve; over_allow, cross_allow, kw...)
+end
+
+function _inner_line_curve_process(
     line, curve;
     over_allow, cross_allow, on_allow, out_allow,
     in_require, on_require, out_require,
@@ -246,11 +257,17 @@ Else, return false.
 If closed_line is true, line is treated as a closed line where the first and
 last point are connected by a segment.
 =#
-function _line_polygon_process(
+@inline function _line_polygon_process(line, polygon; kw...)
+    skip, returnval = _maybe_skip_disjoint_extents(line, polygon; kw...)
+    skip && return returnval
+    return _inner_line_polygon_process(line, polygon; kw...)
+end
+
+function _inner_line_polygon_process(
     line, polygon;
+    closed_line=false,
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
-    closed_line = false,
 )
     in_req_met = !in_require
     on_req_met = !on_require
@@ -315,7 +332,13 @@ If out_require is true, the first polygon must have at least one interior point
 If the point is in an "allowed" location and meets all requirments, return true.
 Else, return false.
 =#
-function _polygon_polygon_process(
+@inline function _polygon_polygon_process(poly1, poly2; kw...)
+    skip, returnval = _maybe_skip_disjoint_extents(poly1, poly2; kw...)
+    skip && return returnval
+    return _inner_polygon_polygon_process(poly1, poly2; kw...)
+end
+
+function _inner_polygon_polygon_process(
     poly1, poly2;
     in_allow, on_allow, out_allow,
     in_require, on_require, out_require,
@@ -641,6 +664,7 @@ function _line_polygon_interactions(
     line, polygon;
     closed_line = false,
 )
+
     in_poly, on_poly, out_poly = _line_filled_curve_interactions(
         line, GI.getexterior(polygon);
         closed_line = closed_line,
@@ -669,4 +693,28 @@ end
 function _point_in_extent(p, extent::Extents.Extent)
     (x1, x2), (y1, y2) = extent.X, extent.Y
     return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
+end
+
+# Disjoint extent optimisation: skip work based on geom extent intersection
+# returns Tuple{Bool, Bool} for (skip, returnval)
+@inline function _maybe_skip_disjoint_extents(a, b;
+    in_allow, on_allow, out_allow, 
+    in_require, on_require, out_require,
+    kw...
+)
+    ext_disjoint = Extents.disjoint(GI.extent(a), GI.extent(b))
+    skip, returnval = if !ext_disjoint
+        # can't tell anything about this case
+        false, false
+    elseif out_allow # && ext_disjoint
+        if in_require || on_require
+            true, false
+        else
+            true, true
+        end
+    else  # !out_allow && ext_disjoint
+        # points not allowed in exterior, but geoms are disjoint
+        true, false
+    end
+    return skip, returnval
 end
