@@ -10,7 +10,7 @@ import GeoInterface as GI
     mp = GI.MultiPolygon([p, p, p])
     mls = GI.MultiLineString([ls, ls, ls])
 
-    @test_all_integrations (ls, lr, p, mp, msl) begin
+    @test_all_implementations (ls, lr, p, mp, msl) begin
 
         @testset "LinearSegments" begin
 
@@ -53,7 +53,7 @@ end
 
 @testset "LinearSegments" begin
     lr = GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
-    @test_all_integrations lr begin
+    @test_all_implementations lr begin
         ct = GO.centroid(lr)
         ar = GO.area(lr)
         for max_distance in exp10.(LinRange(log10(0.01), log10(1), 10))
@@ -66,7 +66,7 @@ end
 
 @testset "GeodesicSegments" begin
     lr = GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
-    @test_all_integrations lr begin
+    @test_all_implementations lr begin
         for max_distance in exp10.(LinRange(log10(0.01), log10(1), 10)) .* 900
             @test_nowarn segmentized = GO.segmentize(GO.GeodesicSegments(; max_distance), lr)
         end

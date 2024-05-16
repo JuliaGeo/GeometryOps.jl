@@ -202,9 +202,11 @@ end
 # Test clipping functions and print error message if tests fail
 function test_clipping(GO_f, LG_f, f_name)
     for (p1, p2, sg1, sg2, sdesc) in test_pairs
-        pass_test = compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
-        @test pass_test
-        !pass_test && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")
+        @test_all_implementations (p1, p2) begin
+            pass_test = compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
+            @test pass_test
+            !pass_test && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")
+        end
     end
     return
 end

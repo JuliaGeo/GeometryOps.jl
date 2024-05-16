@@ -10,7 +10,7 @@ datadir = realpath(joinpath(dirname(pathof(GO)), "../test/data"))
     fc2 = GeoJSON.read(joinpath(datadir, "simplify2.geojson"))
     fcs = [fc for i in 1:100]
 
-    # TODO: @test_all_integrations doesn't handle feature collections yet
+    # TODO: @test_all_implementations doesn't handle feature collections yet
     for T in (GO.RadialDistance, GO.VisvalingamWhyatt)
         @test length(collect(GO.flatten(GI.PointTrait, GO.simplify(T(number=10), fc)))) == 10
         @test length(collect(GO.flatten(GI.PointTrait, GO.simplify(T(ratio=0.5), fc)))) == 39 # Half of 78
@@ -25,7 +25,7 @@ end
         poly = LG.Polygon(c)
         lg_vals = GI.coordinates(LG.simplify(poly, 100.0))[1]
         reduced_npoints = length(lg_vals)
-        @test_all_integrations "Polygon coords match LibGEOS simplify" poly begin
+        @test_all_implementations "Polygon coords match LibGEOS simplify" poly begin
             @test all(GI.coordinates(GO.simplify(poly; tol = 100.0))[1] .== lg_vals)
             @test all(GI.coordinates(GO.simplify(poly; number = reduced_npoints))[1] .== lg_vals)
             @test all(GI.coordinates(GO.simplify(poly; ratio = (reduced_npoints/npoints)))[1] .== lg_vals)
@@ -35,7 +35,7 @@ end
     c = poly_coords[1]
     linestring = LG.LineString(c[1])
     lg_vals = GI.coordinates(LG.simplify(linestring, 100.0))
-    @test_all_integrations "LineString coords match LibGEOS simplify" linestring begin
+    @test_all_implementations "LineString coords match LibGEOS simplify" linestring begin
         @test all(GI.coordinates(GO.simplify(linestring; tol = 100.0)) .== lg_vals)
     end
 end

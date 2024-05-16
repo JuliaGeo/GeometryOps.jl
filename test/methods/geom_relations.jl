@@ -159,7 +159,7 @@ test_pairs = [
 
 function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
     for (g1, g2, sg1, sg2, sdesc) in test_pairs
-        @test_all_integrations (g1, g2, sg1, sg2, sdesc) begin
+        @test_all_implementations (g1, g2, sg1, sg2, sdesc) begin
             if swap_points
                 g1, g2 = g2, g1
                 sg1, sg2 = sg2, sg1
@@ -205,7 +205,7 @@ end
             [-34.9969482421875, 26.455820238459893],
         ])
 
-        @test_all_integrations (p1, p2, mp1, mp2, mp3, mp4, mp5) begin
+        @test_all_implementations (p1, p2, mp1, mp2, mp3, mp4, mp5) begin
             # Two points can't overlap
             @test GO.overlaps(p1, p1) == LG.overlaps(p1, p2)
             # No shared points, doesn't overlap
@@ -235,7 +235,7 @@ end
         r1 = LG.LinearRing([[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]])
         r2 = LG.LinearRing([[1.0, 1.0], [1.0, 6.0], [6.0, 6.0], [6.0, 1.0], [1.0, 1.0]])
 
-        @test_all_integrations (l1, l2, l3, l4, r1, r2) begin
+        @test_all_implementations (l1, l2, l3, l4, r1, r2) begin
             # Line can't overlap with itself
             @test GO.overlaps(l1, l1) == LG.overlaps(l1, l1)
             # Line completely within other line doesn't overlap
@@ -272,7 +272,7 @@ end
             ]
         ])
 
-        @test_all_integrations (p1, p2, p3, p4, p5, m1) begin
+        @test_all_implementations (p1, p2, p3, p4, p5, m1) begin
             # Test basic polygons that don't overlap
             @test GO.overlaps(p1, p2) == LG.overlaps(p1, p2)
             @test !GO.overlaps(p1, (1, 1))
@@ -299,7 +299,7 @@ end
 	line6 = GI.LineString([(1.0, 1.0), (1.0, 2.0), (1.0, 3.0), (1.0, 4.0)])
 	poly7 = GI.Polygon([[(-1.0, 2.0), (3.0, 2.0), (3.0, 3.0), (-1.0, 3.0), (-1.0, 2.0)]])
 
-    @test_all_integrations (line6, poly7) begin
+    @test_all_implementations (line6, poly7) begin
         @test GO.crosses(GI.LineString([(-2.0, 2.0), (4.0, 2.0)]), line6) == true
         @test GO.crosses(GI.LineString([(0.5, 2.5), (1.0, 1.0)]), poly7) == true
         @test GO.crosses(GI.MultiPoint([(1.0, 2.0), (12.0, 12.0)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == true
