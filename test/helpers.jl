@@ -2,6 +2,24 @@ using Test, GeoInterface, ArchGDAL, GeometryBasics, LibGEOS
 
 const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS]
 
+# Monkey-patch GeometryBasics to have correct methods.
+# TODO: push this up to GB!
+
+@eval GeometryBasics begin
+    GeometryBasics.geointerface_geomtype(::GeoInterface.LinearRingTrait) = LineString
+    GeometryBasics.geointerface_geomtype(::GeoInterface.LineTrait) = Line
+    GeoInterface.ncoord(::GeoInterface.MultiPolygonTrait, ::GeometryBasics.MultiPolygon{N}) where N = N
+    function GeoInterface.convert(::Type{Line}, ::GeoInterface.LineTrait, geom)
+        p1, p2 = GeoInterface.getpoint(geom)
+        return Line(GeoInterface.convert(Point, GeoInterface.PointTrait(), p1), GeoInterface.convert(Point, GeoInterface.PointTrait(), p2))
+    end
+    const _ALL_GB_GEOM_TYPES = Union{Point, Line, LineString, Polygon, MultiPolygon, MultiLineString, MultiPoint}
+    GeometryBasics.geointerface_geomtype(::GeoInterface.GeometryCollectionTrait) = Vector{_ALL_GB_GEOM_TYPES}
+    function GeoInterface.convert(::Type{Vector{_ALL_GB_GEOM_TYPES}}, ::GeoInterface.GeometryCollectionTrait, geoms)
+        return _ALL_GB_GEOM_TYPES[GeoInterface.convert(GeometryBasics, g) for g in GeoInterface.getgeom(geoms)]
+    end
+end
+
 # Macro to run a block of `code` for multiple modules, 
 # using GeoInterface.convert for each var in `args`
 macro test_all_implementations(args, code)
