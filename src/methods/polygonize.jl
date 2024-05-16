@@ -177,6 +177,9 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
     edges = Dict{T,Tuple{T,T}}()
     rings = Vector{T}[]
 
+    strait = true
+    turning = false
+
     (length(xs), length(ys)) == size(A) || throw(ArgumentError("length of xs and ys must match the array size"))
 
     # First we collect all the edges around target pixels
@@ -206,16 +209,16 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
     # looping until there are no edge keys left
     while nkeys > 0
         found = false
-        local firstpoint, nextpoints, pointstatus
+        local firstnode, nextnodes, nodestatus
 
         # Loop until we find a key that hasn't been removed,
         # decrementing nkeys as we go.
         while nkeys > 0
-            # Take the first edge from the array
-            firstpoint::T = edgekeys[nkeys]
-            nextpoints = edges[firstpoint]
-            pointstatus = map(!=(typemax(first(firstpoint))) ∘ first, nextpoints)
-            if any(pointstatus)
+            # Take the first node from the array
+            firstnode::T = edgekeys[nkeys]
+            nextnodes = edges[firstnode]
+            nodestatus = map(!=(typemax(first(firstnode))) ∘ first, nextnodes)
+            if any(nodestatus)
                 found = true
                 break
             else
@@ -228,74 +231,121 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
 
         # Check if there are one or two lines going through this node
         # and take one of them, then update the status
-        if pointstatus[2]
-            nextpoint = nextpoints[2]
-            edges[firstpoint] = (nextpoints[1], map(typemax, nextpoint))
+        if nodestatus[2]
+            nextnode = nextnodes[2]
+            edges[firstnode] = (nextnodes[1], map(typemax, nextnode))
         else
             nkeys -= 1
-            nextpoint = nextpoints[1]
-            edges[firstpoint] = (map(typemax, nextpoint), map(typemax, nextpoint))
+            nextnode = nextnodes[1]
+            edges[firstnode] = (map(typemax, nextnode), map(typemax, nextnode))
         end
 
         # Start a new ring
-        currentpoint = firstpoint
-        ring = [currentpoint, nextpoint]
+        currentnode = firstnode
+        ring = [currentnode, nextnode]
         push!(rings, ring)
         
         # Loop until we close a the ring and break
         while true
-            # Find an edge that matches the next point
-            (c1, c2) = possiblepoints = edges[nextpoint]
-            pointstatus = map(!=(typemax(first(firstpoint))) ∘ first, possiblepoints)
-            # When there are two possible edges, 
-            # choose the edge that has turned the furthest right
-            if pointstatus[2]
-                selectedpoint, remainingpoint = if currentpoint[1] == nextpoint[1] # vertical
-                    wasincreasing = nextpoint[2] > currentpoint[2]
-                    firstisstraight = nextpoint[1] == c1[1]
-                    firstisleft = nextpoint[1] > c1[1]
+            # Find a node that matches the next node
+            (c1, c2) = possiblenodes = edges[nextnode]
+            nodestatus = map(!=(typemax(first(firstnode))) ∘ first, possiblenodes)
+            if nodestatus[2]
+                # When there are two possible node, 
+                # choose the node that is the furthest to the left
+                # We also need to check if we are on a straight line
+                # to avoid adding unnecessary points.
+                selectednode, remainingnode, straightline = if currentnode[1] == nextnode[1] # vertical
+                    wasincreasing = nextnode[2] > currentnode[2]
+                    firstisstraight = nextnode[1] == c1[1]
+                    firstisleft = nextnode[1] > c1[1]
+                    secondisstraight = nextnode[1] == c2[1]
+                    secondisleft = nextnode[1] > c2[1]
                     if firstisstraight
-                        secondisleft = nextpoint[1] > c2[1]
                         if secondisleft 
-                            wasincreasing ? (c2, c1) : (c1, c2)
+                            if wasincreasing 
+                                (c2, c1, turning)
+                            else
+                                (c1, c2, straight)
+                            end
                         else
-                            wasincreasing ? (c1, c2) : (c2, c1) 
+                            if wasincreasing 
+                                (c1, c2, straight)
+                            else
+                                (c2, c1, secondisstraight)
+                            end
                         end
                     elseif firstisleft
-                        wasincreasing ? (c1, c2) : (c2, c1)
+                        if wasincreasing 
+                            (c1, c2, turning)
+                        else
+                            (c2, c1, secondisstraight)
+                        end
                     else # firstisright
-                        wasincreasing ? (c2, c1) : (c1, c2)
+                        if wasincreasing 
+                            (c2, c1, secondisstraight)
+                        else
+                            (c1, c2, turning)
+                        end
                     end
                 else # horizontal
-                    wasincreasing = nextpoint[1] > currentpoint[1]
-                    firstisstraight = nextpoint[2] == c1[2]
-                    firstisleft = nextpoint[2] > c1[2]
+                    wasincreasing = nextnode[1] > currentnode[1]
+                    firstisstraight = nextnode[2] == c1[2]
+                    firstisleft = nextnode[2] > c1[2]
+                    secondisleft = nextnode[2] > c2[2]
+                    secondisstraight = nextnode[2] == c2[2]
                     if firstisstraight
-                        secondisleft = nextpoint[2] > c2[2]
                         if secondisleft 
-                            wasincreasing ? (c1, c2) : (c2, c1) 
+                            if wasincreasing 
+                                (c1, c2, straight)
+                            else
+                                (c2, c1, turning)
+                            end
                         else
-                            wasincreasing ? (c2, c1) : (c1, c2)
+                            if wasincreasing 
+                                (c2, c1, turning)
+                            else
+                                (c1, c2, straight)
+                            end
                         end
                     elseif firstisleft
-                        wasincreasing ? (c2, c1) : (c1, c2)
+                        if wasincreasing 
+                            (c2, c1, secondisstraight)
+                        else
+                            (c1, c2, turning)
+                        end
                     else # firstisright
-                        wasincreasing ? (c1, c2) : (c2, c1)
+                        if wasincreasing 
+                            (c1, c2, turning)
+                        else
+                            (c2, c1, secondisstraight)
+                        end
                     end
                 end
-
                 # Update edges
-                edges[nextpoint] = (remainingpoint, map(typemax, remainingpoint))
-                currentpoint, nextpoint = nextpoint, selectedpoint
+                edges[nextnode] = (remainingnode, map(typemax, remainingnode))
             else
-                # Update edges
-                edges[nextpoint] = (map(typemax, c1), map(typemax, c1))
-                currentpoint, nextpoint = nextpoint, c1
-                # Write empty points, they are cleaned up later
+                # Here we simply choose the first (and only valid) node
+                selectednode = c1
+                # Replace the edge nodes with empty nodes, they will be skipped later
+                edges[nextnode] = (map(typemax, c1), map(typemax, c1))
+                # Check if we are on a straight line
+                straightline = currentnode[1] == nextnode[1] == c1[1] || 
+                              currentnode[2] == nextnode[2] == c1[2]
             end
-            push!(ring, nextpoint)
-            # If the ring is closed, start a new one
-            nextpoint == firstpoint && break
+
+            # Update the current and next nodes with the next and selected nodes
+            currentnode, nextnode = nextnode, selectednode
+            # Update the current node or add a new node to the ring 
+            if straightline
+                # replace the last node we don't need it
+                ring[end] = nextnode
+            else
+                # add a new node, we have turned a corner
+                push!(ring, nextnode)
+            end
+            # If the ring is closed, break the loop and start a new one
+            nextnode == firstnode && break
         end
     end
 
