@@ -117,13 +117,14 @@ end
 function _polygonize_featurecollection(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
     values=_default_values(f, A), kw...
 )
+    crs = GI.crs(A)
     # Create one feature per value
     features = map(values) do value
         multipolygon = _polygonize(x -> isequal(f(x), value), xs, ys, A; kw...)
-        GI.Feature(multipolygon; properties=(; value))
+        GI.Feature(multipolygon; properties=(; value), extent = GI.extent(multipolygon), crs)
     end 
 
-    return GI.FeatureCollection(features)
+    return GI.FeatureCollection(features; extent = mapreduce(GI.extent, Extents.union, features), crs)
 end
 
 function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
