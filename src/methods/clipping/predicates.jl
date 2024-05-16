@@ -2,14 +2,14 @@ module Predicates
     using ExactPredicates, ExactPredicates.Codegen
     import ExactPredicates: ext
     import ExactPredicates.Codegen: group!, coord, @genpredicate
-    import GeometryOps: _False, _True, _booltype
+    import GeometryOps: _False, _True, _booltype, _tuple_point
     import GeoInterface as GI
 
     sameside(args...) = ExactPredicates.sameside(args...)
 
     orient(a, b, c; exact = _False()) = _orient(_booltype(exact), a, b, c)
     
-    _orient(::_True, a, b, c) = ExactPredicates.orient(a, b, c)
+    _orient(::_True, a, b, c) = ExactPredicates.orient(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
 
     function _orient(exact::_False, a, b, c)
         a = a .- c
@@ -31,7 +31,7 @@ module Predicates
         return c_val
     end
 
-    _cross(::_True, a, b) = _cross_exact(a, b)
+    _cross(::_True, a, b) = _cross_exact(_tuple_point(a, Float64), _tuple_point(b, Float64))
 
     @genpredicate function _cross_exact(a :: 2, b :: 2)
         group!(a...)
