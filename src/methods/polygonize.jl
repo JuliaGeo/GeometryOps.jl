@@ -343,7 +343,7 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
         return nothing
     else
         # Otherwise return a wrapped MultiPolygon
-        return GI.MultiPolygon(polygons; crs, extent = reduce(Extents.union, GI.extent.(polygons)))
+        return GI.MultiPolygon(polygons; crs, extent = mapreduce(GI.extent, Extents.union, polygons))
     end
 end
 
