@@ -22,15 +22,19 @@ ref_points3857 = map(GI.getpoint(multipolygon)) do p
     trans([GI.x(p), GI.y(p)])
 end
 
+_xy(p) = GI.x(p), GI.y(p)
+
 @test_all_implementations "reproject" multipolygon begin
     multipolygon3857 = GO.reproject(multipolygon, EPSG(4326), EPSG(3857))
     multipolygon4326 = GO.reproject(multipolygon3857; target_crs=EPSG(4326))
     points4326_1 = collect(GI.getpoint(multipolygon))
-    points4326_2 = GI.getcoord.(GI.getpoint(multipolygon4326))
-    points3857 = GI.getcoord.(GI.getpoint(multipolygon3857))
+    points4326_2 = collect.(GI.getcoord.(GI.getpoint(multipolygon4326)))
+    points3857 = collect.(GI.getcoord.(GI.getpoint(multipolygon3857)))
 
     # Comparison to regular `trans` on points
-    @test all(map((p1, p2) -> all(map(isapprox, p1, p2)), ref_points3857, points3857))
+    @test map(ref_points3857, points3857) do p1, p2
+        all(map(isapprox, _xy(p1), _xy(p2))) 
+    end |> all
 
     # Round trip comparison
     @test all(map((p1, p2) -> all(map(isapprox, p1, p2)), points4326_1, points4326_2))
