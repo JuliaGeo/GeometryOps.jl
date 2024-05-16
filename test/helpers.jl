@@ -29,6 +29,17 @@ const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS]
     end
 end
 
+@eval LibGEOS begin
+    function GI.convert(
+        ::Type{GeometryCollection},
+        ::GeometryCollectionTrait,
+        geom;
+        context = get_global_context(),
+    )
+        return GeometryCollection(GI.convert.((LibGEOS,), GI.getgeom(geom)))
+    end
+end
+
 # Macro to run a block of `code` for multiple modules, 
 # using GeoInterface.convert for each var in `args`
 macro test_all_implementations(args, code)
