@@ -159,7 +159,7 @@ test_pairs = [
 
 function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
     for (g1, g2, sg1, sg2, sdesc) in test_pairs
-        @test_all_implementations (g1, g2, sg1, sg2, sdesc) begin
+        @test_all_implementations (g1, g2) begin
             if swap_points
                 g1, g2 = g2, g1
                 sg1, sg2 = sg2, sg1
