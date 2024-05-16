@@ -676,7 +676,7 @@ end
 
 #= Remove collinear edge points, other than the first and last edge vertex, to simplify
 polygon - including both the exterior ring and any holes=#
-function _remove_collinear_points!(poly, remove_idx)
+function _remove_collinear_points!(poly, remove_idx, poly_a, poly_b)
     for ring in GI.getring(poly)
         n = length(ring.geom)
         # resize and reset removing index buffer
@@ -706,7 +706,7 @@ function _remove_collinear_points!(poly, remove_idx)
         # Remove unneeded collinear points
         deleteat!(ring.geom, remove_idx)
         # Check if enough points are left to form a polygon
-        @assert length(ring.geom) ≥ 3 "Polygon doesn't have enough points - clipping error. Please open an issue."
+        @assert length(ring.geom) ≥ 3 "Polygon doesn't have enough points - clipping error. Please open an issue with polygons: $(GI.coordinates(poly_a)) and $(GI.coordinates(poly_b))."
         if remove_idx[1]  # make sure the last point is repeated
             push!(ring.geom, ring.geom[1])
         end

@@ -85,7 +85,7 @@ function _union(
     end
     # Remove uneeded collinear points on same edge
     for p in polys
-        _remove_collinear_points!(p, [false])
+        _remove_collinear_points!(p, [false], poly_a, poly_b)
     end
     return polys
 end
