@@ -321,9 +321,9 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
     assigned = fill(false, length(holes))
     for i in eachindex(holes)
         hole = holes[i]
-        prepared_hole = GI.LinearRing(holes[i]; extent=GI.extent(holes[i]), crs)
+        prepared_hole = GI.LinearRing(holes[i]; extent=GI.extent(holes[i]))
         for poly in polygons
-            exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)); extent=GI.extent(poly), crs)
+            exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)); extent=GI.extent(poly))
             if covers(exterior, prepared_hole)
                 # Hole is in the exterior, so add it to the polygon
                 push!(poly.geom, hole)
