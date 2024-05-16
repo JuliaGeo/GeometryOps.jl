@@ -1,3 +1,5 @@
+# TODO use @test_all_implementations
+
 @testset "Mean value coordinates" begin
     @testset "Preserving return type" begin
         @test barycentric_coordinates(MeanValue(), Point2{BigFloat}[(0,0), (1,0), (0,1)], Point2{BigFloat}(1,1)) isa Vector{BigFloat}
