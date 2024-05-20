@@ -390,89 +390,48 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     Δbax = b1x - a1x
     Δbay = b1y - a1y
     a_cross_b = Δax * Δby - Δay * Δbx
-    #= Determine α value where 0 < α < 1 and β value where 0 < β < 1. Floating point
-    limitations could make intersection be endpoint if α≈0 or α≈1. Make sure α and β point
-    calculations result in an intersection distinct from the endpoint.=#
-    α = T((Δbax * Δby - Δbay * Δbx) / a_cross_b)
-    β = T((Δbax * Δay - Δbay * Δax) / a_cross_b)
-    α_min = 2eps(T)
-    β_min = α_min
-    α_max = one(T) - α_min
-    β_max = α_max
-    if Δax != 0
-        α_min = max(α_min,  2eps(a1x) / Δax)
-        α_max = min(α_max, one(T) - eps(a2x) / Δax)
-    end
-    if Δay != 0
-        α_min = max(α_min,  2eps(a1y) / Δay)
-        α_max = min(α_max, one(T) - eps(a2y) / Δay)
-    end
-    if Δbx != 0
-        β_min = max(β_min,  2eps(b1x) / Δbx)
-        β_max = min(β_max, one(T) - eps(b2x) / Δbx)
-    end
-    if Δby != 0
-        β_min = max(β_min,  2eps(b1y) / Δby)
-        β_max = min(β_max, one(T) - eps(b2y) / Δby)
-    end
-    α = clamp(α, α_min, α_max)
-    β = clamp(β, β_min, β_max)
+    # Determine α value where 0 < α < 1 and β value where 0 < β < 1
+    α = _clamped_frac(Δbax * Δby - Δbay * Δbx, a_cross_b, eps(T))
+    β = _clamped_frac(Δbax * Δay - Δbay * Δax, a_cross_b, eps(T))
+
     #= Intersection will be where a1 + α * Δa = b1 + β * Δb. However, due to floating point
     innacurracies, α and β calculations may yeild different intersection points. Average
-    both points together to minimize difference from real value. =#
+    both points together to minimize difference from real value. Also note that floating
+    point limitations could make intersection be endpoint if α≈0 or α≈1=#
     x = (a1x + α * Δax + b1x + β * Δbx) / 2
     y = (a1y + α * Δay + b1y + β * Δby) / 2
-    return ((x, y), (α, β))
+    pt = (x, y)
+
+    if !_point_in_extent(pt, a_ext) || !_point_in_extent(pt, b_ext)
+        pt, α, β = _nearest_endpoint(T, a1, a2, b1, b2)
+    end
+
+    return (pt, (α, β))
 end
 
-# function _find_nearest_endpoint(::Type{T}, a1, a2, b1, b2, a_dist, b_dist) where T
-#     a1_t, a2_t = _tuple_point(a1, T), _tuple_point(a2, T)
-#     b1_t, b2_t = _tuple_point(b1, T), _tuple_point(b2, T)
-#     a_line = GI.Line(StaticArrays.SVector(a1_t, a2_t))
-#     b_line = GI.Line(StaticArrays.SVector(b1_t, b2_t))
-#     local nearest_pt, nearest_α, nearest_β,  min_dist
-#     for (i, e) in enumerate((a1_t, a2_t, b1_t, b2_t))
-#         ϵ_dist = sqrt(sum(2 .* eps.(e)).^2)
-#         ϵ_frac = ϵ_dist / (i < 3 ? a_dist : b_dist)
-#         ϵ_frac = max(ϵ_frac, 2eps(T))
-#         if iseven(i)
-#             ϵ_frac = 1 - ϵ_frac
-#         end
-#         near_pt, near_α, near_β, dist = if i < 3
-#             pt = a1_t .+ (ϵ_frac .* (a2_t .- a1_t))
-#             α = ϵ_frac
-#             β = distance(pt, b1_t, T) / b_dist
-#             d = distance(pt, b_line, T)
-#             pt, α, β, d
-#         else
-#             pt = b1_t .+ (ϵ_frac .* (b2_t .- b1_t))
-#             α = distance(pt, a1_t, T) / a_dist
-#             β = ϵ_frac
-#             d = distance(pt, a_line, T)
-#             pt, α, β, d
-#         end
-#         if i == 1 || dist < min_dist
-#             nearest_pt, nearest_α, nearest_β, min_dist = near_pt,  near_α, near_β, dist
-#         end
-#     end
-#     return nearest_pt, nearest_α, nearest_β
-# end
+function _nearest_endpoint(::Type{T}, a1, a2, b1, b2) where T
+    a_line, a_dist = GI.Line(StaticArrays.SVector(a1, a2)), distance(a1, a2, T)
+    b_line, b_dist = GI.Line(StaticArrays.SVector(b1, b2)), distance(b1, b2, T)
 
-# function _adjust_crossing_intersection(::Type{T}, pt, α, β, a1, a2, b1, b2, a1x, a1y, Δax, Δay, b1x, b1y, Δbx, Δby) where T
-#     # pt = (T(b1x + β * Δbx), T(b1y + β * Δby))
-#     println("WOOHOO BIG SUMMER BLOWOUT")
-#     if equals(a1, pt)
-#         α_min = max(eps(a1x) / Δax, eps(a1y) / Δay)
-#         pt = (T(a1x + α_min * Δax), T(a1y + α_min * Δay))
-#     elseif equals(a2, pt)
-#         α_max = 1 - max(eps(a2x) / Δax, eps(a2y) / Δay)
-#         pt = (T(a1x + α_max * Δax), T(a1y + α_max * Δay))
-#     elseif equals(b1, pt)
-#         β_min = max(eps(b1x) / Δbx, eps(b1y) / Δby)
-#         pt = (T(b1x + β_min * Δbx), T(b1y + β_min * Δby))
-#     elseif equals(b2, pt)
-#         β_max = 1 - max(eps(b2x) / Δbx, eps(b2y) / Δby)
-#         pt = (T(b1x + β_max * Δbx), T(b1y + β_max * Δby))
-#     end
-#     return pt, α, β
-# end
+    min_pt, min_dist = a1, distance(a1, b_line, T)
+    α, β = eps(T), _clamped_frac(distance(min_pt, b1, T), b_dist, eps(T))
+
+    dist = distance(a2, b_line, T)
+    if dist < min_dist
+        min_pt, min_dist = a2, dist
+        α, β = one(T) - eps(T), _clamped_frac(distance(min_pt, b1, T), b_dist, eps(T))
+    end
+
+    dist = distance(b1, a_line, T)
+    if dist < min_dist
+        min_pt, min_dist = b1, dist
+        α, β = _clamped_frac(distance(min_pt, a1, T), a_dist, eps(T)), eps(T)
+    end
+
+    dist = distance(b2, a_line, T)
+    if dist < min_dist
+        min_pt, min_dist = b2, dist
+        α, β = _clamped_frac(distance(min_pt, a2, T), a_dist, eps(T)), one(T) - eps(T)
+    end
+    return _tuple_point(min_pt, T), α, β
+end

@@ -35,6 +35,8 @@ PolyNode(node::PolyNode{T};
     point = point, inter = inter, neighbor = neighbor, idx = idx, ent_exit = ent_exit,
     crossing = crossing, endpoint = endpoint, fracs = fracs)
 
+equals(pn1::PolyNode, pn2::PolyNode) = pn1.point == pn2.point && pn1.inter == pn2.inter && pn1.fracs == pn2.fracs
+
 #=
     _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f; exact) ->
         (a_list, b_list, a_idx_list)
@@ -51,7 +53,7 @@ function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_boun
     b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
 
     # Flag crossings
-    _classify_crossing!(T, a_list, b_list)
+    _classify_crossing!(T, a_list, b_list; exact)
 
     # Flag the entry and exits
     _flag_ent_exit!(T, GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, Base.Fix2(delay_bounce_f, true); exact)
@@ -205,7 +207,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
             while curr_node.neighbor == i - 1  # Add all intersection points on current edge
                 b_idx = 0
                 new_intr = PolyNode(curr_node; neighbor = curr_idx)
-                if equals(curr_node.point, b_list[prev_counter].point)
+                if curr_node.fracs[2] == 0  # if curr_node is segment start point
                     # intersection point is vertex of b
                     b_idx = prev_counter
                     b_list[b_idx] = new_intr
@@ -228,7 +230,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
 end
 
 #=
-    _classify_crossing!(T, poly_b, a_list)
+    _classify_crossing!(T, poly_b, a_list; exact)
 
 This function marks all intersection points as either bouncing or crossing points. "Delayed"
 crossing or bouncing intersections (a chain of edges where the central edges overlap and
@@ -238,7 +240,7 @@ chain is crossing and delayed otherwise and all middle points are marked as boun
 Additionally, the start and end points of the chain are marked as endpoints using the
 endpoints field. 
 =#
-function _classify_crossing!(::Type{T}, a_list, b_list) where T
+function _classify_crossing!(::Type{T}, a_list, b_list; exact) where T
     napts = length(a_list)
     nbpts = length(b_list)
     # start centered on last point
@@ -257,13 +259,13 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
             b_prev = j == 1 ? b_list[end] : b_list[j-1]
             b_next = j == nbpts ? b_list[1] : b_list[j+1]
             # determine if any segments are on top of one another
-            a_prev_is_b_prev = a_prev.inter && a_prev.point == b_prev.point
-            a_prev_is_b_next = a_prev.inter && a_prev.point == b_next.point
-            a_next_is_b_prev = a_next.inter && a_next.point == b_prev.point
-            a_next_is_b_next = a_next.inter && a_next.point == b_next.point
+            a_prev_is_b_prev = a_prev.inter && equals(a_prev, b_prev)
+            a_prev_is_b_next = a_prev.inter && equals(a_prev, b_next)
+            a_next_is_b_prev = a_next.inter && equals(a_next, b_prev)
+            a_next_is_b_next = a_next.inter && equals(a_next, b_next)
             # determine which side of a segments the p points are on
-            b_prev_side = _get_side(b_prev.point, a_prev.point, curr_pt.point, a_next.point)
-            b_next_side = _get_side(b_next.point, a_prev.point, curr_pt.point, a_next.point)
+            b_prev_side = _get_side(b_prev.point, a_prev.point, curr_pt.point, a_next.point; exact)
+            b_next_side = _get_side(b_next.point, a_prev.point, curr_pt.point, a_next.point; exact)
             # no sides overlap
             if !a_prev_is_b_prev && !a_prev_is_b_next && !a_next_is_b_prev && !a_next_is_b_next
                 if b_prev_side != b_next_side  # lines cross 
@@ -338,10 +340,10 @@ function _classify_crossing!(::Type{T}, a_list, b_list) where T
 end
 
 # Determines if Q lies to the left or right of the line formed by P1-P2-P3
-function _get_side(Q, P1, P2, P3)
-    s1 = _signed_area_triangle(Q, P1, P2)
-    s2 = _signed_area_triangle(Q, P2, P3)
-    s3 = _signed_area_triangle(P1, P2, P3)
+function _get_side(Q, P1, P2, P3; exact)
+    s1 = Predicates.orient(Q, P1, P2; exact)
+    s2 = Predicates.orient(Q, P2, P3; exact)
+    s3 = Predicates.orient(P1, P2, P3; exact)
 
     side = if s3 ≥ 0
         (s1 < 0) || (s2 < 0) ? right : left
@@ -692,15 +694,15 @@ function _remove_collinear_points!(poly, remove_idx, poly_a, poly_b)
                 continue
             else
                 p3 = p
-                # check if p2 is on the edge formed by p1 and p3 - remove if so
-                if _signed_area_triangle(p1, p2, p3) == 0
+                # check if p2 is approximatly on the edge formed by p1 and p3 - remove if so
+                if Predicates.orient(p1, p2, p3; exact = _False()) == 0
                     remove_idx[i - 1] = true
                 end
             end
             p1, p2 = p2, p3
         end
         # Check if the first point (which is repeated as the last point) is needed 
-        if _signed_area_triangle(ring.geom[end - 1], ring.geom[1], ring.geom[2]) == 0
+        if Predicates.orient(ring.geom[end - 1], ring.geom[1], ring.geom[2]; exact = _False()) == 0
             remove_idx[1], remove_idx[end] = true, true
         end
         # Remove unneeded collinear points
