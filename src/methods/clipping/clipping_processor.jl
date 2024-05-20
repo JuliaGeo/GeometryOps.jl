@@ -678,39 +678,50 @@ end
 
 #= Remove collinear edge points, other than the first and last edge vertex, to simplify
 polygon - including both the exterior ring and any holes=#
-function _remove_collinear_points!(poly, remove_idx, poly_a, poly_b)
-    for ring in GI.getring(poly)
-        n = length(ring.geom)
-        # resize and reset removing index buffer
-        resize!(remove_idx, n)
-        fill!(remove_idx, false)
-        local p1, p2
-        for (i, p) in enumerate(ring.geom)
-            if i == 1
-                p1 = p
-                continue
-            elseif i == 2
-                p2 = p
-                continue
-            else
-                p3 = p
-                # check if p2 is approximatly on the edge formed by p1 and p3 - remove if so
-                if Predicates.orient(p1, p2, p3; exact = _False()) == 0
-                    remove_idx[i - 1] = true
+function _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
+    for (i, poly) in Iterators.reverse(enumerate(polys))
+        for (j, ring) in Iterators.reverse(enumerate(GI.getring(poly)))
+            n = length(ring.geom)
+            # resize and reset removing index buffer
+            resize!(remove_idx, n)
+            fill!(remove_idx, false)
+            local p1, p2
+            for (i, p) in enumerate(ring.geom)
+                if i == 1
+                    p1 = p
+                    continue
+                elseif i == 2
+                    p2 = p
+                    continue
+                else
+                    p3 = p
+                    # check if p2 is approximatly on the edge formed by p1 and p3 - remove if so
+                    if Predicates.orient(p1, p2, p3; exact = _False()) == 0
+                        remove_idx[i - 1] = true
+                    end
+                end
+                p1, p2 = p2, p3
+            end
+            # Check if the first point (which is repeated as the last point) is needed 
+            if Predicates.orient(ring.geom[end - 1], ring.geom[1], ring.geom[2]; exact = _False()) == 0
+                remove_idx[1], remove_idx[end] = true, true
+            end
+            # Remove unneeded collinear points
+            deleteat!(ring.geom, remove_idx)
+            # Check if enough points are left to form a polygon
+            if length(ring.geom) ≤ (remove_idx[1] ? 2 : 3)
+                if j == 1
+                    deleteat!(polys, i)
+                    break
+                else
+                    deleteat!(poly.geom, j)
+                    continue
                 end
             end
-            p1, p2 = p2, p3
-        end
-        # Check if the first point (which is repeated as the last point) is needed 
-        if Predicates.orient(ring.geom[end - 1], ring.geom[1], ring.geom[2]; exact = _False()) == 0
-            remove_idx[1], remove_idx[end] = true, true
-        end
-        # Remove unneeded collinear points
-        deleteat!(ring.geom, remove_idx)
-        # Check if enough points are left to form a polygon
-        @assert length(ring.geom) ≥ 3 "Polygon doesn't have enough points - clipping error. Please open an issue with polygons: $(GI.coordinates(poly_a)) and $(GI.coordinates(poly_b))."
-        if remove_idx[1]  # make sure the last point is repeated
-            push!(ring.geom, ring.geom[1])
+            # @assert length(ring.geom) ≥ 3 "Polygon doesn't have enough points - clipping error. Please open an issue with polygons: $(GI.coordinates(poly_a)) and $(GI.coordinates(poly_b))."
+            if remove_idx[1]  # make sure the last point is repeated
+                push!(ring.geom, ring.geom[1])
+            end
         end
     end
     return

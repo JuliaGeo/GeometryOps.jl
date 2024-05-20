@@ -84,9 +84,9 @@ function _union(
         _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b; exact)
     end
     # Remove uneeded collinear points on same edge
-    for p in polys
-        _remove_collinear_points!(p, [false], poly_a, poly_b)
-    end
+    # for p in polys
+    _remove_collinear_points!(polys, [false], poly_a, poly_b)
+    # end
     return polys
 end
 

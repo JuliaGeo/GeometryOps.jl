@@ -87,9 +87,9 @@ function _intersection(
         _add_holes_to_polys!(T, polys, hole_iterator, remove_idx; exact)
     end
     # Remove uneeded collinear points on same edge
-    for p in polys
-        _remove_collinear_points!(p, remove_idx, poly_a, poly_b)
-    end
+    # for p in polys
+    _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
+    # end
     return polys
 end
 
@@ -371,8 +371,6 @@ function _find_hinge_intersection(::Type{T}, a1, a2, b1, b2, a1_orient, a2_orien
     return pt, (α, β)
 end
 
-_clamped_frac(x::T, y::T, ϵ = zero(T)) where T = clamp(x / y, ϵ, one(T) - ϵ)
-
 _set_ab_collinear_intrs(::Type{T}, a_pt, b_pt, a_pt_α, b_pt_β, a1, b1, a_dist, b_dist) where T =
     (
         (_tuple_point(a_pt, T), (a_pt_α, _clamped_frac(distance(a_pt, b1, T), b_dist))),
@@ -435,3 +433,5 @@ function _nearest_endpoint(::Type{T}, a1, a2, b1, b2) where T
     end
     return _tuple_point(min_pt, T), α, β
 end
+
+_clamped_frac(x::T, y::T, ϵ = zero(T)) where T = clamp(x / y, ϵ, one(T) - ϵ)
