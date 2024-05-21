@@ -484,7 +484,7 @@ false if we are tracing b_list. The functions used for each clipping operation a
 
 A list of GeoInterface polygons is returned from this function. 
 =#
-function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
+function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where T
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
@@ -514,7 +514,7 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step) where T
             # changed curr_not_intr to curr_not_same_ent_flag
             same_status, prev_status = true, curr.ent_exit
             while same_status
-                @assert visited_pts < total_pts "Clipping tracing hit every point - clipping error. Please open an issue."
+                @assert visited_pts < total_pts "Clipping tracing hit every point - clipping error. Please open an issue with polygons: $(GI.coordinates(poly_a)) and $(GI.coordinates(poly_b))."
                 # Traverse polygon either forwards or backwards
                 idx += step
                 idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
@@ -718,7 +718,6 @@ function _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
                     continue
                 end
             end
-            # @assert length(ring.geom) ≥ 3 "Polygon doesn't have enough points - clipping error. Please open an issue with polygons: $(GI.coordinates(poly_a)) and $(GI.coordinates(poly_b))."
             if remove_idx[1]  # make sure the last point is repeated
                 push!(ring.geom, ring.geom[1])
             end

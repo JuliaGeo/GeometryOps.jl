@@ -55,7 +55,7 @@ function _union(
     ext_b = GI.getexterior(poly_b)
     # Then, I get the union of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _union_delay_cross_f, _union_delay_bounce_f; exact)
-    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _union_step)
+    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _union_step, poly_a, poly_b)
     n_pieces = length(polys)
     # Check if one polygon totally within other and if so, return the larger polygon
     a_in_b, b_in_a = false, false

@@ -55,7 +55,7 @@ function _difference(
     ext_b = GI.getexterior(poly_b)
     # Find the difference of the exterior of the polygons
     a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f; exact)
-    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _diff_step)
+    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b)
     # if no crossing points, determine if either poly is inside of the other
     if isempty(polys)
         a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b; exact)
