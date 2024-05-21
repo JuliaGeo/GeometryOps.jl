@@ -396,8 +396,22 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     innacurracies, α and β calculations may yeild different intersection points. Average
     both points together to minimize difference from real value. Also note that floating
     point limitations could make intersection be endpoint if α≈0 or α≈1=#
-    x = (a1x + α * Δax + b1x + β * Δbx) / 2
-    y = (a1y + α * Δay + b1y + β * Δby) / 2
+    x = if Δax == 0
+        a1x
+    elseif Δbx == 0
+        b1x
+    else
+        (a1x + α * Δax + b1x + β * Δbx) / 2
+    end
+
+    y = if Δay == 0
+        a1y
+    elseif Δby == 0
+        b1y
+    else
+        (a1y + α * Δay + b1y + β * Δby) / 2
+    end
+    
     pt = (x, y)
 
     if !_point_in_extent(pt, a_ext) || !_point_in_extent(pt, b_ext)
