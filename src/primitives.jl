@@ -168,10 +168,11 @@ if the outer object has `MultiPolygonTrait`, but should work if it has `FeatureT
 
 Objects "shallower" than the target trait are always completely rebuilt, like
 a `Vector` of `FeatureCollectionTrait` of `FeatureTrait` when the target
-has `PolygonTrait` and is held in the features. But "deeper" objects may remain
-unchanged - such as points and linear rings if the target is the same `PolygonTrait`.
+has `PolygonTrait` and is held in the features. These will always be GeoInterface 
+geometries/feature/feature collections. But "deeper" objects may remain
+unchanged or be whatever GeoInterface compatible objects `f` returns.
 
-The result is a functionally similar geometry with values depending on `f`
+The result is a functionally similar geometry with values depending on `f`.
 
 $APPLY_KEYWORDS
 
@@ -571,21 +572,11 @@ rebuild(geom, child_geoms; kw...) = rebuild(GI.trait(geom), geom, child_geoms; k
 function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom), extent=nothing)
     T = GI.geointerface_geomtype(trait)
     if GI.is3d(geom)
-        # The Boolean type parameters here indicate 3d-ness and measure coordinate presence respectively.
+        # The Boolean type parameters here indicate "3d-ness" and "measure" coordinate, respectively.
         return T{true,false}(child_geoms; crs, extent)
     else
         return T{false,false}(child_geoms; crs, extent)
     end
-end
-# So that GeometryBasics geoms rebuild as themselves
-function rebuild(trait::GI.AbstractTrait, geom::BasicsGeoms, child_geoms; crs=nothing)
-    GB.geointerface_geomtype(trait)(child_geoms)
-end
-function rebuild(trait::GI.AbstractTrait, geom::Union{GB.LineString,GB.MultiPoint}, child_geoms; crs=nothing)
-    GB.geointerface_geomtype(trait)(GI.convert.(GB.Point, child_geoms))
-end
-function rebuild(trait::GI.PolygonTrait, geom::GB.Polygon, child_geoms; crs=nothing)
-    Polygon(child_geoms[1], child_geoms[2:end])
 end
 
 using Base.Threads: nthreads, @threads, @spawn
