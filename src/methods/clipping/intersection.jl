@@ -87,9 +87,7 @@ function _intersection(
         _add_holes_to_polys!(T, polys, hole_iterator, remove_idx; exact)
     end
     # Remove uneeded collinear points on same edge
-    # for p in polys
     _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
-    # end
     return polys
 end
 
@@ -258,21 +256,21 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) w
     # Seperate out line segment points
     (a1x, a1y), (a2x, a2y) = _tuple_point(a1, T), _tuple_point(a2, T)
     (b1x, b1y), (b2x, b2y) = _tuple_point(b1, T), _tuple_point(b2, T)
-    # Check if envalopes of lines intersect
+    # Check if envelopes of lines intersect
     a_ext = Extent(X = minmax(a1x, a2x), Y = minmax(a1y, a2y))
     b_ext = Extent(X = minmax(b1x, b2x), Y = minmax(b1y, b2y))
     !Extents.intersects(a_ext, b_ext) && return no_intr_result
     # Check orientation of two line segments with respect to one another
-    a1_orient = Predicates.orient(b1, b2, a1)
-    a2_orient = Predicates.orient(b1, b2, a2)
+    a1_orient = Predicates.orient(b1, b2, a1; exact)
+    a2_orient = Predicates.orient(b1, b2, a2; exact)
     a1_orient != 0 && a1_orient == a2_orient && return no_intr_result  # α < 0 or α > 1
-    b1_orient = Predicates.orient(a1, a2, b1)
-    b2_orient = Predicates.orient(a1, a2, b2)
+    b1_orient = Predicates.orient(a1, a2, b1; exact)
+    b2_orient = Predicates.orient(a1, a2, b2; exact)
     b1_orient != 0 && b1_orient == b2_orient && return no_intr_result  # β < 0 or β > 1
     # Determine intersection type and intersection point(s)
     if a1_orient == a2_orient == b1_orient == b2_orient == 0
         # Intersection is collinear if all endpoints lie on the same line
-        line_orient, intr1, intr2 = _find_collinear_intersection(T, a1, a2, b1, b2, a_ext, b_ext)
+        line_orient, intr1, intr2 = _find_collinear_intersection(T, a1, a2, b1, b2, a_ext, b_ext, no_intr_result)
     elseif a1_orient == 0 || a2_orient == 0 || b1_orient == 0 || b2_orient == 0
         # Intersection is a hinge if the intersection point is an endpoint
         line_orient = line_hinge
@@ -285,11 +283,15 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) w
     return line_orient, intr1, intr2
 end
 
-function _find_collinear_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where T
+#= If lines defined by (a1, a2) and (b1, b2) are collinear, find endpoints of overlapping
+region if they exist. This could result in three possibilities. First, there could be no
+overlapping region, in which case, the default 'no_intr_result' intersection information is
+returned. Second, the two regions could just meet at one shared endpoint, in which case it
+is a hinge intersection with one intersection point. Otherwise, it is a overlapping
+intersection defined by two of the endpoints of the line segments. =#
+function _find_collinear_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext, no_intr_result) where T
     # Define default return for no intersection points
-    line_orient = line_out
-    intr1 = (zero(T), zero(T)), (zero(T), zero(T))
-    intr2 = intr1
+    line_orient, intr1, intr2 = no_intr_result
     # Determine collinear line overlaps
     a1_in_b = _point_in_extent(a1, b_ext)
     a2_in_b = _point_in_extent(a2, b_ext)
@@ -346,6 +348,19 @@ function _find_collinear_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) w
     return line_orient, intr1, intr2
 end
 
+#= Determine intersection points and segment fractions when overlap is made up one one 
+endpoint of segment (a1, a2) and one endpoint of segment (b1, b2). =#
+_set_ab_collinear_intrs(::Type{T}, a_pt, b_pt, a_pt_α, b_pt_β, a1, b1, a_dist, b_dist) where T =
+    (
+        (_tuple_point(a_pt, T), (a_pt_α, _clamped_frac(distance(a_pt, b1, T), b_dist))),
+        (_tuple_point(b_pt, T), (_clamped_frac(distance(b_pt, a1, T), a_dist), b_pt_β))
+    )
+
+#= If lines defined by (a1, a2) and (b1, b2) are just touching at one of those endpoints and
+are not collinear, then they form a hinge, with just that one shared intersection point.
+Point equality is checked before segment orientation to have maximal accurary on fractions
+to avoid floating point errors. If the points are not equal, we know that the hinge does not
+take place at an endpoint and the fractions must be between 0 or 1 (exclusive). =#
 function _find_hinge_intersection(::Type{T}, a1, a2, b1, b2, a1_orient, a2_orient, b1_orient) where T
     pt, α, β = if equals(a1, b1)
         _tuple_point(a1, T), zero(T), zero(T)
@@ -356,27 +371,30 @@ function _find_hinge_intersection(::Type{T}, a1, a2, b1, b2, a1_orient, a2_orien
     elseif equals(a2, b2)
         _tuple_point(a2, T), one(T), one(T)
     elseif a1_orient == 0
-        β_val = _clamped_frac(distance(b1, a1, T), distance(b1, b2, T), 2eps(T))
+        β_val = _clamped_frac(distance(b1, a1, T), distance(b1, b2, T), eps(T))
         _tuple_point(a1, T), zero(T), β_val
     elseif a2_orient == 0
-        β_val = _clamped_frac(distance(b1, a2, T), distance(b1, b2, T), 2eps(T))
+        β_val = _clamped_frac(distance(b1, a2, T), distance(b1, b2, T), eps(T))
         _tuple_point(a2, T), one(T), β_val
     elseif b1_orient == 0
-        α_val = _clamped_frac(distance(a1, b1, T), distance(a1, a2, T), 2eps(T))
+        α_val = _clamped_frac(distance(a1, b1, T), distance(a1, a2, T), eps(T))
         _tuple_point(b1, T), α_val, zero(T)
     else  # b2_orient == 0
-        α_val = _clamped_frac(distance(a1, b2, T), distance(a1, a2, T), 2eps(T))
+        α_val = _clamped_frac(distance(a1, b2, T), distance(a1, a2, T), eps(T))
         _tuple_point(b2, T), α_val, one(T)
     end
     return pt, (α, β)
 end
 
-_set_ab_collinear_intrs(::Type{T}, a_pt, b_pt, a_pt_α, b_pt_β, a1, b1, a_dist, b_dist) where T =
-    (
-        (_tuple_point(a_pt, T), (a_pt_α, _clamped_frac(distance(a_pt, b1, T), b_dist))),
-        (_tuple_point(b_pt, T), (_clamped_frac(distance(b_pt, a1, T), a_dist), b_pt_β))
-    )
-
+#= If lines defined by (a1, a2) and (b1, b2) meet at one point that is not an endpoint of
+either segment, they form a crossing intersection with a singular intersection point. That 
+point is caculated by finding the fractional distance along each segment the point occurs
+at (α, β). If the point is too close to an endpoint to be distinct, the point shares a value
+with the endpoint, but with a non-zero and non-one fractional value. If the intersection
+point calculated is outside of the envelope of the two segments due to floating point error,
+it is set to the endpoint of the two segments that is closest to the other segment.
+Regardless of point value, we know that it does not actually occur at an endpoint so the
+fractions must be between 0 or 1 (exclusive). =#
 function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where T
     # First line runs from a to a + Δa
     (a1x, a1y), (a2x, a2y) = _tuple_point(a1, T), _tuple_point(a2, T)
@@ -394,8 +412,10 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
 
     #= Intersection will be where a1 + α * Δa = b1 + β * Δb. However, due to floating point
     innacurracies, α and β calculations may yeild different intersection points. Average
-    both points together to minimize difference from real value. Also note that floating
-    point limitations could make intersection be endpoint if α≈0 or α≈1=#
+    both points together to minimize difference from real value, as long as segment isn't 
+    vertical or horizontal as this will almost certianly lead to the point being outside the
+    envelope due to floating point error. Also note that floating point limitations could
+    make intersection be endpoint if α≈0 or α≈1.=#
     x = if Δax == 0
         a1x
     elseif Δbx == 0
@@ -403,7 +423,6 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     else
         (a1x + α * Δax + b1x + β * Δbx) / 2
     end
-
     y = if Δay == 0
         a1y
     elseif Δby == 0
@@ -411,41 +430,43 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     else
         (a1y + α * Δay + b1y + β * Δby) / 2
     end
-    
     pt = (x, y)
-
+    # Check if point is within segment envelopes and adjust to endpoint if not
     if !_point_in_extent(pt, a_ext) || !_point_in_extent(pt, b_ext)
         pt, α, β = _nearest_endpoint(T, a1, a2, b1, b2)
     end
-
     return (pt, (α, β))
 end
 
+# Find endpoint of either segment that is closest to the opposite segment
 function _nearest_endpoint(::Type{T}, a1, a2, b1, b2) where T
+    # Create lines from segments and calculate segment length
     a_line, a_dist = GI.Line(StaticArrays.SVector(a1, a2)), distance(a1, a2, T)
     b_line, b_dist = GI.Line(StaticArrays.SVector(b1, b2)), distance(b1, b2, T)
-
+    # Determine distance from a1 to segment b
     min_pt, min_dist = a1, distance(a1, b_line, T)
     α, β = eps(T), _clamped_frac(distance(min_pt, b1, T), b_dist, eps(T))
-
+    # Determine distance from a2 to segment b
     dist = distance(a2, b_line, T)
     if dist < min_dist
         min_pt, min_dist = a2, dist
         α, β = one(T) - eps(T), _clamped_frac(distance(min_pt, b1, T), b_dist, eps(T))
     end
-
+    # Determine distance from b1 to segment a
     dist = distance(b1, a_line, T)
     if dist < min_dist
         min_pt, min_dist = b1, dist
         α, β = _clamped_frac(distance(min_pt, a1, T), a_dist, eps(T)), eps(T)
     end
-
+    # Determine distance from b2 to segment a
     dist = distance(b2, a_line, T)
     if dist < min_dist
         min_pt, min_dist = b2, dist
         α, β = _clamped_frac(distance(min_pt, a2, T), a_dist, eps(T)), one(T) - eps(T)
     end
+    # Return point with smallest distance
     return _tuple_point(min_pt, T), α, β
 end
 
+# Return value of x/y clamped between ϵ and 1 - ϵ
 _clamped_frac(x::T, y::T, ϵ = zero(T)) where T = clamp(x / y, ϵ, one(T) - ϵ)

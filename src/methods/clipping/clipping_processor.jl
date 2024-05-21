@@ -35,6 +35,7 @@ PolyNode(node::PolyNode{T};
     point = point, inter = inter, neighbor = neighbor, idx = idx, ent_exit = ent_exit,
     crossing = crossing, endpoint = endpoint, fracs = fracs)
 
+# Checks equality of two PolyNodes by backing point value, fractional value, and intersection status
 equals(pn1::PolyNode, pn2::PolyNode) = pn1.point == pn2.point && pn1.inter == pn2.inter && pn1.fracs == pn2.fracs
 
 #=
@@ -358,7 +359,13 @@ function _signed_area_triangle(P, Q, R)
     return (GI.x(Q)-GI.x(P))*(GI.y(R)-GI.y(P))-(GI.y(Q)-GI.y(P))*(GI.x(R)-GI.x(P))
 end
 
-# True if the edge with pt as the starting endpoint is not shared between polygons
+#= Given a list of PolyNodes, find the first element that isn't an intersection point. Then,
+test if this element is in or out of the given polygon. Return the next index, as well as
+the enter/exit status of the next intersection point (the opposite of the in/out check). If 
+all points are intersection points, find the first element that either is the end of a chain
+or a crossing point that isn't in a chain. Then take the midpoint of this point and the next
+point in the list and perform the in/out check. If none of these points exist, return
+a `next_idx` of `nothing`. =#
 function _pt_off_edge_status(::Type{T}, pt_list, poly, npts; exact) where T
     start_idx, is_non_intr_pt = findfirst(_is_not_intr, pt_list), true
     if isnothing(start_idx)
@@ -374,7 +381,11 @@ function _pt_off_edge_status(::Type{T}, pt_list, poly, npts; exact) where T
     start_status = !_point_filled_curve_orientation(start_pt, poly; in = true, on = false, out = false, exact)
     return next_idx, start_status
 end
+# Check if a PolyNode is an intersection point
 _is_not_intr(pt) = !pt.inter
+#= Check if a PolyNode is the last point of a chain or a non-overlapping crossing point.
+The next midpoint of one of these points and the next point within a polygon must not be on
+the polygon edge. =#
 _next_edge_off(pt) = (pt.endpoint == end_chain) || (pt.crossing && pt.endpoint == not_endpoint)
 
 #=
@@ -483,6 +494,9 @@ false if we are tracing b_list. The functions used for each clipping operation a
     - Union: (x, y) -> x ? (-1) : 1
 
 A list of GeoInterface polygons is returned from this function. 
+
+Note: `poly_a` and `poly_b` are temporary inputs used for debugging and can be removed
+eventually.
 =#
 function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where T
     n_a_pts, n_b_pts = length(a_list), length(b_list)

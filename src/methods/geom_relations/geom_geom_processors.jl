@@ -59,9 +59,6 @@ If in_allow is true, the point can be within the polygon interior
 If on_allow is true, the point can be on the polygon boundary.
 If out_allow is true, the point can be disjoint from the polygon.
 
-If exact is true then ExactPredicates is used for determining point placement, else
-float calculations are used, which inevitably has floating point errors.
-
 If the point is in an "allowed" location, return true. Else, return false.
 =#
 function _point_polygon_process(
@@ -609,7 +606,7 @@ function _line_filled_curve_interactions(
                         so calculate if segment endpoints and intersections are
                         in/out of filled curve
                         =#
-                        ipoints = intersection_points(GI.Line([l_start, l_end]), curve)
+                        ipoints = intersection_points(GI.Line(StaticArrays.SVector(l_start, l_end)), curve)
                         npoints = length(ipoints)  # since hinge, at least one
                         dist_from_lstart = let l_start = l_start
                             x -> _euclid_distance(Float64, x, l_start)
