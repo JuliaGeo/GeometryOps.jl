@@ -36,7 +36,7 @@ GI.coordinates.(inter_points)
 
 # output
 1-element Vector{Vector{Float64}}:
- [125.58375366067547, -14.83572303404496]
+ [125.58375366067548, -14.83572303404496]
 ```
 """
 function intersection(
