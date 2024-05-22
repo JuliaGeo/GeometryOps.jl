@@ -223,8 +223,7 @@ function _simplify(::GI.PolygonTrait, alg, geom;  kw...)
         GI.LinearRingTrait(), alg, g;
         kw..., preserve_endpoint = false,
     )
-    rebuilder(g) = rebuild(g, simplifier(g))
-    lrs = map(rebuilder, GI.getgeom(geom))
+    lrs = map(simplifier, GI.getgeom(geom))
     return rebuild(geom, lrs)
 end
 

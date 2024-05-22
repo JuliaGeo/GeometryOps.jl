@@ -2,8 +2,10 @@ import GeoJSON
 import JLD2
 import LibGEOS as LG
 import GeometryOps as GO
+import GeoInterface as GI
 
 datadir = realpath(joinpath(dirname(pathof(GO)), "../test/data"))
+
 @testset "RadialDistance and VisvalingamWhyatt" begin
     fc = GeoJSON.read(joinpath(datadir, "simplify.geojson"))
     fc2 = GeoJSON.read(joinpath(datadir, "simplify2.geojson"))
