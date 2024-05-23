@@ -265,8 +265,8 @@ function _classify_crossing!(::Type{T}, a_list, b_list; exact) where T
             a_next_is_b_prev = a_next.inter && equals(a_next, b_prev)
             a_next_is_b_next = a_next.inter && equals(a_next, b_next)
             # determine which side of a segments the p points are on
-            b_prev_side = _get_side(b_prev.point, a_prev.point, curr_pt.point, a_next.point; exact)
-            b_next_side = _get_side(b_next.point, a_prev.point, curr_pt.point, a_next.point; exact)
+            b_prev_side, b_next_side = _get_sides(b_prev, b_next, a_prev, curr_pt, a_next,
+                i, j, a_list, b_list; exact)
             # no sides overlap
             if !a_prev_is_b_prev && !a_prev_is_b_next && !a_next_is_b_prev && !a_next_is_b_next
                 if b_prev_side != b_next_side  # lines cross 
@@ -340,6 +340,52 @@ function _classify_crossing!(::Type{T}, a_list, b_list; exact) where T
     end
 end
 
+# Check if PolyNode is a vertex of original polygon
+_is_vertex(pt) = !pt.inter || pt.fracs[1] == 0 || pt.fracs[1] == 1 || pt.fracs[2] == 0 || pt.fracs[2] == 1
+
+#= Determines which side (right or left) of the segment a_prev-curr_pt-a_next the points
+b_prev and b_next are on. Given this is only called when curr_pt is an intersection point
+that wasn't initially classified as crossing, we know that curr_pt is either from a hinge or
+overlapping intersection and thus is an original vertex of either poly_a or poly_b. Due to
+floating point error when calculating new intersection points, we only want to use original 
+vertices to determine orientation. Thus, for other points, find nearest point that is a
+vertex. Given other intersection points will be collinear along existing segments, this
+won't change the orientation. =#
+function _get_sides(b_prev, b_next, a_prev, curr_pt, a_next, i, j, a_list, b_list; exact)
+    b_prev_pt = if _is_vertex(b_prev)
+        b_prev.point
+    else  # Find original start point of segment formed by b_prev and curr_pt
+        prev_idx = findprev(_is_vertex, b_list, j - 1)
+        prev_idx = isnothing(prev_idx) ? findlast(_is_vertex, b_list) : prev_idx
+        b_list[prev_idx].point
+    end
+    b_next_pt = if _is_vertex(b_next)
+        b_next.point
+    else  # Find original end point of segment formed by curr_pt and b_next
+        next_idx = findnext(_is_vertex, b_list, j + 1)
+        next_idx = isnothing(next_idx) ? findfirst(_is_vertex, b_list) : next_idx
+        b_list[next_idx].point
+    end
+    a_prev_pt = if _is_vertex(a_prev)
+        a_prev.point
+    else   # Find original start point of segment formed by a_prev and curr_pt
+        prev_idx = findprev(_is_vertex, a_list, i - 1)
+        prev_idx = isnothing(prev_idx) ? findlast(_is_vertex, a_list) : prev_idx
+        a_list[prev_idx].point
+    end
+    a_next_pt = if _is_vertex(a_next)
+        a_next.point
+    else  # Find original end point of segment formed by curr_pt and a_next
+        next_idx = findnext(_is_vertex, a_list, i + 1)
+        next_idx = isnothing(next_idx) ? findfirst(_is_vertex, a_list) : next_idx
+        a_list[next_idx].point
+    end
+    # Determine side orientation of b_prev and b_next
+    b_prev_side = _get_side(b_prev_pt, a_prev_pt, curr_pt.point, a_next_pt; exact)
+    b_next_side = _get_side(b_next_pt, a_prev_pt, curr_pt.point, a_next_pt; exact)
+    return b_prev_side, b_next_side
+end
+
 # Determines if Q lies to the left or right of the line formed by P1-P2-P3
 function _get_side(Q, P1, P2, P3; exact)
     s1 = Predicates.orient(Q, P1, P2; exact)
@@ -352,11 +398,6 @@ function _get_side(Q, P1, P2, P3; exact)
         (s1 > 0) || (s2 > 0) ? left : right
     end
     return side
-end
-
-# Returns the signed area formed by vertices P, Q, and R
-function _signed_area_triangle(P, Q, R)
-    return (GI.x(Q)-GI.x(P))*(GI.y(R)-GI.y(P))-(GI.y(Q)-GI.y(P))*(GI.x(R)-GI.x(P))
 end
 
 #= Given a list of PolyNodes, find the first element that isn't an intersection point. Then,
