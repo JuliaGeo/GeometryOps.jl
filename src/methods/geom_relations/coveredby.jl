@@ -54,6 +54,7 @@ const COVEREDBY_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow 
 const COVEREDBY_CURVE_REQUIRES = (in_require = false, on_require = false, out_require = false)
 const COVEREDBY_POLYGON_REQUIRES = (in_require = true, on_require = false, out_require = false,)
 const COVEREDBY_EXACT = (exact = _False(),)
+
 """
     coveredby(g1, g2)::Bool
 

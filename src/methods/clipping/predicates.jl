@@ -42,11 +42,10 @@ module Predicates
     function _cross(::_False, a, b)
         c_t1 = GI.x(a) * GI.y(b)
         c_t2 = GI.y(a) * GI.x(b)
-        c_val = if c_t1 ≈ c_t2
+        c_val = if isapprox(c_t1, c_t2)
             0
         else
-            c = c_t1 - c_t2
-            c > 0 ? 1 : -1
+            sign(c_t1 - c_t2)
         end
         return c_val
     end
