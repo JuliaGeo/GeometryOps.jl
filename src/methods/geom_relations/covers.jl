@@ -53,8 +53,8 @@ intersect.
 
 ```jldoctest
 import GeometryOps as GO, GeoInterface as GI
-l1 = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
-l2 = GI.LineString([(1, 1), (1, 2)])
+l1 = GI.LineString([(1.0, 1.0), (1.0, 2.0), (1.0, 3.0), (1.0, 4.0)])
+l2 = GI.LineString([(1.0, 1.0), (1.0, 2.0)])
 
 GO.covers(l1, l2)
 # output

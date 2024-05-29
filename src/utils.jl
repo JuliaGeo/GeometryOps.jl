@@ -127,9 +127,9 @@ function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}
     return n
 end
 
-function point_in_extent(p, extent::Extents.Extent)
-    (x1, x2), (y1, y1) = extent.X, extent.Y
-    return x1 <= GI.x(p) && y1 <= GI.y(p) && x2 >= GI.x(p) && y2 >= GI.y(p)
+function _point_in_extent(p, extent::Extents.Extent)
+    (x1, x2), (y1, y2) = extent.X, extent.Y
+    return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
 end
 
 _get_point_type(::Type{T}) where T =

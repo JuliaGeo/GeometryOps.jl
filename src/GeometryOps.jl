@@ -6,6 +6,8 @@ using GeoInterface
 using GeometryBasics
 import Tables
 using LinearAlgebra, Statistics
+import GeometryBasics.StaticArrays
+import ExactPredicates
 import Base.@kwdef
 
 using GeoInterface.Extents: Extents
@@ -31,6 +33,7 @@ include("methods/barycentric.jl")
 include("methods/centroid.jl")
 include("methods/distance.jl")
 include("methods/equals.jl")
+include("methods/clipping/predicates.jl")
 include("methods/clipping/clipping_processor.jl")
 include("methods/clipping/coverage.jl")
 include("methods/clipping/cut.jl")
