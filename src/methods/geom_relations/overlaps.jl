@@ -216,10 +216,11 @@ end
 outside of the other edge, return true. Else false. =#
 function _overlaps(
     (a1, a2)::Edge,
-    (b1, b2)::Edge
+    (b1, b2)::Edge,
+    exact = _False(),
 )
     # meets in more than one point
-    seg_val, _, _ = _intersection_point(Float64, (a1, a2), (b1, b2))
+    seg_val, _, _ = _intersection_point(Float64, (a1, a2), (b1, b2); exact)
     # one end point is outside of other segment
     a_fully_within = _point_on_seg(a1, b1, b2) && _point_on_seg(a2, b1, b2)
     b_fully_within = _point_on_seg(b1, a1, a2) && _point_on_seg(b2, a1, a2)
@@ -248,4 +249,25 @@ function _point_on_seg(point, start, stop)
         end
     end
     return false
+end
+
+#= Returns true if there is at least one intersection between edges within the
+two lists of edges. =#
+function _line_intersects(
+    edges_a::Vector{<:Edge},
+    edges_b::Vector{<:Edge};
+)
+    # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
+    for edge_a in edges_a
+        for edge_b in edges_b
+            _line_intersects(edge_a, edge_b) && return true 
+        end
+    end
+    return false
+end
+
+# Returns true if there is at least one intersection between two edges.
+function _line_intersects(edge_a::Edge, edge_b::Edge)
+    seg_val, _, _ = _intersection_point(Float64, edge_a, edge_b; exact = _False())
+    return seg_val != line_out
 end

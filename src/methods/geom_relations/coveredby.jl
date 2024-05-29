@@ -53,6 +53,7 @@ const COVEREDBY_ALLOWS = (in_allow = true, on_allow = true, out_allow = false)
 const COVEREDBY_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = false)
 const COVEREDBY_CURVE_REQUIRES = (in_require = false, on_require = false, out_require = false)
 const COVEREDBY_POLYGON_REQUIRES = (in_require = true, on_require = false, out_require = false,)
+const COVEREDBY_EXACT = (exact = _False(),)
 
 """
     coveredby(g1, g2)::Bool
@@ -118,6 +119,7 @@ _coveredby(
 ) = _point_polygon_process(
     g1, g2;
     COVEREDBY_ALLOWS...,
+    COVEREDBY_EXACT...,
 )
 
 # Points cannot cover any geometry other than points
@@ -138,6 +140,7 @@ _coveredby(
     g1, g2;
     COVEREDBY_CURVE_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
+    COVEREDBY_EXACT...,
     closed_line = false,
     closed_curve = false,
 )
@@ -151,6 +154,7 @@ _coveredby(
     g1, g2;
     COVEREDBY_CURVE_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
+    COVEREDBY_EXACT...,
     closed_line = false,
     closed_curve = true,
 )
@@ -164,6 +168,7 @@ _coveredby(
     g1, g2;
     COVEREDBY_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
+    COVEREDBY_EXACT...,
     closed_line = false,
 )
 
@@ -178,6 +183,7 @@ _coveredby(
     g1, g2;
     COVEREDBY_CURVE_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
+    COVEREDBY_EXACT...,
     closed_line = true,
     closed_curve = false,
 )
@@ -191,6 +197,7 @@ _coveredby(
     g1, g2;
     COVEREDBY_CURVE_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
+    COVEREDBY_EXACT...,
     closed_line = true,
     closed_curve = true,
 )
@@ -204,6 +211,7 @@ _coveredby(
     g1, g2;
     COVEREDBY_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
+    COVEREDBY_EXACT...,
     closed_line = true,
 )
 
@@ -220,6 +228,7 @@ _coveredby(
     g1, g2;
     COVEREDBY_ALLOWS...,
     COVEREDBY_POLYGON_REQUIRES...,
+    COVEREDBY_EXACT...,
 )
 
 # Polygons cannot covered by any curves

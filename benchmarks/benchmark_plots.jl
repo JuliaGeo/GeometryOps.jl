@@ -89,7 +89,6 @@ function plot_trials(
     end
 
     tag_attrs = capture_tag_attrs(results.tags)
-    tag_theme = merge(theme, tag_attrs)
 
     lp = if legend_position isa Makie.Automatic 
         gp.layout[gp.span.rows, gp.span.cols, TopRight()] 
@@ -101,12 +100,15 @@ function plot_trials(
         error()
     end
 
-    return Makie.with_theme(tag_theme) do
+    ax = Makie.with_theme(theme) do
         ax = Axis(
             gp;
             tag_attrs.Axis...,
             xlabel = "Number of points", ylabel = "Time to calculate",
             xscale = log10, yscale = log10, ytickformat = _prettytime,
+            xticksvisible = true, xticklabelsvisible = true,
+            yticks = Makie.LogTicks(Makie.WilkinsonTicks(7; k_min = 4)),
+            ygridwidth = 0.75,
         ) 
         plots = [scatterlines!(ax, x, y; label = label) for (x, y, label) in zip(xs, ys, labels)]
         setproperty!.(getindex.(getproperty.(plots, :plots), 1), :alpha, 0.1)
@@ -118,13 +120,11 @@ function plot_trials(
             valign = legend_valign, 
             orientation = legend_orientation
         )
-        ax.xticksvisible[] = true
         ax.xtickcolor[] = ax.xgridcolor[]
-        ax.xticklabelsvisible[] = true
-        ax.yticks[] = Makie.LogTicks(Makie.WilkinsonTicks(7; k_min = 4))
-        ax.ygridwidth[] = 0.75
-        return ax
+        ax
     end
+
+    return ax
 end
 
 const _tag_includelist = ["title", "subtitle"]

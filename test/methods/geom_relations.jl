@@ -1,5 +1,8 @@
-# Tests of DE-9IM Methods
+import GeometryOps as GO
+import GeoInterface as GI
+import LibGEOS as LG
 
+# Tests of DE-9IM Methods
 pt1 = LG.Point([0.0, 0.0])
 pt2 = LG.Point([5.0, 5.0])
 pt3 = LG.Point([1.0, 0.0])
@@ -235,7 +238,7 @@ end
         # Linear rings that intersect but don't overlap
         r1 = LG.LinearRing([[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]])
         r2 = LG.LinearRing([[1.0, 1.0], [1.0, 6.0], [6.0, 6.0], [6.0, 1.0], [1.0, 1.0]])
-        @test LG.overlaps(r1, r2) == LG.overlaps(r1, r2)
+        @test GO.overlaps(r1, r2) == LG.overlaps(r1, r2)
     end
     
     @testset "Polygons/MultiPolygons" begin
@@ -286,7 +289,7 @@ end
 	line6 = GI.LineString([(1.0, 1.0), (1.0, 2.0), (1.0, 3.0), (1.0, 4.0)])
 	poly7 = GI.Polygon([[(-1.0, 2.0), (3.0, 2.0), (3.0, 3.0), (-1.0, 3.0), (-1.0, 2.0)]])
 
-	@test GO.crosses(GI.LineString([(-2, 2), (4, 2)]), line6) == true
+	@test GO.crosses(GI.LineString([(-2.0, 2.0), (4.0, 2.0)]), line6) == true
 	@test GO.crosses(GI.LineString([(0.5, 2.5), (1.0, 1.0)]), poly7) == true
 	@test GO.crosses(GI.MultiPoint([(1.0, 2.0), (12.0, 12.0)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == true
 	@test GO.crosses(GI.MultiPoint([(1.0, 0.0), (12.0, 12.0)]), GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])) == false

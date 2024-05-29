@@ -51,6 +51,8 @@ The code for the specific implementations is in the geom_geom_processors file.
 const DISJOINT_ALLOWS = (in_allow = false, on_allow = false, out_allow = true)
 const DISJOINT_CURVE_ALLOWS = (over_allow = false, cross_allow = false, on_allow = false, out_allow = true)
 const DISJOINT_REQUIRES = (in_require = false, on_require = false, out_require = false)
+const DISJOINT_EXACT = (exact = _False(),)
+
 """
     disjoint(geom1, geom2)::Bool
 
@@ -114,6 +116,7 @@ _disjoint(
 ) = _point_polygon_process(
     g1, g2;
     DISJOINT_ALLOWS...,
+    DISJOINT_EXACT...,
 )
 
 #= Geometry is disjoint from a point if the point is not in the interior or on
@@ -135,6 +138,7 @@ _disjoint(
     g1, g2;
     DISJOINT_CURVE_ALLOWS...,
     DISJOINT_REQUIRES...,
+    DISJOINT_EXACT...,
     closed_line = false,
     closed_curve = false,
 )
@@ -148,6 +152,7 @@ _disjoint(
     g1, g2;
     DISJOINT_CURVE_ALLOWS...,
     DISJOINT_REQUIRES...,
+    DISJOINT_EXACT...,
     closed_line = false,
     closed_curve = true,
 )
@@ -161,6 +166,7 @@ _disjoint(
     g1, g2;
     DISJOINT_ALLOWS...,
     DISJOINT_REQUIRES...,
+    DISJOINT_EXACT...,
     closed_line = false,
 )
 
@@ -183,6 +189,7 @@ _disjoint(
     g1, g2;
     DISJOINT_CURVE_ALLOWS...,
     DISJOINT_REQUIRES...,
+    DISJOINT_EXACT...,
     closed_line = true,
     closed_curve = true,
 )
@@ -196,6 +203,7 @@ _disjoint(
     g1, g2;
     DISJOINT_ALLOWS...,
     DISJOINT_REQUIRES...,
+    DISJOINT_EXACT...,
     closed_line = true,
 )
 
@@ -210,6 +218,7 @@ _disjoint(
     g1, g2;
     DISJOINT_ALLOWS...,
     DISJOINT_REQUIRES...,
+    DISJOINT_EXACT...,
 )
 
 
