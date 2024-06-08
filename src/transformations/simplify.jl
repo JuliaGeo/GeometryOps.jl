@@ -223,8 +223,7 @@ function _simplify(::GI.PolygonTrait, alg, geom;  kw...)
         GI.LinearRingTrait(), alg, g;
         kw..., preserve_endpoint = false,
     )
-    rebuilder(g) = rebuild(g, simplifier(g))
-    lrs = map(rebuilder, GI.getgeom(geom))
+    lrs = map(simplifier, GI.getgeom(geom))
     return rebuild(geom, lrs)
 end
 
@@ -367,13 +366,17 @@ function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
     end
     sorted_results = sort!(@view results[1:i])
     if !preserve_endpoint && i > 3
-        endpt_dist = _squared_distance_line(Float64, points[1], points[end - 1], points[2])
+        # Check start/endpoint distance to other points to see if it meets criteria
+        pre_pt, post_pt = points[sorted_results[end - 1]], points[sorted_results[2]]
+        endpt_dist = _squared_distance_line(Float64, points[1], pre_pt, post_pt)
         if !isnothing(alg.tol)
+            # Remove start point and replace with second point
             if endpt_dist < max_tol
                 results[i] = results[2]
                 sorted_results = @view results[2:i]
             end
         else
+            # Remove start point and add point with maximum distance still remaining
             if endpt_dist < max_dist
                 insert!(results, searchsortedfirst(sorted_results, max_idx), max_idx)
                 results[i+1] = results[2]

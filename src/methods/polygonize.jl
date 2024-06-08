@@ -2,10 +2,12 @@
 
 export polygonize
 
-#= 
-
+#=
 The methods in this file convert a raster image into a set of polygons, 
 by contour detection using a clockwise Moore neighborhood method.
+
+The resulting polygons are snapped to the boundaries of the cells of the input raster,
+so they will look different from traditional contours from a plotting package.
 
 The main entry point is the [`polygonize`](@ref) function.
 
@@ -38,14 +40,13 @@ which would provide two distinct polyogns with holes.
 ```@example polygonize
 polygons = polygonize(xs, ys, 0.8 .< zs .< 3.2)
 ```
-This returns a list of `GeometryBasics.Polygon`, which can be plotted immediately, 
-or wrapped directly in a `GeometryBasics.MultiPolygon`.  Let's see how these look:
+This returns a `GI.MultiPolygon`, which is directly plottable.  Let's see how these look:
 
 ```@example polygonize
 f, a, p = poly(polygons; label = "Polygonized polygons", axis = (; aspect = DataAspect()))
 ```
 
-Finally, let's plot the Makie contour lines on top, to see how well the polygonization worked:
+Finally, let's plot the Makie contour lines on top, to see how the polygonization compares:
 ```@example polygonize
 contour!(a, xs, ys, zs; labels = true, levels = [0.8, 3.2], label = "Contour lines")
 f
@@ -57,165 +58,343 @@ The implementation follows:
 =# 
 
 """
-    polygonize(A; minpoints=10)
-    polygonize(xs, ys, A; minpoints=10)
+    polygonize(A::AbstractMatrix{Bool}; kw...)
+    polygonize(f, A::AbstractMatrix; kw...)
+    polygonize(xs, ys, A::AbstractMatrix{Bool}; kw...)
+    polygonize(f, xs, ys, A::AbstractMatrix; kw...)
 
-Convert matrix `A` to polygons.
+Polygonize an `AbstractMatrix` of values, currently to a single class of polygons.
 
-If `xs` and `ys` are passed in they are used as the pixel center points.
+Returns a `MultiPolygon` for `Bool` values and `f` return values, and
+a `FeatureCollection` of `Feature`s holding `MultiPolygon` for all other values.
+
+
+Function `f` should return either `true` or `false` or a transformation
+of values into simpler groups, especially useful for floating point arrays.
+
+If `xs` and `ys` are ranges, they are used as the pixel/cell center points.
+If they are `Vector` of `Tuple` they are used as the lower and upper bounds of each pixel/cell.
 
 # Keywords
-- `minpoints`: ignore polygons with less than `minpoints` points. 
+
+- `minpoints`: ignore polygons with less than `minpoints` points.
+- `values`: the values to turn into polygons. By default these are `union(A)`,
+    If function `f` is passed these refer to the return values of `f`, by
+    default `union(map(f, A)`. If values `Bool`, false is ignored and a single
+    `MultiPolygon` is returned rather than a `FeatureCollection`.
+
+# Example
+
+```julia
+using GeometryOps
+A = rand(100, 100)
+multipolygon = polygonize(>(0.5), A);
+```
 """
-polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...) 
-
-function polygonize(xs, ys, A::AbstractMatrix; minpoints=10)
-    ## This function uses a lazy map to get contours.  
-    contours = Iterators.map(get_contours(A)) do contour
-        poly = map(contour) do xy
-            x, y = Tuple(xy)
-            Point2f(xs[x], ys[y])
-        end
-    end
-    ## If we filter off the minimum points, then it's a hair more efficient
-    ## not to convert contours with length < missingpoints to polygons.
-    if minpoints > 1
-        contours = Iterators.filter(contours) do contour
-            length(contour) > minpoints
-        end
-       return map(Polygon, contours)
+polygonize(A::AbstractMatrix{Bool}; kw...) = polygonize(identity, A; kw...)
+polygonize(f::Base.Callable, A::AbstractMatrix; kw...) = polygonize(f, axes(A)..., A; kw...)
+polygonize(A::AbstractMatrix; kw...) = polygonize(axes(A)..., A; kw...)
+polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix{Bool}; kw...) =
+    _polygonize(identity, xs, ys, A)
+function polygonize(xs::AbstractVector, ys::AbstractVector, A::AbstractMatrix; 
+    values=sort!(Base.union(A)), kw...
+)
+    _polygonize_featurecollection(identity, xs, ys, A; values, kw...) 
+end
+function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+    values=_default_values(f, A), kw...
+)
+    if isnothing(values)
+        _polygonize(f, xs, ys, A; kw...) 
     else
-        return map(Polygon, contours)
+        _polygonize_featurecollection(f, xs, ys, A; kw...) 
     end
 end
+function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+    kw...
+)
+    # Make vectors of pixel bounds
+    xhalf = step(xs) / 2
+    yhalf = step(ys) / 2
+    # Make bounds ranges first to avoid floating point error making gaps or overlaps
+    xbounds = first(xs) - xhalf : step(xs) : last(xs) + xhalf
+    ybounds = first(ys) - yhalf : step(ys) : last(ys) + yhalf
+    Tx = eltype(xbounds)
+    Ty = eltype(ybounds)
+    xvec = similar(Vector{Tuple{Tx,Tx}}, xs)
+    yvec = similar(Vector{Tuple{Ty,Ty}}, ys)
+    for (xind, i) in enumerate(eachindex(xvec))
+        xvec[i] = xbounds[xind], xbounds[xind+1]
+    end
+    for (yind, i) in enumerate(eachindex(yvec))
+        yvec[i] = ybounds[yind], ybounds[yind+1]
+    end
+    return _polygonize(f, xvec, yvec, A; kw...)
+end
+function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::AbstractMatrix; 
+    minpoints=0,
+) where T<:Tuple
+    (length(xs), length(ys)) == size(A) || throw(ArgumentError("length of xs and ys must match the array size"))
 
-## rotate direction clockwise
-rot_clockwise(dir) = (dir) % 8 + 1
-## rotate direction counterclockwise
-rot_counterclockwise(dir) = (dir + 6) % 8 + 1
+    # Extract the CRS of the array (if it is some kind of geo array / raster)
+    crs = GI.crs(A)
+    # Define buffers for edges and rings
+    rings = Vector{T}[]
 
-## move from current pixel to next in given direction
-function move(pixel, image, dir, dir_delta)
-    newp = pixel + dir_delta[dir]
-    height, width = size(image)
-    if (0 < newp[1] <= height) && (0 < newp[2] <= width)
-        if image[newp] != 0
-            return newp
+    strait = true
+    turning = false
+
+    # Get edges from the array A
+    edges = _pixel_edges(f, xs, ys, A)
+    # Keep dict keys separately in a vector for performance
+    edgekeys = collect(keys(edges))
+    # We don't delete keys we just reduce length with nkeys
+    nkeys = length(edgekeys)
+
+    # Now create rings from the edges, 
+    # looping until there are no edge keys left
+    while nkeys > 0
+        found = false
+        local firstnode, nextnodes, nodestatus
+
+        # Loop until we find a key that hasn't been removed,
+        # decrementing nkeys as we go.
+        while nkeys > 0
+            # Take the first node from the array
+            firstnode::T = edgekeys[nkeys]
+            nextnodes = edges[firstnode]
+            nodestatus = map(!=(typemax(first(firstnode))) ∘ first, nextnodes)
+            if any(nodestatus)
+                found = true
+                break
+            else
+                nkeys -= 1
+            end
+        end
+
+        # If we found nothing this time, we are done
+        found == false && break
+
+        # Check if there are one or two lines going through this node
+        # and take one of them, then update the status
+        if nodestatus[2]
+            nextnode = nextnodes[2]
+            edges[firstnode] = (nextnodes[1], map(typemax, nextnode))
+        else
+            nkeys -= 1
+            nextnode = nextnodes[1]
+            edges[firstnode] = (map(typemax, nextnode), map(typemax, nextnode))
+        end
+
+        # Start a new ring
+        currentnode = firstnode
+        ring = [currentnode, nextnode]
+        push!(rings, ring)
+        
+        # Loop until we close a the ring and break
+        while true
+            # Find a node that matches the next node
+            (c1, c2) = possiblenodes = edges[nextnode]
+            nodestatus = map(!=(typemax(first(firstnode))) ∘ first, possiblenodes)
+            if nodestatus[2]
+                # When there are two possible node, 
+                # choose the node that is the furthest to the left
+                # We also need to check if we are on a straight line
+                # to avoid adding unnecessary points.
+                selectednode, remainingnode, straightline = if currentnode[1] == nextnode[1] # vertical
+                    wasincreasing = nextnode[2] > currentnode[2]
+                    firstisstraight = nextnode[1] == c1[1]
+                    firstisleft = nextnode[1] > c1[1]
+                    secondisstraight = nextnode[1] == c2[1]
+                    secondisleft = nextnode[1] > c2[1]
+                    if firstisstraight
+                        if secondisleft 
+                            if wasincreasing 
+                                (c2, c1, turning)
+                            else
+                                (c1, c2, straight)
+                            end
+                        else
+                            if wasincreasing 
+                                (c1, c2, straight)
+                            else
+                                (c2, c1, secondisstraight)
+                            end
+                        end
+                    elseif firstisleft
+                        if wasincreasing 
+                            (c1, c2, turning)
+                        else
+                            (c2, c1, secondisstraight)
+                        end
+                    else # firstisright
+                        if wasincreasing 
+                            (c2, c1, secondisstraight)
+                        else
+                            (c1, c2, turning)
+                        end
+                    end
+                else # horizontal
+                    wasincreasing = nextnode[1] > currentnode[1]
+                    firstisstraight = nextnode[2] == c1[2]
+                    firstisleft = nextnode[2] > c1[2]
+                    secondisleft = nextnode[2] > c2[2]
+                    secondisstraight = nextnode[2] == c2[2]
+                    if firstisstraight
+                        if secondisleft 
+                            if wasincreasing 
+                                (c1, c2, straight)
+                            else
+                                (c2, c1, turning)
+                            end
+                        else
+                            if wasincreasing 
+                                (c2, c1, turning)
+                            else
+                                (c1, c2, straight)
+                            end
+                        end
+                    elseif firstisleft
+                        if wasincreasing 
+                            (c2, c1, secondisstraight)
+                        else
+                            (c1, c2, turning)
+                        end
+                    else # firstisright
+                        if wasincreasing 
+                            (c1, c2, turning)
+                        else
+                            (c2, c1, secondisstraight)
+                        end
+                    end
+                end
+                # Update edges
+                edges[nextnode] = (remainingnode, map(typemax, remainingnode))
+            else
+                # Here we simply choose the first (and only valid) node
+                selectednode = c1
+                # Replace the edge nodes with empty nodes, they will be skipped later
+                edges[nextnode] = (map(typemax, c1), map(typemax, c1))
+                # Check if we are on a straight line
+                straightline = currentnode[1] == nextnode[1] == c1[1] || 
+                               currentnode[2] == nextnode[2] == c1[2]
+            end
+
+            # Update the current and next nodes with the next and selected nodes
+            currentnode, nextnode = nextnode, selectednode
+            # Update the current node or add a new node to the ring 
+            if straightline
+                # replace the last node we don't need it
+                ring[end] = nextnode
+            else
+                # add a new node, we have turned a corner
+                push!(ring, nextnode)
+            end
+            # If the ring is closed, break the loop and start a new one
+            nextnode == firstnode && break
         end
     end
-    return CartesianIndex(0, 0)
-end
 
-## finds direction between two given pixels
-function from_to(from, to, dir_delta)
-    delta = to - from
-    return findall(x -> x == delta, dir_delta)[1]
-end
-
-function detect_move(image, p0, p2, nbd, border, done, dir_delta)
-    dir = from_to(p0, p2, dir_delta)
-    moved = rot_clockwise(dir)
-    p1 = CartesianIndex(0, 0)
-    while moved != dir ## 3.1
-        newp = move(p0, image, moved, dir_delta)
-        if newp[1] != 0
-            p1 = newp
-            break
-        end
-        moved = rot_clockwise(moved)
+    # Define wrapped LinearRings, with embedded extents
+    # so we only calculate them once
+    linearrings = map(rings) do ring
+        extent = GI.extent(GI.LinearRing(ring))
+        GI.LinearRing(ring; extent, crs)
     end
 
-    if p1 == CartesianIndex(0, 0)
-        return
+    # Separate exteriors from holes by winding direction
+    direction = (last(last(xs)) - first(first(xs))) * (last(last(ys)) - first(first(ys)))
+    exterior_inds = if direction > 0 
+        .!isclockwise.(linearrings)
+    else
+        isclockwise.(linearrings)
+    end
+    holes = linearrings[.!exterior_inds]
+    polygons = map(view(linearrings, exterior_inds)) do lr
+        GI.Polygon([lr]; extent=GI.extent(lr), crs)
     end
 
-    p2 = p1 ## 3.2
-    p3 = p0 ## 3.2
-    done .= false
-    while true
-        dir = from_to(p3, p2, dir_delta)
-        moved = rot_counterclockwise(dir)
-        p4 = CartesianIndex(0, 0)
-        done .= false
-        while true ## 3.3
-            p4 = move(p3, image, moved, dir_delta)
-            if p4[1] != 0
+    # Then we add the holes to the polygons they are inside of
+    assigned = fill(false, length(holes))
+    for i in eachindex(holes)
+        hole = holes[i]
+        prepared_hole = GI.LinearRing(holes[i]; extent=GI.extent(holes[i]))
+        for poly in polygons
+            exterior = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly)); extent=GI.extent(poly))
+            if covers(exterior, prepared_hole)
+                # Hole is in the exterior, so add it to the polygon
+                push!(poly.geom, hole)
+                assigned[i] = true
                 break
             end
-            done[moved] = true
-            moved = rot_counterclockwise(moved)
-        end
-        push!(border, p3) ## 3.4
-        if p3[1] == size(image, 1) || done[3]
-            image[p3] = -nbd
-        elseif image[p3] == 1
-            image[p3] = nbd
-        end
-
-        if (p4 == p0 && p3 == p1) ## 3.5
-            break
-        end
-        p2 = p3
-        p3 = p4
-    end
-end
-
-"""
-   get_contours(A::AbstractMatrix)
-
-Returns contours as vectors of `CartesianIndex`.
-"""
-function get_contours(image::AbstractMatrix)
-    nbd = 1
-    lnbd = 1
-    image = Float64.(image)
-    contour_list = Vector{typeof(CartesianIndex[])}()
-    done = [false, false, false, false, false, false, false, false]
-
-    ## Clockwise Moore neighborhood.
-    dir_delta = (CartesianIndex(-1, 0), CartesianIndex(-1, 1), CartesianIndex(0, 1), CartesianIndex(1, 1), 
-                 CartesianIndex(1, 0), CartesianIndex(1, -1), CartesianIndex(0, -1), CartesianIndex(-1, -1))
-
-    height, width = size(image)
-
-    for i = 1:height
-        lnbd = 1
-        for j = 1:width
-            fji = image[i, j]
-            is_outer = (image[i, j] == 1 && (j == 1 || image[i, j-1] == 0)) ## 1 (a)
-            is_hole = (image[i, j] >= 1 && (j == width || image[i, j+1] == 0))
-
-            if is_outer || is_hole
-                ## 2
-                border = CartesianIndex[]
-                from = CartesianIndex(i, j)
-
-                if is_outer
-                    nbd += 1
-                    from -= CartesianIndex(0, 1)
-
-                else
-                    nbd += 1
-                    if fji > 1
-                        lnbd = fji
-                    end
-                    from += CartesianIndex(0, 1)
-                end
-
-                p0 = CartesianIndex(i, j)
-                detect_move(image, p0, from, nbd, border, done, dir_delta) ## 3
-                if isempty(border) ##TODO
-                    push!(border, p0)
-                    image[p0] = -nbd
-                end
-                push!(contour_list, border)
-            end
-            if fji != 0 && fji != 1
-                lnbd = abs(fji)
-            end
-
         end
     end
 
-    return contour_list
+    assigned_holes = count(assigned)
+    assigned_holes == length(holes) || @warn "Not all holes were assigned to polygons, $(length(holes) - assigned_holes) where missed from $(length(holes)) holes and $(length(polygons)) polygons"
+
+    if isempty(polygons)
+        # TODO: this really should return an emtpty MultiPolygon but
+        # GeoInterface wrappers cant do that yet, which is not ideal...
+        @warn "No polgons found, check your data or try another function for `f`"
+        return nothing
+    else
+        # Otherwise return a wrapped MultiPolygon
+        return GI.MultiPolygon(polygons; crs, extent = mapreduce(GI.extent, Extents.union, polygons))
+    end
 end
+
+function _polygonize_featurecollection(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
+    values=_default_values(f, A), kw...
+)
+    crs = GI.crs(A)
+    # Create one feature per value
+    features = map(values) do value
+        multipolygon = _polygonize(x -> isequal(f(x), value), xs, ys, A; kw...)
+        GI.Feature(multipolygon; properties=(; value), extent = GI.extent(multipolygon), crs)
+    end 
+
+    return GI.FeatureCollection(features; extent = mapreduce(GI.extent, Extents.union, features), crs)
+end
+
+function _default_values(f, A)
+    # Get union of f return values with resolved eltype
+    values = map(identity, sort!(Base.union(Iterators.map(f, A))))
+    # We ignore pure Bool
+    return eltype(values) == Bool ? nothing : collect(skipmissing(values))
+end
+
+function update_edge!(dict, key, node)
+    newnodes = (node, map(typemax, node))
+    # Get or write in one go, to skip a hash lookup
+    existingnodes = get!(() -> newnodes, dict, key)
+    # If we actually fetched an existing node, update it
+    if existingnodes[1] != node
+        dict[key] = (existingnodes[1], node)
+    end
+end
+
+function _pixel_edges(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A) where T<:Tuple
+    edges = Dict{T,Tuple{T,T}}()
+    # First we collect all the edges around target pixels
+    fi, fj = map(first, axes(A))
+    li, lj = map(last, axes(A))
+    for j in axes(A, 2)
+        y1, y2 = ys[j]
+        for i in axes(A, 1) 
+            if f(A[i, j]) # This is a pixel inside a polygon
+                # xs and ys hold pixel bounds
+                x1, x2 = xs[i]
+                # We check the Von Neumann neighborhood to
+                # decide what edges are needed, if any.
+                (j == fi || !f(A[i, j-1])) && update_edge!(edges, (x1, y1), (x2, y1)) # S
+                (i == fj || !f(A[i-1, j])) && update_edge!(edges, (x1, y2), (x1, y1)) # W
+                (j == lj || !f(A[i, j+1])) && update_edge!(edges, (x2, y2), (x1, y2)) # N
+                (i == li || !f(A[i+1, j])) && update_edge!(edges, (x2, y1), (x2, y2)) # E
+            end
+        end
+    end
+    return edges
+end
+
+

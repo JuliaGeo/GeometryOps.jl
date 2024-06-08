@@ -70,23 +70,23 @@ function coverage(geom, cell_ext::Extents.Extent, ::Type{T} = Float64; threaded=
 end
 
 # Points, MultiPoints, Curves, MultiCurves
-_coverage(::Type{T}, ::GI.AbstractGeometryTrait, geom, xmin, xmax, ymin, ymax) where T = zero(T)
+_coverage(::Type{T}, ::GI.AbstractGeometryTrait, geom, xmin, xmax, ymin, ymax; kwargs...) where T = zero(T)
 
 # Polygons
-function _coverage(::Type{T}, ::GI.PolygonTrait, poly, xmin, xmax, ymin, ymax) where T
+function _coverage(::Type{T}, ::GI.PolygonTrait, poly, xmin, xmax, ymin, ymax; exact = _False()) where T
     GI.isempty(poly) && return zero(T)
-    cov_area = _coverage(T, GI.getexterior(poly), xmin, xmax, ymin, ymax)
+    cov_area = _coverage(T, GI.getexterior(poly), xmin, xmax, ymin, ymax; exact)
     cov_area == 0 && return cov_area
     # Remove hole coverage from total
     for hole in GI.gethole(poly)
-        cov_area -= _coverage(T, hole, xmin, xmax, ymin, ymax)
+        cov_area -= _coverage(T, hole, xmin, xmax, ymin, ymax; exact)
     end
     return cov_area
 end
 
 #= Calculates the area of the filled ring within the cell defined by corners with (xmin, ymin),
 (xmin, ymax), (xmax, ymax), and (xmax, ymin). =#
-function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax) where T
+function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax; exact) where T
     cov_area = zero(T)
     unmatched_out_wall, unmatched_out_point = UNKNOWN, (zero(T), zero(T))
     unmatched_in_wall, unmatched_in_point = unmatched_out_wall, unmatched_out_point
@@ -137,7 +137,7 @@ function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax) where T
             else
                 check_point = find_point_on_cell(unmatched_out_point, start_point,
                     unmatched_out_wall, start_wall,xmin, xmax, ymin, ymax)
-                if _point_filled_curve_orientation(check_point, ring; in = true, on = false, out = false)
+                if _point_filled_curve_orientation(check_point, ring; in = true, on = false, out = false, exact)
                     cov_area += connect_edges(T, unmatched_out_point, start_point,
                         unmatched_out_wall, start_wall,xmin, xmax, ymin, ymax)
                 else
@@ -160,7 +160,7 @@ function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax) where T
     cov_area = abs(cov_area) / 2
     #  if grid cell is within polygon then the area is grid cell area
     if cov_area == 0
-        if _point_filled_curve_orientation((xmin, ymin), ring; in = true, on = true, out = false)
+        if _point_filled_curve_orientation((xmin, ymin), ring; in = true, on = true, out = false, exact)
             cov_area = abs((xmax - xmin) * (ymax - ymin))
         end
     end

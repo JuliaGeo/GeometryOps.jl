@@ -54,6 +54,7 @@ const TOUCHES_POINT_ALLOWED = (in_allow = false, on_allow = true, out_allow = fa
 const TOUCHES_CURVE_ALLOWED = (over_allow = false, cross_allow = false, on_allow = true, out_allow = true)
 const TOUCHES_POLYGON_ALLOWS = (in_allow = false, on_allow = true, out_allow = true)
 const TOUCHES_REQUIRES = (in_require = false, on_require = true, out_require = false)
+const TOUCHES_EXACT = (exact = _False(),)
 
 """
     touches(geom1, geom2)::Bool
@@ -115,6 +116,7 @@ _touches(
 ) = _point_polygon_process(
     g1, g2;
     TOUCHES_POINT_ALLOWED...,
+    TOUCHES_EXACT...,
 )
 
 #= Geometry touches a point if the point is on the geometry boundary. =#
@@ -135,6 +137,7 @@ _touches(
     g1, g2;
     TOUCHES_CURVE_ALLOWED...,
     TOUCHES_REQUIRES...,
+    TOUCHES_EXACT...,
     closed_line = false,
     closed_curve = false,
 )
@@ -149,6 +152,7 @@ _touches(
     g1, g2;
     TOUCHES_CURVE_ALLOWED...,
     TOUCHES_REQUIRES...,
+    TOUCHES_EXACT...,
     closed_line = false,
     closed_curve = true,
 )
@@ -162,6 +166,7 @@ _touches(
     g1, g2;
     TOUCHES_POLYGON_ALLOWS...,
     TOUCHES_REQUIRES...,
+    TOUCHES_EXACT...,
     closed_line = false,
 )
 
@@ -191,6 +196,7 @@ _touches(
     g1, g2;
     TOUCHES_POLYGON_ALLOWS...,
     TOUCHES_REQUIRES...,
+    TOUCHES_EXACT...,
     closed_line = true,
 )
 
@@ -214,6 +220,7 @@ _touches(
     g1, g2;
     TOUCHES_POLYGON_ALLOWS...,
     TOUCHES_REQUIRES...,
+    TOUCHES_EXACT...,
 )
 
 # # Geometries touch multi-geometry/geometry collections
