@@ -192,9 +192,10 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
     intr_curr = 1
     b_count = 0
     # Loop over points in poly_b and add each point and intersection point
+    _tuple_point_part(x)= _tuple_point(x, T)
     local b_pt1
     for (i, b_p2) in enumerate(GI.getpoint(poly_b))
-        b_pt2 = _tuple_point(b_p2, T)
+        b_pt2 = _tuple_point_part(b_p2)#_tuple_point(b_p2, T)
         if i ≤ 1 || (b_pt1 == b_pt2)  # don't repeat points
             b_pt1 = b_pt2
             continue
@@ -644,13 +645,15 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
         n_new_per_poly = 0
         for curr_hole in Iterators.map(tuples, hole_iterator) # loop through all holes
             # loop through all pieces of original polygon (new pieces added to end of list)
+            _combine_holes!_partial(x) = _combine_holes!(T, curr_hole, x, return_polys, remove_hole_idx)
+            _line_polygon_interactions_partial(a) = _line_polygon_interactions(curr_hole, a; exact, closed_line = true)
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
                 curr_poly = return_polys[j]
                 remove_poly_idx[j] && continue
                 curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
-                in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; exact, closed_line = true)
+                in_ext, on_ext, out_ext = _line_polygon_interactions_partial(curr_poly_ext)
                 if in_ext  # hole is at least partially within the polygon's exterior
-                    new_hole, new_hole_poly, n_new_pieces = _combine_holes!(T, curr_hole, curr_poly, return_polys, remove_hole_idx)
+                    new_hole, new_hole_poly, n_new_pieces = _combine_holes!_partial(curr_poly)
                     if n_new_pieces > 0
                         append!(remove_poly_idx, falses(n_new_pieces))
                         n_new_per_poly += n_new_pieces

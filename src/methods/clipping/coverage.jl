@@ -59,8 +59,9 @@ Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
 function coverage(geom, xmin, xmax, ymin, ymax,::Type{T} = Float64; threaded=false) where T <: AbstractFloat
+    coverage_partial(x) = _coverage(T, GI.trait(x), x, T(xmin), T(xmax), T(ymin), T(ymax))
     applyreduce(+, _COVERAGE_TARGETS, geom; threaded, init=zero(T)) do g
-        _coverage(T, GI.trait(g), g, T(xmin), T(xmax), T(ymin), T(ymax))
+        coverage_partial(g)
     end
 end
 
@@ -78,8 +79,9 @@ function _coverage(::Type{T}, ::GI.PolygonTrait, poly, xmin, xmax, ymin, ymax; e
     cov_area = _coverage(T, GI.getexterior(poly), xmin, xmax, ymin, ymax; exact)
     cov_area == 0 && return cov_area
     # Remove hole coverage from total
+    _coverage_partial(x) = _coverage(T, x, xmin, xmax, ymin, ymax; exact)
     for hole in GI.gethole(poly)
-        cov_area -= _coverage(T, hole, xmin, xmax, ymin, ymax; exact)
+        cov_area -= _coverage_partial(hole)
     end
     return cov_area
 end
@@ -92,8 +94,9 @@ function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax; exact) where T
     unmatched_in_wall, unmatched_in_point = unmatched_out_wall, unmatched_out_point
     # Loop over edges of polygon
     start_idx = 1
+    _point_in_cell_partial(x) = _point_in_cell(x, xmin, xmax, ymin, ymax)
     for (i, p) in enumerate(GI.getpoint(ring))
-        if !_point_in_cell(p, xmin, xmax, ymin, ymax)
+        if !_point_in_cell_partial(p)
             start_idx = i
             break
         end
@@ -106,8 +109,8 @@ function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax; exact) where T
     for i in point_idx
         p2 = _tuple_point(GI.getpoint(ring, i), T)
         # Determine if edge points are within the cell
-        p1_in_cell = _point_in_cell(p1, xmin, xmax, ymin, ymax)
-        p2_in_cell = _point_in_cell(p2, xmin, xmax, ymin, ymax)
+        p1_in_cell = _point_in_cell_partial(p1)
+        p2_in_cell = _point_in_cell_partial(p2)
         # If entire line segment is inside cell
         if p1_in_cell && p2_in_cell
             cov_area += _area_component(p1, p2)

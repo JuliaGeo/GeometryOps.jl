@@ -122,9 +122,10 @@ function _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b; exact)
         repeating overlapping holes in poly_a and poly_b =#
         curr_exterior_poly = n_a_holes > 0 ? ext_poly_b : ext_poly_a
         current_poly = n_a_holes > 0 ? ext_poly_b : poly_a
+        _line_polygon_interactions_partial(x) = _line_polygon_interactions(x, curr_exterior_poly; exact, closed_line = true)
         # Loop over all holes in both original polygons
         for (i, ih) in enumerate(Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b))))
-            in_ext, _, _ = _line_polygon_interactions(ih, curr_exterior_poly; exact, closed_line = true)
+            in_ext, _, _ = _line_polygon_interactions_partial(ih)
             if !in_ext
                 #= if the hole isn't in the overlapping region between the two polygons, add
                 the hole to the resulting polygon as we know it can't interact with any
@@ -155,9 +156,10 @@ intersecting, return the original polygons.=#
 function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly; exact)
     union_poly = polys[1]
     ext_int_ring = GI.getexterior(interior_poly)
+    _line_polygon_interactions_partial(x) = _line_polygon_interactions(ext_int_ring, x; exact, closed_line = true)
     for (i, ih) in enumerate(GI.gethole(exterior_poly))
         poly_ih = GI.Polygon(StaticArrays.SVector(ih))
-        in_ih, on_ih, out_ih = _line_polygon_interactions(ext_int_ring, poly_ih; exact, closed_line = true)
+        in_ih, on_ih, out_ih = _line_polygon_interactions_partial(poly_ih)
         if in_ih  # at least part of interior polygon exterior is within the ith hole
             if !on_ih && !out_ih
                 #= interior polygon is completly within the ith hole - polygons aren't
@@ -259,9 +261,10 @@ function _union(
         fix_multipoly = nothing
     end
     multipolys = multipoly_b
+    union_partial(x) = union(x, multipolys; target, fix_multipoly)
     local polys
     for poly_a in GI.getpolygon(multipoly_a)
-        polys = union(poly_a, multipolys; target, fix_multipoly)
+        polys = union_partial(poly_a)
         multipolys = GI.MultiPolygon(polys)
     end
     return polys

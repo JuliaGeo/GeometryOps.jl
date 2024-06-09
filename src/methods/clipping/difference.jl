@@ -116,9 +116,10 @@ function _difference(
     kwargs...,
 ) where T
     polys = [tuples(poly_a, T)]
+    mapreduce_partial(x) = mapreduce(p -> difference(p, x; target), append!, polys)
     for poly_b in GI.getpolygon(multipoly_b)
         isempty(polys) && break
-        polys = mapreduce(p -> difference(p, poly_b; target), append!, polys)
+        polys = mapreduce_partial(poly_b)
     end
     return polys
 end
@@ -138,8 +139,9 @@ function _difference(
     end
     polys = Vector{_get_poly_type(T)}()
     sizehint!(polys, GI.npolygon(multipoly_a))
+    append!_partial(x) = append!(polys, difference(x, poly_b; target))
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, difference(poly_a, poly_b; target))
+        append!_partial(poly_a)
     end
     return polys
 end
@@ -160,8 +162,10 @@ function _difference(
         fix_multipoly = nothing
     end
     local polys
+    #difference_partial(x,y, z) = difference(z == 1 ? multipoly_a : x, y; target, fix_multipoly)
+    #Can't curry for some reason?
     for (i, poly_b) in enumerate(GI.getpolygon(multipoly_b))
-        polys = difference(i == 1 ? multipoly_a : GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
+        polys = difference(i == 1 ? multipoly_a : GI.MultiPolygon(polys), poly_b; target, fix_multipoly)#difference_partial(GI.MultiPolygon(polys),poly_b, i)
     end
     return polys
 end

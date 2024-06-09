@@ -121,8 +121,9 @@ function _intersection(
         multipoly_b = fix_multipoly(multipoly_b)
     end
     polys = Vector{_get_poly_type(T)}()
+    append!_partial(x) = append!(polys, intersection(poly_a, x; target))
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(poly_a, poly_b; target))
+        append!_partial(poly_b)
     end
     return polys
 end
@@ -154,8 +155,9 @@ function _intersection(
         fix_multipoly = nothing
     end
     polys = Vector{_get_poly_type(T)}()
+    append!_partial(x) = append!(polys, intersection(x, multipoly_b; target, fix_multipoly))
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(poly_a, multipoly_b; target, fix_multipoly))
+        append!_partial(poly_a)
     end
     return polys
 end
@@ -207,8 +209,9 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
     b_closed = npoints_b > 1 && edges_b[1][1] == edges_b[end][1]
     if npoints_a > 0 && npoints_b > 0
         # Loop over pairs of edges and add any intersection points to results
+        _intersection_point_partial(x,y) = _intersection_point(T, x, y; exact)
         for i in eachindex(edges_a), j in eachindex(edges_b)
-            line_orient, intr1, _ = _intersection_point(T, edges_a[i], edges_b[j]; exact)
+            line_orient, intr1, _ = _intersection_point_partial(edges_a[i], edges_b[j])#_intersection_point(T, edges_a[i], edges_b[j]; exact)
             # TODO: Add in degenerate intersection points when line_over
             if line_orient == line_cross || line_orient == line_hinge
                 #=

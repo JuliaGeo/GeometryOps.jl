@@ -54,7 +54,7 @@ n_points_values = round.(Int, exp10.(LinRange(log10(10), log10(100_000), 5)))
     circle_area_suite["LibGEOS"][n_points] = @be LG.area($lg_circle) seconds=1
 end
 
-plot_trials(circle_area_suite)
+# plot_trials(circle_area_suite)
 
 
 # ## Vancouver watershed benchmarks
@@ -175,9 +175,9 @@ n_points_values = round.(Int, exp10.(LinRange(1, 4, 10)))
     circle_union_suite["LibGEOS"][n_points]     = @be LG.union($lg_circle_left, $lg_circle_right)
 end
 
-plot_trials(circle_difference_suite)
-plot_trials(circle_intersection_suite)
-plot_trials(circle_union_suite)
+# plot_trials(circle_difference_suite)
+# plot_trials(circle_intersection_suite)
+# plot_trials(circle_union_suite)
 
 usa_poly_suite = BenchmarkGroup()
 usa_difference_suite = usa_poly_suite["difference"] = BenchmarkGroup(["title:USA difference", "subtitle:Tested on CONUS"])
