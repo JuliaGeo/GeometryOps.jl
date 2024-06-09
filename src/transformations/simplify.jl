@@ -441,6 +441,25 @@ _triangle_double_area(p1, p2, p3) =
     abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2]))
 
 
+"""
+    TopologyPreserve <: SimplifyAlg
+
+    TopologyPreserve(; tol)
+
+
+Simplifies geometries by removing points below `tol`
+distance from the line between its neighboring points,
+while preserving their topology (intersections, etc).
+
+## Keywords
+- `tol`: the minimum distance between points.
+"""
+@kwdef struct TopologyPreserve <: SimplifyAlg
+    tol::Float64 = nothing
+end
+
+# The implementation for TopologyPreserve is in the GEOS extension.
+
 # # Shared utils
 
 function _build_tolerances(f, points)

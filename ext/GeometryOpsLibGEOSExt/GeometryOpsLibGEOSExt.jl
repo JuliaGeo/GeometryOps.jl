@@ -17,6 +17,7 @@ end
 
 include("buffer.jl")
 include("segmentize.jl")
+include("simplify.jl")
 include("simple_overrides.jl")
 
 end
