@@ -256,8 +256,9 @@ function _within(
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g2,
 )
+    within_partial(x) = within(g1, x)
     for sub_g2 in GI.getgeom(g2)
-        within(g1, sub_g2) && return true
+        within_partial(sub_g2) && return true
     end
     return false
 end
@@ -273,8 +274,9 @@ function _within(
     }, g1,
     ::GI.AbstractGeometryTrait, g2,
 )
+    within_partial(x) = within(x, g2)
     for sub_g1 in GI.getgeom(g1)
-        !within(sub_g1, g2) && return false
+        !within_partial(sub_g1) && return false
     end
     return true
 end

@@ -234,8 +234,9 @@ function _touches(
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g2,
 )
+    touches_partial(x) = touches(g1, x)
     for sub_g2 in GI.getgeom(g2)
-        !touches(g1, sub_g2) && return false
+        !touches_partial(sub_g2) && return false
     end
     return true
 end
@@ -251,8 +252,9 @@ function _touches(
     }, g1,
     ::GI.AbstractGeometryTrait, g2,
 )
+    touches_partial(x) = touches(x, g2)
     for sub_g1 in GI.getgeom(g1)
-        !touches(sub_g1, g2) && return false
+        !touches_partial(sub_g1) && return false
     end
     return true
 end

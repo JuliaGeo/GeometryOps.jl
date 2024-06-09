@@ -33,7 +33,7 @@ function multipoint_crosses_line(geom1, geom2)
     np2 = GI.npoint(geom2)
 
     while i < GI.npoint(geom1) && !int_point && !ext_point
-        for j in 1:GI.npoint(geom2) - 1
+        for j in 1:np2 - 1
             exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
             if _point_on_segment(GI.getpoint(geom1, i), (GI.getpoint(geom2, j), GI.getpoint(geom2, j + 1)); exclude_boundary)
                 int_point = true
@@ -50,7 +50,7 @@ function line_crosses_line(line1, line2)
     np2 = GI.npoint(line2)
     if GeometryOps.intersects(line1, line2)
         for i in 1:GI.npoint(line1) - 1
-            for j in 1:GI.npoint(line2) - 1
+            for j in 1:np2 - 1
                 exclude_boundary = (j === 1 || j === np2 - 2) ? :none : :both
                 pa = GI.getpoint(line1, i)
                 pb = GI.getpoint(line1, i + 1)
@@ -63,6 +63,7 @@ function line_crosses_line(line1, line2)
 end
 
 function line_crosses_poly(line, poly)
+    intersect_partial(x) = intersects(line, x)
     for l in flatten(AbstractCurveTrait, poly)
         intersects(line, l) && return true
     end
@@ -72,12 +73,12 @@ end
 function multipoint_crosses_poly(mp, poly)
     int_point = false
     ext_point = false
-
+    _point_polygon_process_partial(x) = _point_polygon_process(
+        x, poly;
+        in_allow = true, on_allow = true, out_allow = false, exact = _False()
+    )
     for p in GI.getpoint(mp)
-        if _point_polygon_process(
-            p, poly;
-            in_allow = true, on_allow = true, out_allow = false, exact = _False()
-        )
+        if _point_polygon_process_partial(p)
             int_point = true
         else
             ext_point = true

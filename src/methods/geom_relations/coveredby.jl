@@ -249,8 +249,9 @@ function _coveredby(
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g2,
 )
+    coveredby_partial(x) = coveredby(g1, x)
     for sub_g2 in GI.getgeom(g2)
-        coveredby(g1, sub_g2) && return true
+        coveredby_partial(sub_g2) && return true
     end
     return false
 end
@@ -265,9 +266,10 @@ function _coveredby(
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g1,
     ::GI.AbstractGeometryTrait, g2,
-)
+)   
+    coveredby_partial(x) = coveredby(x, g2)
     for sub_g1 in GI.getgeom(g1)
-        !coveredby(sub_g1, g2) && return false
+        !coveredby_partial(sub_g1) && return false
     end
     return true
 end

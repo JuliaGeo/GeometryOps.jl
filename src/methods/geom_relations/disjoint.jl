@@ -233,8 +233,9 @@ function _disjoint(
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g2,
 )
+    disjoint_partial(x) = disjoint(g1, x)
     for sub_g2 in GI.getgeom(g2)
-        !disjoint(g1, sub_g2) && return false
+        !disjoint_partial(sub_g2) && return false
     end
     return true
 end
@@ -250,8 +251,9 @@ function _disjoint(
     }, g1,
     ::GI.AbstractGeometryTrait, g2,
 )
+    disjoint_partial(x) = disjoint(x, g2)
     for sub_g1 in GI.getgeom(g1)
-        !disjoint(sub_g1, g2) && return false
+        !disjoint_partial(sub_g1) && return false
     end
     return true
 end

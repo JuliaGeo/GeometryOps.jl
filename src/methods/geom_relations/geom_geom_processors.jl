@@ -36,9 +36,10 @@ function _point_curve_process(
     n -= first_last_equal ? 1 : 0
     # Loop through all curve segments
     p_start = GI.getpoint(curve, closed_curve ? n : 1)
+    _point_segment_orientation_partial(x) = _point_segment_orientation(point, p_start, x)
     @inbounds for i in (closed_curve ? 1 : 2):n
         p_end = GI.getpoint(curve, i)
-        seg_val = _point_segment_orientation(point, p_start, p_end)
+        seg_val = _point_segment_orientation_partial(p_end)
         seg_val == point_in && return in_allow
         if seg_val == point_on
             if !closed_curve  # if point is on curve endpoints, it is "on"
@@ -71,10 +72,10 @@ function _point_polygon_process(
     ext_val == point_out && return out_allow
     # if a point is on an external boundary, it isn't interacting with any holes
     ext_val == point_on && return on_allow
-    
+    _point_filled_curve_orientation_partial(x) = _point_filled_curve_orientation(point, x; exact)
     # If geom is within the polygon, need to check interactions with holes
     for hole in GI.gethole(polygon)
-        hole_val = _point_filled_curve_orientation(point, hole; exact)
+        hole_val = _point_filled_curve_orientation_partial(hole)
         # If a point in in a hole, it is outside of the polygon
         hole_val == point_in && return out_allow
         # If a point in on a hole edge, it is on the edge of the polygon
@@ -141,14 +142,17 @@ function _inner_line_curve_process(
     # Loop over each line segment
     l_start = _tuple_point(GI.getpoint(line, closed_line ? nl : 1))
     i = closed_line ? 1 : 2
+    _tuple_point_partial(x) = _tuple_point(GI.getpoint(line, x))
+    _tuple_point_partial_curve(x) = _tuple_point(GI.getpoint(curve, x))
     while i ≤ nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        c_start = _tuple_point(GI.getpoint(curve, closed_curve ? nc : 1))
+        l_end = _tuple_point_partial(i)
+        c_start = _tuple_point_partial_curve(closed_curve ? nc : 1)
+        _intersection_point_partial(x) = _intersection_point(Float64, (l_start, l_end), (c_start, x); exact)
         # Loop over each curve segment
         for j in (closed_curve ? 1 : 2):nc
-            c_end = _tuple_point(GI.getpoint(curve, j))
+            c_end = _tuple_point_partial_curve(j)
             # Check if line and curve segments meet
-            seg_val, intr1, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end); exact)
+            seg_val, intr1, _ = _intersection_point_partial(c_end)
             # If segments are co-linear
             if seg_val == line_over
                 !over_allow && return false
@@ -287,13 +291,13 @@ function _inner_line_polygon_process(
     end
     # If no points within the polygon, the line is disjoint and we are done
     !in_curve && return in_req_met && on_req_met && out_req_met
-
+    _line_filled_curve_interactions_partial(x) = _line_filled_curve_interactions(
+        line, x;
+        exact, closed_line = closed_line,
+    )
     # Loop over polygon holes
     for hole in GI.gethole(polygon)
-        in_hole, on_hole, out_hole =_line_filled_curve_interactions(
-            line, hole;
-            exact, closed_line = closed_line,
-        )
+        in_hole, on_hole, out_hole =_line_filled_curve_interactions_partial(hole)
         if in_hole  # line in hole is equivalent to being out of polygon
             !out_allow && return false
             out_req_met = true
@@ -372,12 +376,11 @@ function _inner_polygon_polygon_process(
         )  # if they really are disjoint, we are done
         e2_out_e1 && return in_req_met && on_req_met && out_req_met
     end
+    _line_polygon_interactions_partial(x) = _line_polygon_interactions(x, poly2;
+    exact, closed_line = true,)
     # If interiors interact, check if poly2 interacts with any of poly1's holes
     for h1 in GI.gethole(poly1)
-        h1_in_p2, h1_on_p2, h1_out_p2 = _line_polygon_interactions(
-            h1, poly2;
-            exact, closed_line = true,
-        )
+        h1_in_p2, h1_on_p2, h1_out_p2 = _line_polygon_interactions_partial(h1)
         if h1_on_p2
             !on_allow && return false
             on_req_met = true
@@ -403,13 +406,11 @@ function _inner_polygon_polygon_process(
     =#
     !in_allow && return false
     in_req_met = true
-
+    _line_polygon_interactions_partial_poly1(x) = _line_polygon_interactions(x, poly1;
+    exact, closed_line = true,)
     # If any of poly2 holes are within poly1, part of poly1 is exterior to poly2
     for h2 in GI.gethole(poly2)
-        h2_in_p1, h2_on_p1, _ = _line_polygon_interactions(
-            h2, poly1;
-            exact, closed_line = true,
-        )
+        h2_in_p1, h2_on_p1, _ = _line_polygon_interactions_partial_poly1(h2)
         if h2_on_p1
             !on_allow && return false
             on_req_met = true
@@ -499,6 +500,7 @@ function _point_filled_curve_orientation(
     n -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, n)) ? 1 : 0
     k = 0  # counter for ray crossings
     p_start = GI.getpoint(curve, n)
+
     for (i, p_end) in enumerate(GI.getpoint(curve))
         i > n && break
         v1 = GI.y(p_start) - y
@@ -569,17 +571,21 @@ function _line_filled_curve_interactions(
         out_curve = true
     end
 
-    # Check for any intersections between line and curve
+    _tuple_point_partial_line(x) = _tuple_point(GI.getpoint(line, x))
+    _tuple_point_partial_curve(y) = _tuple_point(GI.getpoint(curve, y))
+    c_start = _tuple_point_partial_curve(nc)
+    # Check for any intersections between line and curve    
     for i in (closed_line ? 1 : 2):nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        c_start = _tuple_point(GI.getpoint(curve, nc))
+        l_end = _tuple_point_partial_line(i)
+        # c_start = _tuple_point_partial_curve(curve)
         # If already interacted with all regions of curve, can stop
         in_curve && on_curve && out_curve && break
         # Check next segment of line against curve
+        _intersection_point_partial(x) = _intersection_point(Float64, (l_start, l_end), (c_start, x); exact)
         for j in 1:nc
-            c_end = _tuple_point(GI.getpoint(curve, j))
+            c_end = _tuple_point_partial_curve(j)
             # Check if two line and curve segments meet
-            seg_val, _, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end); exact)
+            seg_val, _, _ = _intersection_point_partial(c_end)
             if seg_val != line_out
                 # If line and curve meet, then at least one point is on boundary
                 on_curve = true
@@ -613,9 +619,10 @@ function _line_filled_curve_interactions(
                         end
                         sort!(ipoints, by = dist_from_lstart)
                         p_start = _tuple_point(l_start)
+                        _point_filled_curve_orientation_partial(x) = _point_filled_curve_orientation((p_start .+ x) ./ 2, curve; exact)
                         for i in 1:(npoints + 1)
                             p_end = i ≤ npoints ? _tuple_point(ipoints[i]) : l_end
-                            mid_val = _point_filled_curve_orientation((p_start .+ p_end) ./ 2, curve; exact)
+                            mid_val = _point_filled_curve_orientation_partial(p_end)
                             if mid_val == point_in
                                 in_curve = true
                             elseif mid_val == point_out
@@ -660,12 +667,13 @@ function _line_polygon_interactions(
         exact, closed_line = closed_line,
     )
     !in_poly && return (in_poly, on_poly, out_poly)
+    _line_filled_curve_interactions_partial(x) = _line_filled_curve_interactions(
+        line, x;
+        exact, closed_line = closed_line,
+    )
     # Loop over polygon holes
     for hole in GI.gethole(polygon)
-        in_hole, on_hole, out_hole =_line_filled_curve_interactions(
-            line, hole;
-            exact, closed_line = closed_line,
-        )
+        in_hole, on_hole, out_hole = _line_filled_curve_interactions_partial(hole)
         if in_hole
             out_poly = true
         end

@@ -137,8 +137,9 @@ function overlaps(
 )
     edges_a, edges_b = map(sort! ∘ to_edges, (line1, line2))
     for edge_a in edges_a
+        _overlaps_partial(x) = _overlaps(edge_a, x)
         for edge_b in edges_b
-            _overlaps(edge_a, edge_b) && return true
+            _overlaps_partial(edge_b) && return true
         end
     end
     return false
@@ -175,8 +176,9 @@ function overlaps(
     ::GI.PolygonTrait, poly1,
     ::GI.MultiPolygonTrait, polys2,
 )
+    overlaps_partial(x) = overlaps(poly1, x)
     for poly2 in GI.getgeom(polys2)
-        overlaps(poly1, poly2) && return true
+        overlaps_partial(poly2) && return true
     end
     return false
 end
@@ -206,8 +208,9 @@ function overlaps(
     ::GI.MultiPolygonTrait, polys1,
     ::GI.MultiPolygonTrait, polys2,
 )
+    overlaps_partial(x) = overlaps(x, polys2)
     for poly1 in GI.getgeom(polys1)
-        overlaps(poly1, polys2) && return true
+        overlaps_partial(poly1) && return true
     end
     return false
 end
@@ -259,8 +262,9 @@ function _line_intersects(
 )
     # Extents.intersects(to_extent(edges_a), to_extent(edges_b)) || return false
     for edge_a in edges_a
+        _line_intersects_partial(x) = _line_intersects(edge_a, x)
         for edge_b in edges_b
-            _line_intersects(edge_a, edge_b) && return true 
+            _line_intersects_partial(edge_b) && return true 
         end
     end
     return false
