@@ -14,6 +14,33 @@ const AG = ArchGDAL
 const LG = LibGEOS
 const GO = GeometryOps
 
+# Hack LG to have GeometryCollection converts
+@eval LG begin
+    GI.convert(
+        ::Type{GeometryCollection},
+        ::GeometryCollectionTrait,
+        geom::GeometryCollection;
+        context = nothing,
+    ) = geom
+    function GI.convert(
+        ::Type{GeometryCollection},
+        ::GeometryCollectionTrait,
+        geom;
+        context = get_global_context(),
+    )
+        geometries =
+            [
+                begin
+                    t = GI.trait(g)
+                    lg = geointerface_geomtype(t)
+                    GI.convert(lg, t, g; context) 
+                end
+                for g in GI.getgeom(geom)
+            ]
+        return GeometryCollection(geometries)
+    end
+end
+
 @testset "GeometryOps.jl" begin
     @safetestset "Primitives" begin include("primitives.jl") end
     # # # Methods
