@@ -172,8 +172,8 @@ function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
 end
 
 @testset "Covered By" begin test_geom_relation(GO.coveredby, (x, y) -> GO.coveredby(GO.GEOS(), x, y), "coveredby") end
-@testset "Contains" begin test_geom_relation(GO.contains, (x, y) -> GO.contains(GO.GEOS(), y, x), "contains"; swap_points = true) end
-@testset "Covers" begin test_geom_relation(GO.covers, (x, y) -> GO.covers(GO.GEOS(), y, x), "covers"; swap_points = true) end
+@testset "Contains" begin test_geom_relation(GO.contains, (x, y) -> GO.contains(GO.GEOS(), x, y), "contains"; swap_points = true) end
+@testset "Covers" begin test_geom_relation(GO.covers, (x, y) -> GO.covers(GO.GEOS(), x, y), "covers"; swap_points = true) end
 @testset "Disjoint" begin test_geom_relation(GO.disjoint, (x, y) -> GO.disjoint(GO.GEOS(), x, y), "disjoint")end
 @testset "Intersect" begin test_geom_relation(GO.intersects, (x, y) -> GO.intersects(GO.GEOS(), x, y), "intersects") end
 @testset "Touches" begin test_geom_relation(GO.touches, (x, y) -> GO.touches(GO.GEOS(), x, y), "touches") end
