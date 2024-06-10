@@ -37,7 +37,7 @@ _xy(p) = GI.x(p), GI.y(p)
     end |> all
 
     # Round trip comparison
-    @test all(map((p1, p2) -> all(map(isapprox, p1, p2)), points4326_1, points4326_2))
+    @test all(map((p1, p2) -> all(map(isapprox, _xy(p1), _xy(p2))), points4326_1, points4326_2))
 
     # Embedded crs check
     @test GI.crs(multipolygon3857) == EPSG(3857)

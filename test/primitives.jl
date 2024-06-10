@@ -73,11 +73,10 @@ end
     @test flipped_vectors == [[(2, 1), (4, 3), (6, 5), (2, 1)], [(4, 3), (6, 5), (7, 6), (4, 3)]]
 end
 
-@test_all_implementations "flatten" poly begin
+@test_all_implementations "flatten" (poly, lr1, lr2) begin
     very_wrapped = [[GI.FeatureCollection([GI.Feature(poly; properties=(;))])]]
-    @test collect(GO.flatten(GI.PointTrait, very_wrapped)) == vcat(pv1, pv2)
-    @test collect(GO.flatten(GI.LinearRingTrait, [poly])) == [lr1, lr2]
-    @test collect(GO.flatten(GI.LinearRingTrait, [poly])) == [lr1, lr2]
+    @test GO._tuple_point.(GO.flatten(GI.PointTrait, very_wrapped)) == vcat(pv1, pv2)
+    @test collect(GO.flatten(GI.AbstractCurveTrait, [poly])) == [lr1, lr2]
     @test collect(GO.flatten(GI.x, GI.PointTrait, very_wrapped)) == first.(vcat(pv1, pv2))
 end
 

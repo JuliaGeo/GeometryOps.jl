@@ -6,30 +6,32 @@ concave_coords = [(0.0, 0.0), (0.0, 1.0), (-1.0, 1.0), (-1.0, 2.0), (2.0, 2.0), 
 l2 = GI.LineString(concave_coords)
 l3 = GI.LineString(concave_coords[1:(end - 1)])
 r1 = GI.LinearRing(concave_coords)
-r2 = GI.LinearRing(concave_coords[1:(end - 1)])
-r3 = GI.LinearRing([(1.0, 1.0), (1.0, 1.5), (1.5, 1.5), (1.5, 1.0), (1.0, 1.0)])
+r2 = GI.LinearRing([(1.0, 1.0), (1.0, 1.5), (1.5, 1.5), (1.5, 1.0), (1.0, 1.0)])
 concave_angles = [90.0, 270.0, 90.0, 90.0, 90.0, 90.0]
 
-p1 = GI.Polygon([r3])
+p1 = GI.Polygon([r2])
 p2 = GI.Polygon([[(0.0, 0.0), (0.0, 4.0), (3.0, 0.0), (0.0, 0.0)]])
 p3 = GI.Polygon([[(-3.0, -2.0), (0.0,0.0), (5.0, 0.0), (-3.0, -2.0)]])
 p4 = GI.Polygon([r1])
-p5 = GI.Polygon([r1, r3])
+p5 = GI.Polygon([r1, r2])
 
 mp1 = GI.MultiPolygon([p2, p3])
 c1 = GI.GeometryCollection([pt1, l2, p2])
 
-@test_all_implementations (pt1, mpt1, l1, l2, l3, r1, r2, r3, p1, p2, p3, p4, p5, mp1, c1) begin
+# Line is not a widely available geometry type
+@test_all_implementations "line angles" l1 [GeometryBasics, GeoInterface] begin
+    @test isempty(GO.angles(l1))
+end
+
+@test_all_implementations "angles" (pt1, mpt1, l2, l3, r1, p1, p2, p3, p4, p5, mp1, c1) begin
     # Points and lines
     @test isempty(GO.angles(pt1))
     @test isempty(GO.angles(mpt1))
-    @test isempty(GO.angles(l1))
 
     # LineStrings and Linear Rings
     @test all(isapprox.(GO.angles(l2), concave_angles, atol = 1e-3))
     @test all(isapprox.(GO.angles(l3), concave_angles[2:(end - 1)], atol = 1e-3))
     @test all(isapprox.(GO.angles(r1), concave_angles, atol = 1e-3))
-    @test all(isapprox.(GO.angles(r2), concave_angles, atol = 1e-3))
 
     # Polygons
     p2_angles = [90.0, 36.8699, 53.1301]

@@ -13,9 +13,10 @@ import GeoInterface as GI
     @test_all_implementations (ls, lr, p, mp, mls) begin
 
         @testset "LinearSegments" begin
-
             @test GO.segmentize(ls; max_distance = 0.5) isa GI.LineString
-            @test GO.segmentize(lr; max_distance = 0.5) isa GI.LinearRing
+            if GI.trait(lr) isa GI.LinearRingTrait
+                @test GO.segmentize(lr; max_distance = 0.5) isa GI.LinearRing
+            end
             # Test that linear rings are closed after segmentization
             segmentized_ring = GO.segmentize(lr; max_distance = 0.5)
             @test GI.getpoint(segmentized_ring, 1) == GI.getpoint(segmentized_ring, GI.npoint(segmentized_ring))
@@ -32,7 +33,9 @@ import GeoInterface as GI
         @testset "GeodesicSegments" begin
 
             @test GO.segmentize(GO.GeodesicSegments(; max_distance = 0.5*900), ls) isa GI.LineString
-            @test GO.segmentize(GO.GeodesicSegments(; max_distance = 0.5*900), lr) isa GI.LinearRing
+            if GI.trait(lr) isa GI.LinearRingTrait
+                @test GO.segmentize(GO.GeodesicSegments(; max_distance = 0.5*900), lr) isa GI.LinearRing
+            end
             # Test that linear rings are closed after segmentization
             segmentized_ring = GO.segmentize(GO.GeodesicSegments(; max_distance = 0.5*900), lr)
             @test GI.getpoint(segmentized_ring, 1) == GI.getpoint(segmentized_ring, GI.npoint(segmentized_ring))

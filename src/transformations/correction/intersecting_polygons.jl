@@ -60,6 +60,7 @@ application_level(::UnionIntersectingPolygons) = GI.MultiPolygonTrait
 
 function (::UnionIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
     union_multipoly = tuples(multipoly)
+    @show union_multipoly
     n_polys = GI.npolygon(multipoly)
     if n_polys > 1
         keep_idx = trues(n_polys)  # keep track of sub-polygons to remove

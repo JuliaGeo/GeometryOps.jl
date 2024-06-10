@@ -42,16 +42,23 @@ end
 
 # Macro to run a block of `code` for multiple modules, 
 # using GeoInterface.convert for each var in `args`
-macro test_all_implementations(args, code)
-    _test_all_implementations_inner("", args, code)
+macro test_all_implementations(args, code::Expr)
+    _test_all_implementations_inner("", args, TEST_MODULES, code)
 end
-macro test_all_implementations(title::String, args, code)
-    _test_all_implementations_inner(string(title, " "), args, code)
+macro test_all_implementations(title::String, args, code::Expr)
+    _test_all_implementations_inner(title::String, args, TEST_MODULES, code)
+end
+macro test_all_implementations(args, modules, code::Expr)
+    _test_all_implementations_inner("", args, modules, code)
+end
+macro test_all_implementations(title::String, args, modules, code::Expr)
+    _test_all_implementations_inner(title, args, modules, code)
 end
 
-function _test_all_implementations_inner(title, args, code)
+function _test_all_implementations_inner(title, args, modules, code)
     args1 = esc(args)
     code1 = esc(code)
+    modules1 = modules isa Expr ? modules.args : modules
 
     let_expr = if args isa Symbol # Handle a single variable name
         quote
@@ -66,11 +73,21 @@ function _test_all_implementations_inner(title, args, code)
             end
         end
     end
-    quote
-        for mod in TEST_MODULES 
-            @testset "$($(isempty(title) ? "" : "$title : " ))$mod" begin
+    testsets = Expr(:block)
+
+    for mod in modules1
+        expr = quote
+            mod = $mod
+            @testset "$mod" begin
                 $let_expr
             end
+        end
+        push!(testsets.args, expr)
+    end
+
+    quote 
+        @testset "$($title)" begin
+            $testsets
         end
     end
 end

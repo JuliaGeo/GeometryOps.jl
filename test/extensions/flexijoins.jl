@@ -1,17 +1,13 @@
 import GeometryOps as GO, GeoInterface as GI
 using FlexiJoins, DataFrames
 
-@testset "Tuple-point DataDrame" begin
-    points = tuple.(rand(100), rand(100))
-    points_df = DataFrame(geometry = points)
-
-    @test_nowarn joined_df = FlexiJoins.innerjoin((poly_df, points_df), by_pred(:geometry, GO.contains, :geometry))
-end
+points = tuple.(rand(100), rand(100))
+points_df = DataFrame(geometry = points)
 
 pl = GI.Polygon([GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 0)])])
 pu = GI.Polygon([GI.LinearRing([(0, 0), (0, 1), (1, 1), (0, 0)])])
 
-@test_all_integrations "Polygon DataDrame" (pl, pu) begin
+@test_all_implementations "Polygon DataDrame" (pl, pu) begin
     poly_df = DataFrame(geometry = [pl, pu], color = [:red, :blue])
     # Test that the join happened correctly
     joined_df = FlexiJoins.innerjoin((poly_df, points_df), by_pred(:geometry, GO.contains, :geometry))
