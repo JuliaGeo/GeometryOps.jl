@@ -7,15 +7,17 @@ import GeoFormatTypes as GFT
 import CoordinateTransformations
 import Proj
 using CairoMakie
+using GeoMakie
+using GeoJSON
 ````
 
-The first thing we need to do is decide which Coordinate Reference System (CRS) we will be working in. Here, we start with the most common geographic CRS, [WGS84](https://epsg.io/4326).
+The first thing we need to do is decide which Coordinate Reference System (CRS) we will be working in. Here, we start with the most common geographic CRS (i.e. coordiantes of latitude and longitude), [WGS84](https://epsg.io/4326).
 
 ````@example creating_geometry
 crs = GFT.EPSG(4326)
 ````
 
-Let's start by making a single point with CRS info included.
+Let's start by making a single `Point` with CRS info included.
 
 ````@example creating_geometry
 point = GI.Point(0, 0; crs)
@@ -37,14 +39,14 @@ plot!(ax, points; marker = '✈', markersize = 30)
 fig
 ````
 
-Points can be combined into a single MultiPoint geometry.
+Points can be combined into a single `MultiPoint` geometry.
 
 ````@example creating_geometry
 x = [-5, -5, 5, 5]
 y = [-5, 5, 5, -5]
-multipoint = GeoInterface.MultiPoint(GI.Point.(zip(x, y); crs))
+multipoint = GI.MultiPoint(GI.Point.(zip(x, y); crs))
 plot!(ax, multipoint, marker = '☁', markersize = 30)
-display(fig)
+fig
 ````
 
 Let's create a line between two points.
@@ -57,7 +59,7 @@ plot!(ax, line)
 fig
 ````
 
-Now, let's create a line connecting multiple points (i.e. a LineString).
+Now, let's create a line connecting multiple points (i.e. a `LineString`).
 This time we get a bit more fancy with point creation.
 
 ````@example creating_geometry
@@ -152,33 +154,24 @@ plot!(multipolygon)
 display(fig)
 ````
 
-Great, now we can make `Points`, `MultiPoints`, `Lines`, `LineStrings`, `Polygons` (with holes), and `MultiPolygons`.
+Great, now we can make `Points`, `MultiPoints`, `Lines`, `LineStrings`, `Polygons` (with holes), and `MultiPolygons` and modify them using [`CoordinateTransformations`] and [`GeometryOps`].
 
 But where does the `crs` information come in? To show this, we need to use `GeoMakie` that can interpret the `crs` information that we've included with our geometries.
 
-add additional packages
-
-````@example creating_geometry
-using GeoMakie
-using GeoJSON
-````
-
-Now specify the source and destination projections for our map. Remember that the very
-first thing we did was set our source coordinate system.
+Now specify the source and destination projections for our map. Remember that the very first thing we did was select our source coordinate system.
 
 ````@example creating_geometry
 source = crs;
 dest = "+proj=natearth2" #see [https://proj.org/en/9.4/operations/projections/natearth2.html]
 ````
 
-Open the Natural Earth continental outlines, which are available from https://www.naturalearthdata.com/, and bundled
-with GeoMakie as well.
+Open the Natural Earth continental outlines, which are available from https://www.naturalearthdata.com/, and are bundled with GeoMakie.
 
 ````@example creating_geometry
 land_path = GeoMakie.assetpath("ne_110m_land.geojson")
 ````
 
-Read the land data into a `GeoJSON.FeatureCollection`.
+Read the land polygons into a `GeoJSON.FeatureCollection`.
 
 ````@example creating_geometry
 land_geo = GeoJSON.read(read(land_path, String))
@@ -205,18 +198,16 @@ poly!(ga, land_geo, color=:black)
 display(fig)
 ````
 
-Now let's make a `Polygon` like before.
+Now let's plot a `Polygon` like before, but now on coordinate reference system (CRS) that is different from our data
 
 ````@example creating_geometry
 plot!(multipolygon; color = :green)
 display(fig)
 ````
 
-Great, we can make geometries and plot them on a map... now let's export the data to
-common geospatial data formats.
+Great, we can make geometries and plot them on a map... now let's export the data to common geospatial data formats.
 
-Typically, you'll also want to include attibutes with your geometries. The easiest way to
-do that is to create a table with a `:geometry` column. Let's do this using [`DataFrames`](https://github.com/JuliaData/DataFrames.jl).
+Typically, you'll also want to include attibutes with your geometries. Attibutes are simply data that is attibuted to each geometry. The easiest way to do this is to create a table with a `:geometry` column. Let's do this using [`DataFrames`](https://github.com/JuliaData/DataFrames.jl).
 
 ````@example creating_geometry
 using DataFrames
@@ -235,26 +226,26 @@ df[!,:id] = ["a", "b"]
 df[!, :name] = ["polygon 1", "polygon 2"]
 ````
 
-now let's save as a GeoJSON
+now let's save as a `GeoJSON`
 
 ````@example creating_geometry
 fn = "shapes.json"
 GeoJSON.write(fn, df)
 ````
 
-now let's save as a Shapefile
+now let's save as a `Shapefile`
 
 ````@example creating_geometry
 fn = "shapes.shp"
 Shapefile.write(fn, df)
 ````
 
-now let's save as a GeoParquet
+now let's save as a `GeoParquet`
 
 ````@example creating_geometry
 fn = "shapes.parquet"
 GeoParquet.write(fn, df, (:geometry,))
 ````
 
-And there we go, you can now create mapped geometries from scratch, plot them on a map, and save
-in multiple geospatial data formats.
+And there we go, you can now create mapped geometries from scratch, manipulate them, plot them on a map, and save
+them in multiple geospatial data formats.
