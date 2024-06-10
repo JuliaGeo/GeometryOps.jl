@@ -19,17 +19,19 @@ export isclockwise, isconcave
 """
     isclockwise(line::Union{LineString, Vector{Position}})::Bool
 
-Take a ring and return true or false whether or not the ring is clockwise or
-counter-clockwise.
+Take a ring and return `true` if the line goes clockwise, or `false` if the line goes
+counter-clockwise.  "Going clockwise" means, mathematically,
+
+```math
+\\left\\(\\sum_{i=2}^n (x_i - x_{i-1}) \\cdot (y_i + y_{i-1})\\right\\) > 0
+```
 
 ## Example
 
 ```jldoctest
-import GeoInterface as GI, GeometryOps as GO
-
-ring = GI.LinearRing([(0, 0), (1, 1), (1, 0), (0, 0)])
-GO.isclockwise(ring)
-
+julia> import GeoInterface as GI, GeometryOps as GO
+julia> ring = GI.LinearRing([(0, 0), (1, 1), (1, 0), (0, 0)]);
+julia> GO.isclockwise(ring)
 # output
 true
 ```
