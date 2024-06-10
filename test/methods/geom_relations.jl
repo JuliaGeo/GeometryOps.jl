@@ -159,7 +159,7 @@ test_pairs = [
 
 function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
     for (g1, g2, sg1, sg2, sdesc) in test_pairs
-        @test_all_implementations (g1, g2) begin
+        @test_all_implementations "$sg1 $f_name $sg2 - $sdesc" (g1, g2) begin
             if swap_points
                 g1, g2 = g2, g1
                 sg1, sg2 = sg2, sg1
@@ -167,7 +167,6 @@ function test_geom_relation(GO_f, LG_f, f_name; swap_points = false)
             go_val = GO_f(g1, g2)
             lg_val = LG_f(g1, g2)
             @test go_val == lg_val
-            go_val != lg_val && println("\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n")
         end
     end
 end
