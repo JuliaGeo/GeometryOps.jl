@@ -5,6 +5,11 @@ This file holds implementations for the RadialDistance, Douglas-Peucker, and
 Visvalingam-Whyatt algorithms for simplifying geometries (specifically for
 polygons and lines).
 
+The GEOS extension also allows for GEOS's topology preserving simplification 
+as well as Douglas-Peucker simplification implemented in GEOS.  Call this by
+passing `GEOS(; method = :TopologyPreserve)` or `GEOS(; method = :DouglasPeucker)`
+to the algorithm.
+
 ## Examples
 
 A quick and dirty example is:
@@ -439,26 +444,6 @@ end
 # Calculates double the area of a triangle given its vertices
 _triangle_double_area(p1, p2, p3) =
     abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2]))
-
-
-"""
-    TopologyPreserve <: SimplifyAlg
-
-    TopologyPreserve(; tol)
-
-
-Simplifies geometries by removing points below `tol`
-distance from the line between its neighboring points,
-while preserving their topology (intersections, etc).
-
-## Keywords
-- `tol`: the minimum distance between points.
-"""
-@kwdef struct TopologyPreserve <: SimplifyAlg
-    tol::Float64 = nothing
-end
-
-# The implementation for TopologyPreserve is in the GEOS extension.
 
 # # Shared utils
 
