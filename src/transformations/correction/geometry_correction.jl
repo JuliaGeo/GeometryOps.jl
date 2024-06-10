@@ -47,12 +47,14 @@ application_level(gc::GeometryCorrection) = error("Not implemented yet for $(gc)
 function fix(geometry; corrections = GeometryCorrection[ClosedRing(),], kwargs...)
     traits = application_level.(corrections)
     final_geometry = geometry
+    reduce_partial(x) = reduce(∘, corrections[x])
+    apply_partial(x,y,z) = apply(x, y, z; kwargs...)
     for Trait in (GI.PointTrait, GI.MultiPointTrait, GI.LineStringTrait, GI.LinearRingTrait, GI.MultiLineStringTrait, GI.PolygonTrait, GI.MultiPolygonTrait)
         available_corrections = findall(x -> x == Trait, traits)
         isempty(available_corrections) && continue
         @debug "Correcting for $(Trait)"
-        net_function = reduce(∘, corrections[available_corrections])
-        final_geometry = apply(net_function, Trait, final_geometry; kwargs...)
+        net_function = reduce_partial(available_corrections)
+        final_geometry = apply_partial(net_function, Trait, final_geometry)
     end
     return final_geometry
 end
