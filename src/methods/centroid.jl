@@ -109,8 +109,9 @@ Returns the centroid and area of a given geometry.
 function centroid_and_area(geom, ::Type{T}=Float64; threaded=false) where T
     target = TraitTarget{Union{GI.PolygonTrait,GI.LineStringTrait,GI.LinearRingTrait}}()
     init = (zero(T), zero(T)), zero(T)
+    _centroid_and_area_partial(x) = _centroid_and_area(GI.trait(x), x, T)
     applyreduce(_combine_centroid_and_area, target, geom; threaded, init) do g
-        _centroid_and_area(GI.trait(g), g, T)
+        _centroid_and_area_partial(g)
     end
 end
 
@@ -150,10 +151,11 @@ function _centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}) where T
     # Weight exterior centroid by area
     xcentroid *= area
     ycentroid *= area
+    centroid_and_area_partial(x) = centroid_and_area(x, T)
     # Loop over any holes within the polygon
     for hole in GI.gethole(geom)
         # Hole polygon's centroid and area
-        (xinterior, yinterior), interior_area = centroid_and_area(hole, T)
+        (xinterior, yinterior), interior_area = centroid_and_area_partial(hole)
         # Accumulate the area component into `area`
         area -= interior_area
         # Weighted average of centroid components

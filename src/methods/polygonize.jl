@@ -157,13 +157,14 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
         found = false
         local firstnode, nextnodes, nodestatus
 
+        map_partial(x,y) = map(!=(typemax(first(x))) ∘ first, y)
         # Loop until we find a key that hasn't been removed,
         # decrementing nkeys as we go.
         while nkeys > 0
             # Take the first node from the array
             firstnode::T = edgekeys[nkeys]
             nextnodes = edges[firstnode]
-            nodestatus = map(!=(typemax(first(firstnode))) ∘ first, nextnodes)
+            nodestatus = map_partial(firstnode, nextnodes)
             if any(nodestatus)
                 found = true
                 break
@@ -195,7 +196,7 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
         while true
             # Find a node that matches the next node
             (c1, c2) = possiblenodes = edges[nextnode]
-            nodestatus = map(!=(typemax(first(firstnode))) ∘ first, possiblenodes)
+            nodestatus = map_partial(firstnode, possiblenodes)
             if nodestatus[2]
                 # When there are two possible node, 
                 # choose the node that is the furthest to the left

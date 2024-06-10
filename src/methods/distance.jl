@@ -265,9 +265,10 @@ function _distance_curve(::Type{T}, point, curve; close_curve = false) where T
     # find minimum distance
     min_dist = typemax(T)
     p1 = GI.getpoint(curve, close_curve ? np : 1)
+    _distance_line_partial(x,y) = _distance_line(T, point, x, y)
     for i in (close_curve ? 1 : 2):np
         p2 = GI.getpoint(curve, i)
-        dist = _distance_line(T, point, p1, p2)
+        dist = _distance_line_partial(p1, p2)
         min_dist = dist < min_dist ? dist : min_dist
         p1 = p2
     end
@@ -281,8 +282,9 @@ treats the exterior and each hole as a linear ring.
 =#
 function _distance_polygon(::Type{T}, point, poly) where T
     min_dist = _distance_curve(T, point, GI.getexterior(poly); close_curve = true)
+    _distance_curve_partial(x) = _distance_curve(T, point, x; close_curve = true)
     @inbounds for hole in GI.gethole(poly)
-        dist = _distance_curve(T, point, hole; close_curve = true)
+        dist = _distance_curve_partial(hole)
         min_dist = dist < min_dist ? dist : min_dist
     end
     return min_dist

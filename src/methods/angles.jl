@@ -47,8 +47,9 @@ Result will be a Vector, or nested set of vectors, of type T where an optional a
 a default value of Float64.
 """
 function angles(geom, ::Type{T} = Float64; threaded =false) where T <: AbstractFloat
+    _angles_partial(x) = _angles(T, GI.trait(x), x)
     applyreduce(vcat, _ANGLE_TARGETS, geom; threaded, init = Vector{T}()) do g
-        _angles(T, GI.trait(g), g)
+        _angles_partial(g)
     end
 end
 
@@ -87,8 +88,9 @@ within the polyogn, the angles will be listed after the exterior ring angles in 
 holes. All angles, including the hole angles, are interior angles of the polygon.=#
 function _angles(::Type{T}, ::GI.PolygonTrait, geom) where T
     angles = _angles(T, GI.LinearRingTrait(), GI.getexterior(geom); interior = true)
+    append!_partial(x) = append!(angles, _angles(T, GI.LinearRingTrait(), x; interior = false))
     for h in GI.gethole(geom)
-        append!(angles, _angles(T, GI.LinearRingTrait(), h; interior = false))
+        append!_partial(h)
     end
     return angles
 end

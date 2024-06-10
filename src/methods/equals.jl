@@ -128,9 +128,10 @@ Two multipoints are equal if they share the same set of points.
 """
 function equals(::GI.MultiPointTrait, mp1, ::GI.MultiPointTrait, mp2)
     GI.npoint(mp1) == GI.npoint(mp2) || return false
+    mp2_points = GI.getpoint(mp2)
     for p1 in GI.getpoint(mp1)
         has_match = false  # if point has a matching point in other multipoint
-        for p2 in GI.getpoint(mp2)
+        for p2 in mp2_points
             if equals(p1, p2)
                 has_match = true
                 break
@@ -275,10 +276,11 @@ function equals(::GI.PolygonTrait, geom_a, ::GI.PolygonTrait, geom_b)
     ) || return false
     # Check if number of holes are equal
     GI.nhole(geom_a) == GI.nhole(geom_b) || return false
+    geom_b_holes = GI.gethole(geom_b)
     # Check if holes are equal
     for ihole in GI.gethole(geom_a)
         has_match = false
-        for jhole in GI.gethole(geom_b)
+        for jhole in geom_b_holes
             if _equals_curves(
                 ihole, jhole,
                 true, true,  # linear rings are closed by definition
@@ -320,10 +322,11 @@ Two multipolygons are equal if they share the same set of polygons.
 function equals(::GI.MultiPolygonTrait, geom_a, ::GI.MultiPolygonTrait, geom_b)
     # Check if same number of polygons
     GI.npolygon(geom_a) == GI.npolygon(geom_b) || return false
+    geom_b_polygon = GI.getpolygon(geom_b)
     # Check if each polygon has a matching polygon
     for poly_a in GI.getpolygon(geom_a)
         has_match = false
-        for poly_b in GI.getpolygon(geom_b)
+        for poly_b in geom_b_polygon
             if equals(poly_a, poly_b)
                 has_match = true
                 break

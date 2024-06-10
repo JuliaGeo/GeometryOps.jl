@@ -67,8 +67,9 @@ Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
 function area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat
+    _area_partial(x) = _area(T, GI.trait(x), x)
     applyreduce(+, _AREA_TARGETS, geom; threaded, init=zero(T)) do g
-        _area(T, GI.trait(g), g)
+        _area_partial(g)
     end
 end
 
@@ -111,9 +112,10 @@ function _signed_area(::Type{T}, ::GI.PolygonTrait, poly) where T
     s_area = _signed_area(T, GI.getexterior(poly))
     area = abs(s_area)
     area == 0 && return area
+    _signed_area_partial(x) = _signed_area(T, x)
     # Remove hole areas from total
     for hole in GI.gethole(poly)
-        area -= abs(_signed_area(T, hole))
+        area -= abs(_signed_area_partial(hole))
     end
     # Winding of exterior ring determines sign
     return area * sign(s_area)
