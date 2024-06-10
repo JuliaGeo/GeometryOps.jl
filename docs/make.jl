@@ -98,8 +98,8 @@ makedocs(;
             "Spatial Joins" => "tutorials/spatial_joins.md",
         ],
         "Explanations" => [
-            "Paradigms" => "paradigms.md",
-            "Peculiarities" => "peculiarities.md",
+            "Paradigms" => "explanations/paradigms.md",
+            "Peculiarities" => "explanations/peculiarities.md",
         ],
         "Source code" => literate_pages,
     ],
