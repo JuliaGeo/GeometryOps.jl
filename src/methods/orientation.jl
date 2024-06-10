@@ -28,7 +28,7 @@ counter-clockwise.  "Going clockwise" means, mathematically,
 
 ## Example
 
-```jldoctest
+```julia
 julia> import GeoInterface as GI, GeometryOps as GO
 julia> ring = GI.LinearRing([(0, 0), (1, 1), (1, 0), (0, 0)]);
 julia> GO.isclockwise(ring)
