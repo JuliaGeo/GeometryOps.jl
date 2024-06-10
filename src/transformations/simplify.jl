@@ -500,7 +500,7 @@ end
 function _sv_points(::Type{T}, geom) where T
     points = Array{_get_point_type(T)}(undef, GI.npoint(geom))
     for (i, p) in enumerate(GI.getpoint(geom))
-        points[i] = _sv_point(p)
+        points[i] = _sv_point(p, T)
     end
     return points
 end

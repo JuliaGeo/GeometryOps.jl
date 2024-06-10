@@ -41,15 +41,15 @@ GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearR
 function transform(f, geom, ::Type{T} = Float64; kw...) where T
     if _ismeasured(geom)
         return apply(PointTrait(), geom; kw...) do p
-            GI.Point(T.(f(SA.SVector{4}(GI.x(p), GI.y(p), GI.z(p), GI.m(p)))))
+            f(SVPoint_4D{T}(p))
         end
     elseif _is3d(geom)
         return apply(PointTrait(), geom; kw...) do p
-            GI.Point(T.(f(SA.SVector{3}((GI.x(p), GI.y(p), GI.z(p))))))
+            f(SVPoint_3D{T}(p))
         end
     else
         return apply(PointTrait(), geom; kw...) do p
-            GI.Point(T.(f(SA.SVector{2}((GI.x(p), GI.y(p))))))
+            f(SVPoint_2D{T}(p))
         end
     end
 end

@@ -15,15 +15,15 @@ $APPLY_KEYWORDS
 function svpoints(geom, ::Type{T} = Float64; kw...) where T
     if _ismeasured(geom)
         return apply(PointTrait(), geom; kw...) do p
-            GI.Point(SA.SVector{4}(T(GI.x(p)), T(GI.y(p)), T(GI.z(p)), T(GI.m(p))))
+            SVPoint{4, T, _True, _True}((GI.x(p), GI.y(p), GI.z(p), GI.m(p)))
         end
     elseif _is3d(geom)
         return apply(PointTrait(), geom; kw...) do p
-            GI.Point(SA.SVector{3}(T(GI.x(p)), T(GI.y(p)), T(GI.z(p))))
+            SVPoint{3, T, _True, _False}((GI.x(p), GI.y(p), GI.z(p)))
         end
     else
         return apply(PointTrait(), geom; kw...) do p
-            GI.Point(SA.SVector{2}(T(GI.x(p)), T(GI.y(p))))
+            SVPoint{2, T, _False, _False}((GI.x(p), GI.y(p)))
         end
     end
 end

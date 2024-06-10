@@ -183,7 +183,7 @@ end
         ::Nothing,
     }
 
-Return a list of intersection points between two geometries of type GI.Point.
+Return a list of intersection points between two geometries of type SVPoint.
 If no intersection point was possible given geometry extents, returns an empty
 list.
 """
@@ -243,14 +243,14 @@ are the two points that define the endpoints of the overlapping region between t
 lines.
 
 Also note again that each intersection is a tuple of two elements. The first is the
-intersection point GI.Point(SV[x,y]) while the second is the ratio along the initial lines
+intersection point SVPoint((x, y)) while the second is the ratio along the initial lines
 (α, β) for that point. 
 
 Calculation derivation can be found here: https://stackoverflow.com/questions/563198/ =#
 function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T
     # Default answer for no intersection
     line_orient = line_out
-    intr1 = (_sv_point((zero(T), zero(T))), (zero(T), zero(T)))
+    intr1 = (_sv_point((zero(T), zero(T)), T), (zero(T), zero(T)))
     intr2 = intr1
     no_intr_result = (line_orient, intr1, intr2)
     # Seperate out line segment points
@@ -430,7 +430,7 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     else
         (a1y + α * Δay + b1y + β * Δby) / 2
     end
-    pt = _sv_point((x, y))
+    pt = _sv_point((x, y), T)
     # Check if point is within segment envelopes and adjust to endpoint if not
     if !_point_in_extent(pt, a_ext) || !_point_in_extent(pt, b_ext)
         pt, α, β = _nearest_endpoint(T, a1, a2, b1, b2)

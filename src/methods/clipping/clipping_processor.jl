@@ -15,7 +15,7 @@ polygons, or not an endpoint of a chain. =#
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
 @kwdef struct PolyNode{T <: AbstractFloat}
-    point::GI.Point{false, false, SA.SVector{2, T}, Nothing} # GI.Point(SV[x y]) point values
+    point::SVPoint_2D{T}
     inter::Bool = false        # If ipt, true, else 0
     neighbor::Int = 0          # If ipt, index of equivalent point in a_list or b_list, else 0
     idx::Int = 0               # If crossing point, index within sorted a_idx_list
