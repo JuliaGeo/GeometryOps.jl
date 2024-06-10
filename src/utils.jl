@@ -64,21 +64,24 @@ end
 
 _to_edges!(edges::Vector, x, n) = _to_edges!(edges, trait(x), x, n)
 function _to_edges!(edges::Vector, ::GI.FeatureCollectionTrait, fc, n)
+    _to_edges!_partial(x,y) = _to_edges!(edges, x, y)
     for f in GI.getfeature(fc)
-        n = _to_edges!(edges, f, n)
+        n = _to_edges!_partial(f, n)
     end
 end
 _to_edges!(edges::Vector, ::GI.FeatureTrait, f, n) = _to_edges!(edges, GI.geometry(f), n)
 function _to_edges!(edges::Vector, ::GI.AbstractGeometryTrait, fc, n)
+    _to_edges!_partial(x,y) = _to_edges!(edges, x, y)
     for f in GI.getgeom(fc)
-        n = _to_edges!(edges, f, n)
+        n = _to_edges!_partial(f, n)
     end
 end
 function _to_edges!(edges::Vector, ::GI.AbstractCurveTrait, geom, n)
     p1 = GI.getpoint(geom, 1) 
     p1x, p1y = GI.x(p1), GI.y(p1)
+    getpoint_partial(x) = GI.getpoint(geom, x)
     for i in 2:GI.npoint(geom)
-        p2 = GI.getpoint(geom, i)
+        p2 = getpoint_partial(i)
         p2x, p2y = GI.x(p2), GI.y(p2)
         edges[n] = (p1x, p1y), (p2x, p2y)
         p1x, p1y = p2x, p2y
@@ -103,14 +106,16 @@ end
 
 _to_points!(points::Vector, x, n) = _to_points!(points, trait(x), x, n)
 function _to_points!(points::Vector, ::FeatureCollectionTrait, fc, n)
+    _to_points!_partial(x,y) = _to_points!(points, x, y)
     for f in GI.getfeature(fc)
-        n = _to_points!(points, f, n)
+        n = _to_points!_partial(f, n)
     end
 end
 _to_points!(points::Vector, ::FeatureTrait, f, n) = _to_points!(points, GI.geometry(f), n)
 function _to_points!(points::Vector, ::AbstractGeometryTrait, fc, n)
+    _to_points!_partial(x,y) = _to_points!(points, x, y)
     for f in GI.getgeom(fc)
-        n = _to_points!(points, f, n)
+        n = _to_points!_partial(f, n)
     end
 end
 function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}, geom, n)
