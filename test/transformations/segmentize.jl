@@ -10,7 +10,7 @@ import GeoInterface as GI
     mp = GI.MultiPolygon([p, p, p])
     mls = GI.MultiLineString([ls, ls, ls])
 
-    @test_all_implementations (ls, lr, p, mp, msl) begin
+    @test_all_implementations (ls, lr, p, mp, mls) begin
 
         @testset "LinearSegments" begin
 
