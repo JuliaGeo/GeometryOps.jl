@@ -393,8 +393,9 @@ value will be used, which might cause differences in results from other algorith
 function _find_max_squared_dist(points, start_idx, end_idx)
     max_idx = start_idx
     max_dist = zero(Float64)
+    _squared_distance_line_partial(x) = _squared_distance_line(Float64, points[x], points[start_idx], points[end_idx])
     for i in (start_idx + 1):(end_idx - 1)
-        d = _squared_distance_line(Float64, points[i], points[start_idx], points[end_idx])
+        d = _squared_distance_line_partial(i)
         if d > max_dist
             max_dist = d
             max_idx = i
