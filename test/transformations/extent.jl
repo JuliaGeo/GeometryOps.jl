@@ -1,7 +1,6 @@
 using Test
  
-import GeoInterface as GI
-import GeometryOps as GO
+import GeoInterface as GI, GeometryOps as GO
 using GeoInterface: Extents
 
 @testset "embed_extent" begin

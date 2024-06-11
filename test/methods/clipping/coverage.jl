@@ -1,3 +1,8 @@
+using Test
+import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
+using GeoInterface
+using GeoInterface.Extents
+
 cell_extremes = (0.0, 20.0, 0.0, 20.0)
 cell_extent = Extents.Extent(X = (0.0, 20.0), Y = (0.0, 20.0))
 cell_poly = GI.Polygon([[(0.0, 0.0), (0.0, 20.0), (20.0, 20.0), (20.0, 0.0), (0.0, 0.0)]])

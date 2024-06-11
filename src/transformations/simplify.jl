@@ -5,6 +5,11 @@ This file holds implementations for the RadialDistance, Douglas-Peucker, and
 Visvalingam-Whyatt algorithms for simplifying geometries (specifically for
 polygons and lines).
 
+The GEOS extension also allows for GEOS's topology preserving simplification 
+as well as Douglas-Peucker simplification implemented in GEOS.  Call this by
+passing `GEOS(; method = :TopologyPreserve)` or `GEOS(; method = :DouglasPeucker)`
+to the algorithm.
+
 ## Examples
 
 A quick and dirty example is:
@@ -185,6 +190,8 @@ GI.npoint(simple)
 ```
 """
 simplify(alg::SimplifyAlg, data, ::Type{T} = Float64; kw...) where T = _simplify(T, alg, data; kw...)
+simplify(alg::GEOS, data; kw...) = _simplify(alg, data; kw...)
+
 # Default algorithm is DouglasPeucker
 simplify(
     data, ::Type{T} = Float64; prefilter_alg = nothing,
@@ -198,6 +205,11 @@ function _simplify(::Type{T}, alg::SimplifyAlg, data; prefilter_alg=nothing, kw.
     simplifier(geom) = _simplify(T, GI.trait(geom), alg, geom; prefilter_alg)
     return apply(simplifier, _SIMPLIFY_TARGET, data; kw...)
 end
+# GEOS only works with Float64 so you cannot pass in a float type argument
+function _simplify(alg::GEOS, data; prefilter_alg=nothing, kw...)
+    simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg)
+    return apply(simplifier, _SIMPLIFY_TARGET, data; kw...)
+end 
 
 
 ## For Point and MultiPoint traits we do nothing
@@ -439,7 +451,6 @@ end
 # Calculates double the area of a triangle given its vertices
 _triangle_double_area(p1, p2, p3) =
     abs(GI.x(p1) * (GI.y(p2) - GI.y(p3)) + GI.x(p2) * (GI.y(p3) - GI.y(p1)) + GI.x(p3) * (GI.y(p1) - GI.y(p2)))
-
 
 # # Shared utils
 
