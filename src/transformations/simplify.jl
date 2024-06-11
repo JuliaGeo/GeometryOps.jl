@@ -190,6 +190,8 @@ GI.npoint(simple)
 ```
 """
 simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
+simplify(alg::GEOS, data; kw...) = _simplify(alg, data; kw...)
+
 # Default algorithm is DouglasPeucker
 simplify(
     data; prefilter_alg = nothing,
@@ -199,7 +201,7 @@ simplify(
 
 #= For each algorithm, apply simplication to all curves, multipoints, and
 points, reconstructing everything else around them. =#
-function _simplify(alg::SimplifyAlg, data; prefilter_alg=nothing, kw...)
+function _simplify(alg::Union{SimplifyAlg, GEOS}, data; prefilter_alg=nothing, kw...)
     simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg)
     return apply(simplifier, _SIMPLIFY_TARGET, data; kw...)
 end
