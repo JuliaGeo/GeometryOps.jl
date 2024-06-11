@@ -132,9 +132,9 @@ function _point_in_extent(p, extent::Extents.Extent)
     return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
 end
 
-_get_point_type(::Type{T}) where T = SVPoint_2D{T}
+_get_point_type(::Type{T}) where T = SVPoint{2, T, _False, _False}
 
-_sv_point(p, ::Type{T}) where T = SVPoint_2D{T}(_tuple_point(p))
+_sv_point(p, ::Type{T}) where T = SVPoint_2D(_tuple_point(p, T))
 # Get type of polygons that will be made
 # TODO: Increase type options
 _get_poly_type(::Type{T}) where T =

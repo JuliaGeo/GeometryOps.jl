@@ -60,16 +60,20 @@ struct SVPoint{N,T,Z,M} <: GeometryBasics.StaticArraysCore.StaticVector{N,T}
     vals::NTuple{N,T}  # TODO: Should Z and M be booleans or BoolsAsTypes?
 end
 
-SVPoint(p) = SVPoint(tuples(p))
-
-const SVPoint_2D{T} = SVPoint{2, T, _False, _False} where T <: AbstractFloat
-const SVPoint_3D{T} = SVPoint{3, T, _True, _False} where T <: AbstractFloat
-const SVPoint_4D{T} = SVPoint{4, T, _True, _True} where T <: AbstractFloat
-
 Base.getindex(p::SVPoint, i::Int64) = p.vals[i]
-SVPoint(vals::NTuple{2, T}) where T = SVPoint_2D{T}(vals)
-SVPoint(vals::NTuple{3, T}) where T = SVPoint_3D{T}(vals)
-SVPoint(vals::NTuple{4, T}) where T = SVPoint_4D{T}(vals)
+
+SVPoint_2D(vals::NTuple{2,T}) where T = SVPoint{2, T, _False, _False}(vals)
+SVPoint_2D(vals) = SVPoint_2D((GI.x(vals), GI.y(vals)))
+
+SVPoint_3D(vals::NTuple{3,T}) where T = SVPoint{3, T, _True, _False}(vals)
+SVPoint_3D(vals) = SVPoint_3D((GI.x(vals), GI.y(vals), GI.z(vals)))
+
+SVPoint_4D(vals::NTuple{4,T}) where T = SVPoint{4, T, _True, _True}(vals)
+SVPoint_4D(vals) = SVPoint_4D((GI.x(vals), GI.y(vals), GI.z(vals), GI.m(vals)))
+
+SVPoint(vals::NTuple{2, <:AbstractFloat}) = SVPoint_2D(vals)
+SVPoint(vals::NTuple{3, <:AbstractFloat}) = SVPoint_3D(vals)
+SVPoint(vals::NTuple{4, <:AbstractFloat}) = SVPoint_4D(vals)
 
 const SVEdge{T} = Tuple{SVPoint{N,T,Z,M}, SVPoint{N,T,Z,M}} where {N,T,Z,M}
 const Edge{T} = Union{TupleEdge{T}, SVEdge{T}} where T
