@@ -1,7 +1,6 @@
 using Test
  
-import GeoInterface as GI
-import GeometryOps as GO
+import GeoInterface as GI, GeometryOps as GO
 
 @testset "flip" begin
     geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]), 

@@ -1,3 +1,6 @@
+using Test
+import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
+
 pt1 = GI.Point((0.0, 0.0))
 mpt1 = GI.MultiPoint([pt1, pt1])
 l1 = GI.Line([(0.0, 0.0), (0.0, 1.0)])

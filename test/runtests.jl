@@ -43,4 +43,5 @@ const GO = GeometryOps
     end
     # Extensions
     @testset "FlexiJoins" begin include("extensions/flexijoins.jl") end
+    @testset "LibGEOS" begin include("extensions/libgeos.jl") end
 end

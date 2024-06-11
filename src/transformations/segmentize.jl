@@ -174,7 +174,7 @@ end
 function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = _False())
     @assert method.max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
     segmentize_function = Base.Fix1(_segmentize, method)
-    return apply(segmentize_function, Union{GI.LinearRingTrait, GI.LineStringTrait}, geom; threaded)
+    return apply(segmentize_function, TraitTarget(GI.LinearRingTrait(), GI.LineStringTrait()), geom; threaded)
 end
 
 _segmentize(method, geom) = _segmentize(method, geom, GI.trait(geom))

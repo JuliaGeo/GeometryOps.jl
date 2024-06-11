@@ -1,3 +1,6 @@
+using Test
+import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
+
 @testset "Points/MultiPoints" begin
     p1 = LG.Point([0.0, 0.0])
     p2 = LG.Point([0.0, 1.0])

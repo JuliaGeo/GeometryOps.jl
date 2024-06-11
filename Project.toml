@@ -1,23 +1,26 @@
 name = "GeometryOps"
 uuid = "3251bfac-6a57-4b6d-aa61-ac1fef2975ab"
 authors = ["Anshul Singhvi <anshulsinghvi@gmail.com> and contributors"]
-version = "0.1.6"
+version = "0.1.7"
 
 [deps]
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
 ExactPredicates = "429591f6-91af-11e9-00e2-59fbe8cec110"
 GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
+InteractiveUtils = "b77e0a4c-d291-57a0-90e8-8db25a27a240"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 SortTileRecursiveTree = "746ee33f-1797-42c2-866d-db2fce69d14d"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 
 [weakdeps]
+LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
 FlexiJoins = "e37f2e79-19fa-4eb7-8510-b63b51fe0a37"
 Proj = "c94c279d-25a6-4763-9509-64d165bea63e"
 
 [extensions]
+GeometryOpsLibGEOSExt = "LibGEOS"
 GeometryOpsFlexiJoinsExt = "FlexiJoins"
 GeometryOpsProjExt = "Proj"
 
@@ -27,6 +30,7 @@ ExactPredicates = "2.2.8"
 FlexiJoins = "0.1.30"
 GeoInterface = "1.2"
 GeometryBasics = "0.4.7"
+LibGEOS = "0.9.2"
 LinearAlgebra = "1"
 Proj = "1"
 SortTileRecursiveTree = "0.1"
@@ -40,17 +44,20 @@ CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DimensionalData = "0703355e-b756-11e9-17c0-8b28908087d0"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
+Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 FlexiJoins = "e37f2e79-19fa-4eb7-8510-b63b51fe0a37"
 GeoFormatTypes = "68eda718-8dee-11e9-39e7-89f7f65f511f"
 GeoJSON = "61d90e0f-e114-555e-ac52-39dfb47a3ef9"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
 Rasters = "a3a2b9e3-a471-40c9-b274-f788e487c689"
+NaturalEarth = "436b0209-26ab-4e65-94a9-6526d86fea76"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
 Proj = "c94c279d-25a6-4763-9509-64d165bea63e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 Shapefile = "8e980c4a-a4fe-5da2-b3a7-4b4b0353a2f4"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "FlexiJoins", "GeoFormatTypes", "GeoJSON", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "OffsetArrays", "Shapefile", "Test"]
+test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "Downloads", "FlexiJoins", "GeoFormatTypes", "GeoJSON", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "NaturalEarth", "OffsetArrays", "SafeTestsets", "Shapefile", "Test"]

@@ -1,3 +1,9 @@
+using Test
+import GeoInterface as GI, 
+    GeometryOps as GO, 
+    LibGEOS as LG,
+    ArchGDAL as AG
+
 @testset "Lines/Rings" begin
     # Basic line string
     l1 = LG.LineString([[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]])
