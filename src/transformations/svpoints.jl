@@ -3,10 +3,11 @@
 """
     svpoints(obj)
 
-Convert all points in `obj` to GI.Points wrapping StaticVectors, wherever the are nested.
+Convert all points in `obj` to SVPoints, which are a subtype of a StaticVector, wherever
+they are nested.
 
 Returns a similar object or collection of objects using GeoInterface.jl geometries wrapping
-GI.Points containing a StaticVector.
+SVPoints.
 
 # Keywords
 

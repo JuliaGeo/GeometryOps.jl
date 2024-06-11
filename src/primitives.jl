@@ -78,6 +78,9 @@ const TupleEdge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 struct SVPoint{N,T,Z,M} <: GeometryBasics.StaticArraysCore.StaticVector{N,T}
     vals::NTuple{N,T}  # TODO: Should Z and M be booleans or BoolsAsTypes?
 end
+
+SVPoint(p) = SVPoint(tuples(p))
+
 const SVPoint_2D{T} = SVPoint{2, T, _False, _False} where T <: AbstractFloat
 const SVPoint_3D{T} = SVPoint{3, T, _True, _False} where T <: AbstractFloat
 const SVPoint_4D{T} = SVPoint{4, T, _True, _True} where T <: AbstractFloat
