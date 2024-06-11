@@ -45,7 +45,7 @@ c1 = GI.GeometryCollection([pt1, l2, p2])
             @test_nowarn GO.difference(GO.GEOS(), p1, p2)
         end
         @testset "Segmentize" begin
-            @test GI.npoint(GO.segmentize(GO.GEOS(; max_distance = 0.1), l1)) == GI.npoint(GO.segmentize(l1; max_distance = 0.1))
+            @test GI.npoint(GO.segmentize(GO.GEOS(; max_distance = 0.1), l2)) == GI.npoint(GO.segmentize(l2; max_distance = 0.1))
         end
         @testset "Simplify" begin
             @test GI.npoint(GO.simplify(GO.GEOS(; tol = 1.0, method = :TopologyPreserve), l2)) == GI.npoint(GO.simplify(l2; tol = 1.0))
