@@ -9,7 +9,7 @@ As of now, we only support `GEOS` as the backend, meaning that LibGEOS must be l
 
 function buffer(geometry, distance; kwargs...)
     buffered = buffer(GEOS(; kwargs...), geometry, distance)
-    return GO.tuples(buffered)
+    return tuples(buffered)
 end
 
 # Below is an error handler similar to the others we have for e.g. segmentize,
