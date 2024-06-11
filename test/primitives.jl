@@ -1,10 +1,9 @@
 using Test
 
-import GeoInterface as GI
-import GeometryOps as GO
-import GeometryBasics as GB
+import GeoInterface as GI, GeometryOps as GO, GeometryBasics as GB
 import Proj
 import Shapefile, DataFrames
+using Downloads: download
 
 pv1 = [(1, 2), (3, 4), (5, 6), (1, 2)]
 pv2 = [(3, 4), (5, 6), (6, 7), (3, 4)]

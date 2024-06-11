@@ -1,3 +1,6 @@
+using Test
+import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
+
 pt1 = LG.Point([0.0, 0.0])
 pt2 = LG.Point([0.0, 1.0])
 pt3 = LG.Point([2.5, 2.5])

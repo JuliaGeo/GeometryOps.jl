@@ -1,3 +1,6 @@
+using Test
+import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
+
 pt = LG.Point([0.0, 0.0])
 empty_pt = LG.readgeom("POINT EMPTY")
 mpt = LG.MultiPoint([[0.0, 0.0], [1.0, 0.0]])

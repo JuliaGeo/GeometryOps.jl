@@ -1,5 +1,5 @@
-import GeometryOps as GO
-import GeoInterface as GI
+using Test
+import GeometryOps as GO, GeoInterface as GI, LibGEOS as LG
 
 # Test of polygon clipping
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])

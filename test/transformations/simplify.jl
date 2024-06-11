@@ -1,8 +1,6 @@
-import GeoJSON
-import JLD2
-import LibGEOS as LG
-import GeometryOps as GO
-import GeoInterface as GI
+using Test
+import GeoJSON, JLD2
+import GeometryOps as GO, GeoInterface as GI, LibGEOS as LG
 
 datadir = realpath(joinpath(dirname(pathof(GO)), "../test/data"))
 @testset "RadialDistance and VisvalingamWhyatt" begin

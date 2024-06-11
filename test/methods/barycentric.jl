@@ -1,10 +1,12 @@
-import GeoInterface as GI, GeometryOps as GO
-using GeometryOps: barycentric_coordinates, MeanValue
+using Test
+import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
+using GeometryOps, GeoInterface, GeometryBasics, barycentric_coordinates, MeanValue
+
 
 @testset "Mean value coordinates" begin
     t1, p1 = GI.LineString([(0.,0.), (1.,0.), (0.,1.)]), (0.5, 0.5)
     t2, p2 = GI.LineString([(0.,0.), (1.,0.), (0.,1.)]), (1., 1.)
-    t3, p3 = GI.LineString(GO.GeometryBasics.Point2d[(0,0), (1,0), (0,1)]), (1., 1.)
+    t3, p3 = GI.LineString(GeometryBasics.Point2d[(0,0), (1,0), (0,1)]), (1., 1.)
     @test_all_implementations "Triangle coordinates" (t1, p1, t2, p2, t3, p3) begin
         # Test that the barycentric coordinates for (0,0), (1,0), (0,1), and (0.5,0.5) are (0.5,0.25,0.25)
         @test all(barycentric_coordinates(MeanValue(), t1, p1) .== (0.5,0.25,0.25))
