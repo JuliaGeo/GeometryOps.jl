@@ -249,6 +249,40 @@ plot!(multipolygon; color = :green)
 fig
 ````
 
+OK, now what if we want to plot geomitires that are in a diffent Coordinate Reference System (CRS?)
+
+Select out new source `CRS`: WGS 84 / UTM zone 10N coodinate system [EPSG:32610](https://epsg.io/32610)
+````@example creating_geometry
+crs2 = GFT.EPSG(32610)
+````
+
+Create a polygon in the new coordinate systen (we're working in meters no, not lat/lon)
+````@example creating_geometry
+r = 1000000;
+ϴ = 0:0.01:2pi
+x = r .* cos.(ϴ).^3 .+ 500000
+y = r .* sin.(ϴ) .^ 3 .+5000000
+````
+
+Now create a `LinearRing` from `Points`
+
+````@example creating_geometry
+ring3 = GI.LinearRing(Point.(zip(x, y)))
+````
+
+Now create a `Polygon` from the `LineRing` with new the `CRS`
+
+````@example creating_geometry
+polygon3 = GI.Polygon([ring3]; crs=crs2)
+````
+
+Now plot on existing GeoAxis. NOTE: keyword argument `source` is used to specify the new `CRS`
+
+````@example creating_geometry
+plot!(ga,polygon3; color=:green, source=crs2)
+fig
+````
+
 Great, we can make geometries and plot them on a map... now let's export the data to common geospatial data formats.
 
 Typically, you'll also want to include attibutes with your geometries. Attibutes are simply data that is attibuted to each geometry. The easiest way to do this is to create a table with a `:geometry` column. Let's do this using [`DataFrames`](https://github.com/JuliaData/DataFrames.jl).
