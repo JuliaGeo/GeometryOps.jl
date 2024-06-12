@@ -97,6 +97,11 @@ polygon1 = GI.Polygon([ring1]; crs)
 Now, we can use GeometryOperations and CoordinateTransformations to shift `polygon1`
 vertically up, to avoid plotting over our earlier results.
 
+
+:::tabs
+
+==tab CoordinateTransformations
+
 ````@example creating_geometry
 xoffset = 0.
 yoffset = 50.
@@ -105,6 +110,24 @@ polygon1 = GO.transform(f, polygon1)
 plot!(polygon1)
 fig
 ````
+
+===tab Direct manipulation
+
+```julia
+polygon1 = GO.transform(polygon1) do point
+    # Here, you must return an object that has the 
+    # `GI.PointTrait` trait.  GeoInterface interprets
+    # tuples of Float64 as Points by default, so we return
+    # that.
+    return (GI.x(point), GI.y(point) + 50)
+end
+plot!(polygon1)
+fig
+```
+```@example
+fig # hide
+```
+:::
 
 Polygons can contain "holes". The first `LinearRing` in a polygon is the exterior, and all 
 subsequent `LinearRing`s are treated as holes in the leading `LinearRing`.
@@ -126,6 +149,10 @@ polygon1 = GI.Polygon([ring1, hole]; crs)
 
 Shift `polygon1` to the right, to avoid plotting over our earlier results.
 
+:::tabs
+
+==tab CoordinateTransformations
+
 ````@example creating_geometry
 xoffset = 50.
 yoffset = 0.
@@ -134,6 +161,20 @@ polygon1 = GO.transform(f, polygon1)
 plot!(polygon1)
 fig
 ````
+
+===tab Direct manipulation
+
+```julia
+polygon1 = GO.transform(polygon1) do point
+    return (GI.x(point) + 50, GI.y(point))
+end
+plot!(polygon1)
+fig
+```
+```@example
+fig # hide
+```
+:::
 
 `Polygon`s can also be grouped together as a `MultiPolygon`.
 
