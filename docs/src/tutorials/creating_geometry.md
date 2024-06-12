@@ -325,5 +325,14 @@ fn = "shapes.parquet"
 GeoParquet.write(fn, df, (:geometry,))
 ````
 
+Finally, if there's no Julia-native package which saves in that format (`.gpkg`, `.gml`, etc), you can use [`GeoDataFrames`](https://github.com/evetion/GeoDataFrames.jl) to save your data.
+This package uses the [GDAL](https://gdal.org/) library, which is the industry standard, via [ArchGDAL.jl](https://github.com/yeesian/ArchGDAL.jl).
+
+````@example creating_geometry
+import GeoDataFrames
+fn = "shapes.gpkg"
+GeoDataFrames.write(fn, df)
+````
+
 And there we go, you can now create mapped geometries from scratch, manipulate them, plot them on a map, and save
 them in multiple geospatial data formats.
