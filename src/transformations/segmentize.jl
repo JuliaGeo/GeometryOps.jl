@@ -187,7 +187,7 @@ function _segmentize(::Type{T}, method::Union{LinearSegments, GeodesicSegments},
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
     new_coords = _get_point_type(T)[] #NTuple{2, Float64}[]
     sizehint!(new_coords, GI.npoint(geom))
-    push!(new_coords, _sv_point((x1, y1), T))
+    push!(new_coords, SVPoint_2D((x1, y1), T))
     for coord in Iterators.drop(GI.getpoint(geom), 1)
         x2, y2 = GI.x(coord), GI.y(coord)
         _fill_linear_kernel!(T, method, new_coords, x1, y1, x2, y2)
@@ -203,12 +203,12 @@ function _fill_linear_kernel!(::Type{T}, method::LinearSegments, new_coords::Vec
         n_segments = ceil(Int, distance / method.max_distance)
         for i in 1:(n_segments - 1)
             t = i / n_segments
-            push!(new_coords, _sv_point((x1 + t * dx, y1 + t * dy), T))
+            push!(new_coords, SVPoint_2D((x1 + t * dx, y1 + t * dy), T))
         end
     end
     # End the line with the original coordinate,
     # to avoid any multiplication errors.
-    push!(new_coords, _sv_point((x2, y2), T))
+    push!(new_coords, SVPoint_2D((x2, y2), T))
     return nothing
 end
 #=

@@ -54,6 +54,10 @@ function polygon_to_line(poly)
     return GI.LineString(collect(GI.getgeom(GI.getgeom(poly, 1))))
 end
 
+#= TODO: Should the `_to_edges` and `_to_points` functions return tuples or svpoints and
+should they be dimensionally specific? If the dimension is found with if/else like in
+the transform functions, is that going to effect performance negatively? Note the existance
+of the _sv_points function that was within `simplify.jl`=#
 
 """
     to_edges()
@@ -81,19 +85,16 @@ function _to_edges!(edges::Vector, ::GI.AbstractGeometryTrait, fc, n)
 end
 function _to_edges!(edges::Vector, ::GI.AbstractCurveTrait, geom, n)
     p1 = GI.getpoint(geom, 1) 
-    p1x, p1y = GI.x(p1), GI.y(p1)
+    p1x, p1y = TuplePoint_2D(p1)
     for i in 2:GI.npoint(geom)
         p2 = GI.getpoint(geom, i)
-        p2x, p2y = GI.x(p2), GI.y(p2)
+        p2x, p2y = TuplePoint_2D(p2)
         edges[n] = (p1x, p1y), (p2x, p2y)
         p1x, p1y = p2x, p2y
         n += 1
     end
     return n
 end
-
-_tuple_point(p) = GI.x(p), GI.y(p)
-_tuple_point(p, ::Type{T}) where T = T(GI.x(p)), T(GI.y(p))
 
 function to_extent(edges::Vector{<:Edge})
     x, y = extrema(first, edges)
@@ -122,21 +123,20 @@ function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}
     n = 0
     for p in GI.getpoint(geom)
         n += 1
-        points[n] = _tuple_point(p)
+        points[n] = TuplePoint_2D(p)
     end
     return n
+end
+
+function _sv_points(::Type{T}, geom) where T
+    points = Array{_get_point_type(T)}(undef, GI.npoint(geom))
+    for (i, p) in enumerate(GI.getpoint(geom))
+        points[i] = SVPoint_2D(p, T)
+    end
+    return points
 end
 
 function _point_in_extent(p, extent::Extents.Extent)
     (x1, x2), (y1, y2) = extent.X, extent.Y
     return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
 end
-
-_get_point_type(::Type{T}) where T = SVPoint{2, T, _False, _False}
-
-_sv_point(p, ::Type{T}) where T = SVPoint_2D(_tuple_point(p, T))
-# Get type of polygons that will be made
-# TODO: Increase type options
-_get_poly_type(::Type{T}) where T =
-    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{_get_point_type(T)}, Nothing, Nothing}}, Nothing, Nothing}
-

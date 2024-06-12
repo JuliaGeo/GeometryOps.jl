@@ -1,6 +1,6 @@
 # This holds the `segmentize` geodesic functionality.
 
-import GeometryOps: GeodesicSegments, _fill_linear_kernel!, _sv_point
+import GeometryOps: GeodesicSegments, _fill_linear_kernel!, SVPoint_2D
 import Proj
 
 function GeometryOps.GeodesicSegments(; max_distance, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563, geodesic::Proj.geod_geodesic = Proj.geod_geodesic(equatorial_radius, flattening))
@@ -17,11 +17,11 @@ function GeometryOps._fill_linear_kernel!(::Type{T}, method::GeodesicSegments{Pr
         n_segments = ceil(Int, distance / method.max_distance)
         for i in 1:(n_segments - 1)
             y, x, _ = Proj.geod_position(geod_line, i / n_segments * distance)
-            push!(new_coords, GeometryOps._sv_point((x, y), T))
+            push!(new_coords, GeometryOps.SVPoint_2D((x, y), T))
         end
     end
     # End the line with the original coordinate,
     # to avoid any multiplication errors.
-    push!(new_coords, GeometryOps._sv_point((x2, y2), T))
+    push!(new_coords, GeometryOps.SVPoint_2D((x2, y2), T))
     return nothing
 end

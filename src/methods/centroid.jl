@@ -79,10 +79,10 @@ function centroid_and_length(
     xcentroid = T(0)
     ycentroid = T(0)
     length = T(0)
-    x1, y1 = _tuple_point(GI.getpoint(geom, 1), T)
+    x1, y1 = TuplePoint_2D(GI.getpoint(geom, 1), T)
     # Loop over line segments of line string
     for point₂ in GI.getpoint(geom)
-        x2, y2 = _tuple_point(point₂, T)
+        x2, y2 = TuplePoint_2D(point₂, T)
         # Calculate length of line segment
         length_component = distance((x1, y1), (x2, y2), T)
         # Accumulate the line segment length into `length`
@@ -95,7 +95,7 @@ function centroid_and_length(
     end
     xcentroid /= length
     ycentroid /= length
-    return _sv_point((xcentroid, ycentroid), T), length
+    return SVPoint_2D((xcentroid, ycentroid), T), length
 end
 
 """
@@ -109,7 +109,7 @@ function centroid_and_area(geom, ::Type{T}=Float64; threaded=false) where T
     centroid, area = applyreduce(_combine_centroid_and_area, target, geom; threaded, init) do g
         _centroid_and_area(GI.trait(g), g, T)
     end
-    return _sv_point(centroid, T), area
+    return SVPoint_2D(centroid, T), area
 end
 
 function _centroid_and_area(

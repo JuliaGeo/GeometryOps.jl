@@ -52,32 +52,6 @@ TraitTarget
 ## Implementation
 
 =#
-
-const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
-const TupleEdge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
-
-struct SVPoint{N,T,Z,M} <: GeometryBasics.StaticArraysCore.StaticVector{N,T}
-    vals::NTuple{N,T}  # TODO: Should Z and M be booleans or BoolsAsTypes?
-end
-
-Base.getindex(p::SVPoint, i::Int64) = p.vals[i]
-
-SVPoint_2D(vals::NTuple{2,T}) where T = SVPoint{2, T, _False, _False}(vals)
-SVPoint_2D(vals) = SVPoint_2D((GI.x(vals), GI.y(vals)))
-
-SVPoint_3D(vals::NTuple{3,T}) where T = SVPoint{3, T, _True, _False}(vals)
-SVPoint_3D(vals) = SVPoint_3D((GI.x(vals), GI.y(vals), GI.z(vals)))
-
-SVPoint_4D(vals::NTuple{4,T}) where T = SVPoint{4, T, _True, _True}(vals)
-SVPoint_4D(vals) = SVPoint_4D((GI.x(vals), GI.y(vals), GI.z(vals), GI.m(vals)))
-
-SVPoint(vals::NTuple{2, <:AbstractFloat}) = SVPoint_2D(vals)
-SVPoint(vals::NTuple{3, <:AbstractFloat}) = SVPoint_3D(vals)
-SVPoint(vals::NTuple{4, <:AbstractFloat}) = SVPoint_4D(vals)
-
-const SVEdge{T} = Tuple{SVPoint{N,T,Z,M}, SVPoint{N,T,Z,M}} where {N,T,Z,M}
-const Edge{T} = Union{TupleEdge{T}, SVEdge{T}} where T
-
 const THREADED_KEYWORD = "- `threaded`: `true` or `false`. Whether to use multithreading. Defaults to `false`."
 const CRS_KEYWORD = "- `crs`: The CRS to attach to geometries. Defaults to `nothing`."
 const CALC_EXTENT_KEYWORD = "- `calc_extent`: `true` or `false`. Whether to calculate the extent. Defaults to `false`."

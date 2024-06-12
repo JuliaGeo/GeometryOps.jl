@@ -508,14 +508,6 @@ function _build_tolerances(f, points)
     return real_tolerances
 end
 
-function _sv_points(::Type{T}, geom) where T
-    points = Array{_get_point_type(T)}(undef, GI.npoint(geom))
-    for (i, p) in enumerate(GI.getpoint(geom))
-        points[i] = _sv_point(p, T)
-    end
-    return points
-end
-
 function _get_points(alg, points, tolerances)
     ## This assumes that `alg` has the properties
     ## `tol`, `number`, and `ratio` available...

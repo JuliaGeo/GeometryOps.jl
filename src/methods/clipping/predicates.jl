@@ -2,7 +2,7 @@ module Predicates
     using ExactPredicates, ExactPredicates.Codegen
     import ExactPredicates: ext
     import ExactPredicates.Codegen: group!, @genpredicate
-    import GeometryOps: _False, _True, _booltype, _tuple_point
+    import GeometryOps: _False, _True, _booltype, TuplePoint_2D
     import GeoInterface as GI
 
     #= Determine the orientation of c with regards to the oriented segment (a, b).
@@ -12,7 +12,7 @@ module Predicates
     orient(a, b, c; exact) = _orient(_booltype(exact), a, b, c)
     
     # If `exact` is `true`, use `ExactPredicates` to calculate the orientation.
-    _orient(::_True, a, b, c) = ExactPredicates.orient(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
+    _orient(::_True, a, b, c) = ExactPredicates.orient(TuplePoint_2D(a, Float64), TuplePoint_2D(b, Float64), TuplePoint_2D(c, Float64))
     # If `exact` is `false`, calculate the orientation without using `ExactPredicates`.
     function _orient(exact::_False, a, b, c)
         a = a .- c
@@ -29,7 +29,7 @@ module Predicates
     #= If `exact` is `true`, use exact cross product calculation created using
     `ExactPredicates`generated predicate. Note that as of now `ExactPredicates` requires
     Float64 so we must convert points a and b. =#
-    _cross(::_True, a, b) = _cross_exact(_tuple_point(a, Float64), _tuple_point(b, Float64))
+    _cross(::_True, a, b) = _cross_exact(TuplePoint_2D(a, Float64), TuplePoint_2D(b, Float64))
 
     # Exact cross product calculation using `ExactPredicates`.
     @genpredicate function _cross_exact(a :: 2, b :: 2)

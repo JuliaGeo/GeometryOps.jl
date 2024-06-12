@@ -103,7 +103,7 @@ function _cut(::Type{T}, geom, line, geom_list, intr_list, n_intr_pts; exact) wh
     _flag_ent_exit!(GI.LineTrait(), line, geom_list; exact)
     # Add first point to output list
     return_coords = [[geom_list[1].point]]
-    cross_backs = [_sv_point((Inf, Inf), T)]
+    cross_backs = [SVPoint_2D((Inf, Inf), T)]
     poly_idx = 1
     n_polys = 1
     # Walk around original polygon to find split polygons

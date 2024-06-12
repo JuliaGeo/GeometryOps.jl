@@ -90,7 +90,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
     # Loop through points of poly_a
     local a_pt1
     for (i, a_p2) in enumerate(GI.getpoint(poly_a))
-        a_pt2 = _sv_point(a_p2, T)
+        a_pt2 = SVPoint_2D(a_p2, T)
         if i <= 1 || (a_pt1 == a_pt2)  # don't repeat points
             a_pt1 = a_pt2
             continue
@@ -103,7 +103,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
         local b_pt1
         prev_counter = a_count
         for (j, b_p2) in enumerate(GI.getpoint(poly_b))
-            b_pt2 = _sv_point(b_p2, T)
+            b_pt2 = SVPoint_2D(b_p2, T)
             if j <= 1 || (b_pt1 == b_pt2)  # don't repeat points
                 b_pt1 = b_pt2
                 continue
@@ -194,7 +194,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
     # Loop over points in poly_b and add each point and intersection point
     local b_pt1
     for (i, b_p2) in enumerate(GI.getpoint(poly_b))
-        b_pt2 = _sv_point(b_p2, T)
+        b_pt2 = SVPoint_2D(b_p2, T)
         if i ≤ 1 || (b_pt1 == b_pt2)  # don't repeat points
             b_pt1 = b_pt2
             continue

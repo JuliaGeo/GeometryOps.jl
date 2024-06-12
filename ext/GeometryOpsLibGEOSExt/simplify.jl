@@ -21,7 +21,6 @@ function GO._simplify(::GI.AbstractGeometryTrait, alg::GO.GEOS, geom; kwargs...)
 end
 
 function GO._simplify(trait::GI.AbstractCurveTrait, alg::GO.GEOS, geom; kw...)
-    # TODO: Not sure what to do about T... LibGEOS only works in Float64 and don't think I can convert while still returning LG object
     Base.invoke(
         GO._simplify,
         Tuple{GI.AbstractGeometryTrait, GO.GEOS, typeof(geom)},

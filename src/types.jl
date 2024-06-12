@@ -68,6 +68,55 @@ struct _False <: BoolsAsTypes end
 @inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
 @inline _booltype(x::BoolsAsTypes)::BoolsAsTypes = x
 
+
+const TuplePoint{N, T} = Tuple{T, T} where T <: AbstractFloat
+const TupleEdge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
+
+# Should we just have default Float64??
+TuplePoint_2D(vals) = (GI.x(vals), GI.y(vals))
+TuplePoint_2D(vals, ::Type{T}) where T <: AbstractFloat = T.((GI.x(vals), GI.y(vals)))
+
+TuplePoint_3D(vals) = (GI.x(vals), GI.y(vals), GI.z(vals))
+TuplePoint_3D(vals, ::Type{T}) where T <: AbstractFloat = T.((GI.x(vals), GI.y(vals), GI.z(vals)))
+
+TuplePoint_4D(vals) = (GI.x(vals), GI.y(vals), GI.z(vals), GI.m(vals))
+TuplePoint_4D(vals, ::Type{T}) where T <: AbstractFloat = T.((GI.x(vals), GI.y(vals), GI.z(vals), GI.m(vals)))
+
+#=
+## `SVPoint`
+
+
+=#
+struct SVPoint{N, T, Z <: BoolsAsTypes, M <: BoolsAsTypes} <: GeometryBasics.StaticArraysCore.StaticVector{N,T}
+    vals::NTuple{N,T}  # TODO: Should Z and M be booleans or BoolsAsTypes?
+end
+
+Base.getindex(p::SVPoint, i::Int64) = p.vals[i]
+
+# Should we just have default Float64??
+SVPoint_2D(vals) = _SVPoint_2D(TuplePoint_2D(vals))
+SVPoint_2D(vals, ::Type{T}) where T <: AbstractFloat = _SVPoint_2D(TuplePoint_2D(vals, T))
+_SVPoint_2D(vals::NTuple{2,T}) where T = SVPoint{2, T, _False, _False}(vals)
+
+SVPoint_3D(vals) = _SVPoint_3D(TuplePoint_3D(vals))
+SVPoint_3D(vals, ::Type{T}) where T <: AbstractFloat = _SVPoint_3D(TuplePoint_3D(vals, T))
+_SVPoint_3D(vals::NTuple{3,T}) where T = SVPoint{3, T, _True, _False}(vals)
+
+SVPoint_4D(vals) = _SVPoint_4D(TuplePoint_4D(vals))
+SVPoint_4D(vals, ::Type{T}) where T <: AbstractFloat = _SVPoint_4D(TuplePoint_4D(vals, T))
+_SVPoint_4D(vals::NTuple{4,T}) where T = SVPoint{4, T, _True, _True}(vals)
+
+const SVEdge{T} = Tuple{SVPoint{N,T,Z,M}, SVPoint{N,T,Z,M}} where {N,T,Z,M}
+
+#=
+Get type of points and polygons made through library functionality (e.g. clipping)
+TODO: Increase type options as library expands capabilities
+=#
+_get_point_type(::Type{T}) where T = SVPoint{2, T, _False, _False}
+_get_poly_type(::Type{T}) where T =
+    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{_get_point_type(T)}, Nothing, Nothing}}, Nothing, Nothing}
+
+const Edge{T} = Union{TupleEdge{T}, SVEdge{T}} where T
 #=
 
 ## `GEOS`
