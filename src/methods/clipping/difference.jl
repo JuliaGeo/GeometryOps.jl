@@ -162,6 +162,7 @@ function _difference(
     local polys
     for (i, poly_b) in enumerate(GI.getpolygon(multipoly_b))
         polys = difference(i == 1 ? multipoly_a : GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
+        isempty(polys) && break
     end
     return polys
 end
