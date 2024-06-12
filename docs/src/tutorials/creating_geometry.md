@@ -39,16 +39,16 @@ plot!(ax, points; marker = '✈', markersize = 30)
 fig
 ````
 
-Points can be combined into a single `MultiPoint` geometry. This time let's include information on CRS with the geometry making it a geospatial geometry. All that's needed is to include crs = crs when constucting the goemetry.
+Points can be combined into a single `MultiPoint` geometry. This time let's include information on CRS with the geometry making it a geospatial geometry. All that's needed is to include `; crs = crs` as a keyword argument when constucting the geometry.
 
 !!! note
-    It is good practice to only include CRS information with the highest-level geometry. Not doing so can bloat the memory footprint of the geometry. CRS information can be included at the individual `Point` level but is discouraged.
+    It is good practice to only include CRS information with the highest-level geometry. Not doing so can bloat the memory footprint of the geometry. CRS information _can_ be included at the individual `Point` level but is discouraged.
 
 ````@example creating_geometry
 x = [-5, -5, 5, 5]
 y = [-5, 5, 5, -5]
 multipoint = GI.MultiPoint(GI.Point.(zip(x, y)); crs)
-plot!(ax, multipoint, marker = '☁', markersize = 30)
+plot!(ax, multipoint; marker = '☁', markersize = 30)
 fig
 ````
 
