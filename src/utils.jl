@@ -54,7 +54,7 @@ function polygon_to_line(poly)
     return GI.LineString(collect(GI.getgeom(GI.getgeom(poly, 1))))
 end
 
-#= TODO: Should the `_to_edges` and `_to_points` functions return tuples or svpoints and
+#= Question: Should the `_to_edges` and `_to_points` functions return tuples or svpoints and
 should they be dimensionally specific? If the dimension is found with if/else like in
 the transform functions, is that going to effect performance negatively? Note the existance
 of the _sv_points function that was within `simplify.jl`=#

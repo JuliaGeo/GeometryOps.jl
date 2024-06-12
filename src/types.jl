@@ -88,7 +88,7 @@ TuplePoint_4D(vals, ::Type{T}) where T <: AbstractFloat = T.((GI.x(vals), GI.y(v
 
 =#
 struct SVPoint{N, T, Z <: BoolsAsTypes, M <: BoolsAsTypes} <: GeometryBasics.StaticArraysCore.StaticVector{N,T}
-    vals::NTuple{N,T}  # TODO: Should Z and M be booleans or BoolsAsTypes?
+    vals::NTuple{N,T}
 end
 
 Base.getindex(p::SVPoint, i::Int64) = p.vals[i]
