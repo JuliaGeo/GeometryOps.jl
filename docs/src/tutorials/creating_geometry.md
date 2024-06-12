@@ -100,7 +100,7 @@ vertically up, to avoid plotting over our earlier results.
 
 :::tabs
 
-==tab CoordinateTransformations
+===tab CoordinateTransformations
 
 ````@example creating_geometry
 xoffset = 0.
@@ -151,7 +151,7 @@ Shift `polygon1` to the right, to avoid plotting over our earlier results.
 
 :::tabs
 
-==tab CoordinateTransformations
+===tab CoordinateTransformations
 
 ````@example creating_geometry
 xoffset = 50.
