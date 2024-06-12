@@ -72,7 +72,7 @@ k = 10;
 x = r .* (k + 1) .* cos.(ϴ) .- r .* cos.((k + 1) .* ϴ)
 y = r .* (k + 1) .* sin.(ϴ) .- r .* sin.((k + 1) .* ϴ)
 lines = GI.LineString(GI.Point.(zip(x,y)); crs)
-plot!(ax, lines; linewidth = 3)
+plot!(ax, lines; linewidth = 5)
 fig
 ````
 
@@ -95,7 +95,7 @@ polygon1 = GI.Polygon([ring1]; crs)
 ````
 
 Now, we can use GeometryOperations and CoordinateTransformations to shift `polygon1`
-vertically up, to avoid plotting over our earlier results.
+up, to avoid plotting over our earlier results.
 
 
 :::tabs
@@ -209,7 +209,7 @@ source = crs;
 dest = "+proj=natearth2" #see [https://proj.org/en/9.4/operations/projections/natearth2.html]
 ````
 
-Open the Natural Earth continental outlines, which are available from https://www.naturalearthdata.com/, and are bundled with GeoMakie.
+Open the Natural Earth continental outlines that are bundled with GeoMakie, and also available from https://www.naturalearthdata.com/.
 
 ````@example creating_geometry
 land_path = GeoMakie.assetpath("ne_110m_land.geojson")
@@ -221,7 +221,7 @@ Read the land polygons into a `GeoJSON.FeatureCollection`.
 land_geo = GeoJSON.read(read(land_path, String))
 ````
 
-create a figure with a `GeoAxis` from GeoMakie, that can handle the projections between CRS.
+create a figure with a `GeoAxis` from GeoMakie, that can handle the projections between different CRSs.
 
 ````@example creating_geometry
 fig = Figure(size=(1000, 500));
@@ -249,19 +249,19 @@ plot!(multipolygon; color = :green)
 fig
 ````
 
-OK, now what if we want to plot geomitires that are in a diffent Coordinate Reference System (CRS?)
+OK, now what if we want to plot geomitires on the same figure that are in a diffent Coordinate Reference System (CRS)?
 
 Select out new source `CRS`: WGS 84 / UTM zone 10N coodinate system [EPSG:32610](https://epsg.io/32610)
 ````@example creating_geometry
 crs2 = GFT.EPSG(32610)
 ````
 
-Create a polygon in the new coordinate systen (we're working in meters no, not lat/lon)
+Create a polygon in the new coordinate systen (we're working in meters now, not lat/lon)
 ````@example creating_geometry
 r = 1000000;
-ϴ = 0:0.01:2pi
-x = r .* cos.(ϴ).^3 .+ 500000
-y = r .* sin.(ϴ) .^ 3 .+5000000
+ϴ = 0:0.01:2pi;
+x = r .* cos.(ϴ).^3 .+ 500000;
+y = r .* sin.(ϴ) .^ 3 .+5000000;
 ````
 
 Now create a `LinearRing` from `Points`
@@ -276,7 +276,7 @@ Now create a `Polygon` from the `LineRing` with new the `CRS`
 polygon3 = GI.Polygon([ring3]; crs=crs2)
 ````
 
-Now plot on existing GeoAxis. NOTE: keyword argument `source` is used to specify the new `CRS`
+Now plot on existing GeoAxis. NOTE: keyword argument `source` is used to specify the new `CRS` when plotting on an existing `GeoAxis`
 
 ````@example creating_geometry
 plot!(ga,polygon3; color=:green, source=crs2)
@@ -325,8 +325,8 @@ fn = "shapes.parquet"
 GeoParquet.write(fn, df, (:geometry,))
 ````
 
-Finally, if there's no Julia-native package which saves in that format (`.gpkg`, `.gml`, etc), you can use [`GeoDataFrames`](https://github.com/evetion/GeoDataFrames.jl) to save your data.
-This package uses the [GDAL](https://gdal.org/) library, which is the industry standard, via [ArchGDAL.jl](https://github.com/yeesian/ArchGDAL.jl).
+Finally, if there's no Julia-native package that can wirte data to your desired format (e.g. `.gpkg`, `.gml`, etc), you can use [`GeoDataFrames`](https://github.com/evetion/GeoDataFrames.jl).
+This package uses the [GDAL](https://gdal.org/) library under the hood which supports writing to nearly all geospatial formats.
 
 ````@example creating_geometry
 import GeoDataFrames
