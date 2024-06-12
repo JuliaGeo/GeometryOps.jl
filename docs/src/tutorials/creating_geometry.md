@@ -9,9 +9,10 @@ import Proj
 using CairoMakie
 using GeoMakie
 using GeoJSON
+Makie.set_theme!(Makie.MAKIE_DEFAULT_THEME) # hide
 ````
 
-The first thing we need to do is decide which Coordinate Reference System (CRS) we will be working in. Here, we start with the most common geographic CRS (i.e. coordiantes of latitude and longitude), [WGS84](https://epsg.io/4326).
+The first thing we need to do is decide which [Coordinate Reference System (CRS)](https://en.wikipedia.org/wiki/Spatial_reference_system) we will be working in. Here, we start with the most common geographic CRS (i.e. coordinates of latitude and longitude), [WGS84](https://epsg.io/4326).
 
 ````@example creating_geometry
 crs = GFT.EPSG(4326)
@@ -95,12 +96,7 @@ polygon1 = GI.Polygon([ring1]; crs)
 ````
 
 Now, we can use GeometryOperations and CoordinateTransformations to shift `polygon1`
-up, to avoid plotting over our earlier results.
-
-
-:::tabs
-
-== CoordinateTransformations
+up, to avoid plotting over our earlier results.  This is done through the [GeometryOps.transform](@ref) function.
 
 ````@example creating_geometry
 xoffset = 0.
@@ -110,24 +106,6 @@ polygon1 = GO.transform(f, polygon1)
 plot!(polygon1)
 fig
 ````
-
-== Direct manipulation
-
-```julia
-polygon1 = GO.transform(polygon1) do point
-    # Here, you must return an object that has the 
-    # `GI.PointTrait` trait.  GeoInterface interprets
-    # tuples of Float64 as Points by default, so we return
-    # that.
-    return (GI.x(point), GI.y(point) + 50)
-end
-plot!(polygon1)
-fig
-```
-```@example creating_geometry
-fig # hide
-```
-:::
 
 Polygons can contain "holes". The first `LinearRing` in a polygon is the exterior, and all 
 subsequent `LinearRing`s are treated as holes in the leading `LinearRing`.
@@ -149,10 +127,6 @@ polygon1 = GI.Polygon([ring1, hole]; crs)
 
 Shift `polygon1` to the right, to avoid plotting over our earlier results.
 
-:::tabs
-
-== CoordinateTransformations
-
 ````@example creating_geometry
 xoffset = 50.
 yoffset = 0.
@@ -161,20 +135,6 @@ polygon1 = GO.transform(f, polygon1)
 plot!(polygon1)
 fig
 ````
-
-== Direct manipulation
-
-```julia
-polygon1 = GO.transform(polygon1) do point
-    return (GI.x(point) + 50, GI.y(point))
-end
-plot!(polygon1)
-fig
-```
-```@example creating_geometry
-fig # hide
-```
-:::
 
 `Polygon`s can also be grouped together as a `MultiPolygon`.
 
@@ -249,14 +209,15 @@ plot!(multipolygon; color = :green)
 fig
 ````
 
-OK, now what if we want to plot geomitires on the same figure that are in a diffent Coordinate Reference System (CRS)?
+OK, now what if we want to plot geometries on the same figure that are in a different Coordinate Reference System (CRS)?
 
-Select out new source `CRS`: WGS 84 / UTM zone 10N coodinate system [EPSG:32610](https://epsg.io/32610)
+This is our new source `CRS`: the UTM (Universal Transverse Mercator) zone 10N [EPSG:32610](https://epsg.io/32610).  It's a type of [transverse Mercator projection](https://en.wikipedia.org/wiki/Transverse_Mercator) (a cylindrical projection) that covers the west coast of the U.S. and some regions in Canada.
+
 ````@example creating_geometry
 crs2 = GFT.EPSG(32610)
 ````
 
-Create a polygon in the new coordinate systen (we're working in meters now, not lat/lon)
+Create a polygon in the new coordinate system (we're working in meters now, not lat/lon)
 ````@example creating_geometry
 r = 1000000;
 ϴ = 0:0.01:2pi;
@@ -276,7 +237,10 @@ Now create a `Polygon` from the `LineRing` with new the `CRS`
 polygon3 = GI.Polygon([ring3]; crs=crs2)
 ````
 
-Now plot on existing GeoAxis. NOTE: keyword argument `source` is used to specify the new `CRS` when plotting on an existing `GeoAxis`
+Now plot on existing GeoAxis. 
+
+!!! note
+    The keyword argument `source` is used to specify the source `CRS` of that particular plot, when plotting on an existing `GeoAxis`.
 
 ````@example creating_geometry
 plot!(ga,polygon3; color=:green, source=crs2)
@@ -297,11 +261,12 @@ import GeoParquet
 df = DataFrame(geometry=[polygon1, polygon2])
 ````
 
-now lets add a couple of attributes to the geometries
+Now let's add a couple of attributes to the geometries
 
 ````@example creating_geometry
 df[!,:id] = ["a", "b"]
 df[!, :name] = ["polygon 1", "polygon 2"]
+df
 ````
 
 now let's save as a `GeoJSON`
@@ -325,7 +290,7 @@ fn = "shapes.parquet"
 GeoParquet.write(fn, df, (:geometry,))
 ````
 
-Finally, if there's no Julia-native package that can wirte data to your desired format (e.g. `.gpkg`, `.gml`, etc), you can use [`GeoDataFrames`](https://github.com/evetion/GeoDataFrames.jl).
+Finally, if there's no Julia-native package that can write data to your desired format (e.g. `.gpkg`, `.gml`, etc), you can use [`GeoDataFrames`](https://github.com/evetion/GeoDataFrames.jl).
 This package uses the [GDAL](https://gdal.org/) library under the hood which supports writing to nearly all geospatial formats.
 
 ````@example creating_geometry
