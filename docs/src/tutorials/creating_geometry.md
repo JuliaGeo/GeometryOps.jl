@@ -100,7 +100,7 @@ vertically up, to avoid plotting over our earlier results.
 
 :::tabs
 
-===tab CoordinateTransformations
+== CoordinateTransformations
 
 ````@example creating_geometry
 xoffset = 0.
@@ -111,7 +111,7 @@ plot!(polygon1)
 fig
 ````
 
-===tab Direct manipulation
+== Direct manipulation
 
 ```julia
 polygon1 = GO.transform(polygon1) do point
@@ -124,7 +124,7 @@ end
 plot!(polygon1)
 fig
 ```
-```@example
+```@example creating_geometry
 fig # hide
 ```
 :::
@@ -151,7 +151,7 @@ Shift `polygon1` to the right, to avoid plotting over our earlier results.
 
 :::tabs
 
-===tab CoordinateTransformations
+== CoordinateTransformations
 
 ````@example creating_geometry
 xoffset = 50.
@@ -162,7 +162,7 @@ plot!(polygon1)
 fig
 ````
 
-===tab Direct manipulation
+== Direct manipulation
 
 ```julia
 polygon1 = GO.transform(polygon1) do point
@@ -171,7 +171,7 @@ end
 plot!(polygon1)
 fig
 ```
-```@example
+```@example creating_geometry
 fig # hide
 ```
 :::
