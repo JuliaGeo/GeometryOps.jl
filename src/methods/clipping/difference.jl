@@ -161,7 +161,16 @@ function _difference(
     end
     local polys
     for (i, poly_b) in enumerate(GI.getpolygon(multipoly_b))
-        polys = difference(i == 1 ? multipoly_a : GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
+        #= Removing intersections of `multipoly_a`` with pieces of `multipoly_b`` - as
+        pieces of `multipolygon_a`` are removed, continue to take difference with new shape
+        `polys` =#
+        polys = if i == 1
+            difference(multipoly_a, poly_b; target, fix_multipoly)
+        else
+            difference(GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
+        end
+        #= One multipoly_a has been completly covered (and thus removed) there is no need to
+        continue taking the difference =#
         isempty(polys) && break
     end
     return polys
