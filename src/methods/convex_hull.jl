@@ -56,7 +56,7 @@ function convex_hull end
 
 This is an algorithm for the [`convex_hull`](@ref) function.
 
-Uses [`Delaunator.jl`](https://github.com/JuliaGeometry/DelaunayTriangulation.jl) to compute the convex hull.
+Uses [`DelaunayTriangulation.jl`](https://github.com/JuliaGeometry/DelaunayTriangulation.jl) to compute the convex hull.
 This is a pure Julia algorithm which provides an optimal Delaunay triangulation.
 
 See also [`convex_hull`](@ref)
