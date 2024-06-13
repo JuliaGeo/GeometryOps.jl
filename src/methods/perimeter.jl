@@ -93,7 +93,7 @@ function GO.point_distance(alg::GO.GeodesicDistance, p1, p2, ::Type{T}) where T 
     lon2 = Base.convert(Float64, GI.x(p2))
     lat2 = Base.convert(Float64, GI.y(p2))
 
-    dist, _ = Proj.geod_inverse(alg.geodesic, lon1, lat1, lon2, lat2)
+    dist, _azi1, _azi2 = Proj.geod_inverse(alg.geodesic, lon1, lat1, lon2, lat2)
     return T(dist)
 end
 # point_distance(::RhumbDistance, p1, p2, ::Type{T}) where T <: Number = T(Geod.geod(p1, p2)[])
