@@ -146,7 +146,7 @@ end
 
 f, a, p = GraphMakie.graphplot(
     g; 
-    layout = GraphMakie.Spring(; iterations = 1000), 
+    layout = GraphMakie.Spring(; iterations = 10000, initialpos = GO.tuples(LG.centroid.(us_states.geometry))), 
     ilabels = abbrevs, 
     figure = (; size = (1000, 1000))
 )
@@ -154,7 +154,7 @@ f, a, p = GraphMakie.graphplot(
 record(f, "graph_tightening.mp4", exp10.(LinRange(log10(10), log10(10_000), 100)); framerate = 24) do i
     niters = round(Int, i)
     a.title = "$niters iterations"
-    p.layout = GraphMakie.Spring(; iterations = niters)
+    p.layout = GraphMakie.Spring(; iterations = niters, initialpos = GO.tuples(LG.centroid.(us_states.geometry)))
 end
 
 

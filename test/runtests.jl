@@ -25,6 +25,7 @@ const GO = GeometryOps
     @testset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
     @testset "Distance" begin include("methods/distance.jl") end
     @testset "Equals" begin include("methods/equals.jl") end
+    @testset "Perimeter" begin include("methods/perimeter.jl") end
     # Clipping
     @testset "Coverage" begin include("methods/clipping/coverage.jl") end
     @testset "Cut" begin include("methods/clipping/cut.jl") end
