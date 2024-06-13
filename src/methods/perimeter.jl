@@ -42,7 +42,8 @@ const _PERIMETER_TARGETS = TraitTarget{GI.AbstractCurveTrait}()
 
 function perimeter(geom, ::Type{T}; threaded::Union{Bool, BoolsAsTypes} = _False()) where T <: Number
     _threaded = booltype(threaded)
-    return applyreduce(_perimeter, +, geom; threaded = _threaded)
+    find_perimeter(geom) = _perimeter(alg, geom, T)
+    return applyreduce(find_perimeter, +, geom; threaded = _threaded)
 end
 
 abstract type DistanceAlgorithm end
@@ -76,7 +77,6 @@ _perimeter(alg::DistanceAlgorithm, geom, ::Type{T}) where T <: Number = _perimet
 function _perimeter(::GI.AbstractCurveTrait, alg::DistanceAlgorithm, geom, ::Type{T}) where T <: Number
     ret = T(0)
     prev = GI.getpoint(geom, 1)
-    curr = prev
     for point in GI.getpoint(geom)
         ret += point_distance(alg, prev, point, T)
         prev = point
@@ -96,4 +96,6 @@ function GO.point_distance(alg::GO.GeodesicDistance, p1, p2, ::Type{T}) where T 
     dist, _azi1, _azi2 = Proj.geod_inverse(alg.geodesic, lon1, lat1, lon2, lat2)
     return T(dist)
 end
-# point_distance(::RhumbDistance, p1, p2, ::Type{T}) where T <: Number = T(Geod.geod(p1, p2)[])
+=#
+
+# point_distance(::RhumbDistance, p1, p2, ::Type{T}) where T <: Number = ...
