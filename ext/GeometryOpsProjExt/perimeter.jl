@@ -9,6 +9,6 @@ function GeometryOps.point_distance(alg::GeometryOps.GeodesicDistance, p1, p2, :
     lon2 = Base.convert(Float64, GI.x(p2))
     lat2 = Base.convert(Float64, GI.y(p2))
 
-    dist, _azi1, _azi2 = Proj.geod_inverse(alg.geodesic, lon1, lat1, lon2, lat2)
+    dist, _azi1, _azi2 = Proj.geod_inverse(alg.geodesic, lat1, lon1, lat2, lon2)
     return T(dist)
 end

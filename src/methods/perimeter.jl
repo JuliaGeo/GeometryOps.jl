@@ -105,6 +105,7 @@ function _perimeter(::GI.AbstractCurveTrait, alg::DistanceAlgorithm, geom, ::Typ
     return ret
 end
 
+point_distance(alg::DistanceAlgorithm, p1, p2) = point_distance(alg, p1, p2, Float64)
 point_distance(::LinearDistance, p1, p2, ::Type{T}) where T <: Number = T(hypot(GI.x(p2) - GI.x(p1), GI.y(p2) - GI.y(p1)))
 point_distance(alg::DistanceAlgorithm, p1, p2, ::Type{T}) where T <: Number = error("Not implemented yet for alg $alg")
 
