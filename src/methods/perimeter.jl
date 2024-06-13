@@ -40,8 +40,17 @@ GO.perimeter(mp) # should be 92
 
 const _PERIMETER_TARGETS = TraitTarget{GI.AbstractCurveTrait}()
 
+"""
+    abstract type DistanceAlgorithm
 
+An abstract supertype for a distance algorithm that computes the distance between two points.
+
+Currently used in [`GO.perimeter`](@ref GeometryOps.perimeter), but should be used in GO.distance and other functions as well...
+
+See also: [`LinearDistance`](@ref), [`GeodesicDistance`](@ref), [`RhumbDistance`](@ref).
+"""
 abstract type DistanceAlgorithm end
+
 """
     LinearDistance()
 
@@ -67,7 +76,14 @@ A rhumb distance algorithm that uses the rhumb distance between points.
 """
 struct RhumbDistance <: DistanceAlgorithm end
 
-perimeter(geom, T::Type{_T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where _T <: Number = perimeter(LinearDistance(), geom, _T; threaded = threaded)
+"""
+    perimeter([alg::DistanceAlgorithm], geom, [T::Type{<: Number} = Float64]; threaded = false)
+
+Computes the perimeter of a geometry using the specified distance algorithm.  
+
+Allowed distance algorithms are: [`LinearDistance`](@ref) (default), [`GeodesicDistance`](@ref), [`RhumbDistance`](@ref).  The latter two are not yet implemented.
+"""
+perimeter(alg::DistanceAlgorithm, geom, T::Type{_T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where _T <: Number = perimeter(LinearDistance(), geom, _T; threaded = threaded)
 
 function perimeter(alg::DistanceAlgorithm, geom, T::Type{_T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where _T <: Number
     _threaded = _booltype(threaded)
