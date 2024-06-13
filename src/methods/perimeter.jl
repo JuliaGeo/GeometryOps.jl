@@ -52,6 +52,7 @@ abstract type DistanceAlgorithm end
 A linear distance algorithm that uses simple 2D Euclidean distance between points.
 """
 struct LinearDistance <: DistanceAlgorithm end
+
 """
     GeodesicDistance()
 
@@ -62,6 +63,7 @@ Requires the Proj.jl package to be loaded, uses Proj's GeographicLib.
 struct GeodesicDistance{T} <: DistanceAlgorithm 
     geodesic::T# ::Proj.geod_geodesic
 end
+
 """
     RhumbDistance()
 
@@ -85,7 +87,13 @@ end
 point_distance(::LinearDistance, p1, p2, ::Type{T}) where T <: Number = T(hypot(GI.x(p2) - GI.x(p1), GI.y(p2) - GI.y(p1)))
 point_distance(alg::DistanceAlgorithm, p1, p2, ::Type{T}) where T <: Number = error("Not implemented yet for alg $alg")
 #=
-function GO.point_distance(::GO.GeodesicDistance, p1, p2, ::Type{T}) where T <: Number
+function GO.point_distance(alg::GO.GeodesicDistance, p1, p2, ::Type{T}) where T <: Number
+    lon1 = Base.convert(Float64, GI.x(p1))
+    lat1 = Base.convert(Float64, GI.y(p1))
+    lon2 = Base.convert(Float64, GI.x(p2))
+    lat2 = Base.convert(Float64, GI.y(p2))
 
+    dist, _ = Proj.geod_inverse(alg.geodesic, lon1, lat1, lon2, lat2)
+    return T(dist)
 end
 # point_distance(::RhumbDistance, p1, p2, ::Type{T}) where T <: Number = T(Geod.geod(p1, p2)[])
