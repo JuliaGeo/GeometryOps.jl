@@ -169,11 +169,17 @@ source = crs;
 dest = "+proj=natearth2" #see [https://proj.org/en/9.4/operations/projections/natearth2.html]
 ````
 
-Open the Natural Earth continental outlines that are bundled with GeoMakie, and also available from https://www.naturalearthdata.com/.
+Download and open the [Natural Earth](https://www.naturalearthdata.com) global land polygons at 110m resolution.  
+This will serve as a background and add context to the map.
+
+GeoMakie ships this particular dataset, so we will access it from there.
 
 ````@example creating_geometry
 land_path = GeoMakie.assetpath("ne_110m_land.geojson")
 ````
+
+!!! note
+    Natural Earth has lots of other datasets, and there is a Julia package that provides an interface to it called [NaturalEarth.jl](https://github.com/JuliaGeo/NaturalEarth.jl).
 
 Read the land polygons into a `GeoJSON.FeatureCollection`.
 
@@ -181,7 +187,7 @@ Read the land polygons into a `GeoJSON.FeatureCollection`.
 land_geo = GeoJSON.read(read(land_path, String))
 ````
 
-create a figure with a `GeoAxis` from GeoMakie, that can handle the projections between different CRSs.
+We then create a figure with a `GeoAxis` from GeoMakie, that can handle the projections between different CRSs.  For GeoMakie, `source` is the CRS of the input and `dest` is the CRS you want to visualize in.
 
 ````@example creating_geometry
 fig = Figure(size=(1000, 500));
