@@ -48,6 +48,7 @@ include("methods/geom_relations/overlaps.jl")
 include("methods/geom_relations/touches.jl")
 include("methods/geom_relations/within.jl")
 include("methods/orientation.jl")
+include("methods/perimeter.jl")
 include("methods/polygonize.jl")
 
 include("transformations/extent.jl")
