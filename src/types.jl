@@ -87,24 +87,30 @@ TuplePoint_4D(vals, ::Type{T}) where T <: AbstractFloat = T.((GI.x(vals), GI.y(v
 
 
 =#
-struct SVPoint{N, T, Z <: BoolsAsTypes, M <: BoolsAsTypes} <: GeometryBasics.StaticArraysCore.StaticVector{N,T}
+struct SVPoint{N, T, Z, M} <: GeometryBasics.StaticArraysCore.StaticVector{N,T}
     vals::NTuple{N,T}
 end
-
 Base.getindex(p::SVPoint, i::Int64) = p.vals[i]
 
-# Should we just have default Float64??
-SVPoint_2D(vals) = _SVPoint_2D(TuplePoint_2D(vals))
-SVPoint_2D(vals, ::Type{T}) where T <: AbstractFloat = _SVPoint_2D(TuplePoint_2D(vals, T))
-_SVPoint_2D(vals::NTuple{2,T}) where T = SVPoint{2, T, _False, _False}(vals)
+# Syntactic sugar for type stability within functions with known point types
+SVPoint_2D(vals, ::Type{T} = Float64) where T <: AbstractFloat = _SVPoint_2D(TuplePoint_2D(vals, T))
+_SVPoint_2D(vals::NTuple{2,T}) where T = SVPoint{2, T, false, false}(vals)
 
-SVPoint_3D(vals) = _SVPoint_3D(TuplePoint_3D(vals))
-SVPoint_3D(vals, ::Type{T}) where T <: AbstractFloat = _SVPoint_3D(TuplePoint_3D(vals, T))
-_SVPoint_3D(vals::NTuple{3,T}) where T = SVPoint{3, T, _True, _False}(vals)
+SVPoint_3D(vals, ::Type{T} = Float64) where T <: AbstractFloat = _SVPoint_3D(TuplePoint_3D(vals, T))
+_SVPoint_3D(vals::NTuple{3,T}) where T = SVPoint{3, T, true, false}(vals)
 
-SVPoint_4D(vals) = _SVPoint_4D(TuplePoint_4D(vals))
-SVPoint_4D(vals, ::Type{T}) where T <: AbstractFloat = _SVPoint_4D(TuplePoint_4D(vals, T))
-_SVPoint_4D(vals::NTuple{4,T}) where T = SVPoint{4, T, _True, _True}(vals)
+SVPoint_4D(vals, ::Type{T} = Float64) where T <: AbstractFloat = _SVPoint_4D(TuplePoint_4D(vals, T))
+_SVPoint_4D(vals::NTuple{4,T}) where T = SVPoint{4, T, true, true}(vals)
+
+# General constructor when point type/size isn't known
+SVPoint(geom) = _SVPoint(GI.trait(geom), geom)
+# Make sure geometry is a point type
+_SVPoint(::GI.PointTrait, geom) = _SVPoint(tuples(geom))
+_SVPoint(trait::GI.AbstractTrait, _) = throw(ArgumentError("Geometry with trait $trait cannot be made into a point."))
+# Dispatch off of NTuple length to make point of needed dimension
+_SVPoint(geom::NTuple{2, T}) where T = _SVPoint_2D(geom)
+_SVPoint(geom::NTuple{3, T}) where T = _SVPoint_3D(geom)
+_SVPoint(geom::NTuple{4, T}) where T = _SVPoint_4D(geom)
 
 const SVEdge{T} = Tuple{SVPoint{N,T,Z,M}, SVPoint{N,T,Z,M}} where {N,T,Z,M}
 
@@ -112,7 +118,7 @@ const SVEdge{T} = Tuple{SVPoint{N,T,Z,M}, SVPoint{N,T,Z,M}} where {N,T,Z,M}
 Get type of points and polygons made through library functionality (e.g. clipping)
 TODO: Increase type options as library expands capabilities
 =#
-_get_point_type(::Type{T}) where T = SVPoint{2, T, _False, _False}
+_get_point_type(::Type{T}) where T = SVPoint{2, T, false, false}
 _get_poly_type(::Type{T}) where T =
     GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{_get_point_type(T)}, Nothing, Nothing}}, Nothing, Nothing}
 
