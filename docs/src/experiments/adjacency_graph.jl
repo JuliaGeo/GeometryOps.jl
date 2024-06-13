@@ -108,3 +108,51 @@ record(f, "adjacency_matrix.mp4", 1:size(us_states, 1); framerate = 1) do i
     colors[i] = :red
     p.color = colors
 end
+
+using GraphMakie
+using Graphs
+
+g = SimpleDiGraph(adjmat)
+
+abbrevs = getindex.(us_states.iso_3166_2, (4:5,))
+
+GraphMakie.graphplot(
+    g; 
+    ilabels = abbrevs, 
+    figure = (; size = (1000, 1000))
+)
+
+GraphMakie.graphplot(
+    g; 
+    layout = GraphMakie.Spring(; iterations = 100, C = 3), 
+    ilabels = abbrevs, 
+    figure = (; size = (1000, 1000))
+)
+
+GraphMakie.graphplot(
+    g; 
+    layout = GraphMakie.Spring(; iterations = 100, initialpos = GO.tuples(LG.centroid.(us_states.geometry))), 
+    ilabels = abbrevs, 
+    figure = (; size = (1000, 1000))
+)
+
+
+# Now try actually weighting by intersection distance
+
+@time adjmat = adjacency_matrix(LG.touches, us_states, us_states) do source_geom, target_geom
+    return GO.perimeter(LG.intersection(source_geom, target_geom))
+    # this could be some measure of arclength, for example.
+end
+
+f, a, p = GraphMakie.graphplot(
+    g; 
+    layout = GraphMakie.Spring(; iterations = 1000), 
+    ilabels = abbrevs, 
+    figure = (; size = (1000, 1000))
+)
+
+record(f, "graph_tightening.mp4", exp10.(LinRange(log10(10), log10(10_000), 100)); framerate = 24) do i
+    niters = round(Int, i)
+    a.title = "$niters iterations"
+    p.layout = GraphMakie.Spring(; iterations = niters)
+end
