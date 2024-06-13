@@ -83,7 +83,7 @@ Computes the perimeter of a geometry using the specified distance algorithm.
 
 Allowed distance algorithms are: [`LinearDistance`](@ref) (default), [`GeodesicDistance`](@ref), [`RhumbDistance`](@ref).  The latter two are not yet implemented.
 """
-perimeter(alg::DistanceAlgorithm, geom, T::Type{_T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where _T <: Number = perimeter(LinearDistance(), geom, _T; threaded = threaded)
+perimeter(geom, T::Type{_T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where _T <: Number = perimeter(LinearDistance(), geom, _T; threaded = threaded)
 
 function perimeter(alg::DistanceAlgorithm, geom, T::Type{_T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where _T <: Number
     _threaded = _booltype(threaded)
@@ -107,16 +107,15 @@ end
 
 point_distance(::LinearDistance, p1, p2, ::Type{T}) where T <: Number = T(hypot(GI.x(p2) - GI.x(p1), GI.y(p2) - GI.y(p1)))
 point_distance(alg::DistanceAlgorithm, p1, p2, ::Type{T}) where T <: Number = error("Not implemented yet for alg $alg")
-#=
-function GO.point_distance(alg::GO.GeodesicDistance, p1, p2, ::Type{T}) where T <: Number
-    lon1 = Base.convert(Float64, GI.x(p1))
-    lat1 = Base.convert(Float64, GI.y(p1))
-    lon2 = Base.convert(Float64, GI.x(p2))
-    lat2 = Base.convert(Float64, GI.y(p2))
-
-    dist, _azi1, _azi2 = Proj.geod_inverse(alg.geodesic, lon1, lat1, lon2, lat2)
-    return T(dist)
-end
-=#
 
 # point_distance(::RhumbDistance, p1, p2, ::Type{T}) where T <: Number = ...
+
+# Add an error hint for Geodesicdistance if Proj is not loaded!
+function _geodesic_distance_error_hinter(io, exc, argtypes, kwargs)
+    if isnothing(Base.get_extension(GeometryOps, :GeometryOpsProjExt)) && exc.f == GeodesicDistance
+        print(io, "\n\nThe `GeodesicDistance` method requires the Proj.jl package to be explicitly loaded.\n")
+        print(io, "You can do this by simply typing ")
+        printstyled(io, "using Proj"; color = :cyan, bold = true)
+        println(io, " in your REPL, \nor otherwise loading Proj.jl via using or import.")
+    end
+end

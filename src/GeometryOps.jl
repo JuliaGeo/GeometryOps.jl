@@ -74,7 +74,9 @@ function __init__()
     # Handle all available errors!
     Base.Experimental.register_error_hint(_reproject_error_hinter, MethodError)
     Base.Experimental.register_error_hint(_geodesic_segments_error_hinter, MethodError)
+    Base.Experimental.register_error_hint(_geodesic_distance_error_hinter, MethodError)
     Base.Experimental.register_error_hint(_buffer_error_hinter, MethodError)
+
 end
 
 end
