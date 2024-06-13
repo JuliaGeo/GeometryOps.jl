@@ -156,3 +156,29 @@ record(f, "graph_tightening.mp4", exp10.(LinRange(log10(10), log10(10_000), 100)
     a.title = "$niters iterations"
     p.layout = GraphMakie.Spring(; iterations = niters)
 end
+
+
+
+const _ALASKA_EXTENT = GI.Extent(X = (-171.79110717773438, -129.97999572753906), Y = (54.4041748046875, 71.3577651977539))
+const _HAWAII_EXTENT = Extent(X = (-159.80050659179688, -154.80740356445312), Y = (18.916189193725586, 22.23617935180664))
+function albers_usa_projection(lon, lat)
+    if lon in (..)(_ALASKA_EXTENT.X...) && lat in (..)(_ALASKA_EXTENT.Y...)
+        return _alaska_projection(lon, lat)
+    elseif lon in (..)(_HAWAII_EXTENT.X...) && lat in (..)(_HAWAII_EXTENT.Y...)
+        return _hawaii_projection(lon, lat)
+    else
+        return _albers_projection(lon, lat)
+    end
+end
+
+function _alaska_projection(lon, lat)
+    return (lon, lat)
+end
+
+function _hawaii_projection(lon, lat)
+    return (lon, lat)
+end
+
+function _albers_projection(lon, lat)
+    return (lon, lat)
+end
