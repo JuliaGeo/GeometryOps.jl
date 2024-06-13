@@ -41,12 +41,6 @@ GO.perimeter(mp) # should be 92
 const _PERIMETER_TARGETS = TraitTarget{GI.AbstractCurveTrait}()
 
 
-function perimeter(alg::DistanceAlgorithm, geom, _T::Type{T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where T <: Number
-    _threaded = _booltype(threaded)
-    find_perimeter(geom) = _perimeter(alg, geom, T)
-    return applyreduce(find_perimeter, +, _PERIMETER_TARGETS, geom; threaded = _threaded, init = zero(T))
-end
-
 abstract type DistanceAlgorithm end
 """
     LinearDistance()
@@ -54,9 +48,6 @@ abstract type DistanceAlgorithm end
 A linear distance algorithm that uses simple 2D Euclidean distance between points.
 """
 struct LinearDistance <: DistanceAlgorithm end
-
-perimeter(geom, _T::Type{T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where T <: Number = perimeter(LinearDistance(), geom, T; threaded = threaded)
-
 
 """
     GeodesicDistance()
@@ -75,6 +66,16 @@ end
 A rhumb distance algorithm that uses the rhumb distance between points.
 """
 struct RhumbDistance <: DistanceAlgorithm end
+
+perimeter(geom, T::Type{_T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where _T <: Number = perimeter(LinearDistance(), geom, _T; threaded = threaded)
+
+function perimeter(alg::DistanceAlgorithm, geom, T::Type{_T} = Float64; threaded::Union{Bool, BoolsAsTypes} = _False()) where _T <: Number
+    _threaded = _booltype(threaded)
+    find_perimeter(geom) = _perimeter(alg, geom, T)
+    return applyreduce(find_perimeter, +, _PERIMETER_TARGETS, geom; threaded = _threaded, init = zero(T))
+end
+
+
 
 _perimeter(alg::DistanceAlgorithm, geom, ::Type{T}) where T <: Number = _perimeter(GI.trait(geom), alg, geom, T)
 
