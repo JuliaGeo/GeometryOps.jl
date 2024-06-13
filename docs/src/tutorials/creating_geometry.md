@@ -253,15 +253,10 @@ Typically, you'll also want to include attibutes with your geometries. Attibutes
 
 ````@example creating_geometry
 using DataFrames
-import Shapefile
-import GeoJSON
-import GeoParquet
-
-
 df = DataFrame(geometry=[polygon1, polygon2])
 ````
 
-Now let's add a couple of attributes to the geometries
+Now let's add a couple of attributes to the geometries.  We do this using [DataFrames' `!` mutation syntax](https://dataframes.juliadata.org/stable/man/getting_started/#The-DataFrame-Type).
 
 ````@example creating_geometry
 df[!,:id] = ["a", "b"]
@@ -269,23 +264,29 @@ df[!, :name] = ["polygon 1", "polygon 2"]
 df
 ````
 
-now let's save as a `GeoJSON`
+There are Julia packages for most commonly used geographic data formats.  Below, we show how to save data to each of these.
+
+We begin with [GeoJSON](https://github.com/JuliaGeo/GeoJSON.jl), which is a [JSON](https://en.wikipedia.org/wiki/JSON) format for geospatial feature collections.  It's human-readable and widely supported by most web-based and desktop geospatial libraries.
 
 ````@example creating_geometry
+import GeoJSON
 fn = "shapes.json"
 GeoJSON.write(fn, df)
 ````
 
-now let's save as a `Shapefile`
+
+Now, let's save as a [`Shapefile`](https://github.com/JuliaGeo/Shapefile.jl).  Shapefiles are actually a set of files (usually 4) that hold geometry information, a CRS, and additional attribute information as a separate table.  When you give `Shapefile.write` a file name, it will write 4 files of the same name but with different extensions.
 
 ````@example creating_geometry
+import Shapefile
 fn = "shapes.shp"
 Shapefile.write(fn, df)
 ````
 
-now let's save as a `GeoParquet`
+Now, let's save as a [`GeoParquet`](https://github.com/JuliaGeo/GeoParquet.jl).  GeoParquet is a geospatial extension to the [Parquet](https://parquet.apache.org/) format, which is a high-performance data store.  It's great for storing large amounts of data in a single file.
 
 ````@example creating_geometry
+import GeoParquet
 fn = "shapes.parquet"
 GeoParquet.write(fn, df, (:geometry,))
 ````
