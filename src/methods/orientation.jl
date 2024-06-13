@@ -23,7 +23,7 @@ Take a ring and return `true` if the line goes clockwise, or `false` if the line
 counter-clockwise.  "Going clockwise" means, mathematically,
 
 ```math
-\\left\\(\\sum_{i=2}^n (x_i - x_{i-1}) \\cdot (y_i + y_{i-1})\\right\\) > 0
+\\left(\\sum_{i=2}^n (x_i - x_{i-1}) \\cdot (y_i + y_{i-1})\\right) > 0
 ```
 
 ## Example
