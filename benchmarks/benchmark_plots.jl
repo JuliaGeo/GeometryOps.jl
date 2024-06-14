@@ -68,7 +68,7 @@ end
 function plot_trials(
         gp::Makie.GridPosition,
         results;
-        theme = merge(deepcopy(Makie.CURRENT_DEFAULT_THEME), MakieThemes.bbc()),
+        theme = MakieThemes.bbc(),
         legend_position = Makie.automatic, #(1, 1, TopRight()),
         legend_orientation = :horizontal,
         legend_halign = 1.0,

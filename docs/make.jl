@@ -95,11 +95,12 @@ makedocs(;
         "Introduction" => "introduction.md",
         "API Reference" => "api.md",
         "Tutorials" => [
+            "Creating Geometry" => "tutorials/creating_geometry.md",
             "Spatial Joins" => "tutorials/spatial_joins.md",
         ],
         "Explanations" => [
-            "Paradigms" => "paradigms.md",
-            "Peculiarities" => "peculiarities.md",
+            "Paradigms" => "explanations/paradigms.md",
+            "Peculiarities" => "explanations/peculiarities.md",
         ],
         "Source code" => literate_pages,
     ],
