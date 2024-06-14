@@ -19,6 +19,7 @@ import Proj
 using CairoMakie
 using GeoMakie
 using GeoJSON
+using DisplayAs # hide
 Makie.set_theme!(Makie.MAKIE_DEFAULT_THEME) # hide
 ````
 
@@ -219,6 +220,7 @@ r = 1000000;
 ϴ = 0:0.01:2pi;
 x = r .* cos.(ϴ).^3 .+ 500000;
 y = r .* sin.(ϴ) .^ 3 .+5000000;
+DisplayAs.setcontext(y, :compact => true, :displaysize => (10, 40),) # hide
 ````
 
 Now create a `LinearRing` from `Points`
