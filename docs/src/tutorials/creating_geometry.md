@@ -51,7 +51,7 @@ plot!(ax, multipoint; marker = '☁', markersize = 30)
 fig
 ````
 
-Let's create a `Line` between two points.
+Let's create a `LineString` connecting two points.
 
 ````@example creating_geometry
 p1 = GI.Point.(-5, 0);
