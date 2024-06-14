@@ -1,29 +1,35 @@
 # Creating Geometry
 
-In this tutorial were going to:
-1. Create and plot geometries
-2. Plot geometries on a map using `GeoMakie` and coordinate reference system (`CRS`)
-3. Create geospatial geometries with coordinate reference system information
-4. Assign attributes to geospatial geometries
-5. Save geospatial geometries to common geospatial file formats
+In this tutorial, we're going to:
+1. [Create and plot geometries](@ref creating-geometry)
+2. [Plot geometries on a map using `GeoMakie` and coordinate reference system (`CRS`)](@ref plot-geometry)
+3. [Create geospatial geometries with coordinate reference system information](@ref geom-crs)
+4. [Assign attributes to geospatial geometries](@ref attributes)
+5. [Save geospatial geometries to common geospatial file formats](@ref save-geometry)
 
 
-First load required packages
+
+First, we load some required packages.
 
 ````@example creating_geometry
+# Geospatial packages from Julia
 import GeoInterface as GI
 import GeometryOps as GO
 import GeoFormatTypes as GFT
+using GeoJSON # to load some data
+# Packages for coordinate transformation and projection
 import CoordinateTransformations
 import Proj
+# Plotting
 using CairoMakie
 using GeoMakie
-using GeoJSON
 using DisplayAs # hide
 Makie.set_theme!(Makie.MAKIE_DEFAULT_THEME) # hide
 ````
 
-Then let's start by making a single `Point`.
+## [Creating and plotting geometries](@id creating-geometry)
+
+Let's start by making a single `Point`.
 
 ````@example creating_geometry
 point = GI.Point(0, 0)
@@ -148,6 +154,8 @@ fig
 ````
 
 Great, now we can make `Points`, `MultiPoints`, `Lines`, `LineStrings`, `Polygons` (with holes), and `MultiPolygons` and modify them using [`CoordinateTransformations`] and [`GeometryOps`].
+
+## [Coordinate reference systems (CRS) and you](@id geom-crs) 
 
 In geospatial sciences we often have data in one [Coordinate Reference System (CRS)](https://en.wikipedia.org/wiki/Spatial_reference_system) (`source`) and would like to display it in different (`destination`) `CRS`. `GeoMakie` allows us to do this by automatically projecting from `source` to `destination` CRS.
 
@@ -275,6 +283,8 @@ f = CoordinateTransformations.Translation(xoffset, yoffset);
 geopoly2 = GO.transform(f, geopoly1);
 ````
 
+## [Creating a table with attributes and geometry](@id attributes)
+
 Typically, you'll also want to include attributes with your geometries. Attributes are simply data that are attributed to each geometry. The easiest way to do this is to create a table with a `:geometry` column. Let's do this using [`DataFrames`](https://github.com/JuliaData/DataFrames.jl).
 
 ````@example creating_geometry
@@ -289,6 +299,8 @@ df[!,:id] = ["a", "b"]
 df[!, :name] = ["polygon 1", "polygon 2"]
 df
 ````
+
+## [Saving your geospatial data](@id save-geometry)
 
 There are Julia packages for most commonly used geographic data formats.  Below, we show how to export that data to each of these.
 
