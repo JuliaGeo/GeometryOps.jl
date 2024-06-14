@@ -1,5 +1,15 @@
 # Creating Geometry
 
+In this tutorial were going to:
+1. Create and plot geometries
+2. Plot geometries on a map using `GeoMakie` and coordinate reference system (`CRS`)
+3. Create geospatial geometries with coordinate reference system information
+4. Assign attributes to geospatial geometries
+5. Save geospatial geometries to common geospatial file formats
+
+
+First load required packages
+
 ````@example creating_geometry
 import GeoInterface as GI
 import GeometryOps as GO
@@ -12,14 +22,7 @@ using GeoJSON
 Makie.set_theme!(Makie.MAKIE_DEFAULT_THEME) # hide
 ````
 
-In this tutorial were going to:
-1. Create and plot geometries
-2. Plot geometries on a map using `GeoMakie` and coordinate reference system (`CRS`)
-3. Create geospatial geometries with coordinate reference system information
-4. Assign attributes to geospatial geometries
-5. Save geospatial geometries to common geospatial file formats
-
-Let's start by making a single `Point`.
+Then let's start by making a single `Point`.
 
 ````@example creating_geometry
 point = GI.Point(0, 0)
