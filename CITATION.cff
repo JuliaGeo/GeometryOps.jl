@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+title: GeometryOps.jl
+message: 'If you use this software, please cite it as below.'
+type: software
+authors:
+  - given-names: Skylar
+    family-names: Gering
+    orcid: 'https://orcid.org/0000-0002-8380-0884'
+  - given-names: Rafael
+    family-names: Schouten
+    orcid: 'https://orcid.org/0000-0002-8380-0884'
+  - given-names: Anshul
+    family-names: Singhvi
+    orcid: 'https://orcid.org/0000-0001-6055-1291'
+identifiers:
+  - type: url
+    value: 'https://github.com/JuliaGeo/GeometryOps.jl'
+    description: GitHub repository for the package
+url: 'https://juliageo.org/GeometryOps.jl/stable'
+abstract: >-
+  GeometryOps.jl is a package for geometric calculations on
+  (primarily 2D) geometries.
+
+
+  The driving idea behind this package is to unify all the
+  disparate packages for geometric calculations in Julia,
+  and make them GeoInterface.jl-compatible. We are focusing
+  primarily on 2/2.5D geometries for now. All methods in
+  this package will consume any geometry which is compatible
+  with GeoInterface - see its integrations page for more
+  info on that!
+
+
+  Most of the use cases are driven by GIS and similar Earth
+  data workflows, so this might be a bit specialized towards
+  that, but methods should always be general to any
+  coordinate space.
+keywords:
+  - julia
+  - geometry
+  - gis
+  - vector geometry
+license: MIT
+commit: 02088dc36502e1ef0b6c4511c9b4f1d95c25fa8a
+version: 0.1.8
+date-released: '2024-06-12'
