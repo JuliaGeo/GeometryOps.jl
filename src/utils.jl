@@ -66,9 +66,21 @@ Convert any geometry or collection of geometries into a flat
 vector of `Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}` edges.
 """
 function to_edges(x, ::Type{T} = Float64) where T
+    
     edges = Vector{TupleEdge{T}}(undef, _nedge(x))
     _to_edges!(edges, x, 1)
     return edges
+end
+
+function find_point_constructor(x, ::Type{T})
+    if _ismeasured(x)
+        SVPoint_4D
+    elseif _is3d
+        SVPoint_3D
+    else
+        SVPoint_2D
+    end
+
 end
 
 _to_edges!(edges::Vector, x, n) = _to_edges!(edges, trait(x), x, n)

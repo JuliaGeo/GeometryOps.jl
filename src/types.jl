@@ -69,18 +69,13 @@ struct _False <: BoolsAsTypes end
 @inline _booltype(x::BoolsAsTypes)::BoolsAsTypes = x
 
 
-const TuplePoint{N, T} = Tuple{T, T} where T <: AbstractFloat
+const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const TupleEdge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
-# Should we just have default Float64??
-TuplePoint_2D(vals) = (GI.x(vals), GI.y(vals))
-TuplePoint_2D(vals, ::Type{T}) where T <: AbstractFloat = T.((GI.x(vals), GI.y(vals)))
 
-TuplePoint_3D(vals) = (GI.x(vals), GI.y(vals), GI.z(vals))
-TuplePoint_3D(vals, ::Type{T}) where T <: AbstractFloat = T.((GI.x(vals), GI.y(vals), GI.z(vals)))
-
-TuplePoint_4D(vals) = (GI.x(vals), GI.y(vals), GI.z(vals), GI.m(vals))
-TuplePoint_4D(vals, ::Type{T}) where T <: AbstractFloat = T.((GI.x(vals), GI.y(vals), GI.z(vals), GI.m(vals)))
+TuplePoint_2D(vals, ::Type{T} = Float64) where T <: AbstractFloat = T.((GI.x(vals), GI.y(vals)))
+TuplePoint_3D(vals, ::Type{T} = Float64) where T <: AbstractFloat = T.((GI.x(vals), GI.y(vals), GI.z(vals)))
+TuplePoint_4D(vals, ::Type{T} = Float64) where T <: AbstractFloat = T.((GI.x(vals), GI.y(vals), GI.z(vals), GI.m(vals)))
 
 #=
 ## `SVPoint`
@@ -91,6 +86,10 @@ struct SVPoint{N, T, Z, M} <: GeometryBasics.StaticArraysCore.StaticVector{N,T}
     vals::NTuple{N,T}
 end
 Base.getindex(p::SVPoint, i::Int64) = p.vals[i]
+
+const Point_2D = SVPoint{2, T, false, false}
+const Point_3D = SVPoint{3, T, true, false}
+const Point_4D = SVPoint{4, T, true, true}
 
 # Syntactic sugar for type stability within functions with known point types
 SVPoint_2D(vals, ::Type{T} = Float64) where T <: AbstractFloat = _SVPoint_2D(TuplePoint_2D(vals, T))
