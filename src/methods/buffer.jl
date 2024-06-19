@@ -16,7 +16,7 @@ end
 # which checks if there is a method error for the geos backend.
 
 
-# Add an error hint for GeodesicSegments if Proj is not loaded!
+# Add an error hint for `buffer` if LibGEOS is not loaded!
 function _buffer_error_hinter(io, exc, argtypes, kwargs)
     if isnothing(Base.get_extension(GeometryOps, :GeometryOpsLibGEOSExt)) && exc.f == buffer && first(argtypes) == GEOS
         print(io, "\n\nThe `buffer` method requires the LibGEOS.jl package to be explicitly loaded.\n")
