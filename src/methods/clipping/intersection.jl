@@ -175,26 +175,30 @@ function _intersection(
 end
 
 """
-    intersection_points(
-        geom_a,
-        geom_b,
-    )::Union{
-        ::Vector{::Tuple{::Real, ::Real}},
-        ::Nothing,
-    }
+    intersection_points(geom_a, geom_b, [T::Type])
 
-Return a list of intersection points between two geometries of type GI.Point.
-If no intersection point was possible given geometry extents, returns an empty
-list.
+Return a list of intersection tuple points between two geometries. If no intersection points
+exist, returns an empty list.
+
+## Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+inter_points = GO.intersection_points(line1, line2)
+
+# output
+1-element Vector{Tuple{Float64, Float64}}:
+ (125.58375366067548, -14.83572303404496)
 """
 intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat =
     _intersection_points(T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 
 
 #= Calculates the list of intersection points between two geometries, inlcuding line
-segments, line strings, linear rings, polygons, and multipolygons. If no intersection points
-were possible given geometry extents or if none are found, return an empty list of
-GI.Points. =#
+segments, line strings, linear rings, polygons, and multipolygons. =#
 function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _True()) where T
     # Initialize an empty list of points
     result = Tuple{T, T}[]
@@ -202,68 +206,23 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
     Extents.intersects(GI.extent(a), GI.extent(b)) || return result
     # Create a list of edges from the two input geometries
     edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
-    # npoints_a, npoints_b  = length(edges_a), length(edges_b)
-    # a_closed = npoints_a > 1 && edges_a[1][1] == edges_a[end][1]
-    # b_closed = npoints_b > 1 && edges_b[1][1] == edges_b[end][1]
-    # if npoints_a > 0 && npoints_b > 0
-        # Loop over pairs of edges and add any intersection points to results
+    # Loop over pairs of edges and add any unique intersection points to results
     for a_edge in edges_a, b_edge in edges_b
         line_orient, intr1, intr2 = _intersection_point(T, a_edge, b_edge; exact)
-        line_orient == line_out && return result
-        pt1, (α1, β1) = intr1
-        if line_orient == line_cross
-            push!(result, pt1)
-        else
-            add_a1, a1_β, add_b1, b1_α = _add_a1_b1(line_orient, intr1, intr2)
-            if add_a1
-
-            end
-            if add_b1
-
-            end
+        line_orient == line_out && continue
+        pt1, _ = intr1
+        push!(result, pt1)
+        if line_orient == line_over
+            pt2, _ = intr2
+            push!(result, pt2)
         end
     end
-
-        for i in eachindex(edges_a), j in eachindex(edges_b)
-            line_orient, intr1, _ = _intersection_point(T, edges_a[i], edges_b[j]; exact)
-            # TODO: Add in degenerate intersection points when line_over
-            if line_orient == line_cross || line_orient == line_hinge
-                #=
-                Determine if point is on edge (all edge endpoints excluded
-                except for the last edge for an open geometry)
-                =#
-                point, (α, β) = intr1
-                on_a_edge = (!a_closed && i == npoints_a && 0 <= α <= 1) ||
-                    (0 <= α < 1)
-                on_b_edge = (!b_closed && j == npoints_b && 0 <= β <= 1) ||
-                    (0 <= β < 1)
-                if on_a_edge && on_b_edge
-                    push!(result, GI.Point(point))
-                end
-            end
-        end
-    # end
+    #= TODO: We might be able to just add unique points with checks on the α and β values
+    returned from `_intersection_point`, but this would be different for curves vs polygons
+    vs multipolygons depending on if the shape is closed. This then wouldn't allow using the
+    `to_edges` functionality.  =# 
+    unique!(sort!(result))
     return result
-end
-
-function _add_a1_b1(line_orient, intr1, intr2)
-    (_, (α1, β1)) = intr1
-    # Determine if a1 or b1 should be added to a_list
-    add_a1 = α1 == 0 && 0 ≤ β1 < 1
-    a1_β = add_a1 ? β1 : zero(T)
-    add_b1 = β1 == 0 && 0 < α1 < 1
-    b1_α = add_b1 ? α1 : zero(T)
-    # If lines are collinear and overlapping, a second intersection exists
-    if line_orient == line_over
-        (_, (α2, β2)) = intr2
-        if α2 == 0 && 0 ≤ β2 < 1
-            add_a1, a1_β = true, β2
-        end
-        if β2 == 0 && 0 < α2 < 1
-            add_b1, b1_α = true, α2
-        end
-    end
-    return add_a1, a1_β, add_b1, b1_α
 end
 
 #= Calculates the intersection points between two lines if they exists and the fractional
