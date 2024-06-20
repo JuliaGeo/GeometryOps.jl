@@ -25,10 +25,7 @@ julia> f = CoordinateTransformations.Translation(3.5, 1.5)
 Translation(3.5, 1.5)
 
 julia> GO.transform(f, geom)
-GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.Linea
-rRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}[GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}(StaticArraysCo
-re.SVector{2, Float64}[[4.5, 3.5], [6.5, 5.5], [8.5, 7.5], [4.5, 3.5]], nothing, nothing), GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}(StaticA
-rraysCore.SVector{2, Float64}[[6.5, 5.5], [8.5, 7.5], [9.5, 8.5], [6.5, 5.5]], nothing, nothing)], nothing, nothing)
+GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}}, Nothing, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.LinearRing{false, false, Vector{GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}}, Nothing, Nothing}[GeoInterface.Wrappers.LinearRing{false, false, Vector{GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}[GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([4.5, 3.5], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([6.5, 5.5], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([8.5, 7.5], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([4.5, 3.5], nothing)], nothing, nothing), GeoInterface.Wrappers.LinearRing{false, false, Vector{GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}[GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([6.5, 5.5], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([8.5, 7.5], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([9.5, 8.5], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([6.5, 5.5], nothing)], nothing, nothing)], nothing, nothing)
 ```
 
 With Rotations.jl you need to actuall multiply the Rotation
@@ -38,20 +35,21 @@ by the `SVector` point, which is easy using an anonymous function.
 julia> using Rotations
 
 julia> GO.transform(p -> one(RotMatrix{2}) * p, geom)
-GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.LinearR
-ing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}[GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}(StaticArraysCore.SVe
-ctor{2, Int64}[[2, 1], [4, 3], [6, 5], [2, 1]], nothing, nothing), GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}(StaticArraysCore.SVector{2, Int64
-}[[4, 3], [6, 5], [7, 6], [4, 3]], nothing, nothing)], nothing, nothing)
+GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}}, Nothing, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.LinearRing{false, false, Vector{GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}}, Nothing, Nothing}[GeoInterface.Wrappers.LinearRing{false, false, Vector{GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}[GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([1.0, 2.0], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([3.0, 4.0], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([5.0, 6.0], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([1.0, 2.0], nothing)], nothing, nothing), GeoInterface.Wrappers.LinearRing{false, false, Vector{GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}}, Nothing, Nothing}(GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}[GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([3.0, 4.0], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([5.0, 6.0], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([6.0, 7.0], nothing), GeoInterface.Wrappers.Point{false, false, StaticArraysCore.SVector{2, Float64}, Nothing}([3.0, 4.0], nothing)], nothing, nothing)], nothing, nothing)
 ```
 """
-function transform(f, geom; kw...) 
-    if _is3d(geom)
+function transform(f, geom, ::Type{T} = Float64; kw...) where T
+    if _ismeasured(geom)
         return apply(PointTrait(), geom; kw...) do p
-            f(StaticArrays.SVector{3}((GI.x(p), GI.y(p), GI.z(p))))
+            SVPoint_4D(f(SVPoint_4D((GI.x(p), GI.y(p), GI.z(p), GI.m(p)))))
+        end
+    elseif _is3d(geom)
+        return apply(PointTrait(), geom; kw...) do p
+            SVPoint_3D(f(SVPoint_3D((GI.x(p), GI.y(p), GI.z(p)))))
         end
     else
         return apply(PointTrait(), geom; kw...) do p
-            f(StaticArrays.SVector{2}((GI.x(p), GI.y(p))))
+            SVPoint_2D(f(SVPoint_2D((GI.x(p), GI.y(p)))))
         end
     end
 end

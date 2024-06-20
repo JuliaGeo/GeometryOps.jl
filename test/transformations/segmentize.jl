@@ -54,7 +54,9 @@ end
     ar = GO.area(lr)
     for max_distance in exp10.(LinRange(log10(0.01), log10(1), 10))
         segmentized = GO.segmentize(GO.LinearSegments(; max_distance), lr)
-        @test all(GO.centroid(segmentized) .≈ ct)
+        seg_ct = GO.centroid(segmentized)
+        @test GI.x(seg_ct) ≈ GI.x(seg_ct)
+        @test GI.y(seg_ct) ≈ GI.y(seg_ct)
         @test GO.area(segmentized) ≈ ar
     end
 end

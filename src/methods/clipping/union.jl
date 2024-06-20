@@ -62,12 +62,12 @@ function _union(
     if n_pieces == 0 # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([tuples(ext_b)]))
+            push!(polys, GI.Polygon([svpoints(ext_b, T)]))
         elseif b_in_a
-            push!(polys,  GI.Polygon([tuples(ext_a)]))
+            push!(polys,  GI.Polygon([svpoints(ext_a, T)]))
         else
-            push!(polys, tuples(poly_a))
-            push!(polys, tuples(poly_b))
+            push!(polys, svpoints(poly_a, T))
+            push!(polys, svpoints(poly_b, T))
             return polys
         end
     elseif n_pieces > 1
@@ -81,7 +81,7 @@ function _union(
     end
     # Add in holes
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
-        _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b; exact)
+        _add_union_holes!(T, polys, a_in_b, b_in_a, poly_a, poly_b; exact)
     end
     # Remove uneeded collinear points on same edge
     _remove_collinear_points!(polys, [false], poly_a, poly_b)
@@ -108,15 +108,15 @@ _union_step(x, _) = x ? (-1) : 1
 #= Add holes from two polygons to the exterior polygon formed by their union. If adding the
 the holes reveals that the polygons aren't actually intersecting, return the original
 polygons. =#
-function _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b; exact)
+function _add_union_holes!(::Type{T}, polys, a_in_b, b_in_a, poly_a, poly_b; exact) where T
     if a_in_b
-        _add_union_holes_contained_polys!(polys, poly_a, poly_b; exact)
+        _add_union_holes_contained_polys!(T, polys, poly_a, poly_b; exact)
     elseif b_in_a
-        _add_union_holes_contained_polys!(polys, poly_b, poly_a; exact)
+        _add_union_holes_contained_polys!(T, polys, poly_b, poly_a; exact)
     else  # Polygons intersect, but neither is contained in the other
         n_a_holes = GI.nhole(poly_a)
-        ext_poly_a = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly_a)))
-        ext_poly_b = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly_b)))
+        ext_poly_a = GI.Polygon(SA.SVector(GI.getexterior(poly_a)))
+        ext_poly_b = GI.Polygon(SA.SVector(GI.getexterior(poly_b)))
         #= Start with poly_b when comparing with holes from poly_a and then switch to poly_a
         to compare with holes from poly_b. For current_poly, use ext_poly_b to avoid
         repeating overlapping holes in poly_a and poly_b =#
@@ -129,15 +129,15 @@ function _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b; exact)
                 #= if the hole isn't in the overlapping region between the two polygons, add
                 the hole to the resulting polygon as we know it can't interact with any
                 other holes =#
-                push!(polys[1].geom, ih)
+                push!(polys[1].geom, svpoints(ih, T))
             else
                 #= if the hole is at least partially in the overlapping region, take the
                 difference of the hole from the polygon it didn't originate from - note that
                 when current_poly is poly_a this includes poly_a holes so overlapping holes
                 between poly_a and poly_b within the overlap are added, in addition to all
                 holes in non-overlapping regions =#
-                h_poly = GI.Polygon(StaticArrays.SVector(ih))
-                new_holes = difference(h_poly, current_poly; target = GI.PolygonTrait())
+                h_poly = GI.Polygon(SA.SVector(ih))
+                new_holes = difference(h_poly, current_poly, T; target = GI.PolygonTrait())
                 append!(polys[1].geom, (GI.getexterior(new_h) for new_h in new_holes))
             end
             if i == n_a_holes
@@ -152,51 +152,51 @@ end
 #= Add holes holes to the union of two polygons where one of the original polygons was
 inside of the other. If adding the the holes reveal that the polygons aren't actually
 intersecting, return the original polygons.=#
-function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly; exact)
+function _add_union_holes_contained_polys!(::Type{T}, polys, interior_poly, exterior_poly; exact) where T
     union_poly = polys[1]
     ext_int_ring = GI.getexterior(interior_poly)
     for (i, ih) in enumerate(GI.gethole(exterior_poly))
-        poly_ih = GI.Polygon(StaticArrays.SVector(ih))
+        poly_ih = GI.Polygon(SA.SVector(ih))
         in_ih, on_ih, out_ih = _line_polygon_interactions(ext_int_ring, poly_ih; exact, closed_line = true)
         if in_ih  # at least part of interior polygon exterior is within the ith hole
             if !on_ih && !out_ih
                 #= interior polygon is completly within the ith hole - polygons aren't
                 touching and do not actually form a union =#
-                polys[1] = tuples(interior_poly)
-                push!(polys, tuples(exterior_poly))
+                polys[1] = svpoints(interior_poly, T)
+                push!(polys, svpoints(exterior_poly, T))
                 return polys
             else
                 #= interior polygon is partially within the ith hole - area of interior
                 polygon reduces the size of the hole =#
-                new_holes = difference(poly_ih, interior_poly; target = GI.PolygonTrait())
+                new_holes = difference(poly_ih, interior_poly, T; target = GI.PolygonTrait())
                 append!(union_poly.geom, (GI.getexterior(new_h) for new_h in new_holes))
             end
         else  # none of interior polygon exterior is within the ith hole
             if !out_ih
                 #= interior polygon's exterior is the same as the ith hole - polygons do
                 form a union, but do not overlap so all holes stay in final polygon =#
-                append!(union_poly.geom, Iterators.drop(GI.gethole(exterior_poly), i))
-                append!(union_poly.geom, GI.gethole(interior_poly))
+                append!(union_poly.geom, Iterators.map(Base.Fix2(svpoints, T), Iterators.drop(GI.gethole(exterior_poly), i)))
+                append!(union_poly.geom, Iterators.map(Base.Fix2(svpoints, T), GI.gethole(interior_poly)))
                 return polys
             else
                 #= interior polygon's exterior is outside of the ith hole - the interior
                 polygon could either be disjoint from the hole, or contain the hole =#
-                ext_int_poly = GI.Polygon(StaticArrays.SVector(ext_int_ring))
+                ext_int_poly = GI.Polygon(SA.SVector(ext_int_ring))
                 in_int, _, _ = _line_polygon_interactions(ih, ext_int_poly; exact, closed_line = true)
                 if in_int
                     #= interior polygon contains the hole - overlapping holes between the
                     interior and exterior polygons will be added =#
                     for jh in GI.gethole(interior_poly)
-                        poly_jh = GI.Polygon(StaticArrays.SVector(jh))
+                        poly_jh = GI.Polygon(SA.SVector(jh))
                         if intersects(poly_ih, poly_jh)
-                            new_holes = intersection(poly_ih, poly_jh; target = GI.PolygonTrait())
+                            new_holes = intersection(poly_ih, poly_jh, T; target = GI.PolygonTrait())
                             append!(union_poly.geom, (GI.getexterior(new_h) for new_h in new_holes))
                         end
                     end
                 else
                     #= interior polygon and the exterior polygon are disjoint - add the ith
                     hole as it is not covered by the interior polygon =#
-                    push!(union_poly.geom, ih)
+                    push!(union_poly.geom, svpoints(ih, T))
                 end
             end
         end
@@ -215,21 +215,21 @@ function _union(
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
-        multipoly_b = fix_multipoly(multipoly_b)
+        multipoly_b = fix_multipoly(multipoly_b, T)
     end
-    polys = [tuples(poly_a, T)]
+    polys = [svpoints(poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         if intersects(polys[1], poly_b)
             # If polygons intersect and form a new polygon, swap out polygon
-            new_polys = union(polys[1], poly_b; target)
+            new_polys = union(polys[1], poly_b, T; target)
             if length(new_polys) > 1 # case where they intersect by just one point
-                push!(polys, tuples(poly_b, T))  # add poly_b to list
+                push!(polys, svpoints(poly_b, T))  # add poly_b to list
             else
                 polys[1] = new_polys[1]
             end
         else
             # If they don't intersect, poly_b is now a part of the union as its own polygon
-            push!(polys, tuples(poly_b, T))
+            push!(polys, svpoints(poly_b, T))
         end
     end
     return polys
@@ -242,7 +242,7 @@ _union(
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     kwargs...,
-) where T = union(poly_b, multipoly_a; target, kwargs...)
+) where T = union(poly_b, multipoly_a, T; target, kwargs...)
 
 #= Multipolygon with multipolygon union - note that all of the sub-polygons of `multipoly_a`
 and the sub-polygons of `multipoly_b` are included and combined together where there are
@@ -255,13 +255,13 @@ function _union(
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
-        multipoly_b = fix_multipoly(multipoly_b)
+        multipoly_b = fix_multipoly(multipoly_b, T)
         fix_multipoly = nothing
     end
     multipolys = multipoly_b
     local polys
     for poly_a in GI.getpolygon(multipoly_a)
-        polys = union(poly_a, multipolys; target, fix_multipoly)
+        polys = union(poly_a, multipolys, T; target, fix_multipoly)
         multipolys = GI.MultiPolygon(polys)
     end
     return polys

@@ -68,6 +68,61 @@ struct _False <: BoolsAsTypes end
 @inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
 @inline _booltype(x::BoolsAsTypes)::BoolsAsTypes = x
 
+
+const TuplePoint{N, T} = NTuple{N, T} where {N, T}
+const TupleEdge{N, T} = Tuple{TuplePoint{N, T}, TuplePoint{N, T}} where {N, T}
+
+TuplePoint(geom, ::Type{T} = Float64) where T = _TuplePoint(T, GI.trait(geom), geom)
+_TuplePoint(::Type{T}, ::GI.PointTrait, geom) where T = tuples(geom, T)
+_TuplePoint(::Type{T}, trait::GI.AbstractTrait, _) where T = throw(ArgumentError("Geometry with trait $trait cannot be made into a point."))
+
+TuplePoint_2D(vals, ::Type{T} = Float64) where T = TuplePoint{2, T}((GI.x(vals), GI.y(vals)))
+
+TuplePoint_3D(vals, ::Type{T} = Float64, M = _False()) where T = _TuplePoint_3D(T, _booltype(M), vals)
+_TuplePoint_3D(::Type{T}, ::_False, vals) where T = TuplePoint{3, T}((GI.x(vals), GI.y(vals), GI.z(vals)))
+_TuplePoint_3D(::Type{T}, ::_True, vals) where T = TuplePoint{3, T}((GI.x(vals), GI.y(vals), GI.m(vals)))
+
+TuplePoint_4D(vals, ::Type{T} = Float64) where T = TuplePoint{4, T}((GI.x(vals), GI.y(vals), GI.z(vals), GI.m(vals)))
+
+#=
+## `SVPoint`
+
+
+=#
+struct SVPoint{N, T, Z, M} <: GeometryBasics.StaticArraysCore.StaticVector{N,T}
+    vals::NTuple{N,T}
+end
+Base.getindex(p::SVPoint, i::Int64) = p.vals[i]
+# TODO: overload `similar_type``
+
+const SVEdge{N, T, Z, M} = Tuple{SVPoint{N,T,Z,M}, SVPoint{N,T,Z,M}} where {N,T,Z,M}
+
+# General SVPoint constructor when point type/size isn't known
+SVPoint(geom, ::Type{T} = Float64) where T = _SVPoint(T, GI.trait(geom), geom)
+_SVPoint(::Type{T}, ::GI.PointTrait, geom) where T = svpoints(geom, T)
+_SVPoint(::Type{T}, trait::GI.AbstractTrait, _) where T = throw(ArgumentError("Geometry with trait $trait cannot be made into a point."))
+
+# Syntactic sugar for type stability within functions with known point types
+const PointType2D{T} = SVPoint{2, T, false, false} where T
+const PointType3D{T} = SVPoint{3, T, true, false} where T
+const PointType3DM{T} = SVPoint{3, T, false, true} where T
+const PointType4D{T} = SVPoint{4, T, true, true} where T
+
+SVPoint_2D(vals, ::Type{T} = Float64) where T <: AbstractFloat = PointType2D{T}(TuplePoint_2D(vals, T))
+
+SVPoint_3D(vals, ::Type{T} = Float64, M = _False()) where {T <: AbstractFloat} = _SVPoint_3D(T, _booltype(M), vals)
+_SVPoint_3D(T, M::_False, vals) = PointType3D{T}(TuplePoint_3D(vals, T, M))
+_SVPoint_3D(T, M::_True, vals) = PointType3DM{T}(TuplePoint_3D(vals, T, M))
+
+SVPoint_4D(vals, ::Type{T} = Float64) where T <: AbstractFloat = PointType4D{T}(TuplePoint_4D(vals, T))
+
+#=
+Get type of points and polygons made through library functionality (e.g. clipping)
+TODO: Increase type options as library expands capabilities
+=#
+const PolyType2D{T} = GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{PointType2D{T}}, Nothing, Nothing}}, Nothing, Nothing} where T
+
+const Edge{N, T} = Union{TupleEdge{N, T}, SVEdge{N, T, Z, M}} where {N, T, Z, M}
 #=
 
 ## `GEOS`

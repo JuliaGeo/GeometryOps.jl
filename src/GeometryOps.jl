@@ -14,9 +14,7 @@ using GeoInterface.Extents: Extents
 
 const GI = GeoInterface
 const GB = GeometryBasics
-
-const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
-const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
+const SA = GeometryBasics.StaticArrays
 
 include("types.jl")
 include("primitives.jl")
@@ -55,6 +53,7 @@ include("transformations/flip.jl")
 include("transformations/reproject.jl")
 include("transformations/segmentize.jl")
 include("transformations/simplify.jl")
+include("transformations/svpoints.jl")
 include("transformations/tuples.jl")
 include("transformations/transform.jl")
 include("transformations/correction/geometry_correction.jl")

@@ -15,7 +15,7 @@ polygons, or not an endpoint of a chain. =#
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
 @kwdef struct PolyNode{T <: AbstractFloat}
-    point::Tuple{T,T}          # (x, y) values of given point
+    point::SVPoint{2, T, false, false}
     inter::Bool = false        # If ipt, true, else 0
     neighbor::Int = 0          # If ipt, index of equivalent point in a_list or b_list, else 0
     idx::Int = 0               # If crossing point, index within sorted a_idx_list
@@ -90,7 +90,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
     # Loop through points of poly_a
     local a_pt1
     for (i, a_p2) in enumerate(GI.getpoint(poly_a))
-        a_pt2 = (T(GI.x(a_p2)), T(GI.y(a_p2)))
+        a_pt2 = SVPoint_2D(a_p2, T)
         if i <= 1 || (a_pt1 == a_pt2)  # don't repeat points
             a_pt1 = a_pt2
             continue
@@ -103,7 +103,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
         local b_pt1
         prev_counter = a_count
         for (j, b_p2) in enumerate(GI.getpoint(poly_b))
-            b_pt2 = _tuple_point(b_p2, T)
+            b_pt2 = SVPoint_2D(b_p2, T)
             if j <= 1 || (b_pt1 == b_pt2)  # don't repeat points
                 b_pt1 = b_pt2
                 continue
@@ -194,7 +194,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
     # Loop over points in poly_b and add each point and intersection point
     local b_pt1
     for (i, b_p2) in enumerate(GI.getpoint(poly_b))
-        b_pt2 = _tuple_point(b_p2, T)
+        b_pt2 = SVPoint_2D(b_p2, T)
         if i ≤ 1 || (b_pt1 == b_pt2)  # don't repeat points
             b_pt1 = b_pt2
             continue
@@ -543,7 +543,7 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a,
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
-    return_polys = Vector{_get_poly_type(T)}(undef, 0)
+    return_polys = Vector{PolyType2D{T}}(undef, 0)
     # Keep track of number of processed intersection points
     visited_pts = 0
     processed_pts = 0
@@ -601,11 +601,6 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a,
     return return_polys
 end
 
-# Get type of polygons that will be made
-# TODO: Increase type options
-_get_poly_type(::Type{T}) where T =
-    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
-
 #=
     _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)
 
@@ -642,12 +637,12 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
     # Remove set of holes from all polygons
     for i in 1:n_polys
         n_new_per_poly = 0
-        for curr_hole in Iterators.map(tuples, hole_iterator) # loop through all holes
+        for curr_hole in Iterators.map(Base.Fix2(svpoints, T), hole_iterator) # loop through all holes
             # loop through all pieces of original polygon (new pieces added to end of list)
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))
                 curr_poly = return_polys[j]
                 remove_poly_idx[j] && continue
-                curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
+                curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(SA.SVector(GI.getexterior(curr_poly))) : curr_poly
                 in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; exact, closed_line = true)
                 if in_ext  # hole is at least partially within the polygon's exterior
                     new_hole, new_hole_poly, n_new_pieces = _combine_holes!(T, curr_hole, curr_poly, return_polys, remove_hole_idx)
@@ -670,7 +665,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
                         end
                     end
                 # polygon is completly within hole
-                elseif coveredby(curr_poly_ext, GI.Polygon(StaticArrays.SVector(curr_hole)))
+                elseif coveredby(curr_poly_ext, GI.Polygon(SA.SVector(curr_hole)))
                     remove_poly_idx[j] = true
                 end
             end
@@ -698,16 +693,16 @@ changes.
 function _combine_holes!(::Type{T}, new_hole, curr_poly, return_polys, remove_hole_idx) where T
     n_new_polys = 0
     empty!(remove_hole_idx)
-    new_hole_poly = GI.Polygon(StaticArrays.SVector(new_hole))
+    new_hole_poly = GI.Polygon(SA.SVector(new_hole))
     # Combine any existing holes in curr_poly with new hole
     for (k, old_hole) in enumerate(GI.gethole(curr_poly))
-        old_hole_poly = GI.Polygon(StaticArrays.SVector(old_hole))
+        old_hole_poly = GI.Polygon(SA.SVector(old_hole))
         if intersects(new_hole_poly, old_hole_poly)
             # If the holes intersect, combine them into a bigger hole
             hole_union = union(new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait())[1]
             push!(remove_hole_idx, k + 1)
             new_hole = GI.getexterior(hole_union)
-            new_hole_poly = GI.Polygon(StaticArrays.SVector(new_hole))
+            new_hole_poly = GI.Polygon(SA.SVector(new_hole))
             n_pieces = GI.nhole(hole_union)
             if n_pieces > 0  # if the hole has a hole, then this is a new polygon piece! 
                 append!(return_polys, [GI.Polygon([h]) for h in GI.gethole(hole_union)])

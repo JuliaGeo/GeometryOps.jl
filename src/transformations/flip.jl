@@ -14,14 +14,18 @@ original type).
 
 $APPLY_KEYWORDS
 """
-function flip(geom; kw...) 
-    if _is3d(geom)
+function flip(geom; kw...)
+    if _ismeasured(geom)
         return apply(PointTrait(), geom; kw...) do p
-            (GI.y(p), GI.x(p), GI.z(p))
+            SVPoint_4D((GI.y(p), GI.x(p), GI.z(p), GI.m(p)))
+        end
+    elseif _is3d(geom)
+        return apply(PointTrait(), geom; kw...) do p
+            SVPoint_3D((GI.y(p), GI.x(p), GI.z(p)))
         end
     else
         return apply(PointTrait(), geom; kw...) do p
-            (GI.y(p), GI.x(p))
+            SVPoint_2D((GI.y(p), GI.x(p)))
         end
     end
 end

@@ -99,12 +99,12 @@ function _coverage(::Type{T}, ring, xmin, xmax, ymin, ymax; exact) where T
         end
     end
     ring_cw = isclockwise(ring)
-    p1 = _tuple_point(GI.getpoint(ring, start_idx), T)
+    p1 = TuplePoint_2D(GI.getpoint(ring, start_idx), T)
     # Must rotate clockwise for the algorithm to work
     point_idx = ring_cw ? Iterators.flatten((start_idx + 1:GI.npoint(ring), 1:start_idx)) :
         Iterators.flatten((start_idx - 1:-1:1, GI.npoint(ring):-1:start_idx))
     for i in point_idx
-        p2 = _tuple_point(GI.getpoint(ring, i), T)
+        p2 = TuplePoint_2D(GI.getpoint(ring, i), T)
         # Determine if edge points are within the cell
         p1_in_cell = _point_in_cell(p1, xmin, xmax, ymin, ymax)
         p2_in_cell = _point_in_cell(p2, xmin, xmax, ymin, ymax)

@@ -75,9 +75,9 @@ function _intersection(
     if isempty(polys) # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([tuples(ext_a)]))
+            push!(polys, GI.Polygon([svpoints(ext_a, T)]))
         elseif b_in_a
-            push!(polys, GI.Polygon([tuples(ext_b)]))
+            push!(polys, GI.Polygon([svpoints(ext_b, T)]))
         end
     end
     remove_idx = falses(length(polys))
@@ -118,11 +118,11 @@ function _intersection(
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
-        multipoly_b = fix_multipoly(multipoly_b)
+        multipoly_b = fix_multipoly(multipoly_b, T)
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{PolyType2D{T}}()
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(poly_a, poly_b; target))
+        append!(polys, intersection(poly_a, poly_b, T; target))
     end
     return polys
 end
@@ -135,7 +135,7 @@ _intersection(
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     kwargs...,
-) where T = intersection(poly_b, multipoly_a; target , kwargs...)
+) where T = intersection(poly_b, multipoly_a, T; target , kwargs...)
 
 #= Multipolygon with multipolygon intersection - note that all intersection regions between
 any sub-polygons of `multipoly_a` and any of the sub-polygons of `multipoly_b` are counted
@@ -149,13 +149,13 @@ function _intersection(
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix both multipolygons to prevent duplicated regions
-        multipoly_a = fix_multipoly(multipoly_a)
-        multipoly_b = fix_multipoly(multipoly_b)
+        multipoly_a = fix_multipoly(multipoly_a, T)
+        multipoly_b = fix_multipoly(multipoly_b, T)
         fix_multipoly = nothing
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{PolyType2D{T}}()
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(poly_a, multipoly_b; target, fix_multipoly))
+        append!(polys, intersection(poly_a, multipoly_b, T; target, fix_multipoly))
     end
     return polys
 end
@@ -183,7 +183,7 @@ end
         ::Nothing,
     }
 
-Return a list of intersection points between two geometries of type GI.Point.
+Return a list of intersection points between two geometries of type SVPoint.
 If no intersection point was possible given geometry extents, returns an empty
 list.
 """
@@ -197,7 +197,7 @@ were possible given geometry extents or if none are found, return an empty list 
 GI.Points. =#
 function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _False()) where T
     # Initialize an empty list of points
-    result = GI.Point[]
+    result = Vector{PointType2D{T}}()
     # Check if the geometries extents even overlap
     Extents.intersects(GI.extent(a), GI.extent(b)) || return result
     # Create a list of edges from the two input geometries
@@ -221,7 +221,7 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
                 on_b_edge = (!b_closed && j == npoints_b && 0 <= β <= 1) ||
                     (0 <= β < 1)
                 if on_a_edge && on_b_edge
-                    push!(result, GI.Point(point))
+                    push!(result, point)
                 end
             end
         end
@@ -242,20 +242,20 @@ second isn't. Finally, if the intersection is line_over, then both points are va
 are the two points that define the endpoints of the overlapping region between the two
 lines.
 
-Also note again that each intersection is a tuple of two tuples. The first is the
-intersection point (x,y) while the second is the ratio along the initial lines (α, β) for
-that point. 
+Also note again that each intersection is a tuple of two elements. The first is the
+intersection point SVPoint((x, y)) while the second is the ratio along the initial lines
+(α, β) for that point. 
 
 Calculation derivation can be found here: https://stackoverflow.com/questions/563198/ =#
 function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T
     # Default answer for no intersection
     line_orient = line_out
-    intr1 = ((zero(T), zero(T)), (zero(T), zero(T)))
+    intr1 = (SVPoint_2D((zero(T), zero(T)), T), (zero(T), zero(T)))
     intr2 = intr1
     no_intr_result = (line_orient, intr1, intr2)
     # Seperate out line segment points
-    (a1x, a1y), (a2x, a2y) = _tuple_point(a1, T), _tuple_point(a2, T)
-    (b1x, b1y), (b2x, b2y) = _tuple_point(b1, T), _tuple_point(b2, T)
+    (a1x, a1y), (a2x, a2y) = TuplePoint_2D(a1, T), TuplePoint_2D(a2, T)
+    (b1x, b1y), (b2x, b2y) = TuplePoint_2D(b1, T), TuplePoint_2D(b2, T)
     # Check if envelopes of lines intersect
     a_ext = Extent(X = minmax(a1x, a2x), Y = minmax(a1y, a2y))
     b_ext = Extent(X = minmax(b1x, b2x), Y = minmax(b1y, b2y))
@@ -304,18 +304,18 @@ function _find_collinear_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext, n
         line_orient = line_over
         β1 = _clamped_frac(distance(a1, b1, T), b_dist)
         β2 = _clamped_frac(distance(a2, b1, T), b_dist)
-        intr1 = (_tuple_point(a1, T), (zero(T), β1))
-        intr2 = (_tuple_point(a2, T), (one(T), β2))
+        intr1 = (SVPoint_2D(a1, T), (zero(T), β1))
+        intr2 = (SVPoint_2D(a2, T), (one(T), β2))
     elseif b1_in_a && b2_in_a  # 1st vertex of b and 2nd vertex of b form overlap
         line_orient = line_over
         α1 = _clamped_frac(distance(b1, a1, T), a_dist)
         α2 = _clamped_frac(distance(b2, a1, T), a_dist)
-        intr1 = (_tuple_point(b1, T), (α1, zero(T)))
-        intr2 = (_tuple_point(b2, T), (α2, one(T)))
+        intr1 = (SVPoint_2D(b1, T), (α1, zero(T)))
+        intr2 = (SVPoint_2D(b2, T), (α2, one(T)))
     elseif a1_in_b && b1_in_a  # 1st vertex of a and 1st vertex of b form overlap
         if equals(a1, b1)
             line_orient = line_hinge
-            intr1 = (_tuple_point(a1, T), (zero(T), zero(T)))
+            intr1 = (SVPoint_2D(a1, T), (zero(T), zero(T)))
         else
             line_orient = line_over
             intr1, intr2 = _set_ab_collinear_intrs(T, a1, b1, zero(T), zero(T), a1, b1, a_dist, b_dist)
@@ -323,7 +323,7 @@ function _find_collinear_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext, n
     elseif a1_in_b && b2_in_a  # 1st vertex of a and 2nd vertex of b form overlap
         if equals(a1, b2)
             line_orient = line_hinge
-            intr1 = (_tuple_point(a1, T), (zero(T), one(T)))
+            intr1 = (SVPoint_2D(a1, T), (zero(T), one(T)))
         else
             line_orient = line_over
             intr1, intr2 = _set_ab_collinear_intrs(T, a1, b2, zero(T), one(T), a1, b1, a_dist, b_dist) 
@@ -331,7 +331,7 @@ function _find_collinear_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext, n
     elseif a2_in_b && b1_in_a  # 2nd vertex of a and 1st vertex of b form overlap
         if equals(a2, b1)
             line_orient = line_hinge
-            intr1 = (_tuple_point(a2, T), (one(T), zero(T)))
+            intr1 = (SVPoint_2D(a2, T), (one(T), zero(T)))
         else
             line_orient = line_over
             intr1, intr2 = _set_ab_collinear_intrs(T, a2, b1, one(T), zero(T), a1, b1, a_dist, b_dist)
@@ -339,7 +339,7 @@ function _find_collinear_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext, n
     elseif a2_in_b && b2_in_a  # 2nd vertex of a and 2nd vertex of b form overlap
         if equals(a2, b2)
             line_orient = line_hinge
-            intr1 = (_tuple_point(a2, T), (one(T), one(T)))
+            intr1 = (SVPoint_2D(a2, T), (one(T), one(T)))
         else
             line_orient = line_over
             intr1, intr2 = _set_ab_collinear_intrs(T, a2, b2, one(T), one(T), a1, b1, a_dist, b_dist)
@@ -352,8 +352,8 @@ end
 endpoint of segment (a1, a2) and one endpoint of segment (b1, b2). =#
 _set_ab_collinear_intrs(::Type{T}, a_pt, b_pt, a_pt_α, b_pt_β, a1, b1, a_dist, b_dist) where T =
     (
-        (_tuple_point(a_pt, T), (a_pt_α, _clamped_frac(distance(a_pt, b1, T), b_dist))),
-        (_tuple_point(b_pt, T), (_clamped_frac(distance(b_pt, a1, T), a_dist), b_pt_β))
+        (SVPoint_2D(a_pt, T), (a_pt_α, _clamped_frac(distance(a_pt, b1, T), b_dist))),
+        (SVPoint_2D(b_pt, T), (_clamped_frac(distance(b_pt, a1, T), a_dist), b_pt_β))
     )
 
 #= If lines defined by (a1, a2) and (b1, b2) are just touching at one of those endpoints and
@@ -363,25 +363,25 @@ to avoid floating point errors. If the points are not equal, we know that the hi
 take place at an endpoint and the fractions must be between 0 or 1 (exclusive). =#
 function _find_hinge_intersection(::Type{T}, a1, a2, b1, b2, a1_orient, a2_orient, b1_orient) where T
     pt, α, β = if equals(a1, b1)
-        _tuple_point(a1, T), zero(T), zero(T)
+        SVPoint_2D(a1, T), zero(T), zero(T)
     elseif equals(a1, b2)
-        _tuple_point(a1, T), zero(T), one(T)
+        SVPoint_2D(a1, T), zero(T), one(T)
     elseif equals(a2, b1)
-        _tuple_point(a2, T), one(T), zero(T)
+        SVPoint_2D(a2, T), one(T), zero(T)
     elseif equals(a2, b2)
-        _tuple_point(a2, T), one(T), one(T)
+        SVPoint_2D(a2, T), one(T), one(T)
     elseif a1_orient == 0
         β_val = _clamped_frac(distance(b1, a1, T), distance(b1, b2, T), eps(T))
-        _tuple_point(a1, T), zero(T), β_val
+        SVPoint_2D(a1, T), zero(T), β_val
     elseif a2_orient == 0
         β_val = _clamped_frac(distance(b1, a2, T), distance(b1, b2, T), eps(T))
-        _tuple_point(a2, T), one(T), β_val
+        SVPoint_2D(a2, T), one(T), β_val
     elseif b1_orient == 0
         α_val = _clamped_frac(distance(a1, b1, T), distance(a1, a2, T), eps(T))
-        _tuple_point(b1, T), α_val, zero(T)
+        SVPoint_2D(b1, T), α_val, zero(T)
     else  # b2_orient == 0
         α_val = _clamped_frac(distance(a1, b2, T), distance(a1, a2, T), eps(T))
-        _tuple_point(b2, T), α_val, one(T)
+        SVPoint_2D(b2, T), α_val, one(T)
     end
     return pt, (α, β)
 end
@@ -397,10 +397,10 @@ Regardless of point value, we know that it does not actually occur at an endpoin
 fractions must be between 0 or 1 (exclusive). =#
 function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where T
     # First line runs from a to a + Δa
-    (a1x, a1y), (a2x, a2y) = _tuple_point(a1, T), _tuple_point(a2, T)
+    (a1x, a1y), (a2x, a2y) = TuplePoint_2D(a1, T), TuplePoint_2D(a2, T)
     Δax, Δay = a2x - a1x, a2y - a1y
     # Second line runs from b to b + Δb 
-    (b1x, b1y), (b2x, b2y) = _tuple_point(b1, T), _tuple_point(b2, T)
+    (b1x, b1y), (b2x, b2y) = TuplePoint_2D(b1, T), TuplePoint_2D(b2, T)
     Δbx, Δby = b2x - b1x, b2y - b1y
     # Differences between starting points
     Δbax = b1x - a1x
@@ -430,7 +430,7 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     else
         (a1y + α * Δay + b1y + β * Δby) / 2
     end
-    pt = (x, y)
+    pt = SVPoint_2D((x, y), T)
     # Check if point is within segment envelopes and adjust to endpoint if not
     if !_point_in_extent(pt, a_ext) || !_point_in_extent(pt, b_ext)
         pt, α, β = _nearest_endpoint(T, a1, a2, b1, b2)
@@ -465,7 +465,7 @@ function _nearest_endpoint(::Type{T}, a1, a2, b1, b2) where T
         α, β = _clamped_frac(distance(min_pt, a2, T), a_dist, eps(T)), one(T) - eps(T)
     end
     # Return point with smallest distance
-    return _tuple_point(min_pt, T), α, β
+    return SVPoint_2D(min_pt, T), α, β
 end
 
 # Return value of x/y clamped between ϵ and 1 - ϵ

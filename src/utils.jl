@@ -1,4 +1,9 @@
 # # Utility functions
+_ismeasured(geom)::Bool = _ismeasured(GI.trait(geom), geom)
+_ismeasured(::GI.AbstractGeometryTrait, geom)::Bool = GI.ismeasured(geom)
+_ismeasured(::GI.FeatureTrait, feature)::Bool = _ismeasured(GI.geometry(feature))
+_ismeasured(::GI.FeatureCollectionTrait, fc)::Bool = _ismeasured(GI.getfeature(fc, 1))
+_ismeasured(::Nothing, geom)::Bool = _ismeasured(first(geom)) # Otherwise step into an itererable
 
 _is3d(geom)::Bool = _is3d(GI.trait(geom), geom)
 _is3d(::GI.AbstractGeometryTrait, geom)::Bool = GI.is3d(geom)
@@ -49,6 +54,10 @@ function polygon_to_line(poly)
     return GI.LineString(collect(GI.getgeom(GI.getgeom(poly, 1))))
 end
 
+#= Question: Should the `_to_edges` and `_to_points` functions return tuples or svpoints and
+should they be dimensionally specific? If the dimension is found with if/else like in
+the transform functions, is that going to effect performance negatively? Note the existance
+of the _sv_points function that was within `simplify.jl`=#
 
 """
     to_edges()
@@ -56,11 +65,22 @@ end
 Convert any geometry or collection of geometries into a flat 
 vector of `Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}` edges.
 """
-function to_edges(x, ::Type{T} = Float64) where T
-    edges = Vector{Edge{T}}(undef, _nedge(x))
+function to_edges(x, ::Type{T} = Float64, ::Val{N} = Val(2)) where {T, N}
+    edges = Vector{TupleEdge{N, T}}(undef, _nedge(x))
     _to_edges!(edges, x, 1)
     return edges
 end
+
+# function find_point_constructor(x, ::Type{T})
+#     if _ismeasured(x)
+#         SVPoint_4D
+#     elseif _is3d(x)
+#         SVPoint_3D
+#     else
+#         SVPoint_2D
+#     end
+
+# end
 
 _to_edges!(edges::Vector, x, n) = _to_edges!(edges, trait(x), x, n)
 function _to_edges!(edges::Vector, ::GI.FeatureCollectionTrait, fc, n)
@@ -76,10 +96,10 @@ function _to_edges!(edges::Vector, ::GI.AbstractGeometryTrait, fc, n)
 end
 function _to_edges!(edges::Vector, ::GI.AbstractCurveTrait, geom, n)
     p1 = GI.getpoint(geom, 1) 
-    p1x, p1y = GI.x(p1), GI.y(p1)
+    p1x, p1y = TuplePoint_2D(p1)
     for i in 2:GI.npoint(geom)
         p2 = GI.getpoint(geom, i)
-        p2x, p2y = GI.x(p2), GI.y(p2)
+        p2x, p2y = TuplePoint_2D(p2)
         edges[n] = (p1x, p1y), (p2x, p2y)
         p1x, p1y = p2x, p2y
         n += 1
@@ -87,10 +107,7 @@ function _to_edges!(edges::Vector, ::GI.AbstractCurveTrait, geom, n)
     return n
 end
 
-_tuple_point(p) = GI.x(p), GI.y(p)
-_tuple_point(p, ::Type{T}) where T = T(GI.x(p)), T(GI.y(p))
-
-function to_extent(edges::Vector{Edge})
+function to_extent(edges::Vector{<:Edge})
     x, y = extrema(first, edges)
     Extents.Extent(X=x, Y=y)
 end
@@ -117,9 +134,17 @@ function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}
     n = 0
     for p in GI.getpoint(geom)
         n += 1
-        points[n] = _tuple_point(p)
+        points[n] = TuplePoint_2D(p)
     end
     return n
+end
+
+function _sv_points(::Type{T}, geom) where T
+    points = Array{PointType2D{T}}(undef, GI.npoint(geom))
+    for (i, p) in enumerate(GI.getpoint(geom))
+        points[i] = SVPoint_2D(p, T)
+    end
+    return points
 end
 
 function _point_in_extent(p, extent::Extents.Extent)

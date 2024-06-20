@@ -109,6 +109,7 @@ function polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::A
     else
         _polygonize_featurecollection(f, xs, ys, A; kw...) 
     end
+    return [GI.Polygon([c]) for c in contours]
 end
 function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::AbstractMatrix; 
     kw...

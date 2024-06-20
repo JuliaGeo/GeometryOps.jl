@@ -139,14 +139,14 @@ function _inner_line_curve_process(
     closed_line |= first_last_equal_line
     closed_curve |= first_last_equal_curve
     # Loop over each line segment
-    l_start = _tuple_point(GI.getpoint(line, closed_line ? nl : 1))
+    l_start = TuplePoint_2D(GI.getpoint(line, closed_line ? nl : 1))
     i = closed_line ? 1 : 2
     while i ≤ nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        c_start = _tuple_point(GI.getpoint(curve, closed_curve ? nc : 1))
+        l_end = TuplePoint_2D(GI.getpoint(line, i))
+        c_start = TuplePoint_2D(GI.getpoint(curve, closed_curve ? nc : 1))
         # Loop over each curve segment
         for j in (closed_curve ? 1 : 2):nc
-            c_end = _tuple_point(GI.getpoint(curve, j))
+            c_end = TuplePoint_2D(GI.getpoint(curve, j))
             # Check if line and curve segments meet
             seg_val, intr1, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end); exact)
             # If segments are co-linear
@@ -228,12 +228,12 @@ end
 function _find_hinge_next_segments(α, β, ls, le, cs, ce, i, line, j, curve) 
     next_seg = if β == 1
         if α == 1  # hinge at endpoints, so next segment of both is needed
-            ((le, _tuple_point(GI.getpoint(line, i + 1))), (ce, _tuple_point(GI.getpoint(curve, j + 1))))
+            ((le, TuplePoint_2D(GI.getpoint(line, i + 1))), (ce, TuplePoint_2D(GI.getpoint(curve, j + 1))))
         else  # hinge at curve endpoint and line interior point, curve next segment needed 
-            ((ls, le), (ce, _tuple_point(GI.getpoint(curve, j + 1))))
+            ((ls, le), (ce, TuplePoint_2D(GI.getpoint(curve, j + 1))))
         end
     else  # hinge at curve interior point and line endpoint, line next segment needed
-        ((le, _tuple_point(GI.getpoint(line, i + 1))), (cs, ce))
+        ((le, TuplePoint_2D(GI.getpoint(line, i + 1))), (cs, ce))
     end
     return next_seg
 end
@@ -559,7 +559,7 @@ function _line_filled_curve_interactions(
     closed_line |= first_last_equal_line
 
     # See if first point is in an acceptable orientation
-    l_start = _tuple_point(GI.getpoint(line, closed_line ? nl : 1))
+    l_start = TuplePoint_2D(GI.getpoint(line, closed_line ? nl : 1))
     point_val = _point_filled_curve_orientation(l_start, curve; exact)
     if point_val == point_in
         in_curve = true
@@ -571,13 +571,13 @@ function _line_filled_curve_interactions(
 
     # Check for any intersections between line and curve
     for i in (closed_line ? 1 : 2):nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        c_start = _tuple_point(GI.getpoint(curve, nc))
+        l_end = TuplePoint_2D(GI.getpoint(line, i))
+        c_start = TuplePoint_2D(GI.getpoint(curve, nc))
         # If already interacted with all regions of curve, can stop
         in_curve && on_curve && out_curve && break
         # Check next segment of line against curve
         for j in 1:nc
-            c_end = _tuple_point(GI.getpoint(curve, j))
+            c_end = TuplePoint_2D(GI.getpoint(curve, j))
             # Check if two line and curve segments meet
             seg_val, _, _ = _intersection_point(Float64, (l_start, l_end), (c_start, c_end); exact)
             if seg_val != line_out
@@ -612,9 +612,9 @@ function _line_filled_curve_interactions(
                             x -> _euclid_distance(Float64, x, l_start)
                         end
                         sort!(ipoints, by = dist_from_lstart)
-                        p_start = _tuple_point(l_start)
+                        p_start = TuplePoint_2D(l_start)
                         for i in 1:(npoints + 1)
-                            p_end = i ≤ npoints ? _tuple_point(ipoints[i]) : l_end
+                            p_end = i ≤ npoints ? TuplePoint_2D(ipoints[i]) : l_end
                             mid_val = _point_filled_curve_orientation((p_start .+ p_end) ./ 2, curve; exact)
                             if mid_val == point_in
                                 in_curve = true

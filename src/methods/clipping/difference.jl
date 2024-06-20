@@ -62,10 +62,10 @@ function _difference(
         # add case for if they polygons are the same (all intersection points!)
         # add a find_first check to find first non-inter poly!
         if b_in_a && !a_in_b  # b in a and can't be the same polygon
-            poly_a_b_hole = GI.Polygon([tuples(ext_a), tuples(ext_b)])
+            poly_a_b_hole = GI.Polygon([svpoints(ext_a, T), svpoints(ext_b, T)])
             push!(polys, poly_a_b_hole)
         elseif !b_in_a && !a_in_b # polygons don't intersect
-            push!(polys, tuples(poly_a))
+            push!(polys, svpoints(poly_a, T))
             return polys
         end
     end
@@ -76,7 +76,7 @@ function _difference(
     end
     if GI.nhole(poly_b) != 0
         for hole in GI.gethole(poly_b)
-            hole_poly = GI.Polygon(StaticArrays.SVector(hole))
+            hole_poly = GI.Polygon(SA.SVector(hole))
             new_polys = intersection(hole_poly, poly_a, T; target = GI.PolygonTrait)
             if length(new_polys) > 0
                 append!(polys, new_polys)
@@ -115,10 +115,10 @@ function _difference(
     ::GI.MultiPolygonTrait, multipoly_b;
     kwargs...,
 ) where T
-    polys = [tuples(poly_a, T)]
+    polys = [svpoints(poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         isempty(polys) && break
-        polys = mapreduce(p -> difference(p, poly_b; target), append!, polys)
+        polys = mapreduce(p -> difference(p, poly_b, T; target), append!, polys)
     end
     return polys
 end
@@ -134,12 +134,12 @@ function _difference(
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
-        multipoly_a = fix_multipoly(multipoly_a)
+        multipoly_a = fix_multipoly(multipoly_a, T)
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{PolyType2D{T}}()
     sizehint!(polys, GI.npolygon(multipoly_a))
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, difference(poly_a, poly_b; target))
+        append!(polys, difference(poly_a, poly_b, T; target))
     end
     return polys
 end
@@ -156,7 +156,7 @@ function _difference(
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
-        multipoly_a = fix_multipoly(multipoly_a)
+        multipoly_a = fix_multipoly(multipoly_a, T)
         fix_multipoly = nothing
     end
     local polys
