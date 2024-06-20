@@ -195,18 +195,35 @@ intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloa
 segments, line strings, linear rings, polygons, and multipolygons. If no intersection points
 were possible given geometry extents or if none are found, return an empty list of
 GI.Points. =#
-function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _False()) where T
+function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _True()) where T
     # Initialize an empty list of points
-    result = GI.Point[]
+    result = Tuple{T, T}[]
     # Check if the geometries extents even overlap
     Extents.intersects(GI.extent(a), GI.extent(b)) || return result
     # Create a list of edges from the two input geometries
     edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
-    npoints_a, npoints_b  = length(edges_a), length(edges_b)
-    a_closed = npoints_a > 1 && edges_a[1][1] == edges_a[end][1]
-    b_closed = npoints_b > 1 && edges_b[1][1] == edges_b[end][1]
-    if npoints_a > 0 && npoints_b > 0
+    # npoints_a, npoints_b  = length(edges_a), length(edges_b)
+    # a_closed = npoints_a > 1 && edges_a[1][1] == edges_a[end][1]
+    # b_closed = npoints_b > 1 && edges_b[1][1] == edges_b[end][1]
+    # if npoints_a > 0 && npoints_b > 0
         # Loop over pairs of edges and add any intersection points to results
+    for a_edge in edges_a, b_edge in edges_b
+        line_orient, intr1, intr2 = _intersection_point(T, a_edge, b_edge; exact)
+        line_orient == line_out && return result
+        pt1, (α1, β1) = intr1
+        if line_orient == line_cross
+            push!(result, pt1)
+        else
+            add_a1, a1_β, add_b1, b1_α = _add_a1_b1(line_orient, intr1, intr2)
+            if add_a1
+
+            end
+            if add_b1
+
+            end
+        end
+    end
+
         for i in eachindex(edges_a), j in eachindex(edges_b)
             line_orient, intr1, _ = _intersection_point(T, edges_a[i], edges_b[j]; exact)
             # TODO: Add in degenerate intersection points when line_over
@@ -225,8 +242,28 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
                 end
             end
         end
-    end
+    # end
     return result
+end
+
+function _add_a1_b1(line_orient, intr1, intr2)
+    (_, (α1, β1)) = intr1
+    # Determine if a1 or b1 should be added to a_list
+    add_a1 = α1 == 0 && 0 ≤ β1 < 1
+    a1_β = add_a1 ? β1 : zero(T)
+    add_b1 = β1 == 0 && 0 < α1 < 1
+    b1_α = add_b1 ? α1 : zero(T)
+    # If lines are collinear and overlapping, a second intersection exists
+    if line_orient == line_over
+        (_, (α2, β2)) = intr2
+        if α2 == 0 && 0 ≤ β2 < 1
+            add_a1, a1_β = true, β2
+        end
+        if β2 == 0 && 0 < α2 < 1
+            add_b1, b1_α = true, α2
+        end
+    end
+    return add_a1, a1_β, add_b1, b1_α
 end
 
 #= Calculates the intersection points between two lines if they exists and the fractional
