@@ -65,23 +65,22 @@ of the _sv_points function that was within `simplify.jl`=#
 Convert any geometry or collection of geometries into a flat 
 vector of `Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}` edges.
 """
-function to_edges(x, ::Type{T} = Float64) where T
-    
-    edges = Vector{TupleEdge{T}}(undef, _nedge(x))
+function to_edges(x, ::Type{T} = Float64, ::Val{N} = Val(2)) where {T, N}
+    edges = Vector{TupleEdge{N, T}}(undef, _nedge(x))
     _to_edges!(edges, x, 1)
     return edges
 end
 
-function find_point_constructor(x, ::Type{T})
-    if _ismeasured(x)
-        SVPoint_4D
-    elseif _is3d
-        SVPoint_3D
-    else
-        SVPoint_2D
-    end
+# function find_point_constructor(x, ::Type{T})
+#     if _ismeasured(x)
+#         SVPoint_4D
+#     elseif _is3d(x)
+#         SVPoint_3D
+#     else
+#         SVPoint_2D
+#     end
 
-end
+# end
 
 _to_edges!(edges::Vector, x, n) = _to_edges!(edges, trait(x), x, n)
 function _to_edges!(edges::Vector, ::GI.FeatureCollectionTrait, fc, n)
@@ -141,7 +140,7 @@ function _to_points!(points::Vector, ::Union{AbstractCurveTrait,MultiPointTrait}
 end
 
 function _sv_points(::Type{T}, geom) where T
-    points = Array{_get_point_type(T)}(undef, GI.npoint(geom))
+    points = Array{PointType2D{T}}(undef, GI.npoint(geom))
     for (i, p) in enumerate(GI.getpoint(geom))
         points[i] = SVPoint_2D(p, T)
     end

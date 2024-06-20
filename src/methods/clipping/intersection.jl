@@ -120,7 +120,7 @@ function _intersection(
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
         multipoly_b = fix_multipoly(multipoly_b, T)
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{PolyType2D{T}}()
     for poly_b in GI.getpolygon(multipoly_b)
         append!(polys, intersection(poly_a, poly_b, T; target))
     end
@@ -153,7 +153,7 @@ function _intersection(
         multipoly_b = fix_multipoly(multipoly_b, T)
         fix_multipoly = nothing
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{PolyType2D{T}}()
     for poly_a in GI.getpolygon(multipoly_a)
         append!(polys, intersection(poly_a, multipoly_b, T; target, fix_multipoly))
     end
@@ -197,7 +197,7 @@ were possible given geometry extents or if none are found, return an empty list 
 GI.Points. =#
 function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _False()) where T
     # Initialize an empty list of points
-    result = Vector{_get_point_type(T)}()
+    result = Vector{PointType2D{T}}()
     # Check if the geometries extents even overlap
     Extents.intersects(GI.extent(a), GI.extent(b)) || return result
     # Create a list of edges from the two input geometries

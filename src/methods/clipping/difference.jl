@@ -136,7 +136,7 @@ function _difference(
     if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
         multipoly_a = fix_multipoly(multipoly_a, T)
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{PolyType2D{T}}()
     sizehint!(polys, GI.npolygon(multipoly_a))
     for poly_a in GI.getpolygon(multipoly_a)
         append!(polys, difference(poly_a, poly_b, T; target))

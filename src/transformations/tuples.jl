@@ -15,15 +15,15 @@ $APPLY_KEYWORDS
 function tuples(geom, ::Type{T} = Float64; kw...) where T
     if _ismeasured(geom)
         return apply(PointTrait(), geom; kw...) do p
-            (T(GI.x(p)), T(GI.y(p)), T(GI.z(p)), T(GI.m(p)))
+            TuplePoint_4D(p, T)
         end
     elseif _is3d(geom)
         return apply(PointTrait(), geom; kw...) do p
-            (T(GI.x(p)), T(GI.y(p)), T(GI.z(p)))
+            TuplePoint_3D(p, T)
         end
     else
         return apply(PointTrait(), geom; kw...) do p
-            (T(GI.x(p)), T(GI.y(p)))
+            TuplePoint_2D(p, T)
         end
     end
 end

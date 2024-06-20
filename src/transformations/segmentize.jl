@@ -185,7 +185,7 @@ and calls out to the "kernel" function which we've defined per linesegment.
 function _segmentize(::Type{T}, method::Union{LinearSegments, GeodesicSegments}, geom, ::Union{GI.LineStringTrait, GI.LinearRingTrait}) where T
     first_coord = GI.getpoint(geom, 1)
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
-    new_coords = _get_point_type(T)[] #NTuple{2, Float64}[]
+    new_coords = PointType2D{T}[]
     sizehint!(new_coords, GI.npoint(geom))
     push!(new_coords, SVPoint_2D((x1, y1), T))
     for coord in Iterators.drop(GI.getpoint(geom), 1)

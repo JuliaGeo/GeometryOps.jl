@@ -543,7 +543,7 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a,
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
-    return_polys = Vector{_get_poly_type(T)}(undef, 0)
+    return_polys = Vector{PolyType2D{T}}(undef, 0)
     # Keep track of number of processed intersection points
     visited_pts = 0
     processed_pts = 0
