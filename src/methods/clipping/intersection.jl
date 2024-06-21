@@ -209,10 +209,10 @@ function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTra
     # Loop over pairs of edges and add any unique intersection points to results
     for a_edge in edges_a, b_edge in edges_b
         line_orient, intr1, intr2 = _intersection_point(T, a_edge, b_edge; exact)
-        line_orient == line_out && continue
+        line_orient == line_out && continue  # no intersection points
         pt1, _ = intr1
-        push!(result, pt1)
-        if line_orient == line_over
+        push!(result, pt1)  # if not line_out, there is at least one intersection point
+        if line_orient == line_over # if line_over, there are two intersection points
             pt2, _ = intr2
             push!(result, pt2)
         end

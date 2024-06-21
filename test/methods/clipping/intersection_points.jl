@@ -28,3 +28,7 @@ LG_l5_l6_mp = GI.MultiPoint(collect(GI.getpoint(LG.intersection(l5, l6))))
 # Test that intersection points between lines and polygons is equivalent
 GO_p1_p2_mp = GI.MultiPoint(GO.intersection_points(p1, p2))
 @test GO.equals(GO_p1_p2_mp, GO_l1_l2_mp)
+
+# No intersection points between polygon and line
+GO_p1_l6 = GO.intersection_points(p1, l6)
+@test isempty(GO_p1_l6)
