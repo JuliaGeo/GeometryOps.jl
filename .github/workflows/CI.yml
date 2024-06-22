@@ -49,7 +49,7 @@ jobs:
         with:
           version: '1'
       - name: Build and add versions
-        run: julia --project=docs -e 'using Pkg; Pkg.add([PackageSpec(path = "."), PackageSpec(name = "GeoMakie", rev = "master"), PackageSpec(name = "DimensionalData", rev = "main"), PackageSpec(name = "Rasters", rev = "la/compacts")])'
+        run: julia --project=docs -e 'using Pkg; Pkg.add([PackageSpec(path = "."), PackageSpec(name = "GeoMakie", rev = "master"), PackageSpec(name = "DimensionalData", rev = "main"), PackageSpec(name = "Rasters", rev = "la/compacts"), PackageSpec(name = "DocumenterVitepress", rev = "la/better_layout")])'
       - uses: julia-actions/julia-docdeploy@v1
         with:
           install-package: false
