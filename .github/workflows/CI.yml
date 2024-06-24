@@ -48,8 +48,11 @@ jobs:
       - uses: julia-actions/setup-julia@v1
         with:
           version: '1'
-      - uses: julia-actions/julia-buildpkg@v1
+      - name: Build and add versions
+        run: julia --project=docs -e 'using Pkg; Pkg.add([PackageSpec(path = "."), PackageSpec(name = "GeoMakie", rev = "master"), PackageSpec(name = "DimensionalData", rev = "main"), PackageSpec(name = "Rasters", rev = "la/compacts")])'
       - uses: julia-actions/julia-docdeploy@v1
+        with:
+          install-package: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: |

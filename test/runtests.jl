@@ -29,6 +29,7 @@ const GO = GeometryOps
     # Clipping
     @testset "Coverage" begin include("methods/clipping/coverage.jl") end
     @testset "Cut" begin include("methods/clipping/cut.jl") end
+    @testset "Intersection Point" begin include("methods/clipping/intersection_points.jl") end
     @testset "Polygon Clipping" begin include("methods/clipping/polygon_clipping.jl") end
     # Transformations
     @testset "Embed Extent" begin include("transformations/extent.jl") end
