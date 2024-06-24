@@ -15,14 +15,22 @@ polygons, or not an endpoint of a chain. =#
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
 @kwdef struct PolyNode{T <: AbstractFloat}
-    point::Tuple{T,T}          # (x, y) values of given point
-    inter::Bool = false        # If ipt, true, else 0
-    neighbor::Int = 0          # If ipt, index of equivalent point in a_list or b_list, else 0
-    idx::Int = 0               # If crossing point, index within sorted a_idx_list
-    ent_exit::Bool = false     # If ipt, true if enter and false if exit, else false
-    crossing::Bool = false     # If ipt, true if intersection crosses from out/in polygon, else false
-    endpoint::EndPointType = not_endpoint # If ipt, denotes if point is the start or end of an overlapping chain
-    fracs::Tuple{T,T} = (0., 0.) # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
+    "(x, y) values of given point"
+    point::Tuple{T,T}
+    "If ipt, true, else 0"
+    inter::Bool = false
+    "If ipt, index of equivalent point in a_list or b_list, else 0"
+    neighbor::Int = 0
+    "If crossing point, index within sorted a_idx_list"
+    idx::Int = 0
+    "If ipt, true if enter and false if exit, else false"
+    ent_exit::Bool = false
+    "If ipt, true if intersection crosses from out/in polygon, else false"
+    crossing::Bool = false
+    "If ipt, denotes if point is the start or end of an overlapping chain"
+    endpoint::EndPointType = not_endpoint
+    "If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)"
+    fracs::Tuple{T,T} = (0., 0.)
 end
 
 #= Create a new node with all of the same field values as the given PolyNode unless
@@ -79,6 +87,9 @@ not update the entry and exit flags for a_list.
     
 The a_idx_list is a list of the indicies of intersection points in a_list. The value at
 index i of a_idx_list is the location in a_list where the ith intersection point lies.
+
+`_build_a_list` does not require closed rings, and can indeed be used on linestrings
+and similar things!
 =#
 function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
     n_a_edges = _nedge(poly_a)
