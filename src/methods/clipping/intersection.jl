@@ -175,7 +175,7 @@ function _intersection(
 end
 
 """
-    intersection_points(geom_a, geom_b, [T::Type])
+    intersection_points(geom_a, geom_b, [T::Type; exact = true])
 
 Return a list of intersection tuple points between two geometries. If no intersection points
 exist, returns an empty list.
@@ -193,8 +193,8 @@ inter_points = GO.intersection_points(line1, line2)
 1-element Vector{Tuple{Float64, Float64}}:
  (125.58375366067548, -14.83572303404496)
 """
-intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat =
-    _intersection_points(T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+intersection_points(geom_a, geom_b, ::Type{T} = Float64; exact::Union{Bool, BoolsAsTypes} = _True()) where T <: AbstractFloat =
+    _intersection_points(T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; exact = _booltype(exact))
 
 
 #= Calculates the list of intersection points between two geometries, inlcuding line
