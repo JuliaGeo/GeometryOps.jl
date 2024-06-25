@@ -35,6 +35,15 @@ GeometryOps tries to offer most of the basic geometry operations you'd need, imp
 
 See the "API" page in the docs for a more complete list!
 
+## How to navigate the docs
+
+GeometryOps' [docs](https://juliageo.org/GeometryOps.jl/stable) are divided into three main sections: tutorials, explanations and source code.  
+Documentation and examples for many functions can be found in the source code section, since we use literate programming in GeometryOps.
+
+- Tutorials are meant to teach the fundamental concepts behind GeometryOps, and how to perform certain operations.
+- Explanations usually contain little code, and explain in more detail how GeometryOps works.
+- Source code usually contains explanations and examples at the top of the page, followed by annotated source code from that file.
+
 ## Performance comparison to other packages
 
 From the wonderful [vector-benchmark](https://www.github.com/kadyb/vector-benchmark),

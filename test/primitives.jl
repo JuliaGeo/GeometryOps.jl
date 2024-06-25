@@ -23,6 +23,9 @@ poly = GI.Polygon([lr1, lr2])
     end
 
     @testset "Tables.jl support" begin
+        # check to account for missing data
+        missing_or_equal(x, y) = (ismissing(x) && ismissing(y)) || (x == y)
+        # file setup
         mktempdir() do dir
         cd(dir) do
 
@@ -39,7 +42,7 @@ poly = GI.Polygon([lr1, lr2])
                 @test all(centroid_geometry .== GO.centroid.(countries_table.geometry))
                 @testset "Columns are preserved" begin  
                     for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_table))
-                        @test all(GO.Tables.getcolumn(centroid_table, column) .== GO.Tables.getcolumn(countries_table, column))
+                        @test all(missing_or_equal.(GO.Tables.getcolumn(centroid_table, column), GO.Tables.getcolumn(countries_table, column)))
                     end
                 end
             end
@@ -53,7 +56,7 @@ poly = GI.Polygon([lr1, lr2])
                 @test all(centroid_geometry .== GO.centroid.(countries_df.geometry))
                 @testset "Columns are preserved" begin  
                     for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_df))
-                        @test all(centroid_df[!, column] .== countries_df[!, column])
+                        @test all(missing_or_equal.(centroid_df[!, column], countries_df[!, column]))
                     end
                 end
             end
