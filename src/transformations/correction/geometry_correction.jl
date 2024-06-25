@@ -44,7 +44,18 @@ application_level(gc::GeometryCorrection) = error("Not implemented yet for $(gc)
 
 (gc::GeometryCorrection)(trait::GI.AbstractGeometryTrait, geometry) = error("Not implemented yet for $(gc) and $(trait).")
 
-function fix(geometry; corrections = GeometryCorrection[ClosedRing(),], kwargs...)
+"""
+    fix(x; corrections = GeometryCorrection[], kwargs...)
+
+Apply the given corrections to `x`, and return the corrected version.
+
+`x` may be a geometry, vector of geometries, feature collection, or table - 
+anything which [`apply`](@ref) will accept!
+
+Some available corrections are: [`ClosedRing`](@ref), [`PolygonContents`](@ref), [`UnionIntersectingPolygons`](@ref), [`DiffIntersectingPolygons`](@ref).
+
+"""
+function fix(geometry; corrections = GeometryCorrection[PolygonContents(), ClosedRing(),], kwargs...)
     traits = application_level.(corrections)
     final_geometry = geometry
     for Trait in (GI.PointTrait, GI.MultiPointTrait, GI.LineStringTrait, GI.LinearRingTrait, GI.MultiLineStringTrait, GI.PolygonTrait, GI.MultiPolygonTrait)
