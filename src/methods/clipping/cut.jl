@@ -58,15 +58,14 @@ GI.coordinates.(cut_polys)
  [[[5.0, 0.0], [10.0, 0.0], [10.0, 10.0], [5.0, 10.0], [5.0, 0.0]]]
 ```
 """
-cut(geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} =
-    _cut(T, GI.trait(geom), geom, GI.trait(line), line; exact = _True())
+cut(geom, line, ::Type{T} = Float64; exact = _True()) where {T <: AbstractFloat} =
+    _cut(T, GI.trait(geom), geom, GI.trait(line), line; exact = _booltype(exact))
 
 #= Cut a given polygon by given line. Add polygon holes back into resulting pieces if there
 are any holes. =#
 function _cut(::Type{T}, ::GI.PolygonTrait, poly, ::GI.LineTrait, line; exact) where T
     ext_poly = GI.getexterior(poly)
-    poly_list, intr_list = _build_a_list(T, ext_poly, line; exact)
-    n_intr_pts = length(intr_list)
+    poly_list, intr_list, n_intr_pts = _build_a_list(T, ext_poly, line; exact)
     # If an impossible number of intersection points, return original polygon
     if n_intr_pts < 2 || isodd(n_intr_pts)
         return [tuples(poly)]
@@ -133,3 +132,62 @@ function _cut(::Type{T}, geom, line, geom_list, intr_list, n_intr_pts; exact) wh
     end
     return return_coords
 end
+
+#=
+## Cutting LineStrings
+
+Cutting line strings is simpler than cutting rings, since we don't have to close the two halves of the ring.
+Instead, we can simply find the intersection points of the linestring with the given line, and then cut the linestring
+that way, returning a list of linestrings.  
+
+TODOs:
+- Return a MultiLineString instead (maybe use target as a kwarg)
+- This method probably assumes the following:
+    (a) that the linestring is simple
+=#
+
+function _cut(::Type{T}, ::GI.LineStringTrait, linestring, ::GI.LineTrait, line; exact::Exact) where {T, Exact <: BoolsAsTypes}
+    tuple_vector = tuples(linestring).geom
+    push!(tuple_vector, last(tuple_vector))
+    # TODO: is the above really needed?
+    # We call the point list result `poly_list` to keep parity with the other cut methods
+    # so that it's easy to analyze the differences in the algorithms.  Plus it contains `PolyNode`s anyway.
+    poly_list, intr_list, n_intr_pts = _build_a_list(T, GI.LineString(tuple_vector), line; exact)
+    # If no intersection points, return original linestring
+    # This is different from the polygon condition, since a 
+    # line need not enter and exit a linestring, there can 
+    # be an odd number of intersections.
+    if isempty(intr_list)
+        println("Intersection list was empty")
+        return [tuples(linestring)]
+    end
+    # Cut polygon by line.  This is a riff on the inner `_cut` implementation
+    # for polygons, but since we don't care about entry-exit semantics it's a 
+    # bit simpler.
+    # The polygon methods don't work in the linestring case _because_ they do 
+    # check entry-exit status, which we don't set and can't even get anyway.
+    sort!(intr_list, by = x -> geom_list[x].fracs[2])
+    return_coords = [[geom_list[1].pointxw]]
+    linestring_idx = 1
+    n_linestrings = 1
+    # Walk around original polygon to find split polygons
+    for (pt_idx, curr) in enumerate(poly_list)
+        if pt_idx > 1
+            push!(return_coords[linestring_idx], curr.point)
+        end
+        if curr.inter
+            push!(return_coords, [curr.point])
+            n_linestrings += 1
+            linestring_idx = n_linestrings
+        end
+    end
+
+    # (Main.Infiltrator.@exfiltrate)
+
+    return [GI.LineString(c) for c in return_coords]
+end
+
+# function _cut(::Type{T}, ::GI.MultiLineStringTrait, multilinestring, ::GI.LineTrait, line; exact) where T
+#     # TODO: Implement mls cutting
+#     return [tuples(multilinestring)]
+# end
