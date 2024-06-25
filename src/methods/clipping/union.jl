@@ -88,6 +88,20 @@ function _union(
     return polys
 end
 
+function _union(
+    ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.PolygonTrait, poly_b;
+    exact, kwargs...,
+) where T
+    return GI.MultiPolygon(_union(
+        TraitTarget(GI.PolygonTrait()), T, 
+        GI.trait(poly_a), poly_a, 
+        GI.trait(poly_b), poly_b;
+        exact, kwargs...,
+    ))
+end
+
 # # Helper functions for Unions with Greiner and Hormann Polygon Clipping
 
 #= When marking the crossing status of a delayed crossing, the chain start point is crossing
@@ -234,11 +248,31 @@ function _union(
     end
     return polys
 end
+function _union(
+    target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+) where T
+    return GI.MultiPolygon(_union(
+        TraitTarget(GI.PolygonTrait()), T, 
+        GI.trait(poly_a), poly_a, 
+        GI.trait(multipoly_b), multipoly_b;
+        fix_multipoly, kwargs...,
+    ))
+end
 
 #= Multipolygon with polygon union is equivalent to taking the union of the poylgon with the
 multipolygon and thus simply switches the order of operations and calls the above method. =#
 _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.PolygonTrait, poly_b;
+    kwargs...,
+) where T = union(poly_b, multipoly_a; target, kwargs...)
+
+_union(
+    target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     kwargs...,
