@@ -26,20 +26,20 @@ plot(geoms; color = 1:length(geoms), axis = (; aspect = DataAspect()))
 Now that we have the geometries, we reduce over the vector, performing unions along the way.
 
 ```@example unary
+fixed_geoms = GO.buffer(geoms, 0)
+@time GO.fix(GI.MultiPolygon(fixed_geoms); corrections = (GO.UnionIntersectingPolygons(),))
+```
+
+```@example unary
 @time final_multipoly = reduce(
     (x, y) -> GO.union(x, y; target = GI.MultiPolygonTrait, fix = GO.UnionIntersectingPolygons()), 
     GO.fix(geoms)
 )
 ```
 
-
 ```@example unary
-fixed_geoms = GO.buffer(geoms, 0)
 @time final_multipoly = reduce(
     (x, y) -> GO.union(x, y; target = GI.MultiPolygonTrait, fix = GO.UnionIntersectingPolygons()), 
     fixed_geoms
 )
-```
-```@example unary
-@time GO.fix(GI.MultiPolygon(fixed_geoms); corrections = (GO.UnionIntersectingPolygons(),))
 ```
