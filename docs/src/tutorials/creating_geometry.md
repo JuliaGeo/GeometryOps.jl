@@ -253,7 +253,7 @@ plot!(ga,polygon3; color=:red, source = source_crs2)
 fig
 ````
 
-[Create geospatial geometries with embedded coordinate reference system information](@id geom-crs)
+## [Create geospatial geometries with embedded coordinate reference system information](@id geom-crs)
  
 Great, we can make geometries and plot them on a map... now let's export the data to common geospatial data formats. To do this we now need to create geometries with embedded `CRS` information, making it a geospatial geometry. All that's needed is to include `; crs = crs` as a keyword argument when constructing the geometry.
 
