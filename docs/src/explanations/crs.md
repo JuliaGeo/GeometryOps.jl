@@ -1,6 +1,6 @@
 # Coordinate Reference Systems
 
-[Coordinate Reference System](https://en.wikipedia.com/Spatial_reference_system)s are simply descriptions of what some set of coordinates really mean in reference to some standard.
+[Coordinate Reference System](https://en.wikipedia.com/wiki/Spatial_reference_system)s are simply descriptions of what some set of coordinates really mean in reference to some standard.
 
 In a mathematical sense, coordinate reference systems can be thought of defining a _space_, with associated transformations from and to latitude-longitude space (plate-carree, long-lat, WGS84) which is the default CRS we assume.
 
