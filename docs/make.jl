@@ -101,6 +101,12 @@ makedocs(;
         "Explanations" => [
             "Paradigms" => "explanations/paradigms.md",
             "Peculiarities" => "explanations/peculiarities.md",
+            "GIS things" => [
+                "CRS" => "explanations/crs.md",
+                "Winding order" => "explanations/winding_order.md",
+                # "Geometry types and lack of support" => "explanations/well_known_geometry.md", # TODO write this
+                # "When you should use LibGEOS or ArchGDAL" => "explanations/notgeometryops.md", # TODO write this
+            ],
         ],
         "Source code" => literate_pages,
     ],
