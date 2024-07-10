@@ -52,7 +52,7 @@ polygon_points = Point3f[
 # Plot it!
 # First, we'll plot the polygon using Makie's rendering:
 f, a1, p1 = poly(
-    polygon_points; 
+    Point2d.(polygon_points); 
     color = last.(polygon_points), 
     colormap = cgrad(:jet, 18; categorical = true), 
     axis = (; 
