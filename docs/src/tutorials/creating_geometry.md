@@ -3,7 +3,7 @@
 In this tutorial, we're going to:
 1. [Create and plot geometries](@ref creating-geometry)
 2. [Plot geometries on a map using `GeoMakie` and coordinate reference system (`CRS`)](@ref plot-geometry)
-3. [Create geospatial geometries with coordinate reference system information](@ref geom-crs)
+3. [Create geospatial geometries with embedded coordinate reference system information](@ref geom-crs)
 4. [Assign attributes to geospatial geometries](@ref attributes)
 5. [Save geospatial geometries to common geospatial file formats](@ref save-geometry)
 
@@ -155,7 +155,7 @@ fig
 
 Great, now we can make `Points`, `MultiPoints`, `Lines`, `LineStrings`, `Polygons` (with holes), and `MultiPolygons` and modify them using [`CoordinateTransformations`] and [`GeometryOps`].
 
-## [Coordinate reference systems (CRS) and you](@id geom-crs) 
+## [Plot geometries on a map using `GeoMakie` and coordinate reference system (`CRS`)](@id plot-geometry) 
 
 In geospatial sciences we often have data in one [Coordinate Reference System (CRS)](https://en.wikipedia.org/wiki/Spatial_reference_system) (`source`) and would like to display it in different (`destination`) `CRS`. `GeoMakie` allows us to do this by automatically projecting from `source` to `destination` CRS.
 
@@ -253,6 +253,8 @@ plot!(ga,polygon3; color=:red, source = source_crs2)
 fig
 ````
 
+## [Create geospatial geometries with embedded coordinate reference system information](@id geom-crs)
+ 
 Great, we can make geometries and plot them on a map... now let's export the data to common geospatial data formats. To do this we now need to create geometries with embedded `CRS` information, making it a geospatial geometry. All that's needed is to include `; crs = crs` as a keyword argument when constructing the geometry.
 
 Let's do this for a new `Polygon`

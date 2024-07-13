@@ -1,7 +1,7 @@
 <img width="400" alt="GeometryOps.jl" src="https://github.com/JuliaGeo/GeometryOps.jl/assets/32143268/92c5526d-23a9-4e01-aee0-2fcea99c5001">
 
 ![Lifecycle:Experimental](https://img.shields.io/badge/Lifecycle-Experimental-339999)
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaGeo.github.io/GeometryOps.jl/stable/)
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaGeo.github.io/GeometryOps.jl/v0.1.10/)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaGeo.github.io/GeometryOps.jl/dev/)
 [![Build Status](https://github.com/JuliaGeo/GeometryOps.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/JuliaGeo/GeometryOps.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
