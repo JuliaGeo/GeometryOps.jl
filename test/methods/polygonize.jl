@@ -1,5 +1,6 @@
 using Test
 import GeometryOps as GO
+import GeometryOps: polygonize
 import GeoInterface as GI
 import DimensionalData as DD
 import OffsetArrays, Rasters
@@ -58,13 +59,13 @@ end
 
 @testset "Polygonize with DimensionalData compatible arrays" begin
     data = rand(1:4, 100, 50) .== 1
-    dd = DimensionalData.DimArray(data, (DimensionalData.X(51:150), DimensionalData.Y(151:200)))
+    dd = DD.DimArray(data, (DD.X(51:150), DD.Y(151:200)))
     @testset "DimensionalData" begin
         data_mp = polygonize(51:150, 151:200, data);
         dd_mp = polygonize(dd);
-        @test 
-        GO.equals(data_mp, dd_mp)
+        @test GO.equals(data_mp, dd_mp)
     end
+
     @testset "Rasters" begin
         data = rand(1:4, 100, 50) .== 1
         rast = Rasters.Raster(data; dims=(DD.X(51:150), DD.Y(151:200)), crs=Rasters.GeoFormatTypes.EPSG(4326))
