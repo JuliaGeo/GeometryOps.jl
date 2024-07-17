@@ -61,15 +61,15 @@ This is a pure Julia algorithm which provides an optimal Delaunay triangulation.
 
 See also [`convex_hull`](@ref)
 """
-struct DelaunayTriangulationMethod end
+struct MonotoneChainMethod end
 
-# , [`DelaunayTriangulationMethod`](@ref), [`EarCutMethod`](@ref).
+# , [`MonotoneChainMethod`](@ref), [`EarCutMethod`](@ref).
 # GrahamScanMethod, etc. can be implemented in GO as well, if someone wants to...
 
-convex_hull(geometries) = convex_hull(DelaunayTriangulationMethod(), geometries)
+convex_hull(geometries) = convex_hull(MonotoneChainMethod(), geometries)
 
 # TODO: have this respect the CRS by pulling it out of `geometries`.
-function convex_hull(::DelaunayTriangulationMethod, geometries)
+function convex_hull(::MonotoneChainMethod, geometries)
     # Extract all points as tuples.  We have to collect and allocate
     # here, because DelaunayTriangulation only accepts vectors of 
     # point-like geoms.
