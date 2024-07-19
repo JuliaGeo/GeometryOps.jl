@@ -83,7 +83,7 @@ function _difference(
             end
         end
     end
-    # Remove uneeded collinear points on same edge
+    # Remove unneeded collinear points on same edge
     _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
     return polys
 end
@@ -147,7 +147,7 @@ end
 #= Multipolygon with multipolygon difference - note that all intersection regions between
 sub-polygons of `multipoly_a` and sub-polygons of `multipoly_b` will be removed from the
 corresponding sub-polygon of `multipoly_a`. Unless specified with `fix_multipoly = nothing`,
-`multipolygon_a` will be validated using the given (defauly is `UnionIntersectingPolygons()`)
+`multipolygon_a` will be validated using the given (default is `UnionIntersectingPolygons()`)
 correction. =#
 function _difference(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
@@ -169,7 +169,7 @@ function _difference(
         else
             difference(GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
         end
-        #= One multipoly_a has been completly covered (and thus removed) there is no need to
+        #= One multipoly_a has been completely covered (and thus removed) there is no need to
         continue taking the difference =#
         isempty(polys) && break
     end

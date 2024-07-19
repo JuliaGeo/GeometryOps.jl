@@ -134,7 +134,7 @@ or nested vectors or a table of these.
 
 [`RadialDistance`](@ref), [`DouglasPeucker`](@ref), or 
 [`VisvalingamWhyatt`](@ref) algorithms are available, 
-listed in order of increasing quality but decreaseing performance.
+listed in order of increasing quality but decreasing performance.
 
 `PoinTrait` and `MultiPointTrait` are returned unchanged.
 
@@ -199,7 +199,7 @@ simplify(
  ) = _simplify(DouglasPeucker(; kw...), data; prefilter_alg, calc_extent, threaded, crs)
 
 
-#= For each algorithm, apply simplication to all curves, multipoints, and
+#= For each algorithm, apply simplification to all curves, multipoints, and
 points, reconstructing everything else around them. =#
 function _simplify(alg::Union{SimplifyAlg, GEOS}, data; prefilter_alg=nothing, kw...)
     simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg)
@@ -245,7 +245,7 @@ Simplifies geometries by removing points less than
 $SIMPLIFY_ALG_KEYWORDS
 - `tol`: the minimum distance between points.
 
-Note: user input `tol` is squared to avoid uneccesary computation in algorithm.
+Note: user input `tol` is squared to avoid unnecessary computation in algorithm.
 """
 @kwdef struct RadialDistance <: SimplifyAlg 
     number::Union{Int64,Nothing} = nothing
@@ -284,7 +284,7 @@ Simplifies geometries by removing points below `tol`
 distance from the line between its neighboring points.
 
 $DOUGLAS_PEUCKER_KEYWORDS
-Note: user input `tol` is squared to avoid uneccesary computation in algorithm.
+Note: user input `tol` is squared to avoid unnecessary computation in algorithm.
 """
 @kwdef struct DouglasPeucker <: SimplifyAlg
     number::Union{Int64,Nothing} = nothing
@@ -304,7 +304,7 @@ end
 function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
     npoints = length(points)
     npoints <= MIN_POINTS && return points
-    # Determine stopping critetia
+    # Determine stopping criteria
     max_points = if !isnothing(alg.tol)
         npoints
     else
@@ -395,7 +395,7 @@ function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
 end
 
 #= find maximum distance of any point between the start_idx and end_idx to the line formed
-by conencting the points at start_idx and end_idx. Note that the first index of maximum
+by connecting the points at start_idx and end_idx. Note that the first index of maximum
 value will be used, which might cause differences in results from other algorithms.=#
 function _find_max_squared_dist(points, start_idx, end_idx)
     max_idx = start_idx
@@ -422,7 +422,7 @@ distance from the line between its neighboring points.
 $SIMPLIFY_ALG_KEYWORDS
 - `tol`: the minimum area of a triangle made with a point and
     its neighboring points.
-Note: user input `tol` is doubled to avoid uneccesary computation in algorithm.
+Note: user input `tol` is doubled to avoid unnecessary computation in algorithm.
 """
 @kwdef struct VisvalingamWhyatt <: SimplifyAlg 
     number::Union{Int,Nothing} = nothing

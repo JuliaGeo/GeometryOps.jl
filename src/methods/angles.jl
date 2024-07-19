@@ -39,7 +39,7 @@ This is computed differently for different geometries:
     - The angles of a point is an empty vector.
     - The angles of a single line segment is an empty vector.
     - The angles of a linestring or linearring is a vector of angles formed by the curve.
-    - The angles of a polygin is a vector of vectors of angles formed by each ring.
+    - The angles of a polygon is a vector of vectors of angles formed by each ring.
     - The angles of a multi-geometry collection is a vector of the angles of each of the
         sub-geometries as defined above.
 
@@ -83,7 +83,7 @@ function _angles(::Type{T}, ::GI.LinearRingTrait, geom; interior = true) where T
 end
 
 #= The angles of a polygon is a vector of polygon angles. Note that if there are holes
-within the polyogn, the angles will be listed after the exterior ring angles in order of the
+within the polygon, the angles will be listed after the exterior ring angles in order of the
 holes. All angles, including the hole angles, are interior angles of the polygon.=#
 function _angles(::Type{T}, ::GI.PolygonTrait, geom) where T
     angles = _angles(T, GI.LinearRingTrait(), GI.getexterior(geom); interior = true)

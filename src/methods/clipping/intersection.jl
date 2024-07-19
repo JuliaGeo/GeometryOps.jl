@@ -5,7 +5,7 @@ export intersection, intersection_points
     Enum LineOrientation
 Enum for the orientation of a line with respect to a curve. A line can be
 `line_cross` (crossing over the curve), `line_hinge` (crossing the endpoint of the curve),
-`line_over` (colinear with the curve), or `line_out` (not interacting with the curve).
+`line_over` (collinear with the curve), or `line_out` (not interacting with the curve).
 """
 @enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
@@ -86,7 +86,7 @@ function _intersection(
         hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
         _add_holes_to_polys!(T, polys, hole_iterator, remove_idx; exact)
     end
-    # Remove uneeded collinear points on same edge
+    # Remove unneeded collinear points on same edge
     _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
     return polys
 end
@@ -128,7 +128,7 @@ function _intersection(
 end
 
 #= Multipolygon with polygon intersection is equivalent to taking the intersection of the
-poylgon with the multipolygon and thus simply switches the order of operations and calls the
+polygon with the multipolygon and thus simply switches the order of operations and calls the
 above method. =#
 _intersection(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
@@ -197,7 +197,7 @@ intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloa
     _intersection_points(T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 
 
-#= Calculates the list of intersection points between two geometries, inlcuding line
+#= Calculates the list of intersection points between two geometries, including line
 segments, line strings, linear rings, polygons, and multipolygons. =#
 function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _True()) where T
     # Initialize an empty list of points
@@ -384,7 +384,7 @@ end
 
 #= If lines defined by (a1, a2) and (b1, b2) meet at one point that is not an endpoint of
 either segment, they form a crossing intersection with a singular intersection point. That 
-point is caculated by finding the fractional distance along each segment the point occurs
+point is calculated by finding the fractional distance along each segment the point occurs
 at (α, β). If the point is too close to an endpoint to be distinct, the point shares a value
 with the endpoint, but with a non-zero and non-one fractional value. If the intersection
 point calculated is outside of the envelope of the two segments due to floating point error,
@@ -407,9 +407,9 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     β = _clamped_frac(Δbax * Δay - Δbay * Δax, a_cross_b, eps(T))
 
     #= Intersection will be where a1 + α * Δa = b1 + β * Δb. However, due to floating point
-    innacurracies, α and β calculations may yeild different intersection points. Average
+    inaccuracies, α and β calculations may yield different intersection points. Average
     both points together to minimize difference from real value, as long as segment isn't 
-    vertical or horizontal as this will almost certianly lead to the point being outside the
+    vertical or horizontal as this will almost certainly lead to the point being outside the
     envelope due to floating point error. Also note that floating point limitations could
     make intersection be endpoint if α≈0 or α≈1.=#
     x = if Δax == 0

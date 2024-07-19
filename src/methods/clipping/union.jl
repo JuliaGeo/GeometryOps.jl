@@ -83,7 +83,7 @@ function _union(
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
         _add_union_holes!(polys, a_in_b, b_in_a, poly_a, poly_b; exact)
     end
-    # Remove uneeded collinear points on same edge
+    # Remove unneeded collinear points on same edge
     _remove_collinear_points!(polys, [false], poly_a, poly_b)
     return polys
 end
@@ -160,7 +160,7 @@ function _add_union_holes_contained_polys!(polys, interior_poly, exterior_poly; 
         in_ih, on_ih, out_ih = _line_polygon_interactions(ext_int_ring, poly_ih; exact, closed_line = true)
         if in_ih  # at least part of interior polygon exterior is within the ith hole
             if !on_ih && !out_ih
-                #= interior polygon is completly within the ith hole - polygons aren't
+                #= interior polygon is completely within the ith hole - polygons aren't
                 touching and do not actually form a union =#
                 polys[1] = tuples(interior_poly)
                 push!(polys, tuples(exterior_poly))
@@ -235,7 +235,7 @@ function _union(
     return polys
 end
 
-#= Multipolygon with polygon union is equivalent to taking the union of the poylgon with the
+#= Multipolygon with polygon union is equivalent to taking the union of the polygon with the
 multipolygon and thus simply switches the order of operations and calls the above method. =#
 _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},

@@ -81,7 +81,7 @@ c1 = LG.GeometryCollection([pt1, r1, p1])
 @test GO.distance(pt7, p1) == LG.distance(pt7, p1)
 @test GO.signed_distance(pt7, p1) ≈
     -(min(LG.distance(pt7, r2), LG.distance(pt7, r3), LG.distance(pt7, r4)))
-# Point outside of polyon exterior
+# Point outside of polygon exterior
 @test GO.distance(pt5, p1) ≈ LG.distance(pt5, p1)
 @test GO.signed_distance(pt5, p1) ≈ LG.distance(pt5, p1)
 # Point inside of polygon hole

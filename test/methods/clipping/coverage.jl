@@ -26,7 +26,7 @@ p1 = GI.Polygon([[(0.0, 0.0), (0.0, 20.0), (20.0, 20.0), (20.0, 0.0), (0.0, 0.0)
 # polygon is bigger than the cell
 p2 = GI.Polygon([[(-10, -10.0), (-10.0, 30.0), (30.0, 30.0), (300.0, -10.0), (-10.0, -10.0)]])
 @test GO.coverage(p2, cell_extremes...) == cell_area
-# polygon is completly inside of cell
+# polygon is completely inside of cell
 p3 = GI.Polygon([[(5.0, 5.0), (5.0, 15.0), (15.0, 15.0), (15.0, 5.0), (5.0, 5.0)]])
 @test GO.coverage(p3, cell_extremes...) ≈ LG.area(LG.intersection(cell_poly, p3))
 # polygon exits cell through one edge
@@ -54,7 +54,7 @@ p10 = GI.Polygon([[(0.0, 0.0), (0.0, 20.0), (20.0, 20.0), (20.0, 0.0), (0.0, 0.0
     [(7.0, 7.0), (5.0, 7.0), (5.0, 5.0), (7.0, 7.0)],
 ])
 @test GO.coverage(p10, cell_extremes...) ≈ LG.area(LG.intersection(p10, cell_poly))
-# non-convex polygon split into two pieces (differnet walls)
+# non-convex polygon split into two pieces (different walls)
 p11 = GI.Polygon([[(-10.0, 15.0), (-10.0, -10.0), (15.0, -10.0), (15.0, 5.0), (10.0, 5.0),
     (10.0, -5.0), (-5.0, -5.0), (-5.0, 10.0), (5.0, 10.0), (5.0, 15.0), (-10.0, 15.0)]])
 @test GO.coverage(p11, cell_extremes...) ≈ LG.area(LG.intersection(p11, cell_poly))

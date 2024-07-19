@@ -11,7 +11,7 @@ contained, within, or equal to the other.
 
 Note that this means it is impossible for a single point to overlap with a
 single point and a line only overlaps with another line if only a section of
-each line is colinear. 
+each line is collinear. 
 
 To provide an example, consider these two lines:
 ```@example overlaps
@@ -42,12 +42,12 @@ implementation based on the geometry trait. This is also used in the
 implementation, since it's a lot less work! 
 
 Note that that since only elements of the same dimension can overlap, any two
-geometries with traits that are of different dimensions autmoatically can
+geometries with traits that are of different dimensions automatically can
 return false.
 
 For geometries with the same trait dimension, we must make sure that they share
 a point, an edge, or area for points, lines, and polygons/multipolygons
-respectivly, without being contained. 
+respectively, without being contained. 
 =#
 
 """
@@ -116,7 +116,7 @@ end
 """
     overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line)::Bool
 
-If the lines overlap, meaning that they are colinear but each have one endpoint
+If the lines overlap, meaning that they are collinear but each have one endpoint
 outside of the other line, return true. Else false.
 """
 overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line) =
@@ -212,7 +212,7 @@ function overlaps(
     return false
 end
 
-#= If the edges overlap, meaning that they are colinear but each have one endpoint
+#= If the edges overlap, meaning that they are collinear but each have one endpoint
 outside of the other edge, return true. Else false. =#
 function _overlaps(
     (a1, a2)::Edge,
