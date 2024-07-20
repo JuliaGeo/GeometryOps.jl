@@ -8,7 +8,7 @@ p1 = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
 p2 = GI.Polygon([[(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0), (1.0, 0.0)]])
 # (p1, p3) -> polygons outside of one another, sharing an edge
 p3 = GI.Polygon([[(1.0, 0.0), (2.0, 0.0), (2.0, -1.0), (1.0, -1.0), (1.0, 0.0)]])
-# (p1, p4) -> polygons are completly disjoint (no holes)
+# (p1, p4) -> polygons are completely disjoint (no holes)
 p4 = GI.Polygon([[(1.0, -1.0), (2.0, -1.0), (2.0, -2.0), (1.0, -2.0), (1.0, -1.0)]])
 # (p1, p5) -> polygons cut through one another
 p5 = GI.Polygon([[(1.0, -1.0), (2.0, -1.0), (2.0, 4.0), (1.0, 4.0), (1.0, -1.0)]])

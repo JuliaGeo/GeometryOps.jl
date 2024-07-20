@@ -4,7 +4,7 @@ export coverage
 ## What is coverage?
 
 Coverage is the amount of geometry area within a bounding box defined by the minimum and
-maximum x and y-coordiantes of that bounding box, or an Extent containing that information.
+maximum x and y-coordinates of that bounding box, or an Extent containing that information.
 
 To provide an example, consider this rectangle:
 ```@example rect

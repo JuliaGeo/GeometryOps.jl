@@ -98,7 +98,7 @@ of cut geometry in Vector{Vector{Tuple}} format.
 
 Note: degenerate cases where intersection points are vertices do not work right now. =#
 function _cut(::Type{T}, geom, line, geom_list, intr_list, n_intr_pts; exact) where T
-    # Sort and catagorize the intersection points
+    # Sort and categorize the intersection points
     sort!(intr_list, by = x -> geom_list[x].fracs[2])
     _flag_ent_exit!(GI.LineTrait(), line, geom_list; exact)
     # Add first point to output list

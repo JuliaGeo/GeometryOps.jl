@@ -223,7 +223,7 @@ end
     if calc_extent isa _True
         # Calculate the extent of the features
         extent = mapreduce(GI.extent, Extents.union, features)
-        # Return a FeatureCollection with features, crs and caculated extent
+        # Return a FeatureCollection with features, crs and calculated extent
         return GI.FeatureCollection(features; crs, extent)
     else
         # Return a FeatureCollection with features and crs
@@ -241,10 +241,10 @@ end
     if calc_extent isa _True
         # Calculate the extent of the geometry
         extent = GI.extent(geometry)
-        # Return a new Feature with the new geometry and calculated extent, but the oroginal properties and crs
+        # Return a new Feature with the new geometry and calculated extent, but the original properties and crs
         return GI.Feature(geometry; properties, crs, extent)
     else
-        # Return a new Feature with the new geometry, but the oroginal properties and crs
+        # Return a new Feature with the new geometry, but the original properties and crs
         return GI.Feature(geometry; properties, crs)
     end
 end
@@ -264,11 +264,11 @@ function _apply_inner(geom, geoms, crs, calc_extent::_True)
     # Calculate the extent of the sub geometries
     extent = mapreduce(GI.extent, Extents.union, geoms)
     # Return a new geometry of the same trait as `geom`,
-    # holding tnew `geoms` with `crs` and calcualted extent
+    # holding the new `geoms` with `crs` and calculated extent
     return rebuild(geom, geoms; crs, extent)
 end
 function _apply_inner(geom, geoms, crs, calc_extent::_False)
-    # Return a new geometryof the same trait as `geom`, holding the new `geoms` with `crs`
+    # Return a new geometry of the same trait as `geom`, holding the new `geoms` with `crs`
     return rebuild(geom, geoms; crs)
 end
 # Fail loudly if we hit PointTrait without running `f`
@@ -308,7 +308,7 @@ end
 
 @inline _applyreduce(f::F, op::O, target, geom; threaded, init) where {F, O} =
     _applyreduce(f, op, target, GI.trait(geom), geom; threaded, init)
-# Maybe use threads recucing over arrays
+# Maybe use threads reducing over arrays
 @inline function _applyreduce(f::F, op::O, target, ::Nothing, A::AbstractArray; threaded, init) where {F, O}
     applyreduce_array(i) = _applyreduce(f, op, target, A[i]; threaded=_False(), init)
     _mapreducetasks(applyreduce_array, op, eachindex(A), threaded; init)
@@ -455,7 +455,7 @@ Reconstruct `geom` from an iterable of component objects that match its structur
 
 All objects in `components` must have the same `GeoInterface.trait`.
 
-Ususally used in combination with `flatten`.
+Usually used in combination with `flatten`.
 """
 function reconstruct(geom, components)
     obj, iter = _reconstruct(geom, components)
@@ -537,7 +537,7 @@ using Base.Threads: nthreads, @threads, @spawn
 
 
 # Threading utility, modified Mason Protters threading PSA
-# run `f` over ntasks, where f recieves an AbstractArray/range
+# run `f` over ntasks, where f receives an AbstractArray/range
 # of linear indices
 @inline function _maptasks(f::F, taskrange, threaded::_True)::Vector where F
     ntasks = length(taskrange)
@@ -568,7 +568,7 @@ Base.@assume_effects :foldable @inline function _maptasks(f::F, taskrange, threa
 end
 
 # Threading utility, modified Mason Protters threading PSA
-# run `f` over ntasks, where f recieves an AbstractArray/range
+# run `f` over ntasks, where f receives an AbstractArray/range
 # of linear indices
 #
 # WARNING: this will not work for mean/median - only ops
