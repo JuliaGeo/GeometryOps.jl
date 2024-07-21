@@ -65,7 +65,7 @@ function delaunay_triangulate_spherical(input_points; facetype = CairoMakie.Geom
     faces = map(facetype, DelTri.each_solid_triangle(triangulation))
 
     for ghost_face in DelTri.each_ghost_triangle(triangulation)
-        push!(faces, facetype(map(ghost_face) do i; i ≤ 0 ? pivot_ind : i end))
+        push!(faces, facetype(map(ghost_face) do i; DelaunayTriangulation.is_ghost_vertex(i) ? pivot_ind : i end))
     end
 
     return faces
