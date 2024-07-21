@@ -88,5 +88,3 @@ function convex_hull(::MonotoneChainMethod, geometries)
     # is cleaner.
     return GI.Polygon([GI.LinearRing(ch.points[ch.indices])])
 end
-
-# Other methods may include
