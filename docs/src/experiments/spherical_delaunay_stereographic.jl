@@ -26,7 +26,7 @@ point_colors[pivot_ind] = :red
 # end debug
 
 pivot_point = points[pivot_ind]
-necessary_rotation = Rotations.RotY(-π) * Rotations.RotY(-deg2rad(90-pivot_point[2])) * Rotations.RotZ(-deg2rad(pivot_point[1]))
+necessary_rotation = #=Rotations.RotY(-π) *=# Rotations.RotY(-deg2rad(90-pivot_point[2])) * Rotations.RotZ(-deg2rad(pivot_point[1]))
 
 net_transformation_to_corrected_cartesian = CoordinateTransformations.LinearMap(necessary_rotation) ∘ UnitCartesianFromGeographic()
 
@@ -106,6 +106,8 @@ CairoMakie.GeometryBasics.Mesh(UnitCartesianFromGeographic().(vcat(points, repea
 
 geo_triangulation = deepcopy(triangulation)
 geo_triangulation.points .= geo_mesh_points
+# try NaturalNeighbours, fail miserably
+using NaturalNeighbours
 
 itp = NaturalNeighbours.interpolate(geo_triangulation, last.(geo_mesh_points); derivatives = true)
 lons = LinRange(-180, 180, 360)
@@ -115,6 +117,7 @@ _y = vec([y for _ in lons, y in lats])
 
 sibson_1_vals = itp(_x, _y; method=Sibson(1))
 
+# necessary coordinate transformations
 
 struct StereographicFromCartesian <: CoordinateTransformations.Transformation
 end
@@ -122,6 +125,8 @@ end
 function (::StereographicFromCartesian)(xyz::AbstractVector)
     @assert length(xyz) == 3 "StereographicFromCartesian expects a 3D Cartesian vector"
     x, y, z = xyz
+    # The Wikipedia definition has the north pole at infinity,
+    # this implementation has the south pole at infinity.
     return Point2(x/(1-z), y/(1-z))
 end
 
