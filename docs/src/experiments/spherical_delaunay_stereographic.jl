@@ -65,51 +65,58 @@ boundary_points = reverse([
 ])
 triangulation_points = copy(stereographic_points)
 
-boundary_nodes, pts = DelTri.convert_boundary_points_to_indices(boundary_points; existing_points=triangulation_points)
+# boundary_nodes, pts = DelTri.convert_boundary_points_to_indices(boundary_points; existing_points=triangulation_points)
 
-triangulation = DelTri.triangulate(pts; boundary_nodes)
+# triangulation = DelTri.triangulate(triangulation_points; boundary_nodes)
+triangulation = DelTri.triangulate(triangulation_points)
 triplot(triangulation)
 #  for diagnostics, try `fig, ax, sc = triplot(triangulation, show_constrained_edges=true, show_convex_hull=true)`
 
 # First, get all the "solid" faces, ie, faces not attached to boundary nodes
-faces = map(DelTri.each_solid_triangle(triangulation)) do face_tuple
-    CairoMakie.GeometryBasics.TriangleFace(map(face_tuple) do i; i in DelTri.get_boundary_nodes(triangulation) ? pivot_ind : i end)
-end
+boundary_faces = Iterators.filter(Base.Fix1(DelTri.is_boundary_triangle, triangulation), DelTri.each_solid_triangle(triangulation)) |> collect
+faces = map(CairoMakie.GeometryBasics.TriangleFace, DelTri.each_solid_triangle(triangulation))
+
 for ghost_face in DelTri.each_ghost_triangle(triangulation)
     push!(faces, CairoMakie.GeometryBasics.TriangleFace(map(ghost_face) do i; i ≤ 0 ? pivot_ind : i end))
 end
 
-wireframe(CairoMakie.GeometryBasics.normal_mesh(UnitCartesianFromGeographic().(points), faces))
+wireframe(CairoMakie.GeometryBasics.normal_mesh(map(UnitCartesianFromGeographic(), points), faces))
 
-_f, _a, _tri_p = triplot(triangulation; axis = (; type = Axis3));
-msh = _tri_p.plots[1].plots[1][1][]
+grid_lons = LinRange(-180, 180, 10)
+grid_lats = LinRange(-90, 90, 10)
+lon_grid = [CairoMakie.GeometryBasics.LineString([Point{2, Float64}((grid_lons[j], -90)), Point{2, Float64}((grid_lons[j], 90))]) for j in 1:10] |> vec
+lat_grid = [CairoMakie.GeometryBasics.LineString([Point{2, Float64}((-180, grid_lats[i])), Point{2, Float64}((180, grid_lats[i]))]) for i in 1:10] |> vec
 
-msh3d = GeometryBasics.Mesh(Makie.to_ndim(Point3d, GeometryBasics.coordinates(msh), 0), msh.faces)
-f, a, p = wireframe(msh3d; axis = (; type = LScene));
-p.transformation.transform_func[] = Makie.PointTrans{3}() do point
-    CartesianFromStereographic()(point)
+sampled_grid = GO.segmentize(lat_grid; max_distance = 0.01)
+
+geographic_grid = GO.transform(UnitCartesianFromGeographic(), sampled_grid) .|> x -> GI.LineString{true, false}(x.geom)
+stereographic_grid = GO.transform(sampled_grid) do point
+    (StereographicFromCartesian() ∘ UnitCartesianFromGeographic())(point)
+end .|> x -> GI.LineString{false, false}(x.geom)
+
+
+
+fig = Figure(); ax = LScene(fig[1, 1])
+for (i, line) in enumerate(geographic_grid)
+    lines!(ax, line; linewidth = 3, color = Makie.resample_cmap(:viridis, length(stereographic_grid))[i])
 end
+fig
 
-f
+#
+fig = Figure(); ax = LScene(fig[1, 1])
+for (i, line) in enumerate(stereographic_grid)
+    lines!(ax, line; linewidth = 3, color = Makie.resample_cmap(:viridis, length(stereographic_grid))[i])
+end
+fig
 
-triangulation.points[1:end-3] .= stereographic_points
-triangulation.points[end-2:end] .= (stereographic_points[pivot_ind],)
+all(reduce(vcat, faces) |> sort! |> unique! .== 1:length(points))
 
-f, a, p = triplot(triangulation; axis = (; type = Axis3,));
-m = p.plots[1].plots[1][1][]
+faces[findall(x -> 1 in x, faces)]
 
-geo_mesh_points = vcat(points, repeat([pivot_point], 3))
-cartesian_mesh_points = UnitCartesianFromGeographic().(geo_mesh_points)
-f, a, p = mesh(cartesian_mesh_points, getfield(getfield(m, :simplices), :faces))
-wireframe(p.mesh[])
-CairoMakie.GeometryBasics.Mesh(UnitCartesianFromGeographic().(vcat(points, repeat([pivot_point], 3))), splat(CairoMakie.GeometryBasics.TriangleFace).(collect(triangulation.triangles))) |> wireframe
-
-geo_triangulation = deepcopy(triangulation)
-geo_triangulation.points .= geo_mesh_points
 # try NaturalNeighbours, fail miserably
 using NaturalNeighbours
 
-itp = NaturalNeighbours.interpolate(geo_triangulation, last.(geo_mesh_points); derivatives = true)
+itp = NaturalNeighbours.interpolate(triangulation, last.(points); derivatives = true)
 lons = LinRange(-180, 180, 360)
 lats = LinRange(-90, 90, 180)
 _x = vec([x for x in lons, _ in lats])
