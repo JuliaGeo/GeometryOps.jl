@@ -80,6 +80,42 @@ f, a, p = Makie.mesh(map(UnitCartesianFromGeographic(), points), faces; color = 
 
 # We can also replicate the observable notebook almost exactly (just missing ExactPredicates):
 f, a, p = Makie.mesh(points, faces; axis = (; type = GeoAxis, dest = "+proj=bertin1953 +lon_0=-16.5 +lat_0=-42 +x_0=7.93 +y_0=0.09"), color = last.(points), colormap = Reverse(:RdBu), colorrange = (-20, 40), shading = NoShading)
+# Whoops, this doesn't look so good!  Let's try to do this more "manually" instead.
+# We'll use NaturalNeighbours.jl for this, but we first have to reconstruct the triangulation
+# with the same faces, but in a Bertin projection...
+using NaturalNeighbours
+lonlat2bertin = Proj.Transformation(GFT.EPSG(4326), GFT.ProjString("+proj=bertin1953 +type=crs +lon_0=-16.5 +lat_0=-42 +x_0=7.93 +y_0=0.09"); always_xy = true)
+lons = LinRange(-180, 180, 300)
+lats = LinRange(-90, 90, 150)
+bertin_points = lonlat2bertin.(lons, lats')
+
+projected_points = GO.reproject(GO.tuples(points), source_crs = GFT.EPSG(4326), target_crs = "+proj=bertin1953 +lon_0=-16.5 +lat_0=-42 +x_0=7.93 +y_0=0.09")
+
+ch = DelTri.convex_hull(projected_points) # assumes each point is in the triangulation
+boundary_nodes = DelTri.get_vertices(ch) 
+bertin_boundary_poly = GI.Polygon([GI.LineString(DelTri.get_points(ch)[DelTri.get_vertices(ch)])])
+
+tri = DelTri.Triangulation(projected_points, faces, boundary_nodes)
+itp = NaturalNeighbours.interpolate(tri, last.(points); derivatives = true)
+
+mat = [
+    if GO.contains(bertin_boundary_poly, (x, y))
+        itp(x, y; method = Nearest())
+    else
+        NaN
+    end
+    for (x, y) in bertin_points
+]
+# TODO: this currently doesn't work, because some points are not inside a triangle and so cannot be located.
+# Options are:
+# 1. Reject all points outside the convex hull of the projected points.  (Tried but failed)
+# 2. ...
+
+
+
+
+
+# Now, we proceed with the script implementation which has quite a bit of debug information + plots
 pivot_ind = findfirst(isfinite, points)
 
 # debug
