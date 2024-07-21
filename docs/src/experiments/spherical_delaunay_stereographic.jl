@@ -15,8 +15,66 @@ using JSON3 # to load data
 using CairoMakie # for plotting
 import Makie: Point3d
 
+function delaunay_triangulate_spherical(input_points; facetype = CairoMakie.GeometryBasics.TriangleFace)
+    # @assert GI.crstrait(first(input_points)) isa GI.AbstractGeographicCRSTrait
+    points = GO.tuples(input_points)
+
+    pivot_ind = findfirst(x -> all(isfinite, x), points)
+    
+    pivot_point = points[pivot_ind]
+    necessary_rotation = #=Rotations.RotY(-π) *=# Rotations.RotY(-deg2rad(90-pivot_point[2])) * Rotations.RotZ(-deg2rad(pivot_point[1]))
+
+    net_transformation_to_corrected_cartesian = CoordinateTransformations.LinearMap(necessary_rotation) ∘ UnitCartesianFromGeographic()
+    stereographic_points = (StereographicFromCartesian() ∘ net_transformation_to_corrected_cartesian).(points)
+    triangulation_points = copy(stereographic_points)
+    
+    # Iterate through the points and find infinite/invalid points
+    max_radius = 1
+    really_far_idxs = Int[]
+    for (i, point) in enumerate(stereographic_points)
+        m = hypot(point[1], point[2])
+        if !isfinite(m) || m > 1e32
+            push!(really_far_idxs, i)
+        elseif m > max_radius
+            max_radius = m
+        end
+    end
+    @debug max_radius length(really_far_idxs)
+    far_value = 1e6 * sqrt(max_radius)
+
+    if !isempty(really_far_idxs)
+        triangulation_points[really_far_idxs] .= (Point2(far_value, 0.0),)
+    end
+
+    boundary_points = reverse([
+        (-far_value, -far_value),
+        (-far_value, far_value),
+        (far_value, far_value),
+        (far_value, -far_value),
+        (-far_value, -far_value),
+    ])
+
+    # boundary_nodes, pts = DelTri.convert_boundary_points_to_indices(boundary_points; existing_points=triangulation_points)
+
+    # triangulation = DelTri.triangulate(triangulation_points; boundary_nodes)
+    triangulation = DelTri.triangulate(triangulation_points)
+    #  for diagnostics, try `fig, ax, sc = triplot(triangulation, show_constrained_edges=true, show_convex_hull=true)`
+
+    # First, get all the "solid" faces, ie, faces not attached to boundary nodes
+    boundary_faces = Iterators.filter(Base.Fix1(DelTri.is_boundary_triangle, triangulation), DelTri.each_solid_triangle(triangulation)) |> collect
+    faces = map(facetype, DelTri.each_solid_triangle(triangulation))
+
+    for ghost_face in DelTri.each_ghost_triangle(triangulation)
+        push!(faces, facetype(map(ghost_face) do i; i ≤ 0 ? pivot_ind : i end))
+    end
+
+    return faces
+end
+
 # These points are known to be good points, i.e., lon, lat, alt
 points = Point3{Float64}.(JSON3.read(read(Downloads.download("https://gist.githubusercontent.com/Fil/6bc12c535edc3602813a6ef2d1c73891/raw/3ae88bf307e740ddc020303ea95d7d2ecdec0d19/points.json"), String)))
+
+delaunay_triangulate_spherical(points)
 
 pivot_ind = findfirst(isfinite, points)
 
@@ -53,7 +111,7 @@ end
 far_value = 1e6 * sqrt(max_radius)
 
 if !isempty(really_far_idxs)
-    triangulation_points[really_far_idxs] .= Point2(far_value, 0)
+    triangulation_points[really_far_idxs] .= (Point2(far_value, 0.0),)
 end
 
 boundary_points = reverse([
@@ -63,7 +121,6 @@ boundary_points = reverse([
     (far_value, -far_value),
     (-far_value, -far_value),
 ])
-triangulation_points = copy(stereographic_points)
 
 # boundary_nodes, pts = DelTri.convert_boundary_points_to_indices(boundary_points; existing_points=triangulation_points)
 
