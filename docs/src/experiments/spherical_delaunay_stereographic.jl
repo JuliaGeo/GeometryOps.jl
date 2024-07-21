@@ -5,14 +5,14 @@ This is the approach which d3-geo-voronoi and friends use.  The alternative is S
 The 3D approach is basically that the 3d convex hull of a set of points on the sphere is its Delaunay triangulation.
 =#
 
-import GeometryOps as GO, GeoInterface as GI
+import GeometryOps as GO, GeoInterface as GI, GeoFormatTypes as GFT
 import Proj # for easy stereographic projection - TODO implement in Julia
 import DelaunayTriangulation as DelTri # Delaunay triangulation on the 2d plane
 import CoordinateTransformations, Rotations
 
 using Downloads # does what it says on the tin
 using JSON3 # to load data
-using CairoMakie # for plotting
+using CairoMakie, GeoMakie # for plotting
 import Makie: Point3d
 
 function delaunay_triangulate_spherical(input_points; facetype = CairoMakie.GeometryBasics.TriangleFace)
@@ -73,9 +73,13 @@ end
 
 # These points are known to be good points, i.e., lon, lat, alt
 points = Point3{Float64}.(JSON3.read(read(Downloads.download("https://gist.githubusercontent.com/Fil/6bc12c535edc3602813a6ef2d1c73891/raw/3ae88bf307e740ddc020303ea95d7d2ecdec0d19/points.json"), String)))
+faces = delaunay_triangulate_spherical(points)
 
-delaunay_triangulate_spherical(points)
+# This is the super-cool scrollable 3D globe (though it's a bit deformed... :D)
+f, a, p = Makie.mesh(map(UnitCartesianFromGeographic(), points), faces; color = last.(points), colormap = Reverse(:RdBu), colorrange = (-20, 40), shading = NoShading)
 
+# We can also replicate the observable notebook almost exactly (just missing ExactPredicates):
+f, a, p = Makie.mesh(points, faces; axis = (; type = GeoAxis, dest = "+proj=bertin1953 +lon_0=-16.5 +lat_0=-42 +x_0=7.93 +y_0=0.09"), color = last.(points), colormap = Reverse(:RdBu), colorrange = (-20, 40), shading = NoShading)
 pivot_ind = findfirst(isfinite, points)
 
 # debug
@@ -85,14 +89,14 @@ point_colors[pivot_ind] = :red
 
 pivot_point = points[pivot_ind]
 necessary_rotation = #=Rotations.RotY(-π) *=# Rotations.RotY(-deg2rad(90-pivot_point[2])) * Rotations.RotZ(-deg2rad(pivot_point[1]))
-
+#
 net_transformation_to_corrected_cartesian = CoordinateTransformations.LinearMap(necessary_rotation) ∘ UnitCartesianFromGeographic()
 
 scatter(map(net_transformation_to_corrected_cartesian, points); color = point_colors)
 #
 stereographic_points = (StereographicFromCartesian() ∘ net_transformation_to_corrected_cartesian).(points)
 scatter(stereographic_points; color = point_colors)
-
+#
 triangulation_points = copy(stereographic_points)
 
 
