@@ -61,11 +61,20 @@ function delaunay_triangulate_spherical(input_points; facetype = CairoMakie.Geom
     #  for diagnostics, try `fig, ax, sc = triplot(triangulation, show_constrained_edges=true, show_convex_hull=true)`
 
     # First, get all the "solid" faces, ie, faces not attached to boundary nodes
-    boundary_faces = Iterators.filter(Base.Fix1(DelTri.is_boundary_triangle, triangulation), DelTri.each_solid_triangle(triangulation)) |> collect
-    faces = map(facetype, DelTri.each_solid_triangle(triangulation))
-
+    original_triangles = collect(DelTri.each_solid_triangle(triangulation))
+    boundary_face_inds = findall(Base.Fix1(DelTri.is_boundary_triangle, triangulation), original_triangles)
+    faces = map(facetype, view(original_triangles, setdiff(axes(original_triangles, 1), boundary_face_inds)))
+    
+    for boundary_face in view(original_triangles, boundary_face_inds)
+        push!(faces, facetype(map(boundary_face) do i; first(DelTri.is_boundary_node(triangulation, i)) ? pivot_ind : i end))
+    end
+    
     for ghost_face in DelTri.each_ghost_triangle(triangulation)
-        push!(faces, facetype(map(ghost_face) do i; DelaunayTriangulation.is_ghost_vertex(i) ? pivot_ind : i end))
+        push!(faces, facetype(map(ghost_face) do i; DelTri.is_ghost_vertex(i) ? pivot_ind : i end))
+    end
+    # Remove degenerate triangles
+    filter!(faces) do face
+        !(face[1] == face[2] || face[2] == face[3] || face[1] == face[3])
     end
 
     return faces
@@ -100,7 +109,7 @@ itp = NaturalNeighbours.interpolate(tri, last.(points); derivatives = true)
 
 mat = [
     if GO.contains(bertin_boundary_poly, (x, y))
-        itp(x, y; method = Nearest())
+        itp(x, y; method = Nearest(), project = false)
     else
         NaN
     end
@@ -162,19 +171,29 @@ boundary_points = reverse([
     (-far_value, -far_value),
 ])
 
-# boundary_nodes, pts = DelTri.convert_boundary_points_to_indices(boundary_points; existing_points=triangulation_points)
+boundary_nodes, pts = DelTri.convert_boundary_points_to_indices(boundary_points; existing_points=triangulation_points)
 
-# triangulation = DelTri.triangulate(triangulation_points; boundary_nodes)
-triangulation = DelTri.triangulate(triangulation_points)
+triangulation = DelTri.triangulate(pts; boundary_nodes)
+# triangulation = DelTri.triangulate(triangulation_points)
 triplot(triangulation)
+DelTri.validate_triangulation(triangulation)
 #  for diagnostics, try `fig, ax, sc = triplot(triangulation, show_constrained_edges=true, show_convex_hull=true)`
 
 # First, get all the "solid" faces, ie, faces not attached to boundary nodes
-boundary_faces = Iterators.filter(Base.Fix1(DelTri.is_boundary_triangle, triangulation), DelTri.each_solid_triangle(triangulation)) |> collect
-faces = map(CairoMakie.GeometryBasics.TriangleFace, DelTri.each_solid_triangle(triangulation))
+original_triangles = collect(DelTri.each_solid_triangle(triangulation))
+boundary_face_inds = findall(Base.Fix1(DelTri.is_boundary_triangle, triangulation), original_triangles)
+faces = map(CairoMakie.GeometryBasics.TriangleFace, view(original_triangles, setdiff(axes(original_triangles, 1), boundary_face_inds)))
+
+for boundary_face in view(original_triangles, boundary_face_inds)
+    push!(faces, CairoMakie.GeometryBasics.TriangleFace(map(boundary_face) do i; first(DelTri.is_boundary_node(triangulation, i)) ? pivot_ind : i end))
+end
 
 for ghost_face in DelTri.each_ghost_triangle(triangulation)
-    push!(faces, CairoMakie.GeometryBasics.TriangleFace(map(ghost_face) do i; i ≤ 0 ? pivot_ind : i end))
+    push!(faces, CairoMakie.GeometryBasics.TriangleFace(map(ghost_face) do i; DelTri.is_ghost_vertex(i) ? pivot_ind : i end))
+end
+# Remove degenerate triangles
+filter!(faces) do face
+    !(face[1] == face[2] || face[2] == face[3] || face[1] == face[3])
 end
 
 wireframe(CairoMakie.GeometryBasics.normal_mesh(map(UnitCartesianFromGeographic(), points), faces))
