@@ -74,7 +74,7 @@ function delaunay_triangulate_spherical(input_points; facetype = CairoMakie.Geom
     end
     # Remove degenerate triangles
     filter!(faces) do face
-        !(face[1] == face[2] || face[2] == face[3] || face[1] == face[3])
+        !(DelTri.geti(face) == DelTri.getj(face) || DelTri.getj(face) == DelTri.getk(face) || DelTri.geti(face) == DelTri.getk(face))
     end
 
     return faces
@@ -84,7 +84,9 @@ end
 points = Point3{Float64}.(JSON3.read(read(Downloads.download("https://gist.githubusercontent.com/Fil/6bc12c535edc3602813a6ef2d1c73891/raw/3ae88bf307e740ddc020303ea95d7d2ecdec0d19/points.json"), String)))
 faces = delaunay_triangulate_spherical(points)
 
-# This is the super-cool scrollable 3D globe (though it's a bit deformed... :D)
+
+
+# This is the super-cool scrollable 3D globe (though it's a bit deformed...)
 f, a, p = Makie.mesh(map(UnitCartesianFromGeographic(), points), faces; color = last.(points), colormap = Reverse(:RdBu), colorrange = (-20, 40), shading = NoShading)
 
 # We can also replicate the observable notebook almost exactly (just missing ExactPredicates):
