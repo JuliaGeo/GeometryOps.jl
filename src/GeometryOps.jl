@@ -6,6 +6,7 @@ using GeoInterface
 using GeometryBasics
 using LinearAlgebra, Statistics
 
+import Tables
 import GeometryBasics.StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
