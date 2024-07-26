@@ -6,6 +6,7 @@ using GeoInterface
 using GeometryBasics
 import Tables
 using LinearAlgebra, Statistics
+import StatsBase
 import GeometryBasics.StaticArrays
 import ExactPredicates
 import Base.@kwdef
@@ -47,6 +48,7 @@ include("methods/geom_relations/intersects.jl")
 include("methods/geom_relations/overlaps.jl")
 include("methods/geom_relations/touches.jl")
 include("methods/geom_relations/within.jl")
+include("methods/sample.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 
