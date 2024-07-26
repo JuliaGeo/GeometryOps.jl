@@ -101,6 +101,62 @@ function spherical_triangulation(::SphericalConvexHull, input_points; facetype =
 end
 
 
+# necessary coordinate transformations
+
+struct StereographicFromCartesian <: CoordinateTransformations.Transformation
+end
+
+function (::StereographicFromCartesian)(xyz::AbstractVector)
+    @assert length(xyz) == 3 "StereographicFromCartesian expects a 3D Cartesian vector"
+    x, y, z = xyz
+    # The Wikipedia definition has the north pole at infinity,
+    # this implementation has the south pole at infinity.
+    return Point2(x/(1-z), y/(1-z))
+end
+
+struct CartesianFromStereographic <: CoordinateTransformations.Transformation
+end
+
+function (::CartesianFromStereographic)(stereographic_point)
+    X, Y = stereographic_point
+    x2y2_1 = X^2 + Y^2 + 1
+    return Point3(2X/x2y2_1, 2Y/x2y2_1, (x2y2_1 - 2)/x2y2_1)
+end
+
+struct UnitCartesianFromGeographic <: CoordinateTransformations.Transformation 
+end
+
+function (::UnitCartesianFromGeographic)(geographic_point)
+    # Longitude is directly translatable to a spherical coordinate
+    # θ (azimuth)
+    θ = deg2rad(GI.x(geographic_point))
+    # The polar angle is 90 degrees minus the latitude
+    # ϕ (polar angle)
+    ϕ = deg2rad(90 - GI.y(geographic_point))
+    # Since this is the unit sphere, the radius is assumed to be 1,
+    # and we don't need to multiply by it.
+    return Point3(
+        sin(ϕ) * cos(θ),
+        sin(ϕ) * sin(θ),
+        cos(ϕ)
+    )
+end
+
+struct GeographicFromUnitCartesian <: CoordinateTransformations.Transformation 
+end
+
+function (::GeographicFromUnitCartesian)(xyz::AbstractVector)
+    @assert length(xyz) == 3 "GeographicFromUnitCartesian expects a 3D Cartesian vector"
+    x, y, z = xyz
+    return Point2(
+        atan(y, x),
+        atan(hypot(x, y), z),
+    )
+end
+
+
+
+
 # These points are known to be good points, i.e., lon, lat, alt
 points = Point3{Float64}.(JSON3.read(read(Downloads.download("https://gist.githubusercontent.com/Fil/6bc12c535edc3602813a6ef2d1c73891/raw/3ae88bf307e740ddc020303ea95d7d2ecdec0d19/points.json"), String)))
 faces = delaunay_triangulate_spherical(points)
@@ -262,59 +318,6 @@ _x = vec([x for x in lons, _ in lats])
 _y = vec([y for _ in lons, y in lats])
 
 sibson_1_vals = itp(_x, _y; method=Sibson(1))
-
-# necessary coordinate transformations
-
-struct StereographicFromCartesian <: CoordinateTransformations.Transformation
-end
-
-function (::StereographicFromCartesian)(xyz::AbstractVector)
-    @assert length(xyz) == 3 "StereographicFromCartesian expects a 3D Cartesian vector"
-    x, y, z = xyz
-    # The Wikipedia definition has the north pole at infinity,
-    # this implementation has the south pole at infinity.
-    return Point2(x/(1-z), y/(1-z))
-end
-
-struct CartesianFromStereographic <: CoordinateTransformations.Transformation
-end
-
-function (::CartesianFromStereographic)(stereographic_point)
-    X, Y = stereographic_point
-    x2y2_1 = X^2 + Y^2 + 1
-    return Point3(2X/x2y2_1, 2Y/x2y2_1, (x2y2_1 - 2)/x2y2_1)
-end
-
-struct UnitCartesianFromGeographic <: CoordinateTransformations.Transformation 
-end
-
-function (::UnitCartesianFromGeographic)(geographic_point)
-    # Longitude is directly translatable to a spherical coordinate
-    # θ (azimuth)
-    θ = deg2rad(GI.x(geographic_point))
-    # The polar angle is 90 degrees minus the latitude
-    # ϕ (polar angle)
-    ϕ = deg2rad(90 - GI.y(geographic_point))
-    # Since this is the unit sphere, the radius is assumed to be 1,
-    # and we don't need to multiply by it.
-    return Point3(
-        sin(ϕ) * cos(θ),
-        sin(ϕ) * sin(θ),
-        cos(ϕ)
-    )
-end
-
-struct GeographicFromUnitCartesian <: CoordinateTransformations.Transformation 
-end
-
-function (::GeographicFromUnitCartesian)(xyz::AbstractVector)
-    @assert length(xyz) == 3 "GeographicFromUnitCartesian expects a 3D Cartesian vector"
-    x, y, z = xyz
-    return Point2(
-        atan(y, x),
-        atan(hypot(x, y), z),
-    )
-end
 
 transformed_points = GO.transform(points) do point
     # first, spherical to Cartesian
