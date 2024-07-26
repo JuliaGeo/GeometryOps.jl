@@ -27,6 +27,7 @@ GeometryOpsProjExt = "Proj"
 
 [compat]
 CoordinateTransformations = "0.5, 0.6"
+DelaunayTriangulation = "1.0.4"
 ExactPredicates = "2.2.8"
 FlexiJoins = "0.1.30"
 GeoInterface = "1.2"
