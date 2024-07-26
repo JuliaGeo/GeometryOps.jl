@@ -1,8 +1,26 @@
 #=
 # Spherical Delaunay triangulation using stereographic projections
 
-This is the approach which d3-geo-voronoi and friends use.  The alternative is STRIPACK which computes in 3D on the sphere.
-The 3D approach is basically that the 3d convex hull of a set of points on the sphere is its Delaunay triangulation.
+This file encodes two approaches to spherical Delaunay triangulation.
+
+1. `StereographicDelaunayTriangulation` projects the coordinates to a rotated stereographic projection, then computes the Delaunay triangulation on the plane.
+    This approach was taken from d3-geo-voronoi.
+    ```
+    Copyright 2018-2021 Philippe Rivière
+
+    Permission to use, copy, modify, and/or distribute this software for any purpose
+    with or without fee is hereby granted, provided that the above copyright notice
+    and this permission notice appear in all copies.
+
+    THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+    REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+    FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+    INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+    OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+    TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
+    THIS SOFTWARE.
+    ```
+2. `SphericalConvexHull` computes the convex hull of the points in 3D Cartesian space, which is by definition the Delaunay triangulation.  This triangulation is currently done using the unreleased Quickhull.jl.
 =#
 
 import GeometryOps as GO, GeoInterface as GI, GeoFormatTypes as GFT
