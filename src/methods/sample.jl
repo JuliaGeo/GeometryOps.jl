@@ -47,7 +47,6 @@ function _sample(alg::UniformSampling, ::GI.LineStringTrait, geom, n)
     edges = to_edges(geom)
     edge_lengths = map(splat(distance), edges)
     # normalize the vector
-    edge_lengths .= edge_lengths
     edge_probabilities = edge_lengths ./ sum(edge_lengths)
     edge_idxs = 1:length(edges)
     return map(1:n) do _
