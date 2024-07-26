@@ -40,14 +40,14 @@ implementation based on the geometry trait.
 
 Each of these calls a method in the geom_geom_processors file. The methods in
 this file determine if the given geometries meet a set of criteria. For the
-`within` function and arguments g1 and g2, this criteria is as follows:
-    - points of g1 are allowed to be in the interior of g2 (either through
+`within` function and arguments `g1` and `g2`, this criteria is as follows:
+    - points of `g1` are allowed to be in the interior of `g2` (either through
     overlap or crossing for lines)
-    - points of g1 are allowed to be on the boundary of g2
-    - points of g1 are not allowed to be in the exterior of g2
-    - at least one point of g1 is required to be in the interior of g2
-    - no points of g1 are required to be on the boundary of g2
-    - no points of g1 are required to be in the exterior of g2
+    - points of `g1` are allowed to be on the boundary of `g2`
+    - points of `g1` are not allowed to be in the exterior of `g2`
+    - at least one point of `g1` is required to be in the interior of `g2`
+    - no points of `g1` are required to be on the boundary of `g2`
+    - no points of `g1` are required to be in the exterior of `g2`
 
 The code for the specific implementations is in the geom_geom_processors file.
 =#
