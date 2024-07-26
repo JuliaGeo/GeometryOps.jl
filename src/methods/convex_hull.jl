@@ -63,8 +63,8 @@ See also [`convex_hull`](@ref)
 """
 struct MonotoneChainMethod end
 
-# , [`MonotoneChainMethod`](@ref), [`EarCutMethod`](@ref).
-# GrahamScanMethod, etc. can be implemented in GO as well, if someone wants to...
+# GrahamScanMethod, etc. can be implemented in GO as well, if someone wants to.
+# If we add an extension on Quickhull.jl, then that would be another algorithm.
 
 convex_hull(geometries) = convex_hull(MonotoneChainMethod(), geometries)
 
