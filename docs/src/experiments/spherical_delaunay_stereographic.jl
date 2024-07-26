@@ -15,10 +15,18 @@ using JSON3 # to load data
 using CairoMakie, GeoMakie # for plotting
 import Makie: Point3d
 
-function delaunay_triangulate_spherical(input_points; facetype = CairoMakie.GeometryBasics.TriangleFace)
+abstract type SphericalTriangulationAlgorithm end
+struct StereographicDelaunayTriangulation <: SphericalTriangulationAlgorithm end
+struct SphericalConvexHull <: SphericalTriangulationAlgorithm end 
+
+spherical_triangulation(input_points; kwargs...) = spherical_triangulation(StereographicDelaunayTriangulation(), input_points; kwargs...)
+
+function spherical_triangulation(::StereographicDelaunayTriangulation, input_points; facetype = CairoMakie.GeometryBasics.TriangleFace)
     # @assert GI.crstrait(first(input_points)) isa GI.AbstractGeographicCRSTrait
     points = GO.tuples(input_points)
+    # @assert points isa Vector{GI.Point}
 
+    # In 
     pivot_ind = findfirst(x -> all(isfinite, x), points)
     
     pivot_point = points[pivot_ind]
@@ -79,6 +87,19 @@ function delaunay_triangulate_spherical(input_points; facetype = CairoMakie.Geom
 
     return faces
 end
+
+function spherical_triangulation(::SphericalConvexHull, input_points; facetype = CairoMakie.GeometryBasics.TriangleFace)
+    points = GO.tuples(input_points) # we have to decompose the points into tuples, so they work with Quickhull.jl
+    # @assert points isa Vector{GI.Point}
+    cartesian_points = map(UnitCartesianFromGeographic(), points)
+    # The Delaunay triangulation of points on a sphere is simply the convex hull of those points in 3D Cartesian space.
+    # We can use e.g Quickhull.jl to get us such a convex hull.
+    hull = Quickhull.quickhull(cartesian_points)
+    # We return only the faces from these triangulation methods, so we simply map
+    # the facetype to the returned values from `Quickhull.facets`.
+    return map(facetype, Quickhull.facets(hull))
+end
+
 
 # These points are known to be good points, i.e., lon, lat, alt
 points = Point3{Float64}.(JSON3.read(read(Downloads.download("https://gist.githubusercontent.com/Fil/6bc12c535edc3602813a6ef2d1c73891/raw/3ae88bf307e740ddc020303ea95d7d2ecdec0d19/points.json"), String)))
