@@ -12,7 +12,7 @@ import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
     @test isempty(
         setdiff(
             collect(GO.flatten(GO.tuples, GI.PointTrait, hull)), 
-            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convexhull(GEOS(), points)))
+            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convex_hull(GEOS(), points)))
         )
     )
 end
@@ -33,7 +33,7 @@ end
     @test isempty(
         setdiff(
             collect(GO.flatten(GO.tuples, GI.PointTrait, double_hull)), 
-            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convexhull(GEOS(), points)))
+            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convex_hull(GEOS(), points)))
         )
     )
 end
