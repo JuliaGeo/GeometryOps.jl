@@ -82,9 +82,9 @@ function convex_hull(::MonotoneChainMethod, geometries)
     # required, GeometryBasics points can be passed through directly.
     points = collect(flatten(tuples, GI.PointTrait, geometries))
     # Compute the convex hull using DelTri (shorthand for DelaunayTriangulation.jl).
-    hull = DelTri.convex_hull(points)
+    hull = DelaunayTriangulation.convex_hull(points)
     # Convert the result to a `GI.Polygon` and return it.
     # View would be more efficient here, but re-allocating
     # is cleaner.
-    return GI.Polygon([GI.LinearRing(DelTri.get_points(hull)[(DelTri.get_vertices(hull))])])
+    return GI.Polygon([GI.LinearRing(DelaunayTriangulation.get_points(hull)[(DelaunayTriangulation.get_vertices(hull))])])
 end

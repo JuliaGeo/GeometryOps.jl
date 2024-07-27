@@ -15,7 +15,6 @@ import GeoInterface.Extents: Extents
 
 const GI = GeoInterface
 const GB = GeometryBasics
-const DelTri = DelaunayTriangulation
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
