@@ -40,6 +40,38 @@ lines!(a, GO.convex_hull(usa); color = Makie.wong_colors()[2])
 f
 ```
 
+## Investigating the winding order
+
+The winding order of the monotone chain method is counterclockwise,
+while the winding order of the GEOS method is clockwise.
+
+GeometryOps' convexity detection says that the GEOS hull is convex,
+while the monotone chain method hull is not.  However, they are both going
+over the same points (we checked), it's just that the winding order is different.
+
+In reality, both sets are convex, but we need to fix the GeometryOps convexity detector 
+([`isconcave`](@ref))!
+
+We may also decide at a later date to change the returned winding order of the polygon, but
+most algorithms are robust to that, and you can always [`fix`](@ref) it...
+
+```@example windingorder
+import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
+using CairoMakie # to plot
+
+points = rand(Point2{Float64}, 100)
+go_hull = GO.convex_hull(GO.MonotoneChainMethod(), points)
+lg_hull = GO.convex_hull(GO.GEOS(), points)
+
+fig = Figure()
+a1, p1 = lines(fig[1, 1], go_hull; color = 1:GI.npoint(go_hull), axis = (; title = "MonotoneChainMethod()"))
+a2, p2 = lines(fig[2, 1], lg_hull; color = 1:GI.npoint(lg_hull), axis = (; title = "GEOS()"))\
+cb = Colorbar(fig[1:2, 2], p1; label = "Vertex number")
+fig
+```
+
+## Implementation
+
 =#
 
 """
