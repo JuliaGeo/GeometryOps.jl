@@ -1,10 +1,16 @@
 #=
 # Convex hull
 
-The _convex hull_ of a set of points is the smallest **convex** polygon that contains all the points.
+The [_convex hull_](https://en.wikipedia.org/wiki/Convex_hull) of a set of points is the smallest [**convex**](https://en.wikipedia.org/wiki/Convex_set) polygon that contains all the points.
 
 GeometryOps.jl provides a number of methods for computing the convex hull of a set of points, usually
 linked to other Julia packages.  
+
+For now, we expose one algorithm, [MonotoneChainMethod](@ref), which uses the [DelaunayTriangulation.jl](https://github.com/JuliaGeometry/DelaunayTriangulation.jl) 
+package.  The `GEOS()` interface also supports convex hulls.  
+
+Future work could include other algorithms, such as [Quickhull.jl](https://github.com/augustt198/Quickhull.jl), or similar, via package extensions.
+
 
 ## Example
 
@@ -42,12 +48,14 @@ f
 Compute the convex hull of the points in `geometries`.  
 Returns a `GI.Polygon` representing the convex hull.
 
-Note that all 
+Note that the polygon returned is wound counterclockwise
+as in the Simple Features standard by default.  If you 
+choose GEOS, the winding order will be inverted.
 
 !!! warning
     This interface only computes the 2-dimensional convex hull!
 
-    For higher dimensional hulls, use the relevant package (Qhull.jl or similar).
+    For higher dimensional hulls, use the relevant package (Qhull.jl, Quickhull.jl, or similar).
 """
 function convex_hull end
 
