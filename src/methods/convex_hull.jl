@@ -65,7 +65,7 @@ lg_hull = GO.convex_hull(GO.GEOS(), points)
 
 fig = Figure()
 a1, p1 = lines(fig[1, 1], go_hull; color = 1:GI.npoint(go_hull), axis = (; title = "MonotoneChainMethod()"))
-a2, p2 = lines(fig[2, 1], lg_hull; color = 1:GI.npoint(lg_hull), axis = (; title = "GEOS()"))\
+a2, p2 = lines(fig[2, 1], lg_hull; color = 1:GI.npoint(lg_hull), axis = (; title = "GEOS()"))
 cb = Colorbar(fig[1:2, 2], p1; label = "Vertex number")
 fig
 ```
