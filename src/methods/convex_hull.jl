@@ -126,5 +126,6 @@ function convex_hull(::MonotoneChainMethod, geometries)
     # Convert the result to a `GI.Polygon` and return it.
     # View would be more efficient here, but re-allocating
     # is cleaner.
-    return GI.Polygon([GI.LinearRing(DelaunayTriangulation.get_points(hull)[(DelaunayTriangulation.get_vertices(hull))])])
+    point_vec = DelaunayTriangulation.get_points(hull)[DelaunayTriangulation.get_vertices(hull)]
+    return GI.Polygon([GI.LinearRing(point_vec)])
 end
