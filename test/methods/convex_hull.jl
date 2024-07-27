@@ -7,11 +7,12 @@ import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
     @test !GO.isconcave(hull) skip=true # TODO: fix
     @test !GO.isclockwise(GI.getexterior(hull)) # exterior should be ccw
     @test all(x -> GO.covers(hull, x), points) # but the orientation is right
-    # Test against LibGEOS
+    # Test against LibGEOS, by testing that all the points are the same
+    # This is robust against winding order and starting at a different point, etc.
     @test isempty(
         setdiff(
             collect(GO.flatten(GO.tuples, GI.PointTrait, hull)), 
-            collect(GO.flatten(GO.tuples, GI.PointTrait, LG.convexhull(points |> GI.MultiPoint)))
+            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convexhull(GEOS(), points)))
         )
     )
 end
@@ -27,11 +28,12 @@ end
     @test !GO.isclockwise(GI.getexterior(double_hull)) # exterior should be ccw
     @test all(x -> GO.covers(single_hull, x), points)
     @test all(x -> GO.covers(double_hull, x), points)
-    # Test against LibGEOS
+    # Test against LibGEOS, by testing that all the points are the same
+    # This is robust against winding order and starting at a different point, etc.
     @test isempty(
         setdiff(
             collect(GO.flatten(GO.tuples, GI.PointTrait, double_hull)), 
-            collect(GO.flatten(GO.tuples, GI.PointTrait, LG.convexhull(points |> GI.MultiPoint)))
+            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convexhull(GEOS(), points)))
         )
     )
 end
