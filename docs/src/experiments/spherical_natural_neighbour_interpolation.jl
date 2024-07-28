@@ -130,7 +130,7 @@ function eval_laplace_coords(points, zs, faces, interpolation_point; envelope = 
     weight = 0.0
     for i in eachindex(envelope)
         w, u, prev_u, next_u = laplace_ratio(points, envelope, i, interpolation_point)
-        weighted_sum += w * zs[i]
+        weighted_sum += w * zs[envelope[i]]
         weight += w
     end
     return weighted_sum / weight
