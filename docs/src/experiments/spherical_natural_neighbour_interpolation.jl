@@ -52,6 +52,9 @@ function bowyer_watson_envelope!(applicable_points, query_point, points, faces, 
     end
     # Now that we have the face indices, we need to get the applicable points
     empty!(applicable_points)
+    # for face_idx in applicable_cap_indices
+    #     append!(applicable_points, faces[face_idx])
+    # end
     for i in applicable_cap_indices
         current_face = faces[i]
         edge_reoccurs = false
@@ -72,6 +75,7 @@ function bowyer_watson_envelope!(applicable_points, query_point, points, faces, 
                 push!(applicable_points, current_edge[1])
                 push!(applicable_points, current_edge[2])
             end
+            edge_reoccurs = false
         end
     end
     # Start at point 1, find the first occurrence of point 1 in the applicable_points list.
@@ -120,10 +124,10 @@ function laplace_nearest_neighbour_coords(points, faces, interpolation_point; en
     return coords
 end
 
-function eval_laplace_coordinates(points, faces, zs, interpolation_point)
-    coords = laplace_nearest_neighbour_coords(points, faces, interpolation_point)
+function eval_laplace_coordinates(points, faces, zs, interpolation_point; envelope = Int64[], cap_idxs = Int64[])
+    coords = laplace_nearest_neighbour_coords(points, faces, interpolation_point; envelope, cap_idxs)
     if isempty(coords.coordinates)
-        return NaN
+        return Inf
     end
     return sum((coord * zs[idx] for (coord, idx) in zip(coords.coordinates, coords.indices)))
 end
@@ -173,6 +177,7 @@ f, a, p = scatter([query_point]; markersize = 30, color = :green, axis = (; type
 scatter!(a, cartesian_points)
 scatter!(a, view(cartesian_points, pt_inds); color = eachindex(pt_inds), colormap = :turbo, markersize = 20)
 wireframe!(a, GeometryBasics.Mesh(cartesian_points, faces); alpha = 0.3)
+
 f
 
 function Makie.convert_arguments(::Type{Makie.Mesh}, cap::SphericalCap)
