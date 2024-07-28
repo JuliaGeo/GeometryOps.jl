@@ -15,6 +15,7 @@ import Makie: Point3d
 # include(joinpath(@__DIR__, "spherical_delaunay_stereographic.jl"))
 
 using LinearAlgebra
+using GeometryBasics
 
 struct SphericalCap{T}
     point::Point3{T}
@@ -45,12 +46,12 @@ function bowyer_watson_envelope!(applicable_points, query_point, points, faces, 
     # to get starting points, or similar
     empty!(applicable_cap_indices)
     for (i, cap) in enumerate(caps)
-        if cap.radius > spherical_distance(query_point, cap.point)
+        if cap.radius ≥ spherical_distance(query_point, cap.point)
             push!(applicable_cap_indices, i)
         end
     end
     # Now that we have the face indices, we need to get the applicable points
-    applicable_points = Int64[]
+    empty!(applicable_points)
     for i in applicable_cap_indices
         current_face = faces[i]
         edge_reoccurs = false
@@ -73,6 +74,15 @@ function bowyer_watson_envelope!(applicable_points, query_point, points, faces, 
             end
         end
     end
+    # Start at point 1, find the first occurrence of point 1 in the applicable_points list.
+    # This is the last point of the edge coming from point 1.
+    # Now, swap the element before that with point 3.  Then continue on doing this.
+    # for (i, point_idx) in enumerate(applicable_points)
+    #     if i % 2 == 0
+    #         continue
+    #     end
+    #     applicable_points[i] = findfirst(==(applicable_points[i+1]), points)
+    # end
     return unique!(applicable_points)
 end
 
@@ -100,8 +110,6 @@ end
 
 function laplace_nearest_neighbour_coords(points, faces, interpolation_point; envelope = Int64[], cap_idxs = Int64[])
     envelope = bowyer_watson_envelope!(envelope, interpolation_point, points, faces, caps; applicable_cap_indices = cap_idxs)
-    weighted_sum = 0.0
-    weight = 0.0
     coords = NaturalCoordinates(Float64[], Int64[], interpolation_point)
     for i in eachindex(envelope)
         w, u, prev_u, next_u = laplace_ratio(points, envelope, i, interpolation_point)
@@ -150,10 +158,27 @@ heatmap(lons, lats, values; axis = (; aspect = DataAspect()))
 
 f = Figure();
 a = LScene(f[1, 1])
-p = meshimage!(a, lons, lats, rotl90(values))
+p = meshimage!(a, lons, lats, rotl90(values); npoints = (720, 360))
 p.transformation.transform_func[] = Makie.PointTrans{3}(UnitCartesianFromGeographic())
-scatter!(a, cartesian_points)
+# scatter!(a, cartesian_points)
 f # not entirely sure what's going on here
 # diagnostics
 # f, a, p = scatter(reduce(vcat, (view(cartesian_points, face) for face in view(faces, neighbour_inds))))
 # scatter!(query_point; color = :red, markersize = 40)
+
+query_point = LinearAlgebra.normalize(Point3(1.0, 1.0, 0.0))
+pt_inds = bowyer_watson_envelope!(Int64[], query_point, cartesian_points, faces, caps)
+
+f, a, p = scatter([query_point]; markersize = 30, color = :green, axis = (; type = LScene));
+scatter!(a, cartesian_points)
+scatter!(a, view(cartesian_points, pt_inds); color = eachindex(pt_inds), colormap = :turbo, markersize = 20)
+wireframe!(a, GeometryBasics.Mesh(cartesian_points, faces); alpha = 0.3)
+f
+
+function Makie.convert_arguments(::Type{Makie.Mesh}, cap::SphericalCap)
+    offset_point = LinearAlgebra.normalize(cap.point + LinearAlgebra.normalize(Point3(cos(cap.radius), sin(cap.radius), 0.0)))
+    points = [cap.point + Rotations.AngleAxis(θ, cap.point...) * offset_point for θ in LinRange(0, 2π, 20)]
+    push!(points, cap.point)
+    faces = [GeometryBasics.TriangleFace(i, i+1, 21) for i in 1:19]
+    return (GeometryBasics.normal_mesh(points, faces),)
+end
