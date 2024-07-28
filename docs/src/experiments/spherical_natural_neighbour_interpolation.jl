@@ -39,7 +39,7 @@ function SphericalCap(a::Point3, b::Point3, c::Point3)
     return SphericalCap(circumcenter, circumradius)
 end
 
-function bowyer_watson_envelope!(applicable_cap_indices, query_point, points, faces, caps = map(splat(SphericalCap), (view(cartesian_points, face) for face in faces)))
+function bowyer_watson_envelope!(applicable_points, query_point, points, faces, caps = map(splat(SphericalCap), (view(cartesian_points, face) for face in faces)); applicable_cap_indices = Int64[])
     # brute force for now, but try the jump and search algorithm later
     # can use e.g GeometryBasics.decompose(Point3{Float64}, GeometryBasics.Sphere(Point3(0.0), 1.0), 5) 
     # to get starting points, or similar
@@ -77,6 +77,48 @@ function bowyer_watson_envelope!(applicable_cap_indices, query_point, points, fa
 end
 
 
+import NaturalNeighbours: previndex_circular, nextindex_circular
+function laplace_ratio(points, envelope, i #= current vertex index =#, interpolation_point)
+    u = envelope[i]
+    prev_u = envelope[previndex_circular(envelope, i)]
+    next_u = envelope[nextindex_circular(envelope, i)]
+    p = points[u]
+    q, r = points[prev_u], points[next_u]
+    g1 = circumcenter_on_unit_sphere(q, p, interpolation_point)
+    g2 = circumcenter_on_unit_sphere(p, r, interpolation_point)
+    ℓ = spherical_distance(g1, g2)
+    d = spherical_distance(p, interpolation_point)
+    w = ℓ / d
+    return w, u, prev_u, next_u
+end
+
+struct NaturalCoordinates{F, I}
+    coordinates::Vector{F}
+    indices::Vector{I}
+    interpolation_point::Point3{Float64}
+end
+
+function laplace_nearest_neighbour_coords(points, faces, interpolation_point; envelope = Int64[], cap_idxs = Int64[])
+    envelope = bowyer_watson_envelope!(envelope, interpolation_point, points, faces, caps; applicable_cap_indices = cap_idxs)
+    weighted_sum = 0.0
+    weight = 0.0
+    coords = NaturalCoordinates(Float64[], Int64[], interpolation_point)
+    for i in eachindex(envelope)
+        w, u, prev_u, next_u = laplace_ratio(points, envelope, i, interpolation_point)
+        push!(coords.coordinates, w)
+        push!(coords.indices, u)
+    end
+    coords.coordinates ./= sum(coords.coordinates)
+    return coords
+end
+
+function eval_laplace_coordinates(points, faces, zs, interpolation_point)
+    coords = laplace_nearest_neighbour_coords(points, faces, interpolation_point)
+    if isempty(coords.coordinates)
+        return NaN
+    end
+    return sum((coord * zs[idx] for (coord, idx) in zip(coords.coordinates, coords.indices)))
+end
 
 
 
@@ -95,43 +137,23 @@ cartesian_points = UnitCartesianFromGeographic().(geographic_points)
 
 caps = map(splat(SphericalCap), (view(cartesian_points, face) for face in faces))
 
-lons = -180.0:180.0
-lats = -90.0:90.0
+lons = -180.0:0.5:180.0
+lats = -90.0:0.5:90.0
 
-eval_laplace_coords(cartesian_points, z_values, faces, Point3(1.0, 0.0, 0.0))
+eval_laplace_coordinates(cartesian_points, faces, z_values, Point3(1.0, 0.0, 0.0))
 
 values = map(UnitCartesianFromGeographic().(Point2.(lons, lats'))) do point
-    eval_laplace_coords(cartesian_points, z_values, faces, point)
+    eval_laplace_coordinates(cartesian_points, faces, z_values, point)
 end
 
-heatmap(lons, lats, values)
+heatmap(lons, lats, values; axis = (; aspect = DataAspect()))
 
+f = Figure();
+a = LScene(f[1, 1])
+p = meshimage!(a, lons, lats, rotl90(values))
+p.transformation.transform_func[] = Makie.PointTrans{3}(UnitCartesianFromGeographic())
+scatter!(a, cartesian_points)
+f # not entirely sure what's going on here
 # diagnostics
 # f, a, p = scatter(reduce(vcat, (view(cartesian_points, face) for face in view(faces, neighbour_inds))))
 # scatter!(query_point; color = :red, markersize = 40)
-import NaturalNeighbours: previndex_circular, nextindex_circular
-function laplace_ratio(points, envelope, i #= current vertex index =#, interpolation_point)
-    u = envelope[i]
-    prev_u = envelope[previndex_circular(envelope, i)]
-    next_u = envelope[nextindex_circular(envelope, i)]
-    p = points[u]
-    q, r = points[prev_u], points[next_u]
-    g1 = circumcenter_on_unit_sphere(q, p, interpolation_point)
-    g2 = circumcenter_on_unit_sphere(p, r, interpolation_point)
-    ℓ = spherical_distance(g1, g2)
-    d = spherical_distance(p, interpolation_point)
-    w = ℓ / d
-    return w, u, prev_u, next_u
-end
-
-function eval_laplace_coords(points, zs, faces, interpolation_point; envelope = Int64[])
-    envelope = bowyer_watson_envelope!(envelope, interpolation_point, points, faces, caps)
-    weighted_sum = 0.0
-    weight = 0.0
-    for i in eachindex(envelope)
-        w, u, prev_u, next_u = laplace_ratio(points, envelope, i, interpolation_point)
-        weighted_sum += w * zs[envelope[i]]
-        weight += w
-    end
-    return weighted_sum / weight
-end
