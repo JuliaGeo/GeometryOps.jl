@@ -177,7 +177,7 @@ end
 
 # These points are known to be good points, i.e., lon, lat, alt
 points = Point3{Float64}.(JSON3.read(read(Downloads.download("https://gist.githubusercontent.com/Fil/6bc12c535edc3602813a6ef2d1c73891/raw/3ae88bf307e740ddc020303ea95d7d2ecdec0d19/points.json"), String)))
-faces = delaunay_triangulate_spherical(points)
+faces = spherical_triangulation(points)
 # or
 # faces = Quickhull.quickhull(map(UnitCartesianFromGeographic(), points)) |> Quickhull.faces |> collect
 # @assert isempty(setdiff(unique!(sort!(reduce(vcat, faces))), 1:length(points)))
