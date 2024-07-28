@@ -40,6 +40,23 @@ function SphericalCap(a::Point3, b::Point3, c::Point3)
     return SphericalCap(circumcenter, circumradius)
 end
 
+function _is_ccw_unit_sphere(v_0,v_c,v_i)
+    # checks if the smaller interior angle for the great circles connecting u-v and v-w is CCW
+    return(LinearAlgebra.dot(LinearAlgebra.cross(v_c - v_0,v_i - v_c), v_i) < 0)
+end
+
+function angle_between(a, b, c)
+    ab = b - a
+    bc = c - b
+    norm_dot = (ab ⋅ bc) / (LinearAlgebra.norm(ab) * LinearAlgebra.norm(bc))
+    angle =  acos(clamp(norm_dot, -1.0, 1.0))
+    if _is_ccw_unit_sphere(a, b, c)
+        return angle
+    else
+        return 2π - angle
+    end
+end
+
 function bowyer_watson_envelope!(applicable_points, query_point, points, faces, caps = map(splat(SphericalCap), (view(cartesian_points, face) for face in faces)); applicable_cap_indices = Int64[])
     # brute force for now, but try the jump and search algorithm later
     # can use e.g GeometryBasics.decompose(Point3{Float64}, GeometryBasics.Sphere(Point3(0.0), 1.0), 5) 
@@ -78,6 +95,11 @@ function bowyer_watson_envelope!(applicable_points, query_point, points, faces, 
             edge_reoccurs = false
         end
     end
+    unique!(applicable_points)
+    # Find a plane that can house most points OK
+    # since natural neighbours are local ish (probably wont be too far) 
+    # we can get away with this
+
     # Start at point 1, find the first occurrence of point 1 in the applicable_points list.
     # This is the last point of the edge coming from point 1.
     # Now, swap the element before that with point 3.  Then continue on doing this.
@@ -87,9 +109,11 @@ function bowyer_watson_envelope!(applicable_points, query_point, points, faces, 
     #     end
     #     applicable_points[i] = findfirst(==(applicable_points[i+1]), points)
     # end
-    return unique!(applicable_points)
+    three_d_points = view(points, applicable_points)
+    angles = [angle_between(three_d_points[1], query_point, point) for point in three_d_points]
+    pt_inds = sortperm(angles)
+    return applicable_points[pt_inds]
 end
-
 
 import NaturalNeighbours: previndex_circular, nextindex_circular
 function laplace_ratio(points, envelope, i #= current vertex index =#, interpolation_point)
