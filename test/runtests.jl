@@ -22,6 +22,7 @@ const GO = GeometryOps
     @testset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
     @testset "Orientation" begin include("methods/orientation.jl") end
     @testset "Centroid" begin include("methods/centroid.jl") end
+    @testset "Convex Hull" begin include("methods/convex_hull.jl") end
     @testset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
     @testset "Distance" begin include("methods/distance.jl") end
     @testset "Equals" begin include("methods/equals.jl") end

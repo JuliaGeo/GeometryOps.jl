@@ -37,10 +37,11 @@ We benchmark these methods against LibGEOS's `simplify` implementation, which us
 using BenchmarkTools, Chairmarks, GeoJSON, CairoMakie
 import GeometryOps as GO, LibGEOS as LG, GeoInterface as GI
 using CoordinateTransformations
+using NaturalEarth
 import Main: plot_trials # hide
 lg_and_go(geometry) = (GI.convert(LG, geometry), GO.tuples(geometry))
 # Load in the Natural Earth admin GeoJSON, then extract the USA's geometry
-fc = GeoJSON.read(read(download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_admin_0_countries.geojson")))
+fc = NaturalEarth.naturalearth("admin_0_countries", 10)
 usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)] |> x -> GI.convert(LG, x) |> LG.makeValid |> GO.tuples
 include(joinpath(dirname(dirname(pathof(GO))), "test", "data", "polygon_generation.jl"))
 
