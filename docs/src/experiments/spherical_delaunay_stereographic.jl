@@ -106,7 +106,7 @@ function spherical_triangulation(::StereographicDelaunayTriangulation, input_poi
     return faces
 end
 
-function spherical_triangulation(::SphericalConvexHull, input_points; facetype = CairoMakie.GeometryBasics.TriangleFace)
+function spherical_triangulation(::SphericalConvexHull, input_points; facetype = CairoMakie.GeometryBasics.TriangleFace{Int32})
     points = GO.tuples(input_points) # we have to decompose the points into tuples, so they work with Quickhull.jl
     # @assert points isa Vector{GI.Point}
     cartesian_points = map(UnitCartesianFromGeographic(), points)
