@@ -12,7 +12,7 @@ using JSON3 # to load data
 using CairoMakie, GeoMakie # for plotting
 import Makie: Point3d
 
-# include(joinpath(@__DIR__, "spherical_delaunay_stereographic.jl"))
+include(joinpath(@__DIR__, "spherical_delaunay.jl"))
 
 using LinearAlgebra
 using GeometryBasics
@@ -167,6 +167,8 @@ faces = spherical_triangulation(geographic_points)
 # correct the faces, since the order seems to be off
 faces = reverse.(faces)
 
+faces = spherical_triangulation(SphericalConvexHull(), geographic_points)
+
 unique!(sort!(reduce(vcat, faces))) # so how am I getting this index?
 
 cartesian_points = UnitCartesianFromGeographic().(geographic_points)
@@ -194,15 +196,20 @@ f # not entirely sure what's going on here
 # f, a, p = scatter(reduce(vcat, (view(cartesian_points, face) for face in view(faces, neighbour_inds))))
 # scatter!(query_point; color = :red, markersize = 40)
 
-query_point = LinearAlgebra.normalize(Point3(1.0, 1.0, 0.0))
+query_point = LinearAlgebra.normalize(Point3(1.0, 1.0, 0.5))
 pt_inds = bowyer_watson_envelope!(Int64[], query_point, cartesian_points, faces, caps)
+three_d_points = cartesian_points[pt_inds]
+angles = [angle_between(three_d_points[1], query_point, point) for point in three_d_points]
 
+# pushfirst!(angles, 0)
+pt_inds[sortperm(angles)]
 f, a, p = scatter([query_point]; markersize = 30, color = :green, axis = (; type = LScene));
 scatter!(a, cartesian_points)
-scatter!(a, view(cartesian_points, pt_inds); color = eachindex(pt_inds), colormap = :turbo, markersize = 20)
+scatter!(a, view(cartesian_points, pt_inds[sortperm(angles)]); color = eachindex(pt_inds), colormap = :RdBu, markersize = 20)
 wireframe!(a, GeometryBasics.Mesh(cartesian_points, faces); alpha = 0.3)
 
 f
+
 
 function Makie.convert_arguments(::Type{Makie.Mesh}, cap::SphericalCap)
     offset_point = LinearAlgebra.normalize(cap.point + LinearAlgebra.normalize(Point3(cos(cap.radius), sin(cap.radius), 0.0)))
