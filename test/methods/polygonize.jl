@@ -1,5 +1,6 @@
 using GeometryOps, GeoInterface, Test
-import OffsetArrays, DimensionalData, Rasters
+import DimensionalData, Rasters
+# import OffsetArrays
 
 # Missing holes throw a warning, so testing there are
 # no warnings in a range of randomisation is one way to test 
@@ -41,6 +42,11 @@ end
 
 
 @testset "Polygonize with exotic arrays" begin
+    # OffsetArrays does a bit of undesirable piracy,
+    # so we test without it for now.
+    # See https://github.com/JuliaGeo/GeometryOps.jl/issues/187
+    # and https://github.com/JuliaArrays/OffsetArrays.jl/issues/306
+    #=
     @testset "OffsetArrays" begin
         data = rand(1:4, 100, 100) .== 1
         evil = OffsetArrays.Origin(-100, -100)(data)
@@ -51,6 +57,7 @@ end
         end
         @test GO.equals(data_mp, evil_in_data_space_mp)
     end
+    =#
     @testset "DimensionalData" begin
         data = rand(1:4, 100, 100) .== 1
         evil = DimensionalData.DimArray(data, (DimensionalData.X(1:100), DimensionalData.Y(1:100)))
