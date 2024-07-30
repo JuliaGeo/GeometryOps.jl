@@ -16,7 +16,6 @@ include(joinpath(@__DIR__, "spherical_delaunay.jl"))
 
 using LinearAlgebra
 using GeometryBasics
-
 struct SphericalCap{T}
     point::Point3{T}
     radius::T
@@ -104,7 +103,7 @@ function bowyer_watson_envelope!(applicable_points, query_point, points, faces, 
     angles = [angle_between(three_d_points[1], query_point, point) for point in three_d_points]
     pt_inds = sortperm(angles)
     permute!(applicable_points, pt_inds)
-    push!(applicable_points, applicable_points[begin])
+    # push!(applicable_points, applicable_points[begin])
     return applicable_points
 end
 
@@ -113,8 +112,7 @@ function laplace_ratio(points, envelope, i #= current vertex index =#, interpola
     u = envelope[i]
     prev_u = envelope[previndex_circular(envelope, i)]
     next_u = envelope[nextindex_circular(envelope, i)]
-    p = points[u]
-    q, r = points[prev_u], points[next_u]
+    p, q, r = points[u], points[prev_u], points[next_u]
     g1 = circumcenter_on_unit_sphere(q, p, interpolation_point)
     g2 = circumcenter_on_unit_sphere(p, r, interpolation_point)
     ℓ = spherical_distance(g1, g2)
@@ -159,8 +157,6 @@ cartesian_points = UnitCartesianFromGeographic().(geographic_points)
 z_values = last.(geographic_points)
 
 faces = spherical_triangulation(geographic_points)
-# correct the faces, since the order seems to be off
-faces = reverse.(faces)
 
 faces2 = spherical_triangulation(SphericalConvexHull(), geographic_points)
 
@@ -169,9 +165,10 @@ unique!(sort!(reduce(vcat, faces))) # so how am I getting this index?
 
 caps = map(splat(SphericalCap), (view(cartesian_points, face) for face in faces))
 
-lons = -180.0:0.5:180.0
-lats = -90.0:0.5:90.0
+lons = -180.0:1.0:180.0
+lats = -90.0:1.0:90.0
 
+eval_laplace_coordinates(cartesian_points, faces, z_values, LinearAlgebra.normalize(Point3(1.0, 1.0, 0.0)))
 eval_laplace_coordinates(cartesian_points, faces2, z_values, LinearAlgebra.normalize(Point3(1.0, 1.0, 0.0)))
 
 values = map(UnitCartesianFromGeographic().(Point2.(lons, lats'))) do point
@@ -212,3 +209,24 @@ function Makie.convert_arguments(::Type{Makie.Mesh}, cap::SphericalCap)
     faces = [GeometryBasics.TriangleFace(i, i+1, 21) for i in 1:19]
     return (GeometryBasics.normal_mesh(points, faces),)
 end
+
+
+# Animate the natural neighbours of a loxodromic curve
+# To create a loxodromic curve we use a Mercator projection
+import GeometryOps as GO, GeoInterface as GI, GeoFormatTypes as GFT
+using CairoMakie, GeoMakie
+start_point = (-95.7129, 90.0)
+end_point = (-130.0, 0.0)
+
+geographic_path = GI.LineString([start_point, end_point]; crs = GFT.EPSG(4326))
+mercator_path = GO.reproject(geographic_path; target_crs = GFT.EPSG(3857))
+sampled_loxodromic_path = GO.segmentize(GO.LinearSegments(; max_distance = 1e5), mercator_path) # max distance in mercator coordinates!
+sampled_loxodromic_cartesian_path = GO.transform(UnitCartesianFromGeographic(), GO.reproject(sampled_loxodromic_path; target_crs = GFT.EPSG(4326))) |> GI.getpoint
+
+lines(sampled_loxodromic_cartesian_path)
+
+f, a, p = lines(sampled_loxodromic_path; axis = (; type = GeoAxis))
+lines!(a, GeoMakie.coastlines(); color = (:black, 0.5))
+f
+
+start_point = 

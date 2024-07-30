@@ -90,14 +90,16 @@ function spherical_triangulation(::StereographicDelaunayTriangulation, input_poi
     # First, get all the "solid" faces, ie, faces not attached to boundary nodes
     original_triangles = collect(DelTri.each_solid_triangle(triangulation))
     boundary_face_inds = findall(Base.Fix1(DelTri.is_boundary_triangle, triangulation), original_triangles)
-    faces = map(facetype, view(original_triangles, setdiff(axes(original_triangles, 1), boundary_face_inds)))
-    
+    # Now we construct the faces.  However, we need to reverse the order of the points 
+    # because the Delaunay triangulation is constructed in the stereographic plane,
+    # and orientation there is the opposite of orientation on the sphere.
+    faces = map(facetype ∘ reverse, view(original_triangles, setdiff(axes(original_triangles, 1), boundary_face_inds)))
     for boundary_face in view(original_triangles, boundary_face_inds)
-        push!(faces, facetype(map(boundary_face) do i; first(DelTri.is_boundary_node(triangulation, i)) ? pivot_ind : i end))
+        push!(faces, reverse(facetype(map(boundary_face) do i; first(DelTri.is_boundary_node(triangulation, i)) ? pivot_ind : i end)))
     end
     
     for ghost_face in DelTri.each_ghost_triangle(triangulation)
-        push!(faces, facetype(map(ghost_face) do i; DelTri.is_ghost_vertex(i) ? pivot_ind : i end))
+        push!(faces, reverse(facetype(map(ghost_face) do i; DelTri.is_ghost_vertex(i) ? pivot_ind : i end)))
     end
     # Remove degenerate triangles
     filter!(faces) do face
