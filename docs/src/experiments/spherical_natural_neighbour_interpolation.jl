@@ -96,23 +96,16 @@ function bowyer_watson_envelope!(applicable_points, query_point, points, faces, 
         end
     end
     unique!(applicable_points)
-    # Find a plane that can house most points OK
-    # since natural neighbours are local ish (probably wont be too far) 
-    # we can get away with this
-
-    # Start at point 1, find the first occurrence of point 1 in the applicable_points list.
-    # This is the last point of the edge coming from point 1.
-    # Now, swap the element before that with point 3.  Then continue on doing this.
-    # for (i, point_idx) in enumerate(applicable_points)
-    #     if i % 2 == 0
-    #         continue
-    #     end
-    #     applicable_points[i] = findfirst(==(applicable_points[i+1]), points)
-    # end
+    # Pick a random point (in this case, the first point) and 
+    # compute the angle subtended by the first point, the query
+    # point, and each individual point.  Sorting these angles
+    # allows us to "wind" the polygon in a clockwise way.
     three_d_points = view(points, applicable_points)
     angles = [angle_between(three_d_points[1], query_point, point) for point in three_d_points]
     pt_inds = sortperm(angles)
-    return applicable_points[pt_inds]
+    permute!(applicable_points, pt_inds)
+    push!(applicable_points, applicable_points[begin])
+    return applicable_points
 end
 
 import NaturalNeighbours: previndex_circular, nextindex_circular
@@ -162,23 +155,24 @@ end
 
 # These points are known to be good points, i.e., lon, lat, alt
 geographic_points = Point3{Float64}.(JSON3.read(read(Downloads.download("https://gist.githubusercontent.com/Fil/6bc12c535edc3602813a6ef2d1c73891/raw/3ae88bf307e740ddc020303ea95d7d2ecdec0d19/points.json"), String)))
+cartesian_points = UnitCartesianFromGeographic().(geographic_points)
 z_values = last.(geographic_points)
+
 faces = spherical_triangulation(geographic_points)
 # correct the faces, since the order seems to be off
 faces = reverse.(faces)
 
-faces = spherical_triangulation(SphericalConvexHull(), geographic_points)
+faces2 = spherical_triangulation(SphericalConvexHull(), geographic_points)
 
 unique!(sort!(reduce(vcat, faces))) # so how am I getting this index?
 
-cartesian_points = UnitCartesianFromGeographic().(geographic_points)
 
 caps = map(splat(SphericalCap), (view(cartesian_points, face) for face in faces))
 
 lons = -180.0:0.5:180.0
 lats = -90.0:0.5:90.0
 
-eval_laplace_coordinates(cartesian_points, faces, z_values, Point3(1.0, 0.0, 0.0))
+eval_laplace_coordinates(cartesian_points, faces2, z_values, LinearAlgebra.normalize(Point3(1.0, 1.0, 0.0)))
 
 values = map(UnitCartesianFromGeographic().(Point2.(lons, lats'))) do point
     eval_laplace_coordinates(cartesian_points, faces, z_values, point)
