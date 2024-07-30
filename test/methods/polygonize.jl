@@ -1,5 +1,4 @@
 using GeometryOps, GeoInterface, Test
-import OffsetArrays, DimensionalData, Rasters
 
 # Missing holes throw a warning, so testing there are
 # no warnings in a range of randomisation is one way to test 
@@ -39,6 +38,12 @@ for i in (100, 300), j in (100, 300)
     end
 end
 
+@testset "LinRange and offset arrays (#187)" begin
+    # Test that polygonize with LinRange axes works
+    @test_nowarn polygonize(1:10, 1:20, rand(Bool, 10, 20))
+end
+
+import OffsetArrays, DimensionalData, Rasters
 
 @testset "Polygonize with exotic arrays" begin
     @testset "OffsetArrays" begin
