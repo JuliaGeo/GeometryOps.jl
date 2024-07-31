@@ -182,7 +182,7 @@ function randsphericalangles(n)
 end
 
 function randsphere(n)
-    θϕ = randsphericalangles(n)
+    θϕs = randsphericalangles(n)
     return Point3.(
         sin.(last.(θϕs)) .* cos.(first.(θϕs)),
         sin.(last.(θϕs)) .* sin.(first.(θϕs)),

@@ -56,7 +56,7 @@ function angle_between(a, b, c)
     end
 end
 
-function bowyer_watson_envelope!(applicable_points, query_point, points, faces, caps = map(splat(SphericalCap), (view(cartesian_points, face) for face in faces)); applicable_cap_indices = Int64[])
+function bowyer_watson_envelope!(applicable_points, query_point, points, faces, caps = map(splat(SphericalCap), (view(points, face) for face in faces)); applicable_cap_indices = Int64[])
     # brute force for now, but try the jump and search algorithm later
     # can use e.g GeometryBasics.decompose(Point3{Float64}, GeometryBasics.Sphere(Point3(0.0), 1.0), 5) 
     # to get starting points, or similar
@@ -127,7 +127,7 @@ struct NaturalCoordinates{F, I}
     interpolation_point::Point3{Float64}
 end
 
-function laplace_nearest_neighbour_coords(points, faces, interpolation_point; envelope = Int64[], cap_idxs = Int64[])
+function laplace_nearest_neighbour_coords(points, faces, interpolation_point, caps = map(splat(SphericalCap), (view(points, face) for face in faces)); envelope = Int64[], cap_idxs = Int64[])
     envelope = bowyer_watson_envelope!(envelope, interpolation_point, points, faces, caps; applicable_cap_indices = cap_idxs)
     coords = NaturalCoordinates(Float64[], Int64[], interpolation_point)
     for i in eachindex(envelope)
@@ -139,8 +139,8 @@ function laplace_nearest_neighbour_coords(points, faces, interpolation_point; en
     return coords
 end
 
-function eval_laplace_coordinates(points, faces, zs, interpolation_point; envelope = Int64[], cap_idxs = Int64[])
-    coords = laplace_nearest_neighbour_coords(points, faces, interpolation_point; envelope, cap_idxs)
+function eval_laplace_coordinates(points, faces, zs, interpolation_point, caps = map(splat(SphericalCap), (view(points, face) for face in faces)); envelope = Int64[], cap_idxs = Int64[])
+    coords = laplace_nearest_neighbour_coords(points, faces, interpolation_point, caps; envelope, cap_idxs)
     if isempty(coords.coordinates)
         return Inf
     end
