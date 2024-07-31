@@ -229,4 +229,28 @@ f, a, p = lines(sampled_loxodromic_path; axis = (; type = GeoAxis))
 lines!(a, GeoMakie.coastlines(); color = (:black, 0.5))
 f
 
-start_point = 
+
+
+# A minimal test case to debug
+randpoints = randsphere(10)
+push!(randpoints, Point3d(0.0, 0.0, 1.0))
+
+zs = [zeros(10); 1.0]
+
+faces = spherical_triangulation(randpoints)
+caps = map(splat(SphericalCap), (view(randpoints, face) for face in faces))
+values = map(UnitCartesianFromGeographic().(Point2.(lons, lats'))) do query_point
+    eval_laplace_coordinates(randpoints, faces, zs, query_point, caps)
+end
+
+scatter(randpoints; color = zs)
+
+heatmap(lons, lats, values)
+
+
+f = Figure();
+a = LScene(f[1, 1])
+p = meshimage!(a, lons, lats, rotl90(values); npoints = (720, 360))
+p.transformation.transform_func[] = Makie.PointTrans{3}(UnitCartesianFromGeographic())
+# scatter!(a, cartesian_points)
+f # not entirely sure what's going on here
