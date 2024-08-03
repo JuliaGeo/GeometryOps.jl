@@ -22,11 +22,11 @@ mp1 = GI.MultiPolygon([p2, p3])
 c1 = GI.GeometryCollection([pt1, l2, p2])
 
 # Line is not a widely available geometry type
-@test_all_implementations "line angles" l1 [GeometryBasics, GeoInterface] begin
+@test_implementations "line angles" l1 [GeometryBasics, GeoInterface] begin
     @test isempty(GO.angles(l1))
 end
 
-@test_all_implementations "angles" (pt1, mpt1, l2, l3, r1, p1, p2, p3, p4, p5, mp1, c1) begin
+@test_implementations "angles" (pt1, mpt1, l2, l3, r1, p1, p2, p3, p4, p5, mp1, c1) begin
     # Points and lines
     @test isempty(GO.angles(pt1))
     @test isempty(GO.angles(mpt1))

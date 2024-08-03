@@ -25,7 +25,7 @@ mp6 = GI.MultiPolygon([  # four interlocking polygons forming a hole
     [[(-5.0, -5.0), (-5.0, 15.0), (0.0, 15.0), (0.0, -5.0), (-5.0, -5.0)]],
 ])
 
-@test_all_implementations (p1, p2, p3, p4, p5, mp1, mp2, mp3, mp4, mp5, mp6) begin
+@testset_implementations begin
     union_fixed_mp1 = GO.UnionIntersectingPolygons()(mp1)
     @test GI.npolygon(union_fixed_mp1) == 1
     @test GO.equals(GI.getpolygon(union_fixed_mp1, 1), p1)

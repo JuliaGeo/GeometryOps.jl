@@ -8,7 +8,7 @@ import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
     mp2 = LG.MultiPoint([[0.0, 1.0], [2.0, 2.0], [3.0, 3.0]])
     mp3 = LG.MultiPoint([p2])
 
-    @test_all_implementations (p1, p2, mp1, mp2, mp3) begin
+    @test_implementations (p1, p2, mp1, mp2, mp3) begin
         # Same points
         @test GO.equals(p1, p1) == LG.equals(p1, p1)
         @test GO.equals(p2, p2) == LG.equals(p2, p2)
@@ -34,7 +34,7 @@ end
     r2 = LG.LinearRing([[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0], [3.0, 0.0]])
     r3 = GI.LinearRing([[3.0, 0.0], [8.0, 5.0], [13.0, 0.0], [8.0, -5.0]])
 
-    @test_all_implementations (l1, l2, l3, r1, r2) begin
+    @test_implementations (l1, l2, l3, r1, r2) begin
         # Equal lines
         @test GO.equals(l1, l1) == LG.equals(l1, l1)
         @test GO.equals(l2, l2) == LG.equals(l2, l2)
@@ -53,7 +53,7 @@ end
     end
 
     # LibGEOS rejects rings that are not closed, and they are not eaual in GeometryBasics or ArchGDAL?
-    @test_all_implementations (r2, r3, l3) [GeoInterface] begin
+    @test_implementations (r2, r3, l3) [GeoInterface] begin
         # Test equal rings without closing point
         @test GO.equals(r2, r3)
         @test GO.equals(r3, l3)
@@ -111,7 +111,7 @@ end
     ])
     m3 = LG.MultiPolygon([p3])
 
-    @test_all_implementations "Polygons" (pt1, r1, p1, p2, p3, p4, p5, p6, p7, p9) begin
+    @test_implementations "Polygons" (pt1, r1, p1, p2, p3, p4, p5, p6, p7, p9) begin
         # Point and polygon aren't equal
         GO.equals(pt1, p1) == LG.equals(pt1, p1)
         # Linear ring and polygon aren't equal
@@ -135,12 +135,12 @@ end
         @test GO.equals(p9, p9) == LG.equals(p9, p9)
     end
 
-    @test_all_implementations "Unclosed Polygons" (p7, p8) [GeometryBasics, GeoInterface] begin
+    @test_implementations "Unclosed Polygons" (p7, p8) [GeometryBasics, GeoInterface] begin
         # Equal but without closing point (implied)
         @test GO.equals(p7, p8) 
     end
 
-    @test_all_implementations "MultiPolygons" (p1, m1, m2, m3) begin
+    @test_implementations "MultiPolygons" (p1, m1, m2, m3) begin
         # Equal multipolygon
         @test GO.equals(m1, m1) == LG.equals(m1, m1)
         # Equal multipolygon with different order

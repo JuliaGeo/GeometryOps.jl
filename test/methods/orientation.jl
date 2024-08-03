@@ -22,7 +22,7 @@ poly2 = GI.Polygon([[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]])
 l1 = GI.LineString([[0, 0], [1, 1], [1, 0], [0, 0]])
 l2 = GI.LineString([[0, 0], [1, 0], [1, 1], [0, 0]])
 
-@test_all_implementations "Orientation" (poly1, poly2, l1, l2) begin
+@test_implementations "Orientation" (poly1, poly2, l1, l2) begin
 
     # @test isparallel(line1, line2) == true
     # @test isparallel(line3, line4) == false

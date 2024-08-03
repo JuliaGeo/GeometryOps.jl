@@ -23,7 +23,7 @@ end
 
 _xy(p) = GI.x(p), GI.y(p)
 
-@test_all_implementations "reproject" multipolygon begin
+@testset_implementations "reproject" multipolygon begin
     multipolygon3857 = GO.reproject(multipolygon, EPSG(4326), EPSG(3857))
     multipolygon4326 = GO.reproject(multipolygon3857; target_crs=EPSG(4326))
     points4326_1 = collect(GI.getpoint(multipolygon))

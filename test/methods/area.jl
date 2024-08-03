@@ -37,7 +37,7 @@ c = LG.GeometryCollection([p1, p2, r1])
 c_with_epty_l = LG.GeometryCollection([p1, p2, r1, empty_l])
 empty_c = LG.readgeom("GEOMETRYCOLLECTION EMPTY")
 
-@test_all_implementations "That handle empty geoms" (empty_pt, empty_mpt, empty_l, empty_ml, empty_l, empty_r, empty_p, empty_mp, empty_c) [LibGEOS, ArchGDAL] begin 
+@test_implementations "That handle empty geoms" (empty_pt, empty_mpt, empty_l, empty_ml, empty_l, empty_r, empty_p, empty_mp, empty_c) [LibGEOS, ArchGDAL] begin 
     @test GO.area(empty_pt) == LG.area(empty_pt) == 0
     @test GO.area(empty_mpt) == LG.area(empty_mpt) == 0
     @test GO.area(empty_l) == LG.area(empty_l) == 0
@@ -54,13 +54,13 @@ empty_c = LG.readgeom("GEOMETRYCOLLECTION EMPTY")
     @test GO.area(empty_c) == LG.area(empty_c) == 0
 end
 
-@test_all_implementations "With GeometryCollection" c [LibGEOS, ArchGDAL, GeoInterface] begin 
+@test_implementations "With GeometryCollection" c [LibGEOS, ArchGDAL, GeoInterface] begin 
     # Geometry collection summed area
     @test GO.area(c) == LG.area(c)
     @test GO.area(c, Float32) isa Float32
 end  
 
-@test_all_implementations "all" (pt, mpt, l1, ml1, r1, p1, p2, p3, p4, mp1) begin 
+@test_implementations "all" (pt, mpt, l1, ml1, r1, p1, p2, p3, p4, mp1) begin 
     # Points, lines, and rings have zero area
     @test GO.area(pt) == GO.signed_area(pt) == LG.area(pt) == 0
     @test GO.area(pt) isa Float64

@@ -30,54 +30,89 @@ const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS]
 end
 
 
-# Macro to run a block of `code` for multiple modules, 
+# Macro to run a block of `code` for multiple modules,
 # using GeoInterface.convert for each var in `args`
-macro test_all_implementations(args, code::Expr)
-    _test_all_implementations_inner("", args, TEST_MODULES, code)
+macro test_implementations(code::Expr)
+    _test_implementations_inner(TEST_MODULES, code)
 end
-macro test_all_implementations(title::String, args, code::Expr)
-    _test_all_implementations_inner(title::String, args, TEST_MODULES, code)
-end
-macro test_all_implementations(args, modules, code::Expr)
-    _test_all_implementations_inner("", args, modules, code)
-end
-macro test_all_implementations(title::String, args, modules, code::Expr)
-    _test_all_implementations_inner(title, args, modules, code)
+macro test_implementations(modules, code::Expr)
+    _test_implementations_inner(modules, code)
 end
 
-function _test_all_implementations_inner(title, args, modules, code)
-    args1 = esc(args)
-    code1 = esc(code)
+function _test_implementations_inner(modules, code)
+    vars = Dict{Symbol,Symbol}()
+    code1 = esc(_quasiquote!(code, vars))
     modules1 = modules isa Expr ? modules.args : modules
+    tests = Expr(:block)
+    @show vars
 
-    let_expr = if args isa Symbol # Handle a single variable name
-        quote
-            let $args1 = GeoInterface.convert(mod, $args1)
-                $code1
-            end
+    for mod in modules1[1:end]
+        expr = Expr(:block, :(mod = $mod))
+        for (var, genkey) in pairs(vars)
+            push!(expr.args, :($genkey = GeoInterface.convert(mod, $var)))
         end
-    else # Handle a tuple of variable names
-        quote
-            let ($args1 = map(g -> GeoInterface.convert(mod, g), $args1))
-                $code1
-            end
-        end
+        push!(expr.args, code1)
+        dump(expr)
+        push!(tests.args, expr)
     end
+
+    return testsets
+end
+
+# Macro to run a block of `code` for multiple modules,
+# using GeoInterface.convert for each var in `args`
+macro testset_implementations(code::Expr)
+    _testset_implementations_inner("", TEST_MODULES, code)
+end
+macro testset_implementations(title::String, code::Expr)
+    _testset_implementations_inner(title::String, TEST_MODULES, code)
+end
+macro testset_implementations(modules, code::Expr)
+    _testset_implementations_inner("", modules, code)
+end
+macro testset_implementations(title::String, modules, code::Expr)
+    _testset_implementations_inner(title, modules, code)
+end
+
+function _testset_implementations_inner(title, modules, code)
+    vars = Dict{Symbol,Symbol}()
+    code1 = _quasiquote!(code, vars)
+    modules1 = modules isa Expr ? modules.args : modules
     testsets = Expr(:block)
 
-    for mod in modules1
-        expr = quote
-            mod = $mod
-            @testset "$mod" begin
-                $let_expr
-            end
+    for mod in modules1[1:end]
+        expr = Expr(:block, :(mod = $mod))
+        for (var, genkey) in pairs(vars)
+            push!(expr.args, :($genkey = GeoInterface.convert(mod, $var)))
         end
+        push!(expr.args, code1)
+        dump(expr)
         push!(testsets.args, expr)
     end
 
-    quote 
-        @testset "$($title)" begin
-            $testsets
+    return testsets
+end
+
+# Taken from BenchmarkTools.jl
+_quasiquote!(ex, vars) = ex
+function _quasiquote!(ex::Expr, vars::Dict)
+    if ex.head === :($)
+        v = ex.args[1]
+        gen = if v isa Symbol 
+            haskey(vars, v) ? vars[v] : gensym(v)
+        else
+            gensym()
+        end
+        vars[v] = gen
+        return v 
+    elseif ex.head !== :quote
+        for i in 1:length(ex.args)
+            ex.args[i] = _quasiquote!(ex.args[i], vars)
         end
     end
+    return ex
+end
+
+macro f(x)
+    dump(x)
 end

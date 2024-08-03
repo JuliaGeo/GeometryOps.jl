@@ -11,24 +11,19 @@ l6 = GI.LineString([(0.0, 25000.0), (0.0, 29000.0), (20000.0, 29000.0), (20000.0
 p1, p2 = GI.Polygon([l1]), GI.Polygon([l2])
 
 # Three intersection points
-GO_l1_l2_mp = GI.MultiPoint(GO.intersection_points(l1, l2))
 LG_l1_l2_mp = GI.MultiPoint(collect(GI.getpoint(LG.intersection(l1, l2))))
-@test GO.equals(GO_l1_l2_mp, LG_l1_l2_mp)
+@test_implementations GO.equals(GI.MultiPoint(GO.intersection_points($l1, $l2)), LG_l1_l2_mp)
 
 # Four intersection points with large intersection
-GO_l3_l4_mp = GI.MultiPoint(GO.intersection_points(l3, l4))
 LG_l3_l4_mp = GI.MultiPoint(collect(GI.getpoint(LG.intersection(l3, l4))))
-@test GO.equals(GO_l3_l4_mp, LG_l3_l4_mp)
+@test_implementations GO.equals(GI.MultiPoint(GO.intersection_points($l3, $l4)), LG_l3_l4_mp)
 
 # Four intersection points with very small intersection
-GO_l5_l6_mp = GI.MultiPoint(GO.intersection_points(l5, l6))
 LG_l5_l6_mp = GI.MultiPoint(collect(GI.getpoint(LG.intersection(l5, l6))))
-@test GO.equals(GO_l5_l6_mp, LG_l5_l6_mp)
+@test_implementations GO.equals(GI.MultiPoint(GO.intersection_points($l5, $l6)), LG_l5_l6_mp)
 
 # Test that intersection points between lines and polygons is equivalent
-GO_p1_p2_mp = GI.MultiPoint(GO.intersection_points(p1, p2))
-@test GO.equals(GO_p1_p2_mp, GO_l1_l2_mp)
+@test_implementations GO.equals(GI.MultiPoint(GO.intersection_points($p1, $p2)), GI.MultiPoint(GO.intersection_points($l1, $l2)))
 
 # No intersection points between polygon and line
-GO_p1_l6 = GO.intersection_points(p1, l6)
-@test isempty(GO_p1_l6)
+@test_implementations isempty(GO.intersection_points($p1, $l6))
