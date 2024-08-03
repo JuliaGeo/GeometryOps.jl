@@ -147,7 +147,10 @@ function eval_laplace_coordinates(points, faces, zs, interpolation_point, caps =
     return sum((coord * zs[idx] for (coord, idx) in zip(coords.coordinates, coords.indices)))
 end
 
-
+function get_voronoi_polygon(point_index, points, faces, caps)
+    # For a Voronoi polygon, we can simply retrieve all triangles that have
+    # point_index as a vertex, and then filter them together.  
+end
 
 
 
@@ -232,12 +235,12 @@ f
 
 
 # A minimal test case to debug
-randpoints = randsphere(10)
-push!(randpoints, Point3d(0.0, 0.0, 1.0))
+randpoints = randsphere(50)
+push!(randpoints, LinearAlgebra.normalize(Point3d(0.0, 1.0, 1.0)))
 
-zs = [zeros(10); 1.0]
+zs = [zeros(length(randpoints)-1); 1.0]
 
-faces = spherical_triangulation(randpoints)
+faces = spherical_triangulation(SphericalConvexHull(), randpoints)
 caps = map(splat(SphericalCap), (view(randpoints, face) for face in faces))
 values = map(UnitCartesianFromGeographic().(Point2.(lons, lats'))) do query_point
     eval_laplace_coordinates(randpoints, faces, zs, query_point, caps)
@@ -254,3 +257,51 @@ p = meshimage!(a, lons, lats, rotl90(values); npoints = (720, 360))
 p.transformation.transform_func[] = Makie.PointTrans{3}(UnitCartesianFromGeographic())
 # scatter!(a, cartesian_points)
 f # not entirely sure what's going on here
+
+f, a, p = wireframe(GeometryBasics.Mesh(randpoints, faces))
+
+struct UnitSphereSegments <: GO.SegmentizeMethod
+    "The maximum distance between segments, in radians (solid angle units).  A nice value here for the globe is ~0.01." 
+    max_distance::Float64
+end
+
+function GO._fill_linear_kernel!(p, q, npoints = 10)
+    # perform slerp interpolation between p and q
+    # return npoints points on the great circle between p and q
+    # using spherical linear interpolation
+    # return the points as a vector of Point3{Float64}
+    ω = acos(clamp(dot(p, q), -1.0, 1.0))
+    if isapprox(ω, 0, atol=1e-8)
+        return fill(p, (npoints,))
+    end
+    return [
+        (sin((1 - t) * ω) * p + sin(t * ω) * q) / sin(ω)
+        for t in range(0, 1, length=npoints)
+    ]
+end
+
+function _segmentize(method::UnitSphereSegments, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+    first_coord = GI.getpoint(geom, 1)
+    x1, y1, z1 = GI.x(first_coord), GI.y(first_coord), GI.z(first_coord)
+    new_coords = NTuple{3, Float64}[]
+    sizehint!(new_coords, GI.npoint(geom))
+    push!(new_coords, (x1, y1, z1   ))
+    for coord in Iterators.drop(GI.getpoint(geom), 1)
+        x2, y2, z2 = GI.x(coord), GI.y(coord), GI.z(coord)
+        _fill_linear_kernel!(method, new_coords, x1, y1, z1, x2, y2, z2)
+        x1, y1, z1 = x2, y2, z2
+    end 
+    return rebuild(geom, new_coords)
+end
+
+function get_face_lines(points, faces)
+    return GeometryBasics.MultiLineString(map(faces) do face
+        return GeometryBasics.LineString(vcat(
+            interpolate_line_unit_sphere(points[face[1]], points[face[2]], 10),
+            interpolate_line_unit_sphere(points[face[2]], points[face[3]], 10),
+            interpolate_line_unit_sphere(points[face[3]], points[face[1]], 10),
+        ))
+    end)
+end
+
+lines(get_face_lines(cartesian_points, faces))
