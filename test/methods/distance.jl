@@ -30,7 +30,7 @@ mp1 = LG.MultiPolygon([p1, p2])
 
 c1 = LG.GeometryCollection([pt1, r1, p1])
 
-@test_all_implementations "Where LinearRing exists" (pt1, pt2, pt3, pt4, pt5, r1, r2, r3, r4, r5) [LibGEOS, GeoInterface] begin
+@test_implementations "Where LinearRing exists" (pt1, pt2, pt3, pt4, pt5, r1, r2, r3, r4, r5) [LibGEOS, GeoInterface] begin
     # Point on linear ring
     @test GO.distance(pt1, r1) == LG.distance(pt1, r1)
     @test GO.distance(pt3, r1) == LG.distance(pt3, r1)
@@ -41,11 +41,11 @@ c1 = LG.GeometryCollection([pt1, r1, p1])
     @test GO.distance(pt4, r1) ≈ LG.distance(pt4, r1)
 end
 
-@test_all_implementations "Where GeometryCollection exists" (pt1, c1) [LibGEOS, ArchGDAL, GeoInterface] begin
+@test_implementations "Where GeometryCollection exists" (pt1, c1) [LibGEOS, ArchGDAL, GeoInterface] begin
     @test GO.distance(pt1, c1) == LG.distance(pt1, c1)
 end
 
-@test_all_implementations (pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8, pt9, pt10, pt11, mpt1, l1, p1, p2, mp1) begin
+@test_implementations (pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8, pt9, pt10, pt11, mpt1, l1, p1, p2, mp1) begin
     # Point and Point
     
     # Distance from point to same point
@@ -88,7 +88,7 @@ end
     @test GO.distance(pt7, p1) == LG.distance(pt7, p1)
     @test GO.signed_distance(pt7, p1) ≈
         -(min(LG.distance(pt7, r2), LG.distance(pt7, r3), LG.distance(pt7, r4)))
-    # Point outside of polyon exterior
+    # Point outside of polygon exterior
     @test GO.distance(pt5, p1) ≈ LG.distance(pt5, p1)
     @test GO.signed_distance(pt5, p1) ≈ LG.distance(pt5, p1)
     # Point inside of polygon hole

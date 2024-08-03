@@ -160,7 +160,7 @@ _coveredby(
 )
 
 #= Linestring is coveredby a polygon if all interior and boundary points of the
-line are in the polygon interior or on its edges, inlcuding hole edges. =#
+line are in the polygon interior or on its edges, including hole edges. =#
 _coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.PolygonTrait, g2,
@@ -203,7 +203,7 @@ _coveredby(
 )
 
 #= Linearring is coveredby a polygon if all vertices and edges of the ring are
-in the polygon interior or on the polygon edges, inlcuding hole edges. =# 
+in the polygon interior or on the polygon edges, including hole edges. =# 
 _coveredby(
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,

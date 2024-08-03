@@ -64,3 +64,17 @@ function GO.intersects(::GEOS, geom_a, geom_b)
     return LG.intersects(GI.convert(LG, geom_a), GI.convert(LG, geom_b))
 end
 
+# ## Convex hull
+function GO.convex_hull(::GEOS, geoms)
+    return LG.convexhull(
+        LG.MultiPoint(
+            collect(
+                GO.flatten(
+                    x -> GI.convert(LG, x), 
+                    GI.PointTrait, 
+                    geoms
+                )
+            )
+        )
+    )
+end

@@ -5,7 +5,7 @@ export covers
 #=
 ## What is covers?
 
-The covers function checks if a given geometry completly covers another
+The covers function checks if a given geometry completely covers another
 geometry. For this to be true, the "contained" geometry's interior and
 boundaries must be covered by the "covering" geometry's interior and boundaries.
 The interiors do not need to overlap.

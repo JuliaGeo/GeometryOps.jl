@@ -35,7 +35,7 @@ f
 Now, we can use the `polygonize` function to convert the raster data into polygons.
 
 For this particular example, we chose a range of z-values between 0.8 and 3.2, 
-which would provide two distinct polyogns with holes.
+which would provide two distinct polygons with holes.
 
 ```@example polygonize
 polygons = polygonize(xs, ys, 0.8 .< zs .< 3.2)
@@ -334,7 +334,7 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
     assigned_holes == length(holes) || @warn "Not all holes were assigned to polygons, $(length(holes) - assigned_holes) where missed from $(length(holes)) holes and $(length(polygons)) polygons"
 
     if isempty(polygons)
-        # TODO: this really should return an emtpty MultiPolygon but
+        # TODO: this really should return an empty MultiPolygon but
         # GeoInterface wrappers cant do that yet, which is not ideal...
         @warn "No polgons found, check your data or try another function for `f`"
         return nothing

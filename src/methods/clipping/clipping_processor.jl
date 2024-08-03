@@ -74,10 +74,10 @@ poly_a, including its intersection points with poly_b. The information stored in
 PolyNode is needed for clipping using the Greiner-Hormann clipping algorithm.
     
 Note: After calling this function, a_list is not fully formed because the neighboring
-indicies of the intersection points in b_list still need to be updated. Also we still have
+indices of the intersection points in b_list still need to be updated. Also we still have
 not update the entry and exit flags for a_list.
     
-The a_idx_list is a list of the indicies of intersection points in a_list. The value at
+The a_idx_list is a list of the indices of intersection points in a_list. The value at
 index i of a_idx_list is the location in a_list where the ith intersection point lies.
 =#
 function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
@@ -179,7 +179,7 @@ creates a vector of PolyNodes to represent poly_b. The information stored in eac
 is needed for clipping using the Greiner-Hormann clipping algorithm.
     
 Note: after calling this function, b_list is not fully updated. The entry/exit flags still
-need to be updated. However, the neightbor value in a_list is now updated.
+need to be updated. However, the neighbor value in a_list is now updated.
 =#
 function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
     # Sort intersection points by insertion order in b_list
@@ -609,8 +609,8 @@ _get_poly_type(::Type{T}) where T =
 #=
     _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)
 
-For polygns with no crossing intersection points, either one polygon is inside of another,
-or they are seperate polygons with no intersection (other than an edge or point).
+For polygons with no crossing intersection points, either one polygon is inside of another,
+or they are separate polygons with no intersection (other than an edge or point).
 
 Return two booleans that represent if a is inside b (potentially with shared edges / points)
 and visa versa if b is inside of a.
@@ -656,7 +656,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
                         append!(remove_poly_idx, falses(n_new_pieces))
                         n_new_per_poly += n_new_pieces
                     end
-                    if !on_ext && !out_ext  # hole is completly within exterior
+                    if !on_ext && !out_ext  # hole is completely within exterior
                         push!(curr_poly.geom, new_hole)
                     else  # hole is partially within and outside of polygon's exterior
                         new_polys = difference(curr_poly_ext, new_hole_poly, T; target=GI.PolygonTrait())
@@ -670,7 +670,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
                             n_new_per_poly += n_new_polys
                         end
                     end
-                # polygon is completly within hole
+                # polygon is completely within hole
                 elseif coveredby(curr_poly_ext, GI.Polygon(StaticArrays.SVector(curr_hole)))
                     remove_poly_idx[j] = true
                 end
@@ -688,7 +688,7 @@ end
 
 The new hole is combined with any existing holes in curr_poly. The holes can be combined
 into a larger hole if they are intersecting. If this happens, then the new, combined hole is
-returned with the orignal holes making up the new hole removed from curr_poly. Additionally,
+returned with the original holes making up the new hole removed from curr_poly. Additionally,
 if the combined holes form a ring, the interior is added to the return_polys as a new
 polygon piece. Additionally, holes leftover after combination will be checked for it they
 are in the "main" polygon or in one of these new pieces and moved accordingly. 
@@ -751,7 +751,7 @@ function _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
                     continue
                 else
                     p3 = p
-                    # check if p2 is approximatly on the edge formed by p1 and p3 - remove if so
+                    # check if p2 is approximately on the edge formed by p1 and p3 - remove if so
                     if Predicates.orient(p1, p2, p3; exact = _False()) == 0
                         remove_idx[i - 1] = true
                     end

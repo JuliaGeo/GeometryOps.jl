@@ -104,7 +104,7 @@ end
     @test all(c5 .≈ c6)
 end
 @testset "MultiPolygons" begin
-    # Combine poylgons made above
+    # Combine polygons made above
     m1 = LG.MultiPolygon([
         [
             [[11.0, 0.0], [11.0, 3.0], [14.0, 3.0], [14.0, 2.0], [12.0, 2.0],

@@ -171,7 +171,7 @@ _disjoint(
 )
 
 #= Geometry is disjoint from a linestring if the line's interior and boundary
-points don't intersect with the geometrie's interior and boundary points. =#
+points don't intersect with the geometry's interior and boundary points. =#
 _disjoint(
     trait1::Union{GI.LinearRingTrait, GI.PolygonTrait}, g1,
     trait2::Union{GI.LineTrait, GI.LineStringTrait}, g2,

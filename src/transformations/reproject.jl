@@ -27,12 +27,12 @@ geometries, wrapping views of a `Vector{Proj.Point{D}}`, where `D` is the dimens
 ## Arguments
 
 - `geometry`: Any GeoInterface.jl compatible geometries.
-- `source_crs`: the source coordinate referece system, as a GeoFormatTypes.jl object or a string.
-- `target_crs`: the target coordinate referece system, as a GeoFormatTypes.jl object or a string.
+- `source_crs`: the source coordinate reference system, as a GeoFormatTypes.jl object or a string.
+- `target_crs`: the target coordinate reference system, as a GeoFormatTypes.jl object or a string.
 
 If these a passed as keywords, `transform` will take priority.
 Without it `target_crs` is always needed, and `source_crs` is
-needed if it is not retreivable from the geometry with `GeoInterface.crs(geometry)`.
+needed if it is not retrievable from the geometry with `GeoInterface.crs(geometry)`.
 
 ## Keywords
 
