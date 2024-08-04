@@ -1,9 +1,15 @@
 using Test
 
-import GeoInterface as GI, GeometryOps as GO, GeometryBasics as GB
+import ArchGDAL as AG
+import GeometryBasics as GB 
+import GeometryOps as GO 
+import GeoInterface as GI
+import LibGEOS as LG
 import Proj
-import Shapefile, DataFrames
+import Shapefile
+import DataFrames
 using Downloads: download
+using ..TestHelpers
 
 pv1 = [(1, 2), (3, 4), (5, 6), (1, 2)]
 pv2 = [(3, 4), (5, 6), (6, 7), (3, 4)]
@@ -13,11 +19,11 @@ poly = GI.Polygon([lr1, lr2])
 
 @testset "apply" begin
 
-    @test_implementations begin
-        flipped_poly = GO.apply(GI.PointTrait, poly) do p
+    @testset_implementations "apply flip" begin
+        flipped_poly = GO.apply(GI.PointTrait, $poly) do p
             (GI.y(p), GI.x(p))
         end
-        flipped_poly == GI.Polygon([GI.LinearRing([(2, 1), (4, 3), (6, 5), (2, 1)]), 
+        @test flipped_poly == GI.Polygon([GI.LinearRing([(2, 1), (4, 3), (6, 5), (2, 1)]), 
                                           GI.LinearRing([(4, 3), (6, 5), (7, 6), (4, 3)])])
     end
 
@@ -64,9 +70,7 @@ poly = GI.Polygon([lr1, lr2])
     end
 end
 
-
-
-@test_implementations "unwrap" poly begin
+@testset "unwrap" begin
     flipped_vectors = GO.unwrap(GI.PointTrait, poly) do p
         (GI.y(p), GI.x(p))
     end
@@ -74,14 +78,13 @@ end
     @test flipped_vectors == [[(2, 1), (4, 3), (6, 5), (2, 1)], [(4, 3), (6, 5), (7, 6), (4, 3)]]
 end
 
-@test_implementations "flatten" (poly, lr1, lr2) begin
+@testset "flatten" begin
     very_wrapped = [[GI.FeatureCollection([GI.Feature(poly; properties=(;))])]]
     @test GO._tuple_point.(GO.flatten(GI.PointTrait, very_wrapped)) == vcat(pv1, pv2)
     @test collect(GO.flatten(GI.AbstractCurveTrait, [poly])) == [lr1, lr2]
     @test collect(GO.flatten(GI.x, GI.PointTrait, very_wrapped)) == first.(vcat(pv1, pv2))
 end
 
-# TODO test_implementations
 @testset "reconstruct" begin
     revlr1 =  GI.LinearRing(reverse(pv2))
     revlr2 = GI.LinearRing(reverse(pv1))

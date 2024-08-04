@@ -1,6 +1,8 @@
 using Test
-
-import GeometryOps as GO, GeoInterface as GI
+using Proj
+import GeometryOps as GO
+import GeoInterface as GI
+using ..TestHelpers
 
 @testset "Segmentation on multiple geometry levels" begin
     ls = GI.LineString([(0, 0), (1, 1), (2, 2), (3, 3)])
@@ -59,11 +61,9 @@ lr = GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
     end
 end
 
-@testset "GeodesicSegments" begin
-    lr = GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
-    @testset_implementations lr begin
-        for max_distance in exp10.(LinRange(log10(0.01), log10(1), 10)) .* 900
-            @test_nowarn segmentized = GO.segmentize(GO.GeodesicSegments(; max_distance), lr)
-        end
+lr = GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
+@testset_implementations "GeodesicSegments" begin
+    for max_distance in exp10.(LinRange(log10(0.01), log10(1), 10)) .* 900
+        @test_nowarn segmentized = GO.segmentize(GO.GeodesicSegments(; max_distance), $lr)
     end
 end

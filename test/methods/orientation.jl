@@ -1,5 +1,7 @@
 using Test, GeometryOps
-import GeoInterface as GI, GeometryOps as GO
+import GeoInterface as GI
+import GeometryOps as GO
+using ..TestHelpers
 
 line1 = GI.LineString([[9.170356, 45.477985], [9.164434, 45.482551], [9.166644, 45.484003]])
 line2 = GI.LineString([[9.169356, 45.477985], [9.163434, 45.482551], [9.165644, 45.484003]])
@@ -22,14 +24,13 @@ poly2 = GI.Polygon([[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]])
 l1 = GI.LineString([[0, 0], [1, 1], [1, 0], [0, 0]])
 l2 = GI.LineString([[0, 0], [1, 0], [1, 1], [0, 0]])
 
-@test_implementations "Orientation" (poly1, poly2, l1, l2) begin
-
+@testset_implementations "Orientation" begin
     # @test isparallel(line1, line2) == true
     # @test isparallel(line3, line4) == false
     
-    @test isconcave(poly1) == true
-    @test isconcave(poly2) == false
+    @test isconcave($poly1) == true
+    @test isconcave($poly2) == false
 
-    @test isclockwise(l1) == true
-    @test isclockwise(l2) == false
+    @test isclockwise($l1) == true
+    @test isclockwise($l2) == false
 end

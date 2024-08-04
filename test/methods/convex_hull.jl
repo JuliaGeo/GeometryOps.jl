@@ -1,5 +1,8 @@
 using Test
-import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
+import GeoInterface as GI
+import GeometryOps as GO 
+import LibGEOS as LG
+using ..TestHelpers
 
 @testset "Basic example" begin
     points = tuple.(rand(100), rand(100))
@@ -12,7 +15,7 @@ import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
     @test isempty(
         setdiff(
             collect(GO.flatten(GO.tuples, GI.PointTrait, hull)), 
-            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convex_hull(GEOS(), points)))
+            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convex_hull(GO.GEOS(), points)))
         )
     )
 end
@@ -33,7 +36,7 @@ end
     @test isempty(
         setdiff(
             collect(GO.flatten(GO.tuples, GI.PointTrait, double_hull)), 
-            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convex_hull(GEOS(), points)))
+            collect(GO.flatten(GO.tuples, GI.PointTrait, GO.convex_hull(GO.GEOS(), points)))
         )
     )
 end

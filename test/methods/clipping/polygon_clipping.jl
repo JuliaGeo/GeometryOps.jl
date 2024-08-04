@@ -1,5 +1,8 @@
 using Test
-import GeometryOps as GO, GeoInterface as GI, LibGEOS as LG
+import GeometryOps as GO
+import GeoInterface as GI
+import LibGEOS as LG
+using ..TestHelpers
 
 # Test of polygon clipping
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
@@ -202,7 +205,9 @@ end
 # Test clipping functions and print error message if tests fail
 function test_clipping(GO_f, LG_f, f_name)
     for (p1, p2, sg1, sg2, sdesc) in test_pairs
-        @test_implementations compare_GO_LG_clipping(GO_f, LG_f, $p1, $p2) "\n↑ TEST INFO: $sg1 $f_name $sg2 - $sdesc \n\n"
+        @testset_implementations "$sg1 $f_name $sg2 - $sdesc" begin
+            @test compare_GO_LG_clipping(GO_f, LG_f, $p1, $p2) 
+        end
     end
     return
 end

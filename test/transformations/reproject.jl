@@ -1,8 +1,9 @@
 using Test
- 
-import GeoInterface as GI, GeometryOps as GO
 using GeoFormatTypes
+import GeoInterface as GI
+import GeometryOps as GO
 import Proj
+using ..TestHelpers
 
 ring1 = GI.LinearRing([(1, 2), (7, 4), (5, 6), (1, 2)])
 ring2 = GI.LinearRing([(11, 2), (20, 4), (15, 6), (11, 2)])
@@ -23,10 +24,10 @@ end
 
 _xy(p) = GI.x(p), GI.y(p)
 
-@testset_implementations "reproject" multipolygon begin
-    multipolygon3857 = GO.reproject(multipolygon, EPSG(4326), EPSG(3857))
-    multipolygon4326 = GO.reproject(multipolygon3857; target_crs=EPSG(4326))
-    points4326_1 = collect(GI.getpoint(multipolygon))
+@testset_implementations "reproject" begin
+    multipolygon3857 = GO.reproject($multipolygon, EPSG(4326), EPSG(3857))
+    multipolygon4326 = GO.reproject($multipolygon; source_crs=EPSG(4326), target_crs=EPSG(4326))
+    points4326_1 = collect(GI.getpoint($multipolygon))
     points4326_2 = collect.(GI.getcoord.(GI.getpoint(multipolygon4326)))
     points3857 = collect.(GI.getcoord.(GI.getpoint(multipolygon3857)))
 

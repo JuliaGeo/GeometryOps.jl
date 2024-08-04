@@ -1,4 +1,8 @@
+module TestHelpers
+
 using Test, GeoInterface, ArchGDAL, GeometryBasics, LibGEOS
+
+export @test_implementations, @testset_implementations
 
 const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS]
 
@@ -35,28 +39,26 @@ end
 macro test_implementations(code::Expr)
     _test_implementations_inner(TEST_MODULES, code)
 end
-macro test_implementations(modules, code::Expr)
+macro test_implementations(modules::Union{Expr,Vector}, code::Expr)
     _test_implementations_inner(modules, code)
 end
 
-function _test_implementations_inner(modules, code)
+function _test_implementations_inner(modules::Union{Expr,Vector}, code::Expr)
     vars = Dict{Symbol,Symbol}()
-    code1 = esc(_quasiquote!(code, vars))
+    code1 = _quasiquote!(code, vars)
     modules1 = modules isa Expr ? modules.args : modules
     tests = Expr(:block)
-    @show vars
 
-    for mod in modules1[1:end]
-        expr = Expr(:block, :(mod = $mod))
+    for mod in modules1
+        expr = Expr(:block)
         for (var, genkey) in pairs(vars)
-            push!(expr.args, :($genkey = GeoInterface.convert(mod, $var)))
+            push!(expr.args, :($genkey = $GeoInterface.convert($mod, $var)))
         end
-        push!(expr.args, code1)
-        dump(expr)
+        push!(expr.args, :(@test $code1))
         push!(tests.args, expr)
     end
 
-    return testsets
+    return esc(tests)
 end
 
 # Macro to run a block of `code` for multiple modules,
@@ -64,33 +66,34 @@ end
 macro testset_implementations(code::Expr)
     _testset_implementations_inner("", TEST_MODULES, code)
 end
-macro testset_implementations(title::String, code::Expr)
-    _testset_implementations_inner(title::String, TEST_MODULES, code)
+macro testset_implementations(arg, code::Expr)
+    if arg isa String || arg isa Expr && arg.head == :string
+        _testset_implementations_inner(arg, TEST_MODULES, code)
+    else
+        _testset_implementations_inner("", arg, code)
+    end
 end
-macro testset_implementations(modules, code::Expr)
-    _testset_implementations_inner("", modules, code)
-end
-macro testset_implementations(title::String, modules, code::Expr)
+macro testset_implementations(title, modules::Union{Expr,Vector}, code::Expr)
     _testset_implementations_inner(title, modules, code)
 end
 
-function _testset_implementations_inner(title, modules, code)
+function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code::Expr)
     vars = Dict{Symbol,Symbol}()
     code1 = _quasiquote!(code, vars)
+    title1 = esc(title)
     modules1 = modules isa Expr ? modules.args : modules
     testsets = Expr(:block)
 
-    for mod in modules1[1:end]
-        expr = Expr(:block, :(mod = $mod))
+    for mod in modules1
+        expr = Expr(:block)
         for (var, genkey) in pairs(vars)
-            push!(expr.args, :($genkey = GeoInterface.convert(mod, $var)))
+            push!(expr.args, :($genkey = $GeoInterface.convert($mod, $var)))
         end
-        push!(expr.args, code1)
-        dump(expr)
+        push!(expr.args, :(@testset "$title $mod" $code1))
         push!(testsets.args, expr)
     end
 
-    return testsets
+    return esc(testsets)
 end
 
 # Taken from BenchmarkTools.jl
@@ -113,6 +116,4 @@ function _quasiquote!(ex::Expr, vars::Dict)
     return ex
 end
 
-macro f(x)
-    dump(x)
 end
