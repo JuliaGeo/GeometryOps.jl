@@ -80,7 +80,6 @@ end
 function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code::Expr)
     vars = Dict{Symbol,Symbol}()
     code1 = _quasiquote!(code, vars)
-    title1 = esc(title)
     modules1 = modules isa Expr ? modules.args : modules
     testsets = Expr(:block)
 
@@ -89,7 +88,8 @@ function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code
         for (var, genkey) in pairs(vars)
             push!(expr.args, :($genkey = $GeoInterface.convert($mod, $var)))
         end
-        push!(expr.args, :(@testset "$title $mod" $code1))
+        label = title == "" ? "$mod" : "$title: $mod"
+        push!(expr.args, :(@testset $label $code1))
         push!(testsets.args, expr)
     end
 
