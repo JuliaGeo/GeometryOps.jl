@@ -260,6 +260,19 @@ end
     geoms = _maptasks(apply_to_geom, 1:GI.ngeom(geom), threaded)
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
+@inline function _apply(f::F, target::TraitTarget{<:PointTrait}, trait::GI.PolygonTrait, geom;
+    crs=GI.crs(geom), calc_extent=_False(), threaded
+)::(GI.geointerface_geomtype(trait)) where F
+    # We need to force rebuilding a LinearRing not a LineString
+    geoms = _maptasks(1:GI.ngeom(geom), threaded) do i
+        lr = GI.getgeom(geom, i)
+        points = map(GI.getgeom(lr)) do p
+            _apply(f, target, p; crs, calc_extent, threaded=_False())
+        end
+        _linearring(_apply_inner(lr, points, crs, calc_extent))
+    end
+    return _apply_inner(geom, geoms, crs, calc_extent)
+end
 function _apply_inner(geom, geoms, crs, calc_extent::_True)
     # Calculate the extent of the sub geometries
     extent = mapreduce(GI.extent, Extents.union, geoms)
