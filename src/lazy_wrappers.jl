@@ -67,6 +67,9 @@ end
 
 function LazyClosedRingTuplePointIterator(ring::LazyClosedRing)
     geom = ring.ring
+    if GI.isempty(geom)
+        return LazyClosedRingTuplePointIterator{GI.is3d(geom), GI.ismeasured(geom), typeof(geom)}(geom, true)
+    end
     isclosed = GI.getpoint(geom, 1) == GI.getpoint(geom, GI.npoint(geom))
     return LazyClosedRingTuplePointIterator{GI.is3d(geom), GI.ismeasured(geom), typeof(geom)}(geom, isclosed)
 end
@@ -86,7 +89,11 @@ function Base.eltype(::LazyClosedRingTuplePointIterator{hasZ, hasM}) where {hasZ
 end
 
 function Base.iterate(iter::LazyClosedRingTuplePointIterator)
-    return (GI.getpoint(iter.ring, 1), 1)
+    if GI.isempty(iter.ring)
+        return nothing
+    else
+        return (GI.getpoint(iter.ring, 1), 1)
+    end
 end
 
 function Base.iterate(iter::LazyClosedRingTuplePointIterator, state)
