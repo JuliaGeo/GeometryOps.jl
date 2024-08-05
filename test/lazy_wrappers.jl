@@ -77,3 +77,11 @@ import GeoInterface as GI, GeometryOps as GO
         @test GI.npoint(wrapped_measured) == 5
     end
 end
+
+@testset "LazyClosedRingTuplePointIterator" begin
+    @testset "Type inference" begin
+        ls = create_linestring()
+        wrapped = GO.LazyClosedRing(ls)
+        @inferred Tuple{Float64, Float64} eltype(GO.LazyClosedRingTuplePointIterator(wrapped))
+    end
+end
