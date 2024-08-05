@@ -8,7 +8,7 @@
 
 using Test
 using GeometryOps
-using GeoInterface as GI
+import GeoInterface as GI, GeometryOps as GO
 
 @testset "LazyClosedRing" begin
     # Helper function to create a simple LineString
