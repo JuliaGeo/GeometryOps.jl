@@ -38,30 +38,6 @@ PolyNode(node::PolyNode{T};
 # Checks equality of two PolyNodes by backing point value, fractional value, and intersection status
 equals(pn1::PolyNode, pn2::PolyNode) = pn1.point == pn2.point && pn1.inter == pn2.inter && pn1.fracs == pn2.fracs
 
-#= 
-    _lazy_closed_ring_point_enumerator(ring) -> Iterator
-
-This function returns an enumerator over the points of a ring, and adds an extra point
-to the end, if the ring is not closed.
-=#
-function _lazy_closed_ring_point_enumerator(ring)
-    @assert GI.geomtrait(ring) isa GI.AbstractCurveTrait "`ring` must be a curve, got $(GI.trait(ring))"
-    # Check if poly_a is closed.  
-    # NOTE: `1` is defined as the starting index of a ring in GeoInterface.
-    if equals(GI.getpoint(ring, 1), GI.getpoint(ring, GI.npoint(ring)))
-        # If yes, pass the iterator as formed
-        Iterators.enumerate(GI.getpoint(ring))
-    else
-        # If no, pass the iterator as lazy vcat
-        Iterators.enumerate(
-            Iterators.flatten(
-                (GI.getpoint(ring),
-                (GI.getpoint(ring, 1),),)
-            )
-        )
-    end
-end
-
 #=
     _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f; exact) ->
         (a_list, b_list, a_idx_list)
@@ -113,7 +89,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
     n_b_intrs = 0
     # Loop through points of poly_a
     local a_pt1
-    for (i, a_p2) in _lazy_closed_ring_point_enumerator(poly_a) # basically `enumerate(GI.getpoint(poly_a))` but makes sure `poly_a` is closed
+    for (i, a_p2) in enumerate(GI.getpoint(poly_a))
         a_pt2 = (T(GI.x(a_p2)), T(GI.y(a_p2)))
         if i <= 1 || (a_pt1 == a_pt2)  # don't repeat points
             a_pt1 = a_pt2
@@ -126,7 +102,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
         # Find intersections with edges of poly_b
         local b_pt1
         prev_counter = a_count
-        for (j, b_p2) in _lazy_closed_ring_point_enumerator(poly_b) # basically `enumerate(GI.getpoint(poly_b))` but makes sure `poly_b` is closed
+        for (j, b_p2) in enumerate(GI.getpoint(poly_b))
             b_pt2 = _tuple_point(b_p2, T)
             if j <= 1 || (b_pt1 == b_pt2)  # don't repeat points
                 b_pt1 = b_pt2
@@ -217,7 +193,7 @@ function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
     b_count = 0
     # Loop over points in poly_b and add each point and intersection point
     local b_pt1
-    for (i, b_p2) in _lazy_closed_ring_point_enumerator(poly_b) # basically `enumerate(GI.getpoint(poly_b))` but makes sure `poly_b` is closed
+    for (i, b_p2) in enumerate(GI.getpoint(poly_b))
         b_pt2 = _tuple_point(b_p2, T)
         if i ≤ 1 || (b_pt1 == b_pt2)  # don't repeat points
             b_pt1 = b_pt2
