@@ -1,5 +1,6 @@
 using GeometryOps, GeoInterface, Test
 import OffsetArrays, DimensionalData, Rasters
+using ..TestHelpers
 
 # Missing holes throw a warning, so testing there are
 # no warnings in a range of randomisation is one way to test 
