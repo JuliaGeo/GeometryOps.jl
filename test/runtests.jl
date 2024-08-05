@@ -16,6 +16,7 @@ const GO = GeometryOps
 
 @testset "GeometryOps.jl" begin
     @testset "Primitives" begin include("primitives.jl") end
+    @testset "Lazy Wrappers" begin include("lazy_wrappers.jl") end
     # Methods
     @testset "Angles" begin include("methods/angles.jl") end
     @testset "Area" begin include("methods/area.jl") end

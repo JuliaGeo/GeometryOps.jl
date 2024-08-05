@@ -73,7 +73,7 @@ end
 
 # Base iterator interface
 Base.IteratorSize(::LazyClosedRingTuplePointIterator) = Base.HasLength()
-Base.length(iter::LazyClosedRingTuplePointIterator) = GI.npoint(iter.ring) + iter.closed
+Base.length(iter::LazyClosedRingTuplePointIterator) = GI.npoint(iter.ring) + !iter.closed
 Base.IteratorEltype(::LazyClosedRingTuplePointIterator) = Base.HasEltype()
 function Base.eltype(::LazyClosedRingTuplePointIterator{hasZ, hasM}) where {hasZ, hasM}
     if !hasZ && !hasM
