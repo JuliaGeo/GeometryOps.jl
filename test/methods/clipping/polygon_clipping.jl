@@ -103,6 +103,8 @@ p54 = GI.Polygon([[(2.5, 2.5), (2.5, 7.5), (7.5, 7.5), (7.5, 2.5), (2.5, 2.5)],
 p55 = GI.Polygon([[(5.0, 0.25), (5.0, 5.0), (9.5, 5.0), (9.5, 0.25), (5.0, 0.25)],
     [(6.0, 3.0), (6.0, 4.0), (7.0, 4.0), (7.0, 3.0), (6.0, 3.0)],
     [(7.5, 0.5), (7.5, 2.5), (9.25, 2.5), (9.25, 0.5), (7.5, 0.5)]])
+p56 = GI.Polygon([[(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0)]]) # polygons with unclosed rings
+p57 = GI.Polygon([[(0.0, 0.0), (0.0, 11.0), (11.0, 11.0), (11.0, 0.0)]])
 
 mp1 = GI.MultiPolygon([p1])
 mp2 = GI.MultiPolygon([p2])
@@ -157,7 +159,8 @@ test_pairs = [
     (p34, mp3, "p34", "mp3", "Polygon overlaps with multipolygon, where on of the sub-polygons is equivalent"),
     (mp3, p35, "mp3", "p35", "Mulitpolygon where just one sub-polygon touches other polygon"),
     (p35, mp3, "p35", "mp3", "Polygon that touches just one of the sub-polygons of multipolygon"),
-    (mp4, mp3, "mp4", "mp3", "Two multipolygons, which with two sub-polygons, where some of the sub-polygons intersect and some don't")
+    (mp4, mp3, "mp4", "mp3", "Two multipolygons, which with two sub-polygons, where some of the sub-polygons intersect and some don't"),
+    # (p56, p57, "p56", "p57", "Polygons with unclosed rings (#191)"), # TODO: `difference` doesn't work yet on p56 and p57 in that order (#193)
 ]
 
 const ϵ = 1e-10
@@ -212,3 +215,33 @@ end
 @testset "Intersection" begin test_clipping(GO.intersection, LG.intersection, "intersection") end
 @testset "Union" begin test_clipping(GO.union, LG.union, "union") end
 @testset "Difference" begin test_clipping(GO.difference, LG.difference, "difference") end
+
+
+@testset "Lazy closed ring enumerator" begin
+    # first test an open ring
+    p = GI.Polygon([[(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0)]])
+    cl = collect(GO._lazy_closed_ring_point_enumerator(GI.getring(p, 1)))
+    @test length(cl) == 5
+    @test cl[end][2] == cl[1][2]
+    # then test a closed ring
+    p2 = GI.Polygon([[(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0), (0.0, 0.0)]])
+    cl2 = collect(GO._lazy_closed_ring_point_enumerator(GI.getring(p2, 1)))
+    @test length(cl2) == 5
+    @test cl2[end][2] == cl2[1][2]
+    @test all(cl .== cl2)
+    # TODO: `difference` doesn't work yet on p56 and p57 in that order,
+    # so we do some tests here
+    p_intersection = only(GO.intersection(p56, p57; target = GI.PolygonTrait()))
+    p_union = only(GO.union(p56, p57; target = GI.PolygonTrait()))
+    @test GI.extent(p_intersection) == GI.extent(p56)
+    @test GI.extent(p_union) == GI.extent(p57)
+    @test GO.equals(p_intersection, p56)
+    @test GO.equals(p_union, p57)
+    # Notice how the order of polygons is different here
+    p_diff = only(GO.difference(p57, p56; target = GI.PolygonTrait()))
+    @test GI.extent(p_diff) == GI.extent(p57)
+    p_lg_diff = LG.difference(GO.fix(p57), GO.fix(p56))
+    # The point orders differ so we have to run GO intersection again.
+    # We could test area of difference also like `compare_GO_LG_clipping` does.
+    @test GO.equals(p_diff, only(GO.intersection(p_diff, p_lg_diff; target = GI.PolygonTrait())))
+end
