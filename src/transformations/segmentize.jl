@@ -182,7 +182,7 @@ _segmentize(method, geom) = _segmentize(method, geom, GI.trait(geom))
 This is a method which performs the common functionality for both linear and geodesic algorithms, 
 and calls out to the "kernel" function which we've defined per linesegment.
 =#
-function _segmentize(method::Union{LinearSegments, GeodesicSegments}, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+function _segmentize(method::SegmentizeMethod, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
     first_coord = GI.getpoint(geom, 1)
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
     new_coords = NTuple{2, Float64}[]
