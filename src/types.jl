@@ -6,6 +6,7 @@ This file defines some fundamental types used in GeometryOps.
 !!! warning
     Unlike in other Julia packages, only some types are defined in this file, not all. 
     This is because we define types in the files where they are used, to make it easier to understand the code.
+    
 
 =#
 export TraitTarget, GEOS
