@@ -79,6 +79,13 @@ import GeoInterface as GI, GeometryOps as GO
 end
 
 @testset "LazyClosedRingTuplePointIterator" begin
+    # Helper function to create a simple LineString
+    create_linestring(closed=false) = closed ? GI.LineString([
+        (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0),
+        
+    ]) : GI.LineString([
+        (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)
+    ])
     @testset "Type inference" begin
         ls = create_linestring()
         wrapped = GO.LazyClosedRing(ls)
