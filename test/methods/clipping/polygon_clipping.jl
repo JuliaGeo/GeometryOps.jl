@@ -220,12 +220,12 @@ end
 @testset "Lazy closed ring enumerator" begin
     # first test an open ring
     p = GI.Polygon([[(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0)]])
-    cl = collect(GO._lazy_closed_ring_point_enumerator(GI.getring(p, 1)))
+    cl = collect(GO.LazyClosedRingTuplePointIterator(GO.LazyClosedRing(GI.getring(p, 1))))
     @test length(cl) == 5
     @test cl[end][2] == cl[1][2]
     # then test a closed ring
     p2 = GI.Polygon([[(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0), (0.0, 0.0)]])
-    cl2 = collect(GO._lazy_closed_ring_point_enumerator(GI.getring(p2, 1)))
+    cl2 = collect(GO.LazyClosedRingTuplePointIterator(GO.LazyClosedRing(GI.getring(p2, 1))))
     @test length(cl2) == 5
     @test cl2[end][2] == cl2[1][2]
     @test all(cl .== cl2)
