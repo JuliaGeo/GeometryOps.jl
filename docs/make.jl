@@ -32,12 +32,12 @@ literate_pages = Any[]
 # to add the `@meta` block to the markdown file, which will be used by Documenter to add an edit link.
 function _add_meta_edit_link_generator(path)
     return function (input)
-        return """
+        return input * """
+        
         ```@meta
         EditURL = "$(path).jl"
         ```
-
-        """ * input # we add `.jl` because `relpath` eats the file extension, apparently :shrug:
+        """ # we add `.jl` because `relpath` eats the file extension, apparently :shrug:
     end
 end
 
