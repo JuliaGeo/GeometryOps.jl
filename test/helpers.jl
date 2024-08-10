@@ -92,7 +92,7 @@ function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code
         testset = Expr(
             :macrocall, 
             Symbol("@testset"), 
-            LineNumberNode(95, @__FILE__), 
+            LineNumberNode(@__LINE__, @__FILE__), 
             Expr(:string, mod, " ", title), 
             code1
         )
