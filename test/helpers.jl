@@ -67,7 +67,7 @@ macro testset_implementations(code::Expr)
     _testset_implementations_inner("", TEST_MODULES, code)
 end
 macro testset_implementations(arg, code::Expr)
-    if arg isa String || arg isa Expr && arg.head == :string
+    if arg isa Union{String,Symbol} || arg isa Expr && arg.head == :string
         _testset_implementations_inner(arg, TEST_MODULES, code)
     else
         _testset_implementations_inner("", arg, code)
@@ -88,8 +88,15 @@ function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code
         for (var, genkey) in pairs(vars)
             push!(expr.args, :($genkey = $GeoInterface.convert($mod, $var)))
         end
-        label = title == "" ? "$mod" : "$title: $mod"
-        push!(expr.args, :(@testset $label $code1))
+        # Manually define the testset macrocall and all string interpolation
+        testset = Expr(
+            :macrocall, 
+            Symbol("@testset"), 
+            LineNumberNode(95, @__FILE__), 
+            Expr(:string, mod, " ", title), 
+            code1
+        )
+        push!(expr.args, testset)
         push!(testsets.args, expr)
     end
 
