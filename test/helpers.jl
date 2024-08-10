@@ -67,7 +67,7 @@ macro testset_implementations(code::Expr)
     _testset_implementations_inner("", TEST_MODULES, code)
 end
 macro testset_implementations(arg, code::Expr)
-    if arg isa Union{String,Symbol} || arg isa Expr && arg.head == :string
+    if arg isa String || arg isa Expr && arg.head == :string
         _testset_implementations_inner(arg, TEST_MODULES, code)
     else
         _testset_implementations_inner("", arg, code)
