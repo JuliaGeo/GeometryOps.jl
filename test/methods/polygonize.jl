@@ -57,14 +57,14 @@ end
         evil = DimensionalData.DimArray(data, (DimensionalData.X(-100:-1), DimensionalData.Y(-100:-1)))
         data_mp = polygonize(data)
         evil_mp = @test_nowarn polygonize(evil)
-        @test GO.equals(data_mp, evil_mp)
+        @test GO.equals(GO.transform(x -> x .+ (-100, -100), data_mp), evil_mp)
     end
     @testset "Rasters" begin
         data = rand(1:4, 100, 100) .== 1
         evil = Rasters.Raster(data; dims = (DimensionalData.X(-100:-1), DimensionalData.Y(-90:9)), crs = Rasters.GeoFormatTypes.EPSG(4326))
         data_mp = polygonize(data)
         evil_mp = @test_nowarn polygonize(evil)
-        @test GO.equals(data_mp, evil_mp)
+        @test GO.equals(GO.transform(x -> x .+ (-100, -90), data_mp), evil_mp)
         @test GI.crs(evil_mp) == GI.crs(evil)
     end
 end
