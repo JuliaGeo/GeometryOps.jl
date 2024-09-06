@@ -1,6 +1,31 @@
 using GeometryOps, GeoInterface, Test
-import OffsetArrays, DimensionalData, Rasters
 using ..TestHelpers
+
+import GeometryOps as GO 
+import GeoInterface as GI
+
+@testset "Polygonize with xs and ys, without offsetarrays" begin
+    @test !(@isdefined OffsetArrays) # to make sure this isn't loaded somewhere else
+    data  = rand(1:4, 100, 100) .== 1
+    unitrange = 1:100
+    steprange = 1:1:100
+    steprangelen = range(1, 100; length = 100)
+    data_mp = polygonize(data)
+    for range in (unitrange, steprange, steprangelen)
+        data_mp_range = polygonize(range, range, data)
+        @test GO.equals(data_mp, data_mp_range)
+    end
+    # ideally we'd have a better test to make sure this returns what we think it does
+    data_mp_range200 = polygonize(2:2:200, 2:2:200, data)
+    @test length(GI.coordinates(data_mp_range200)) == length(GI.coordinates(data_mp))
+
+    # this is an example that could throw floating point error
+    range_floats = -1.333333333333343:0.041666666666666664:0.374999999999986
+    data2 = rand(1:4, length(range_floats), length(range_floats)) .== 1
+    data_mp_range_floats = polygonize(range_floats, range_floats, data2)
+end
+
+import OffsetArrays, DimensionalData, Rasters
 
 # Missing holes throw a warning, so testing there are
 # no warnings in a range of randomisation is one way to test 
@@ -66,5 +91,17 @@ end
         evil_mp = @test_nowarn polygonize(evil)
         @test GO.equals(data_mp, evil_mp)
         @test GI.crs(evil_mp) == GI.crs(evil)
+    end
+end
+
+@testset "Polygonize with xs and ys, with offsetarrays" begin
+    data  = rand(1:4, 100, 100) .== 1
+    unitrange = 1:100
+    steprange = 1:1:100
+    steprangelen = range(1, 100; length = 100)
+    data_mp = polygonize(data)
+    for range in (unitrange, steprange, steprangelen)
+        data_mp_range = polygonize(range, range, data)
+        @test GO.equals(data_mp, data_mp_range)
     end
 end
