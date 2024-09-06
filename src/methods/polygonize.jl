@@ -117,12 +117,12 @@ function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::
     xhalf = step(xs) / 2
     yhalf = step(ys) / 2
     # Make bounds ranges first to avoid floating point error making gaps or overlaps
-    xbounds = first(xs) - xhalf : step(xs) : last(xs) + xhalf
-    ybounds = first(ys) - yhalf : step(ys) : last(ys) + yhalf
+    xbounds = range(first(xs) - xhalf; step = step(xs), length = length(xs) + 1)
+    ybounds = range(first(ys) - yhalf; step = step(ys), length = length(ys) + 1)
     Tx = eltype(xbounds)
     Ty = eltype(ybounds)
-    xvec = similar(Vector{Tuple{Tx,Tx}}, xs)
-    yvec = similar(Vector{Tuple{Ty,Ty}}, ys)
+    xvec = similar(Vector{Tuple{Tx,Tx}}, length(xs))
+    yvec = similar(Vector{Tuple{Ty,Ty}}, length(ys))
     for (xind, i) in enumerate(eachindex(xvec))
         xvec[i] = xbounds[xind], xbounds[xind+1]
     end
