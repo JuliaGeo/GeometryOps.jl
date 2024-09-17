@@ -186,7 +186,7 @@ Read the land `MultiPolygon`s as a `GeoJSON.FeatureCollection`.
 land_geo = GeoJSON.read(land_path)
 ````
 
-We then need to create a figure with a `GeoAxis` that can handle the projection between `source` and `destinaton` CRS. For GeoMakie, `source` is the CRS of the input and `dest` is the CRS you want to visualize in.
+We then need to create a figure with a `GeoAxis` that can handle the projection between `source` and `destination` CRS. For GeoMakie, `source` is the CRS of the input and `dest` is the CRS you want to visualize in.
 
 ````@example creating_geometry
 fig = Figure(size=(1000, 500));
@@ -267,7 +267,7 @@ y = r .* (k + 1) .* sin.(ϴ) .- r .* sin.((k + 1) .* ϴ);
 ring4 = GI.LinearRing(Point.(zip(x, y)))
 ````
 
-But this time when we create the `Polygon` we beed to specify the `CRS` at the time of creation, making it a geospatial polygon
+But this time when we create the `Polygon` we need to specify the `CRS` at the time of creation, making it a geospatial polygon
 
 ````@example creating_geometry
 geopoly1 = GI.Polygon([ring4], crs = source_crs1)

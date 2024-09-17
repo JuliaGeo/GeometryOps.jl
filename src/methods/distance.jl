@@ -12,7 +12,7 @@ and multipolygons. If a point is outside of a geometry, signed distance has the
 same value as distance. However, points within the geometry have a negative
 distance representing the distance of a point to the closest boundary.
 Therefore, for all "non-filled" geometries, like curves, the distance will
-either be postitive or 0.
+either be positive or 0.
 
 To provide an example, consider this rectangle:
 ```@example rect

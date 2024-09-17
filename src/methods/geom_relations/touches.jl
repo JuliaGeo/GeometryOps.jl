@@ -8,7 +8,7 @@ export touches
 The touches function checks if one geometry touches another geometry. In other
 words, the interiors of the two geometries don't interact, but one of the
 geometries must have a boundary point that interacts with either the other
-geometies interior or boundary.
+geometry's interior or boundary.
 
 
 To provide an example, consider these two lines:
@@ -61,7 +61,7 @@ const TOUCHES_EXACT = (exact = _False(),)
 
 Return `true` if the first geometry touches the second geometry. In other words,
 the two interiors cannot interact, but one of the geometries must have a
-boundary point that interacts with either the other geometies interior or
+boundary point that interacts with either the other geometry's interior or
 boundary.
 
 ## Examples
@@ -128,8 +128,8 @@ _touches(
 
 # # Lines touching geometries
 
-#= Linestring touches another line if at least one bounday point interacts with
-the bounday of interior of the other line, but the interiors don't interact. =#
+#= Linestring touches another line if at least one boundary point interacts with
+the boundary of interior of the other line, but the interiors don't interact. =#
 _touches(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
@@ -181,14 +181,14 @@ _touches(
 ) = _touches(trait2, g2, trait1, g1)
 
 #= Linearring cannot touch another linear ring since they are both exclusively
-made up of interior points and no bounday points =#
+made up of interior points and no boundary points =#
 _touches(
     ::GI.LinearRingTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = false
 
 #= Linearring touches a polygon if at least one of the points of the ring
-interact with the polygon bounday and non are in the polygon interior. =#
+interact with the polygon boundary and non are in the polygon interior. =#
 _touches(
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,
@@ -203,8 +203,8 @@ _touches(
 
 # # Polygons touch geometries
 
-#= Polygon touches a curve if at least one of the curve bounday points interacts
-with the polygon's bounday and no curve points interact with the interior.=#
+#= Polygon touches a curve if at least one of the curve boundary points interacts
+with the polygon's boundary and no curve points interact with the interior.=#
 _touches(
     trait1::GI.PolygonTrait, g1,
     trait2::GI.AbstractCurveTrait, g2

@@ -14,7 +14,7 @@ function reproject(geom;
         end
 
         # If its still nothing, error
-        isnothing(source_crs) && throw(ArgumentError("geom has no crs attatched. Pass a `source_crs` keyword"))
+        isnothing(source_crs) && throw(ArgumentError("geom has no crs attached. Pass a `source_crs` keyword"))
 
         # Otherwise reproject
         reproject(geom, source_crs, target_crs; kw...)

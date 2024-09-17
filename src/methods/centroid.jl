@@ -45,7 +45,7 @@ LineString or LinearRing when they are closed, for example as the interior hole
 of a polygon.
 
 The helper functions centroid_and_length and centroid_and_area are made
-availible just in case the user also needs the area or length to decrease
+available just in case the user also needs the area or length to decrease
 repeat computation.
 =#
 """

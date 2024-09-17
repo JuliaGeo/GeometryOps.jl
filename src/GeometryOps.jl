@@ -4,13 +4,14 @@ module GeometryOps
 
 using GeoInterface
 using GeometryBasics
-import Tables
 using LinearAlgebra, Statistics
+
+import Tables
 import GeometryBasics.StaticArrays
+import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
-
-using GeoInterface.Extents: Extents
+import GeoInterface.Extents: Extents
 
 const GI = GeoInterface
 const GB = GeometryBasics
@@ -28,6 +29,7 @@ include("methods/area.jl")
 include("methods/barycentric.jl")
 include("methods/buffer.jl")
 include("methods/centroid.jl")
+include("methods/convex_hull.jl")
 include("methods/distance.jl")
 include("methods/equals.jl")
 include("methods/clipping/predicates.jl")

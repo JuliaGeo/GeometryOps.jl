@@ -1,7 +1,10 @@
 using Test
+import GeoInterface as GI
+import GeometryOps as GO
+using ..TestHelpers
 
-import GeoInterface as GI, GeometryOps as GO
-
+# TODO this should also work with a LineString
+# Some geom packages don't have `Line`
 l1 = GI.Line([(5.0, -5.0), (5.0, 15.0)])
 l2 = GI.Line([(-1.0, 8.0), (2.0, 11.0)])
 l3 = GI.Line([(-1.0, 6.0), (11.0, 6.0)])
@@ -13,9 +16,8 @@ p1 = GI.Polygon([r1])
 p2 = GI.Polygon([r1, r2])
 p3 = GI.Polygon([[(0.0, 0.0), (0.0, 5.0), (2.5, 7.5), (5.0, 5.0), (7.5, 7.5), (10.0, 5.0), (10.0, 0.0), (0.0, 0.0)]])
 
-@testset "Cut Polygon" begin
-    # Cut convex polygon
-    cut_polys = GO.cut(p1, l1)
+@testset_implementations "Cut convex polygon" begin
+    cut_polys = GO.cut($p1, l1)
     @test all(GO.equals.(
         cut_polys,
         [
@@ -24,7 +26,7 @@ p3 = GI.Polygon([[(0.0, 0.0), (0.0, 5.0), (2.5, 7.5), (5.0, 5.0), (7.5, 7.5), (1
         ],
     ))
 
-    cut_polys = GO.cut(p1, l2)
+    cut_polys = GO.cut($p1, l2)
     @test all(GO.equals.(
         cut_polys,
         [
@@ -34,7 +36,7 @@ p3 = GI.Polygon([[(0.0, 0.0), (0.0, 5.0), (2.5, 7.5), (5.0, 5.0), (7.5, 7.5), (1
     ))
 
     # Cut convex polygon with hole
-    cut_polys = GO.cut(p2, l1)
+    cut_polys = GO.cut($p2, l1)
     @test all(GO.equals.(
         cut_polys,
         [
@@ -42,7 +44,7 @@ p3 = GI.Polygon([[(0.0, 0.0), (0.0, 5.0), (2.5, 7.5), (5.0, 5.0), (7.5, 7.5), (1
             GI.Polygon([[(5.0, 0.0), (10.0, 0.0), (10.0, 10.0), (5.0, 10.0), (5.0, 4.0), (8.0, 4.0), (8.0, 2.0), (5.0, 2.0), (5.0, 0.0)]]),
         ],
     ))
-    cut_polys = GO.cut(p2, l3)
+    cut_polys = GO.cut($p2, l3)
     @test all(GO.equals.(
         cut_polys,
         [
@@ -52,7 +54,7 @@ p3 = GI.Polygon([[(0.0, 0.0), (0.0, 5.0), (2.5, 7.5), (5.0, 5.0), (7.5, 7.5), (1
     ))
 
     # Cut concave polygon into three pieces
-    cut_polys = GO.cut(p3, l3)
+    cut_polys = GO.cut($p3, l3)
     @test all(GO.equals.(
         cut_polys,
         [
@@ -63,8 +65,8 @@ p3 = GI.Polygon([[(0.0, 0.0), (0.0, 5.0), (2.5, 7.5), (5.0, 5.0), (7.5, 7.5), (1
     ))
 
     # Line doesn't cut through polygon
-    cut_polys = GO.cut(p1, l4)
-    @test all(GO.equals.(cut_polys, [p1]))
-    cut_polys = GO.cut(p1, l5)
-    @test all(GO.equals.(cut_polys, [p1]))
+    cut_polys = GO.cut($p1, l4)
+    @test all(GO.equals.(cut_polys, [$p1]))
+    cut_polys = GO.cut($p1, l5)
+    @test all(GO.equals.(cut_polys, [$p1]))
 end
