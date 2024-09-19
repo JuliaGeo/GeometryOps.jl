@@ -202,12 +202,47 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
     new_names = filter(Base.Fix1(!==, geometry_column), old_schema.names)
     # and try to rebuild the same table as the best type - either the original type of `iterable`,
     # or a named tuple which is the default fallback.
-    return Tables.materializer(iterable)(
+    result = Tables.materializer(iterable)(
         merge(
             NamedTuple{(geometry_column,), Base.Tuple{typeof(new_geometry)}}((new_geometry,)),
             NamedTuple(Iterators.map(_get_col_pair, new_names))
         )
     )
+    # Finally, we ensure that metadata is propagated correctly.
+    # This can only happen if the original table supports metadata reads,
+    # and the result supports metadata writes.
+    if DataAPI.metadatasupport(typeof(result)).write
+        # Copy over all metadata from the original table to the new table, 
+        # if the original table supports metadata reading.
+        if DataAPI.metadatasupport(IterableType).read
+            for (key, (value, style)) in DataAPI.metadata(iterable; style = true)
+                # Default styles are not preserved on data transformation, so we must skip them!
+                style == :default && continue
+                # We assume that any other style is preserved.
+                DataAPI.metadata!(result, key, value; style)
+            end
+        end
+        # We don't usually care about the original table's metadata for GEOINTERFACE namespaced
+        # keys, so we should set the crs and geometrycolumns metadata if they are present.
+        # Ensure that `GEOINTERFACE:geometrycolumns` and `GEOINTERFACE:crs` are set!
+        mdk = DataAPI.metadatakeys(result)
+        # If the user has asked for geometry columns to persist, they would be here,
+        # so we don't need to set them.
+        if !("GEOINTERFACE:geometrycolumns" in mdk)
+            # If the geometry columns are not already set, we need to set them.
+            DataAPI.metadata!(result, "GEOINTERFACE:geometrycolumns", (geometry_column,); style = :default)
+        end
+        # Force reset CRS always, since you can pass `crs` to `apply`.
+        new_crs = if haskey(kw, :crs)
+            kw[:crs]
+        else
+            GI.crs(iterable) # this will automatically check `GEOINTERFACE:crs` unless the type has a specialized implementation.
+        end
+
+        DataAPI.metadata!(result, "GEOINTERFACE:crs", new_crs; style = :default)
+    end
+
+    return result
 end
 
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection

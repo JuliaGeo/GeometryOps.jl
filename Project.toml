@@ -5,6 +5,7 @@ version = "0.1.11"
 
 [deps]
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
+DataAPI = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 DelaunayTriangulation = "927a84f5-c5f4-47a5-9785-b46e178433df"
 ExactPredicates = "429591f6-91af-11e9-00e2-59fbe8cec110"
 GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
