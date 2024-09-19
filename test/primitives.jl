@@ -2,12 +2,13 @@ using Test
 
 import ArchGDAL as AG
 import GeometryBasics as GB 
+import GeoFormatTypes as GFT
 import GeometryOps as GO 
 import GeoInterface as GI
 import LibGEOS as LG
 import Proj
 import Shapefile
-import DataFrames
+import DataFrames, Tables, DataAPI
 using Downloads: download
 using ..TestHelpers
 
@@ -54,7 +55,9 @@ poly = GI.Polygon([lr1, lr2])
 
             @testset "DataFrames" begin
                 countries_df = DataFrames.DataFrame(countries_table)
-                centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df);
+                GO.DataAPI.metadata!(countries_df, "note metadata", "note metadata value"; style = :note)
+                GO.DataAPI.metadata!(countries_df, "default metadata", "default metadata value"; style = :default)
+                centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df; crs = GFT.EPSG(3031));
                 @test centroid_df isa DataFrames.DataFrame
                 centroid_geometry = centroid_df.geometry
                 # Test that the centroids are correct
@@ -63,6 +66,12 @@ poly = GI.Polygon([lr1, lr2])
                     for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_df))
                         @test all(missing_or_equal.(centroid_df[!, column], countries_df[!, column]))
                     end
+                end
+                @testset "Metadata preservation (or not)" begin
+                    @test DataAPI.metadata(centroid_df, "note metadata") == "note metadata value"
+                    @test !("default metadata" in DataAPI.metadatakeys(centroid_df))
+                    @test DataAPI.metadata(centroid_df, "GEOINTERFACE:geometrycolumns") == (:geometry,)
+                    @test DataAPI.metadata(centroid_df, "GEOINTERFACE:crs") == GFT.EPSG(3031)
                 end
             end
         end
