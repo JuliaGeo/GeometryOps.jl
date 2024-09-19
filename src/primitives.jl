@@ -211,13 +211,19 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
     # Finally, we ensure that metadata is propagated correctly.
     # This can only happen if the original table supports metadata reads,
     # and the result supports metadata writes.
-    if DataAPI.metadatasupport(IterableType).read && DataAPI.metadatasupport(typeof(result)).write
-        for (key, (value, style)) in DataAPI.metadata(iterable; style = true)
-            # Default styles are not preserved on data transformation, so we must skip them!
-            style == :default && continue
-            # We assume that any other style is preserved.
-            DataAPI.metadata!(result, key, value; style)
+    if DataAPI.metadatasupport(typeof(result)).write
+        # Copy over all metadata from the original table to the new table, 
+        # if the original table supports metadata reading.
+        if DataAPI.metadatasupport(IterableType).read
+            for (key, (value, style)) in DataAPI.metadata(iterable; style = true)
+                # Default styles are not preserved on data transformation, so we must skip them!
+                style == :default && continue
+                # We assume that any other style is preserved.
+                DataAPI.metadata!(result, key, value; style)
+            end
         end
+        # We don't usually care about the original table's metadata for GEOINTERFACE namespaced
+        # keys, so we should set the crs and geometrycolumns metadata if they are present.
         # Ensure that `GEOINTERFACE:geometrycolumns` and `GEOINTERFACE:crs` are set!
         mdk = DataAPI.metadatakeys(result)
         # If the user has asked for geometry columns to persist, they would be here,
@@ -230,7 +236,7 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
         new_crs = if haskey(kw, :crs)
             kw[:crs]
         else
-            GI.crs(iterable)
+            GI.crs(iterable) # this will automatically check `GEOINTERFACE:crs` unless the type has a specialized implementation.
         end
 
         DataAPI.metadata!(result, "GEOINTERFACE:crs", new_crs; style = :default)
