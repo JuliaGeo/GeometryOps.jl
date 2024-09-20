@@ -6,9 +6,18 @@ Spatial joins can be done between any geometry types (from geometrycollections t
 
 In this tutorial, we will show how to perform a spatial join on first a toy dataset and then two Natural Earth datasets, to show how this can be used in the real world.
 
-In order to perform the spatial join, we use **[FlexiJoins.jl](https://github.com/JuliaAPlavin/FlexiJoins.jl)** to perform the join, specifically using its `by_pred` joining method.  This allows the user to specify a predicate in the following manner:
+In order to perform the spatial join, we use **[FlexiJoins.jl](https://github.com/JuliaAPlavin/FlexiJoins.jl)** to perform the join, specifically using its `by_pred` joining method.  This allows the user to specify a predicate in the following manner, for any kind of table join operation:
 ```julia
-[inner/left/right/outer/...]join((table1, table1),
+innerjoin((table1, table1),
+    by_pred(:table1_column, predicate_function, :table2_column) # & add other conditions here
+)
+leftjoin((table1, table1),
+    by_pred(:table1_column, predicate_function, :table2_column) # & add other conditions here
+)
+rightjoin((table1, table1),
+    by_pred(:table1_column, predicate_function, :table2_column) # & add other conditions here
+)
+outerjoin((table1, table1),
     by_pred(:table1_column, predicate_function, :table2_column) # & add other conditions here
 )
 ```
