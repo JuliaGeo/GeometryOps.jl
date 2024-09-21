@@ -66,15 +66,19 @@ end
 
 # ## Convex hull
 function GO.convex_hull(::GEOS, geoms)
-    return LG.convexhull(
-        LG.MultiPoint(
-            collect(
-                GO.flatten(
-                    x -> GI.convert(LG, x), 
-                    GI.PointTrait, 
-                    geoms
+    return _wrap(
+        LG.convexhull(
+            LG.MultiPoint(
+                collect(
+                    GO.flatten(
+                        x -> GI.convert(LG, x), 
+                        GI.PointTrait, 
+                        geoms
+                    )
                 )
             )
-        )
+        ); 
+        crs = GI.crs(geoms), 
+        calc_extent = false
     )
 end
