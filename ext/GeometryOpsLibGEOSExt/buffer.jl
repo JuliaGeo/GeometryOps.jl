@@ -18,16 +18,17 @@ to_join_style(style::Symbol) = _GEOS_JOINSTYLE_LOOKUP[style]
 to_join_style(style::LG.GEOSBufJoinStyles) = style
 to_join_style(num::Integer) = num
 
-function GO.buffer(alg::GEOS, geometry, distance)
+function GO.buffer(alg::GEOS, geometry, distance; calc_extent = true, kwargs...)
     # The reason we use apply here is so that this also works with featurecollections,
     # tables, vectors of geometries, etc!
-    return apply(TraitTarget{GI.AbstractGeometryTrait}(), geometry) do geom
-        LG.bufferWithStyle(
+    return apply(TraitTarget{GI.AbstractGeometryTrait}(), geometry; kwargs...) do geom
+        newgeom = LG.bufferWithStyle(
             GI.convert(LG, geom), distance; 
             quadsegs = get(alg, :quadsegs, 8),
             endCapStyle = to_cap_style(get(alg, :endCapStyle, :round)),
             joinStyle = to_join_style(get(alg, :joinStyle, :round)),
             mitreLimit = get(alg, :mitreLimit, 5.0),
         )
+        return _wrap(newgeom; crs = GI.crs(geom), calc_extent)
     end
 end

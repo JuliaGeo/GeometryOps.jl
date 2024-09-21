@@ -15,6 +15,10 @@ for name in filter(!in((:var"#eval", :eval, :var"#include", :include)), names(Ge
     @eval using GeometryOps: $name
 end
 
+function _wrap(geom; crs=GI.crs(geom), calc_extent = true)
+    return GI.geointerface_geomtype(GI.geomtrait(geom))(geom; crs, extent = GI.extent(geom, calc_extent))
+end
+
 include("buffer.jl")
 include("segmentize.jl")
 include("simplify.jl")
