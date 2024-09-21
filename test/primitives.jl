@@ -92,6 +92,25 @@ end
     @test GO._tuple_point.(GO.flatten(GI.PointTrait, very_wrapped)) == vcat(pv1, pv2)
     @test collect(GO.flatten(GI.AbstractCurveTrait, [poly])) == [lr1, lr2]
     @test collect(GO.flatten(GI.x, GI.PointTrait, very_wrapped)) == first.(vcat(pv1, pv2))
+    @testset "flatten with tables" begin
+        # Construct a simple table with a geometry column
+        geom_column = [GI.Point(1.0,1.0), GI.Point(2.0,2.0), GI.Point(3.0,3.0)]
+        table = (geometry = geom_column, id = [1, 2, 3])
+        
+        # Test flatten on the table
+        flattened = collect(GO.flatten(GI.PointTrait, table))
+        
+        @test length(flattened) == 3
+        @test all(p isa GI.Point for p in flattened)
+        @test flattened == geom_column
+        
+        # Test flatten with a function
+        flattened_coords = collect(GO.flatten(p -> (GI.x(p), GI.y(p)), GI.PointTrait, table))
+        
+        @test length(flattened_coords) == 3
+        @test all(c isa Tuple{Float64,Float64} for c in flattened_coords)
+        @test flattened_coords == [(1.0,1.0), (2.0,2.0), (3.0,3.0)]
+    end
 end
 
 @testset "reconstruct" begin
