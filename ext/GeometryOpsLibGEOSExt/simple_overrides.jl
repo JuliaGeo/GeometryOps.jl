@@ -71,7 +71,7 @@ function GO.convex_hull(::GEOS, geoms)
             LG.MultiPoint(
                 collect(
                     GO.flatten(
-                        x -> GI.convert(LG, x), 
+                        x -> GI.convert(LG.Point, x), 
                         GI.PointTrait, 
                         geoms
                     )
