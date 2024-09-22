@@ -475,9 +475,10 @@ _flatten(f, ::Type{Target}, geom) where Target = _flatten(f, Target, GI.trait(ge
 # Try to flatten over iterables
 function _flatten(f, ::Type{Target}, ::Nothing, iterable) where Target
     if Tables.istable(iterable)
-        Iterators.flatten(Iterators.map(x -> _flatten(f, Target, x), Tables.getcolumn(iterable, first(GI.geometrycolumns(iterable)))))
+        column = Tables.getcolumn(iterable, first(GI.geometrycolumns(iterable)))
+        Iterators.map(x -> _flatten(f, Target, x), column) |> Iterators.flatten
     else
-        Iterators.flatten(Iterators.map(x -> _flatten(f, Target, x), iterable))
+        Iterators.map(x -> _flatten(f, Target, x), iterable) |> Iterators.flatten
     end
 end
 # Flatten feature collections
