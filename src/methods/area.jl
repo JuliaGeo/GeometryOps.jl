@@ -29,7 +29,7 @@ lines!(
 f
 ```
 The points are ordered in a counterclockwise fashion, which means that the signed area
-is negative.  If we reverse the order of the points, we get a postive area.
+is negative.  If we reverse the order of the points, we get a positive area.
 ```@example rect
 GO.signed_area(rect)  # -1.0
 ```
@@ -76,7 +76,7 @@ end
     signed_area(geom, [T = Float64])::T
 
 Returns the signed area of a single geometry, based on winding order. 
-This is computed slighly differently for different geometries:
+This is computed slightly differently for different geometries:
 
     - The signed area of a point is always zero.
     - The signed area of a curve is always zero.

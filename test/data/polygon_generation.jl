@@ -24,7 +24,7 @@ Inputs:
 Output:
     Vector{Vector{Vector{T}}} representing polygon coordinates
 Note:
-    Check your outputs! No guarentee that the polygon's aren't self-intersecting
+    Check your outputs! No guarantee that the polygon's aren't self-intersecting
 """
 function generate_random_poly(
     x,

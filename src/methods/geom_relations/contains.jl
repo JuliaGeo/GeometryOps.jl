@@ -5,8 +5,8 @@ export contains
 #=
 ## What is contains?
 
-The contains function checks if a given geometry completly contains another
-geometry, or in other words, that the second geometry is completly within the
+The contains function checks if a given geometry completely contains another
+geometry, or in other words, that the second geometry is completely within the
 first. This requires that the two interiors intersect and that the interior and
 boundary of the second geometry is not in the exterior of the first geometry.
 

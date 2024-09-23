@@ -35,7 +35,7 @@ f
 Now, we can use the `polygonize` function to convert the raster data into polygons.
 
 For this particular example, we chose a range of z-values between 0.8 and 3.2, 
-which would provide two distinct polyogns with holes.
+which would provide two distinct polygons with holes.
 
 ```@example polygonize
 polygons = polygonize(xs, ys, 0.8 .< zs .< 3.2)
@@ -117,12 +117,12 @@ function _polygonize(f::Base.Callable, xs::AbstractRange, ys::AbstractRange, A::
     xhalf = step(xs) / 2
     yhalf = step(ys) / 2
     # Make bounds ranges first to avoid floating point error making gaps or overlaps
-    xbounds = first(xs) - xhalf : step(xs) : last(xs) + xhalf
-    ybounds = first(ys) - yhalf : step(ys) : last(ys) + yhalf
+    xbounds = range(first(xs) - xhalf; step = step(xs), length = length(xs) + 1)
+    ybounds = range(first(ys) - yhalf; step = step(ys), length = length(ys) + 1)
     Tx = eltype(xbounds)
     Ty = eltype(ybounds)
-    xvec = similar(Vector{Tuple{Tx,Tx}}, xs)
-    yvec = similar(Vector{Tuple{Ty,Ty}}, ys)
+    xvec = similar(Vector{Tuple{Tx,Tx}}, length(xs))
+    yvec = similar(Vector{Tuple{Ty,Ty}}, length(ys))
     for (xind, i) in enumerate(eachindex(xvec))
         xvec[i] = xbounds[xind], xbounds[xind+1]
     end
@@ -334,7 +334,7 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
     assigned_holes == length(holes) || @warn "Not all holes were assigned to polygons, $(length(holes) - assigned_holes) where missed from $(length(holes)) holes and $(length(polygons)) polygons"
 
     if isempty(polygons)
-        # TODO: this really should return an emtpty MultiPolygon but
+        # TODO: this really should return an empty MultiPolygon but
         # GeoInterface wrappers cant do that yet, which is not ideal...
         @warn "No polgons found, check your data or try another function for `f`"
         return nothing

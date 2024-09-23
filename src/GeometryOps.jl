@@ -4,13 +4,14 @@ module GeometryOps
 
 using GeoInterface
 using GeometryBasics
-import Tables
 using LinearAlgebra, Statistics
+
+import Tables, DataAPI
 import GeometryBasics.StaticArrays
+import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
-
-using GeoInterface.Extents: Extents
+import GeoInterface.Extents: Extents
 
 const GI = GeoInterface
 const GB = GeometryBasics
@@ -18,13 +19,17 @@ const GB = GeometryBasics
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
+include("types.jl")
 include("primitives.jl")
 include("utils.jl")
+include("not_implemented_yet.jl")
 
 include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
+include("methods/buffer.jl")
 include("methods/centroid.jl")
+include("methods/convex_hull.jl")
 include("methods/distance.jl")
 include("methods/equals.jl")
 include("methods/clipping/predicates.jl")
@@ -70,6 +75,7 @@ function __init__()
     # Handle all available errors!
     Base.Experimental.register_error_hint(_reproject_error_hinter, MethodError)
     Base.Experimental.register_error_hint(_geodesic_segments_error_hinter, MethodError)
+    Base.Experimental.register_error_hint(_buffer_error_hinter, MethodError)
 end
 
 end

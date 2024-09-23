@@ -1,10 +1,16 @@
 using Test
 
+import ArchGDAL as AG
+import GeometryBasics as GB 
+import GeoFormatTypes as GFT
+import GeometryOps as GO 
 import GeoInterface as GI
-import GeometryOps as GO
-import GeometryBasics as GB
+import LibGEOS as LG
 import Proj
-import Shapefile, DataFrames
+import Shapefile
+import DataFrames, Tables, DataAPI
+using Downloads: download
+using ..TestHelpers
 
 pv1 = [(1, 2), (3, 4), (5, 6), (1, 2)]
 pv2 = [(3, 4), (5, 6), (6, 7), (3, 4)]
@@ -14,14 +20,18 @@ poly = GI.Polygon([lr1, lr2])
 
 @testset "apply" begin
 
-    flipped_poly = GO.apply(GI.PointTrait, poly) do p
-        (GI.y(p), GI.x(p))
+    @testset_implementations "apply flip" begin
+        flipped_poly = GO.apply(GI.PointTrait, $poly) do p
+            (GI.y(p), GI.x(p))
+        end
+        @test flipped_poly == GI.Polygon([GI.LinearRing([(2, 1), (4, 3), (6, 5), (2, 1)]), 
+                                          GI.LinearRing([(4, 3), (6, 5), (7, 6), (4, 3)])])
     end
 
-    @test flipped_poly == GI.Polygon([GI.LinearRing([(2, 1), (4, 3), (6, 5), (2, 1)]), 
-                                      GI.LinearRing([(4, 3), (6, 5), (7, 6), (4, 3)])])
-
     @testset "Tables.jl support" begin
+        # check to account for missing data
+        missing_or_equal(x, y) = (ismissing(x) && ismissing(y)) || (x == y)
+        # file setup
         mktempdir() do dir
         cd(dir) do
 
@@ -38,30 +48,36 @@ poly = GI.Polygon([lr1, lr2])
                 @test all(centroid_geometry .== GO.centroid.(countries_table.geometry))
                 @testset "Columns are preserved" begin  
                     for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_table))
-                        @test all(GO.Tables.getcolumn(centroid_table, column) .== GO.Tables.getcolumn(countries_table, column))
+                        @test all(missing_or_equal.(GO.Tables.getcolumn(centroid_table, column), GO.Tables.getcolumn(countries_table, column)))
                     end
                 end
             end
 
             @testset "DataFrames" begin
                 countries_df = DataFrames.DataFrame(countries_table)
-                centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df);
+                GO.DataAPI.metadata!(countries_df, "note metadata", "note metadata value"; style = :note)
+                GO.DataAPI.metadata!(countries_df, "default metadata", "default metadata value"; style = :default)
+                centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df; crs = GFT.EPSG(3031));
                 @test centroid_df isa DataFrames.DataFrame
                 centroid_geometry = centroid_df.geometry
                 # Test that the centroids are correct
                 @test all(centroid_geometry .== GO.centroid.(countries_df.geometry))
                 @testset "Columns are preserved" begin  
                     for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_df))
-                        @test all(centroid_df[!, column] .== countries_df[!, column])
+                        @test all(missing_or_equal.(centroid_df[!, column], countries_df[!, column]))
                     end
+                end
+                @testset "Metadata preservation (or not)" begin
+                    @test DataAPI.metadata(centroid_df, "note metadata") == "note metadata value"
+                    @test !("default metadata" in DataAPI.metadatakeys(centroid_df))
+                    @test DataAPI.metadata(centroid_df, "GEOINTERFACE:geometrycolumns") == (:geometry,)
+                    @test DataAPI.metadata(centroid_df, "GEOINTERFACE:crs") == GFT.EPSG(3031)
                 end
             end
         end
         end
     end
 end
-
-
 
 @testset "unwrap" begin
     flipped_vectors = GO.unwrap(GI.PointTrait, poly) do p
@@ -73,10 +89,28 @@ end
 
 @testset "flatten" begin
     very_wrapped = [[GI.FeatureCollection([GI.Feature(poly; properties=(;))])]]
-    @test collect(GO.flatten(GI.PointTrait, very_wrapped)) == vcat(pv1, pv2)
-    @test collect(GO.flatten(GI.LinearRingTrait, [poly])) == [lr1, lr2]
-    @test collect(GO.flatten(GI.LinearRingTrait, [poly])) == [lr1, lr2]
+    @test GO._tuple_point.(GO.flatten(GI.PointTrait, very_wrapped)) == vcat(pv1, pv2)
+    @test collect(GO.flatten(GI.AbstractCurveTrait, [poly])) == [lr1, lr2]
     @test collect(GO.flatten(GI.x, GI.PointTrait, very_wrapped)) == first.(vcat(pv1, pv2))
+    @testset "flatten with tables" begin
+        # Construct a simple table with a geometry column
+        geom_column = [GI.Point(1.0,1.0), GI.Point(2.0,2.0), GI.Point(3.0,3.0)]
+        table = (geometry = geom_column, id = [1, 2, 3])
+        
+        # Test flatten on the table
+        flattened = collect(GO.flatten(GI.PointTrait, table))
+        
+        @test length(flattened) == 3
+        @test all(p isa GI.Point for p in flattened)
+        @test flattened == geom_column
+        
+        # Test flatten with a function
+        flattened_coords = collect(GO.flatten(p -> (GI.x(p), GI.y(p)), GI.PointTrait, table))
+        
+        @test length(flattened_coords) == 3
+        @test all(c isa Tuple{Float64,Float64} for c in flattened_coords)
+        @test flattened_coords == [(1.0,1.0), (2.0,2.0), (3.0,3.0)]
+    end
 end
 
 @testset "reconstruct" begin

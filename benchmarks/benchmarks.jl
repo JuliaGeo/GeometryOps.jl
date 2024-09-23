@@ -11,7 +11,7 @@ import GeometryOps as GO,
     GeoInterface as GI, 
     GeometryBasics as GB, 
     LibGEOS as LG
-import GeoJSON
+import GeoJSON, NaturalEarth
 # In order to benchmark, we'll actually use the new [Chairmarks.jl](https://github.com/lilithhafner/Chairmarks.jl), 
 # since it's significantly faster than BenchmarkTools.  To keep benchmarks organized, though, we'll still use BenchmarkTools' 
 # `BenchmarkGroup` structure.
@@ -184,7 +184,7 @@ usa_difference_suite = usa_poly_suite["difference"] = BenchmarkGroup(["title:USA
 usa_intersection_suite = usa_poly_suite["intersection"] = BenchmarkGroup(["title:USA intersection", "subtitle:Tested on CONUS"])
 usa_union_suite = usa_poly_suite["union"] = BenchmarkGroup(["title:USA union", "subtitle:Tested on CONUS"])
 
-fc = GeoJSON.read(read(download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_admin_0_countries.geojson")))
+fc = NaturalEarth.naturalearth("admin_0_countries", 10)
 usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)] |> x -> GI.convert(LG, x) |> LG.makeValid |> GO.tuples
 
 usa_poly = GI.getgeom(usa_multipoly, findmax(GO.area.(GI.getgeom(usa_multipoly)))[2]) # isolate the poly with the most area
@@ -194,7 +194,7 @@ f, a, p = plot(usa_poly; label = "Original", axis = (; aspect = DataAspect())); 
 axislegend(a)
 f
 
-# Now, we  get to benchmarking:
+# Now, we get to benchmarking:
 
 
 usa_o_lg, usa_o_go = lg_and_go(usa_poly)

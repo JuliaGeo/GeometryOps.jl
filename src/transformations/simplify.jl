@@ -5,6 +5,11 @@ This file holds implementations for the RadialDistance, Douglas-Peucker, and
 Visvalingam-Whyatt algorithms for simplifying geometries (specifically for
 polygons and lines).
 
+The GEOS extension also allows for GEOS's topology preserving simplification 
+as well as Douglas-Peucker simplification implemented in GEOS.  Call this by
+passing `GEOS(; method = :TopologyPreserve)` or `GEOS(; method = :DouglasPeucker)`
+to the algorithm.
+
 ## Examples
 
 A quick and dirty example is:
@@ -32,10 +37,11 @@ We benchmark these methods against LibGEOS's `simplify` implementation, which us
 using BenchmarkTools, Chairmarks, GeoJSON, CairoMakie
 import GeometryOps as GO, LibGEOS as LG, GeoInterface as GI
 using CoordinateTransformations
+using NaturalEarth
 import Main: plot_trials # hide
 lg_and_go(geometry) = (GI.convert(LG, geometry), GO.tuples(geometry))
 # Load in the Natural Earth admin GeoJSON, then extract the USA's geometry
-fc = GeoJSON.read(read(download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_admin_0_countries.geojson")))
+fc = NaturalEarth.naturalearth("admin_0_countries", 10)
 usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)] |> x -> GI.convert(LG, x) |> LG.makeValid |> GO.tuples
 include(joinpath(dirname(dirname(pathof(GO))), "test", "data", "polygon_generation.jl"))
 
@@ -129,7 +135,7 @@ or nested vectors or a table of these.
 
 [`RadialDistance`](@ref), [`DouglasPeucker`](@ref), or 
 [`VisvalingamWhyatt`](@ref) algorithms are available, 
-listed in order of increasing quality but decreaseing performance.
+listed in order of increasing quality but decreasing performance.
 
 `PoinTrait` and `MultiPointTrait` are returned unchanged.
 
@@ -185,6 +191,8 @@ GI.npoint(simple)
 ```
 """
 simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
+simplify(alg::GEOS, data; kw...) = _simplify(alg, data; kw...)
+
 # Default algorithm is DouglasPeucker
 simplify(
     data; prefilter_alg = nothing,
@@ -192,9 +200,9 @@ simplify(
  ) = _simplify(DouglasPeucker(; kw...), data; prefilter_alg, calc_extent, threaded, crs)
 
 
-#= For each algorithm, apply simplication to all curves, multipoints, and
+#= For each algorithm, apply simplification to all curves, multipoints, and
 points, reconstructing everything else around them. =#
-function _simplify(alg::SimplifyAlg, data; prefilter_alg=nothing, kw...)
+function _simplify(alg::Union{SimplifyAlg, GEOS}, data; prefilter_alg=nothing, kw...)
     simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg)
     return apply(simplifier, _SIMPLIFY_TARGET, data; kw...)
 end
@@ -238,7 +246,7 @@ Simplifies geometries by removing points less than
 $SIMPLIFY_ALG_KEYWORDS
 - `tol`: the minimum distance between points.
 
-Note: user input `tol` is squared to avoid uneccesary computation in algorithm.
+Note: user input `tol` is squared to avoid unnecessary computation in algorithm.
 """
 @kwdef struct RadialDistance <: SimplifyAlg 
     number::Union{Int64,Nothing} = nothing
@@ -277,7 +285,7 @@ Simplifies geometries by removing points below `tol`
 distance from the line between its neighboring points.
 
 $DOUGLAS_PEUCKER_KEYWORDS
-Note: user input `tol` is squared to avoid uneccesary computation in algorithm.
+Note: user input `tol` is squared to avoid unnecessary computation in algorithm.
 """
 @kwdef struct DouglasPeucker <: SimplifyAlg
     number::Union{Int64,Nothing} = nothing
@@ -297,7 +305,7 @@ end
 function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
     npoints = length(points)
     npoints <= MIN_POINTS && return points
-    # Determine stopping critetia
+    # Determine stopping criteria
     max_points = if !isnothing(alg.tol)
         npoints
     else
@@ -388,7 +396,7 @@ function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
 end
 
 #= find maximum distance of any point between the start_idx and end_idx to the line formed
-by conencting the points at start_idx and end_idx. Note that the first index of maximum
+by connecting the points at start_idx and end_idx. Note that the first index of maximum
 value will be used, which might cause differences in results from other algorithms.=#
 function _find_max_squared_dist(points, start_idx, end_idx)
     max_idx = start_idx
@@ -415,7 +423,7 @@ distance from the line between its neighboring points.
 $SIMPLIFY_ALG_KEYWORDS
 - `tol`: the minimum area of a triangle made with a point and
     its neighboring points.
-Note: user input `tol` is doubled to avoid uneccesary computation in algorithm.
+Note: user input `tol` is doubled to avoid unnecessary computation in algorithm.
 """
 @kwdef struct VisvalingamWhyatt <: SimplifyAlg 
     number::Union{Int,Nothing} = nothing
@@ -439,7 +447,6 @@ end
 # Calculates double the area of a triangle given its vertices
 _triangle_double_area(p1, p2, p3) =
     abs(p1[1] * (p2[2] - p3[2]) + p2[1] * (p3[2] - p1[2]) + p3[1] * (p1[2] - p2[2]))
-
 
 # # Shared utils
 

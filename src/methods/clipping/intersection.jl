@@ -5,7 +5,7 @@ export intersection, intersection_points
     Enum LineOrientation
 Enum for the orientation of a line with respect to a curve. A line can be
 `line_cross` (crossing over the curve), `line_hinge` (crossing the endpoint of the curve),
-`line_over` (colinear with the curve), or `line_out` (not interacting with the curve).
+`line_over` (collinear with the curve), or `line_out` (not interacting with the curve).
 """
 @enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
@@ -86,7 +86,7 @@ function _intersection(
         hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
         _add_holes_to_polys!(T, polys, hole_iterator, remove_idx; exact)
     end
-    # Remove uneeded collinear points on same edge
+    # Remove unneeded collinear points on same edge
     _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
     return polys
 end
@@ -128,7 +128,7 @@ function _intersection(
 end
 
 #= Multipolygon with polygon intersection is equivalent to taking the intersection of the
-poylgon with the multipolygon and thus simply switches the order of operations and calls the
+polygon with the multipolygon and thus simply switches the order of operations and calls the
 above method. =#
 _intersection(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
@@ -175,57 +175,53 @@ function _intersection(
 end
 
 """
-    intersection_points(
-        geom_a,
-        geom_b,
-    )::Union{
-        ::Vector{::Tuple{::Real, ::Real}},
-        ::Nothing,
-    }
+    intersection_points(geom_a, geom_b, [T::Type])
 
-Return a list of intersection points between two geometries of type GI.Point.
-If no intersection point was possible given geometry extents, returns an empty
-list.
+Return a list of intersection tuple points between two geometries. If no intersection points
+exist, returns an empty list.
+
+## Example
+
+```jldoctest
+import GeoInterface as GI, GeometryOps as GO
+
+line1 = GI.Line([(124.584961,-12.768946), (126.738281,-17.224758)])
+line2 = GI.Line([(123.354492,-15.961329), (127.22168,-14.008696)])
+inter_points = GO.intersection_points(line1, line2)
+
+# output
+1-element Vector{Tuple{Float64, Float64}}:
+ (125.58375366067548, -14.83572303404496)
 """
 intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat =
     _intersection_points(T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 
 
-#= Calculates the list of intersection points between two geometries, inlcuding line
-segments, line strings, linear rings, polygons, and multipolygons. If no intersection points
-were possible given geometry extents or if none are found, return an empty list of
-GI.Points. =#
-function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _False()) where T
+#= Calculates the list of intersection points between two geometries, including line
+segments, line strings, linear rings, polygons, and multipolygons. =#
+function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _True()) where T
     # Initialize an empty list of points
-    result = GI.Point[]
+    result = Tuple{T, T}[]
     # Check if the geometries extents even overlap
     Extents.intersects(GI.extent(a), GI.extent(b)) || return result
     # Create a list of edges from the two input geometries
     edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
-    npoints_a, npoints_b  = length(edges_a), length(edges_b)
-    a_closed = npoints_a > 1 && edges_a[1][1] == edges_a[end][1]
-    b_closed = npoints_b > 1 && edges_b[1][1] == edges_b[end][1]
-    if npoints_a > 0 && npoints_b > 0
-        # Loop over pairs of edges and add any intersection points to results
-        for i in eachindex(edges_a), j in eachindex(edges_b)
-            line_orient, intr1, _ = _intersection_point(T, edges_a[i], edges_b[j]; exact)
-            # TODO: Add in degenerate intersection points when line_over
-            if line_orient == line_cross || line_orient == line_hinge
-                #=
-                Determine if point is on edge (all edge endpoints excluded
-                except for the last edge for an open geometry)
-                =#
-                point, (α, β) = intr1
-                on_a_edge = (!a_closed && i == npoints_a && 0 <= α <= 1) ||
-                    (0 <= α < 1)
-                on_b_edge = (!b_closed && j == npoints_b && 0 <= β <= 1) ||
-                    (0 <= β < 1)
-                if on_a_edge && on_b_edge
-                    push!(result, GI.Point(point))
-                end
-            end
+    # Loop over pairs of edges and add any unique intersection points to results
+    for a_edge in edges_a, b_edge in edges_b
+        line_orient, intr1, intr2 = _intersection_point(T, a_edge, b_edge; exact)
+        line_orient == line_out && continue  # no intersection points
+        pt1, _ = intr1
+        push!(result, pt1)  # if not line_out, there is at least one intersection point
+        if line_orient == line_over # if line_over, there are two intersection points
+            pt2, _ = intr2
+            push!(result, pt2)
         end
     end
+    #= TODO: We might be able to just add unique points with checks on the α and β values
+    returned from `_intersection_point`, but this would be different for curves vs polygons
+    vs multipolygons depending on if the shape is closed. This then wouldn't allow using the
+    `to_edges` functionality.  =# 
+    unique!(sort!(result))
     return result
 end
 
@@ -388,7 +384,7 @@ end
 
 #= If lines defined by (a1, a2) and (b1, b2) meet at one point that is not an endpoint of
 either segment, they form a crossing intersection with a singular intersection point. That 
-point is caculated by finding the fractional distance along each segment the point occurs
+point is calculated by finding the fractional distance along each segment the point occurs
 at (α, β). If the point is too close to an endpoint to be distinct, the point shares a value
 with the endpoint, but with a non-zero and non-one fractional value. If the intersection
 point calculated is outside of the envelope of the two segments due to floating point error,
@@ -411,9 +407,9 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     β = _clamped_frac(Δbax * Δay - Δbay * Δax, a_cross_b, eps(T))
 
     #= Intersection will be where a1 + α * Δa = b1 + β * Δb. However, due to floating point
-    innacurracies, α and β calculations may yeild different intersection points. Average
+    inaccuracies, α and β calculations may yield different intersection points. Average
     both points together to minimize difference from real value, as long as segment isn't 
-    vertical or horizontal as this will almost certianly lead to the point being outside the
+    vertical or horizontal as this will almost certainly lead to the point being outside the
     envelope due to floating point error. Also note that floating point limitations could
     make intersection be endpoint if α≈0 or α≈1.=#
     x = if Δax == 0
