@@ -27,8 +27,8 @@ exactly where the error is.  No other geometry library (to my knowledge) offers 
 GeometryOps also utilizes exact predicates to return geometrically correct answers, which even GEOS does not. 
 
 ## Ongoing research projects
-- CLiMA ice floes
-- Alex Gardner's stuff
+- Subzero.jl (ice floe simulation, OOM better performance than Matlab, 3x better than LibGEOS with more accurate results) using polygon intersection
+- Alex Gardner's stuff (glacier tracking, statistics and forecasting) using polygonize and generic spatial predicates/set ops
 - Anyone else?
 
 ## Citations
