@@ -15,6 +15,19 @@ for name in filter(!in((:var"#eval", :eval, :var"#include", :include)), names(Ge
     @eval using GeometryOps: $name
 end
 
+"""
+    _wrap(geom; crs, calc_extent)
+
+Wraps `geom` in a GI wrapper geometry of its geometry trait.  This allows us
+to attach CRS and extent info to geometry types which otherwise could not hold
+those, like LibGEOS and WKB geometries.
+
+Returns a GI wrapper geometry, for which `parent(result) == geom`.
+"""
+function _wrap(geom; crs=GI.crs(geom), calc_extent = true)
+    return GI.geointerface_geomtype(GI.geomtrait(geom))(geom; crs, extent = GI.extent(geom, calc_extent))
+end
+
 include("buffer.jl")
 include("segmentize.jl")
 include("simplify.jl")

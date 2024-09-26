@@ -6,20 +6,20 @@ require conversion before calling.
 =#
 # ## Polygon set operations
 # ### Difference
-function GO.difference(::GEOS, geom_a, geom_b; target=nothing)
-    return LG.difference(GI.convert(LG, geom_a), GI.convert(LG, geom_b))
+function GO.difference(::GEOS, geom_a, geom_b; target=nothing, calc_extent = false)
+    return _wrap(LG.difference(GI.convert(LG, geom_a), GI.convert(LG, geom_b)); crs = GI.crs(geom_a), calc_extent)
 end
 # ### Union
-function GO.union(::GEOS, geom_a, geom_b; target=nothing)
-    return LG.union(GI.convert(LG, geom_a), GI.convert(LG, geom_b))
+function GO.union(::GEOS, geom_a, geom_b; target=nothing, calc_extent = false)
+    return _wrap(LG.union(GI.convert(LG, geom_a), GI.convert(LG, geom_b)); crs = GI.crs(geom_a), calc_extent)
 end
 # ### Intersection
-function GO.intersection(::GEOS, geom_a, geom_b; target=nothing)
-    return LG.intersection(GI.convert(LG, geom_a), GI.convert(LG, geom_b))
+function GO.intersection(::GEOS, geom_a, geom_b; target=nothing, calc_extent = false)
+    return _wrap(LG.intersection(GI.convert(LG, geom_a), GI.convert(LG, geom_b)); crs = GI.crs(geom_a), calc_extent)
 end
 # ### Symmetric difference
-function GO.symdifference(::GEOS, geom_a, geom_b; target=nothing)
-    return LG.symmetric_difference(GI.convert(LG, geom_a), GI.convert(LG, geom_b))
+function GO.symdifference(::GEOS, geom_a, geom_b; target=nothing, calc_extent = false)
+    return _wrap(LG.symmetric_difference(GI.convert(LG, geom_a), GI.convert(LG, geom_b)); crs = GI.crs(geom_a), calc_extent)
 end
 
 # ## DE-9IM boolean methods
@@ -66,15 +66,20 @@ end
 
 # ## Convex hull
 function GO.convex_hull(::GEOS, geoms)
-    return LG.convexhull(
+    chull = LG.convexhull(
         LG.MultiPoint(
             collect(
                 GO.flatten(
-                    x -> GI.convert(LG, x), 
+                    x -> GI.convert(LG.Point, x), 
                     GI.PointTrait, 
                     geoms
                 )
             )
         )
+    ); 
+    return _wrap(
+        chull;
+        crs = GI.crs(geoms), 
+        calc_extent = false
     )
 end
