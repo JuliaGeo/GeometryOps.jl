@@ -69,6 +69,8 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
     global literate_pages
     vec = []
     process_literate_recursive!(vec, source_path)
+    process_literate_recursive!(vec, joinpath(dirname(@__DIR__), "GeometryOpsCore"))
+    process_literate_recursive!(vec, joinpath(dirname(@__DIR__), "ext"))s
     literate_pages = vec[1][2] # this is a hack to get the pages in the correct order, without an initial "src" folder.  
     # TODO: We should probably fix the above in `process_literate_recursive!`.
 end
@@ -78,7 +80,7 @@ download("https://hackmd.io/kpIqAR8YRJOZQDJjUKVAUQ/download", joinpath(@__DIR__,
 
 # Finally, make the docs!
 makedocs(;
-    modules=[GeometryOps],
+    modules=[GeometryOps, GeometryOps.GeometryOpsCore],
     authors="Anshul Singhvi <anshulsinghvi@gmail.com> and contributors",
     repo="https://github.com/JuliaGeo/GeometryOps.jl/blob/{commit}{path}#{line}",
     sitename="GeometryOps.jl",
