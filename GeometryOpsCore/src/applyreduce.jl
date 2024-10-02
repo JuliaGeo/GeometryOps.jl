@@ -112,7 +112,7 @@ end
 
 ### `_mapreducetasks` - flexible, threaded mapreduce
 
-import Base: nthreads, @threads, @spawn
+import Base.Threads: nthreads, @threads, @spawn
 
 # Threading utility, modified Mason Protters threading PSA
 # run `f` over ntasks, where f receives an AbstractArray/range
