@@ -2,6 +2,17 @@
 
 module GeometryOps
 
+include("../GeometryOpsCore/src/GeometryOpsCore.jl")
+import .GeometryOpsCore
+for name in setdiff(names(GeometryOpsCore, all = true), (:eval, :var"#eval", :include, :var"#include"))
+    # Import all symbols from GeometryOpsCore
+    @eval import GeometryOpsCore: $name
+    # Re-export all exported symbols
+    if Base.isexported(GeometryOpsCore, name)
+        @eval export name
+    end
+end
+
 using GeoInterface
 using GeometryBasics
 using LinearAlgebra, Statistics
