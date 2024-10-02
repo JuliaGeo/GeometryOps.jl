@@ -69,9 +69,15 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
     global literate_pages
     vec = []
     process_literate_recursive!(vec, source_path)
-    process_literate_recursive!(vec, joinpath(dirname(@__DIR__), "GeometryOpsCore"))
-    process_literate_recursive!(vec, joinpath(dirname(@__DIR__), "ext"))
     literate_pages = vec[1][2] # this is a hack to get the pages in the correct order, without an initial "src" folder.  
+    
+    core_stuff = []
+    process_literate_recursive!(core_stuff, joinpath(dirname(@__DIR__), "GeometryOpsCore"))
+    push!(literate_pages, "GeometryOpsCore" => core_stuff[1][2])
+
+    ext_stuff = []
+    process_literate_recursive!(ext_stuff, joinpath(dirname(@__DIR__), "ext"))
+    push!(literate_pages, "Extensions" => ext_stuff[1][2])
     # TODO: We should probably fix the above in `process_literate_recursive!`.
 end
 
