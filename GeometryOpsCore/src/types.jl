@@ -52,9 +52,12 @@ A spherical manifold means that the geometry is on the 3-sphere (but is represen
 ## Extended help
 
 !!! note
-    The traditional definition of spherical coordinates in physics and mathematics, ``r, \theta, \phi``, uses the _colatitude_,
-    that measures angular displacement from the `z`-axis.  Here, we use the geographic definition of longitude and latitude, meaning
-    that `lon` is longitude between -180 and 180, and `lat` is latitude between `-90` (south pole) and `90` (north pole).
+    The traditional definition of spherical coordinates in physics and mathematics, 
+    ``r, \\theta, \\phi``, uses the _colatitude_, that measures angular displacement from the `z`-axis.  
+    
+    Here, we use the geographic definition of longitude and latitude, meaning
+    that `lon` is longitude between -180 and 180, and `lat` is latitude between 
+    `-90` (south pole) and `90` (north pole).
 """
 Base.@kwdef struct Spherical{T} <: Manifold
     radius::T = 6378137.0

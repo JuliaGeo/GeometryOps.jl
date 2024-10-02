@@ -2,14 +2,14 @@
 
 module GeometryOps
 
-include("../GeometryOpsCore/src/GeometryOpsCore.jl")
+include("../GeometryOpsCore/src/GeometryOpsCore.jl") # TODO: replace this with `using GeometryOpsCore`
 import .GeometryOpsCore
 for name in setdiff(names(GeometryOpsCore, all = true), (:eval, :var"#eval", :include, :var"#include"))
     # Import all symbols from GeometryOpsCore
-    @eval import GeometryOpsCore: $name
+    @eval import .GeometryOpsCore: $name
     # Re-export all exported symbols
     if Base.isexported(GeometryOpsCore, name)
-        @eval export name
+        @eval export $name
     end
 end
 

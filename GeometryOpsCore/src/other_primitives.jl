@@ -145,10 +145,6 @@ _reconstruct(::Type{<:GI.FeatureCollectionTrait}, ::GI.FeatureCollectionTrait, f
 _reconstruct(::Type{Target}, trait::GI.PointTrait, geom, components, iter) where Target =
     throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
 
-
-const BasicsGeoms = Union{GB.AbstractGeometry,GB.AbstractFace,GB.AbstractPoint,GB.AbstractMesh,
-    GB.AbstractPolygon,GB.LineString,GB.MultiPoint,GB.MultiLineString,GB.MultiPolygon,GB.Mesh}
-
 """
     rebuild(geom, child_geoms)
 
