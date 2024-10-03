@@ -60,7 +60,7 @@ A spherical manifold means that the geometry is on the 3-sphere (but is represen
     `-90` (south pole) and `90` (north pole).
 """
 Base.@kwdef struct Spherical{T} <: Manifold
-    radius::T = 6378137.0
+    radius::T = 6371008.8
 end
 
 """
