@@ -74,13 +74,13 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
     global source_path
     source_path = joinpath(dirname(@__DIR__), "GeometryOpsCore")
     core_stuff = []
-    process_literate_recursive!(core_stuff, )
+    process_literate_recursive!(core_stuff, source_path)
     push!(literate_pages, "GeometryOpsCore" => core_stuff[1][2])
 
     global source_path
     source_path = joinpath(dirname(@__DIR__), "ext")
     ext_stuff = []
-    process_literate_recursive!(ext_stuff, joinpath(dirname(@__DIR__), "ext"))
+    process_literate_recursive!(ext_stuff, source_path)
     push!(literate_pages, "Extensions" => ext_stuff[1][2])
     # TODO: We should probably fix the above in `process_literate_recursive!`.
 end
