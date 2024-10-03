@@ -1,7 +1,7 @@
 module GeometryOpsLibGEOSExt
 
 import GeometryOps as GO, LibGEOS as LG
-import GeometryOps: GI
+import GeoInterface as GI
 
 import GeometryOps: GEOS, enforce
 
@@ -11,8 +11,8 @@ using GeometryOps
 # However, if you import those from another module (which you would with `all=true`),
 # that creates an ambiguity which causes a warning during precompile/load time.
 # In order to avoid this, we filter out these special functions.
-for name in filter(!in((:var"#eval", :eval, :var"#include", :include)), names(GeometryOps; all = true))
-    @eval using GeometryOps: $name
+for name in filter(!in((:var"#eval", :eval, :var"#include", :include)), names(GeometryOps))
+    @eval import GeometryOps: $name
 end
 
 """

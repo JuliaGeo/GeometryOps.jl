@@ -126,6 +126,3 @@ function _point_in_extent(p, extent::Extents.Extent)
     (x1, x2), (y1, y2) = extent.X, extent.Y
     return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
 end
-
-_linearring(geom::GI.LineString) = GI.LinearRing(parent(geom); extent=geom.extent, crs=geom.crs)
-_linearring(geom::GI.LinearRing) = geom
