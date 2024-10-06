@@ -7,7 +7,7 @@ for name in Base.setdiff(
         Base.union(
             names(GeometryOpsCore), 
             (
-                :flatten, :reconstruct, :rebuild, :unwrap, 
+                :flatten, :reconstruct, :rebuild, :unwrap, :_linearring,
                 :APPLY_KEYWORDS, :THREADED_KEYWORD, :CRS_KEYWORD, :CALC_EXTENT_KEYWORD,
             )
         ),
