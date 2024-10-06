@@ -4,9 +4,14 @@ module GeometryOps
 
 import GeometryOpsCore
 for name in Base.setdiff(
-for name in setdiff(names(GeometryOpsCore, all = true), (:eval, :var"#eval", :include, :var"#include"))
+        Base.union(
+            names(GeometryOpsCore), 
+            (:flatten, :reconstruct, :rebuild, :unwrap, :APPLY_KEYWORDS, :THREADED_KEYWORD, :CRS_KEYWORD, :CALC_EXTENT_KEYWORD,)
+        ),
+        (:eval, :include, :var"#eval", :var"#include"),
+    )
     # Import all symbols from GeometryOpsCore
-    @eval import .GeometryOpsCore: $name
+    @eval import GeometryOpsCore: $name
     # Re-export all exported symbols
     if Base.isexported(GeometryOpsCore, name)
         @eval export $name
