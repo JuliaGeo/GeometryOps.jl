@@ -12,7 +12,7 @@ and that are usable in more than just GeometryOps.
 A manifold is mathematically defined as a topological space that resembles Euclidean space locally.
 
 In GeometryOps (and geodesy more generally), there are three manifolds we care about:
-- [`Linear`](@ref): the 2d plane, a completely Euclidean manifold
+- [`Planar`](@ref): the 2d plane, a completely Euclidean manifold
 - [`Spherical`](@ref): the unit sphere, but one where areas are multiplied by the radius of the Earth.  This is not Euclidean globally, but all map projections attempt to represent the sphere on the Euclidean 2D plane to varying degrees of success.
 - [`Geodesic`](@ref): the ellipsoid, the closest we can come to representing the Earth by a simple geometric shape.  Parametrized by `semimajor_axis` and `inv_flattening`.
 
@@ -20,7 +20,7 @@ Generally, we aim to have `Linear` and `Spherical` be operable everywhere, where
 Currently, those circumstances are `area` and `segmentize`, but this could be extended with time and https://github.com/JuliaGeo/SphericalGeodesics.jl.
 =#
 
-export Linear, Spherical, Geodesic
+export Planar, Spherical, Geodesic
 export TraitTarget
 export BoolsAsTypes, _True, _False, _booltype
 
@@ -31,17 +31,19 @@ A manifold is mathematically defined as a topological space that resembles Eucli
 
 We use the manifold definition to define the space in which an operation should be performed, or where a geometry lies.
 
-Currently we have [`Linear`](@ref), [`Spherical`](@ref), and [`Geodesic`](@ref) manifolds.
+Currently we have [`Planar`](@ref), [`Spherical`](@ref), and [`Geodesic`](@ref) manifolds.
 """
 abstract type Manifold end
 
 """
-    Linear()
+    Planar()
 
-A linear manifold means that the space is completely Euclidean,
-and planar geometry suffices.
+A planar manifold refers to the 2D Euclidean plane.  
+
+Z coordinates may be accepted but will not influence geometry calculations, which 
+are done purely on 2D geometry.  This is the standard "2.5D" model used by e.g. GEOS.
 """
-struct Linear <: Manifold
+struct Planar <: Manifold
 end
 
 """
