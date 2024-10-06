@@ -1,6 +1,6 @@
 name = "GeometryOpsCore"
 uuid = "05efe853-fabf-41c8-927e-7063c8b9f013"
-authors = ["Anshul Singhvi <anshulsinghvi@gmail.com> and contributors"]
+authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "Rafael Schouten <rafaelschouten@gmail.com>", "Skylar Gering <skygering@gmail.com>", "and contributors"]
 version = "0.1.1"
 
 [deps]
