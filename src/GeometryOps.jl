@@ -6,7 +6,10 @@ import GeometryOpsCore
 for name in Base.setdiff(
         Base.union(
             names(GeometryOpsCore), 
-            (:flatten, :reconstruct, :rebuild, :unwrap, :APPLY_KEYWORDS, :THREADED_KEYWORD, :CRS_KEYWORD, :CALC_EXTENT_KEYWORD,)
+            (
+                :flatten, :reconstruct, :rebuild, :unwrap, 
+                :APPLY_KEYWORDS, :THREADED_KEYWORD, :CRS_KEYWORD, :CALC_EXTENT_KEYWORD,
+            )
         ),
         (:eval, :include, :var"#eval", :var"#include"),
     )
