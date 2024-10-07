@@ -60,7 +60,7 @@ jobs:
         with:
           version: '1'
       - name: Build and add versions
-        run: julia --project=docs -e 'using Pkg; Pkg.add([PackageSpec(path = "."), PackageSpec(path = joinpath(".", "GeometryOpsCore")), PackageSpec(name = "GeoMakie", rev = "master")])'
+        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(path = "."), PackageSpec(path = joinpath(".", "GeometryOpsCore"))]); Pkg.add([PackageSpec(name = "GeoMakie", rev = "master")])'
       - uses: julia-actions/julia-docdeploy@v1
         with:
           install-package: false
