@@ -195,7 +195,7 @@ _segmentize(method, geom) = _segmentize(method, geom, GI.trait(geom))
 This is a method which performs the common functionality for both linear and geodesic algorithms, 
 and calls out to the "kernel" function which we've defined per linesegment.
 =#
-function _segmentize(method::Union{Linear, Spherical}, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait}; max_distance)
+function _segmentize(method::Union{Planar, Spherical}, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait}; max_distance)
     first_coord = GI.getpoint(geom, 1)
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
     new_coords = NTuple{2, Float64}[]
@@ -209,7 +209,7 @@ function _segmentize(method::Union{Linear, Spherical}, geom, T::Union{GI.LineStr
     return rebuild(geom, new_coords)
 end
 
-function _fill_linear_kernel!(::Linear, new_coords::Vector, x1, y1, x2, y2; max_distance)
+function _fill_linear_kernel!(::Planar, new_coords::Vector, x1, y1, x2, y2; max_distance)
     dx, dy = x2 - x1, y2 - y1
     distance = hypot(dx, dy) # this is a more stable way to compute the Euclidean distance
     if distance > max_distance
