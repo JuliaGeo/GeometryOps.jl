@@ -169,12 +169,12 @@ This is useful for plotting geometries with a limited number of vertices, or for
 Returns a geometry of similar type to the input geometry, but resampled.
 """
 function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False())
-    return segmentize(Linear(), geom; threaded = _booltype(threaded))
+    return segmentize(Planar(), geom; threaded = _booltype(threaded))
 end
 
 # allow three-arg method as well, just in case
-segmentize(geom, max_distance::Real; threaded = _False()) = segmentize(Linear(), geom, max_distance; threaded)
-segmentize(method::Manifold, geom, max_distance::Real; threaded = _False()) = segmentize(Linear(), geom; max_distance, threaded)
+segmentize(geom, max_distance::Real; threaded = _False()) = segmentize(Planar(), geom, max_distance; threaded)
+segmentize(method::Manifold, geom, max_distance::Real; threaded = _False()) = segmentize(Planar(), geom; max_distance, threaded)
 
 # generic implementation
 function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False())
@@ -184,9 +184,9 @@ function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, 
 end
 
 function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = _False())
-    @warn "`segmentize(method::$(typeof(method)), geom) is deprecated; use `segmentize($(method isa LinearSegments ? "Linear()" : "Geodesic()"), geom; max_distance, threaded) instead!"  maxlog=3
+    @warn "`segmentize(method::$(typeof(method)), geom) is deprecated; use `segmentize($(method isa LinearSegments ? "Planar()" : "Geodesic()"), geom; max_distance, threaded) instead!"  maxlog=3
     @assert method.max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
-    new_method = method isa LinearSegments ? Linear() : Geodesic()
+    new_method = method isa LinearSegments ? Planar() : Geodesic()
     segmentize(new_method, geom; max_distance = method.max_distance, threaded)
 end
 
