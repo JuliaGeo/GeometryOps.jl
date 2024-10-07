@@ -21,3 +21,8 @@ pu = GI.Polygon([GI.LinearRing([(0, 0), (0, 1), (1, 1), (0, 0)])])
     @test_nowarn joined_df = FlexiJoins.innerjoin((points_df, poly_df), by_pred(:geometry, GO.within, :geometry))
 end
 
+@testset "All Predicates" begin
+    for func in [GO.contains, GO.within, GO.intersects, GO.disjoint, GO.touches, GO.overlaps, GO.covers, GO.coveredby, GO.equals]
+        @test_nowarn FlexiJoins.innerjoin((poly_df, points_df), by_pred(:geometry, func, :geometry))
+    end
+end
