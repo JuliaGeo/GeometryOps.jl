@@ -3,23 +3,14 @@
 module GeometryOps
 
 import GeometryOpsCore
-for name in Base.setdiff(
-        Base.union(
-            names(GeometryOpsCore), 
-            (
-                :flatten, :reconstruct, :rebuild, :unwrap, :_linearring,
-                :APPLY_KEYWORDS, :THREADED_KEYWORD, :CRS_KEYWORD, :CALC_EXTENT_KEYWORD,
-            )
-        ),
-        (:eval, :include, :var"#eval", :var"#include"),
-    )
-    # Import all symbols from GeometryOpsCore
-    @eval import GeometryOpsCore: $name
-    # Re-export all exported symbols
-    if Base.isexported(GeometryOpsCore, name)
-        @eval export $name
-    end
-end
+import GeometryOpsCore: 
+                Manifold, Planar, Spherical, Geodesic,
+                BoolsAsTypes, _True, _False, _booltype,
+                apply, applyreduce, 
+                flatten, reconstruct, rebuild, unwrap, _linearring,
+                APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
+
+export Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
 
 using GeoInterface
 using GeometryBasics
