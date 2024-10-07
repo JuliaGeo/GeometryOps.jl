@@ -88,6 +88,20 @@ function _union(
     return polys
 end
 
+function _union(
+    ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.PolygonTrait, poly_b;
+    exact, kwargs...,
+) where T
+    return GI.MultiPolygon(_union(
+        TraitTarget(GI.PolygonTrait()), T, 
+        GI.trait(poly_a), poly_a, 
+        GI.trait(poly_b), poly_b;
+        exact, kwargs...,
+    ))
+end
+
 # # Helper functions for Unions with Greiner and Hormann Polygon Clipping
 
 #= When marking the crossing status of a delayed crossing, the chain start point is crossing
@@ -218,7 +232,7 @@ function _union(
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
         multipoly_b = fix_multipoly(multipoly_b)
     end
-    polys = [tuples(poly_a, T)]
+    polys = [fix(tuples(poly_a, T); corrections = (PolygonContents(), ))]
     for poly_b in GI.getpolygon(multipoly_b)
         if intersects(polys[1], poly_b)
             # If polygons intersect and form a new polygon, swap out polygon
@@ -230,16 +244,36 @@ function _union(
             end
         else
             # If they don't intersect, poly_b is now a part of the union as its own polygon
-            push!(polys, tuples(poly_b, T))
+            push!(polys, fix(tuples(poly_b, T); corrections = (PolygonContents(), )))
         end
     end
     return polys
+end
+function _union(
+    target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+) where T
+    return GI.MultiPolygon(_union(
+        TraitTarget(GI.PolygonTrait()), T, 
+        GI.trait(poly_a), poly_a, 
+        GI.trait(multipoly_b), multipoly_b;
+        fix_multipoly, kwargs...,
+    ))
 end
 
 #= Multipolygon with polygon union is equivalent to taking the union of the polygon with the
 multipolygon and thus simply switches the order of operations and calls the above method. =#
 _union(
     target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.PolygonTrait, poly_b;
+    kwargs...,
+) where T = union(poly_b, multipoly_a; target, kwargs...)
+
+_union(
+    target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     kwargs...,
@@ -266,6 +300,20 @@ function _union(
         multipolys = GI.MultiPolygon(polys)
     end
     return polys
+end
+
+function _union(
+    target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
+    ::GI.MultiPolygonTrait, multipoly_a,
+    ::GI.MultiPolygonTrait, multipoly_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+) where T
+    return GI.MultiPolygon(_union( # this is the method directly above, and returns a vector of polygons
+        TraitTarget{GI.PolygonTrait}(), T, 
+        GI.MultiPolygonTrait(), multipoly_a, 
+        GI.MultiPolygonTrait(), multipoly_b; 
+        fix_multipoly, kwargs...
+    ))
 end
 
 # Many type and target combos aren't implemented
