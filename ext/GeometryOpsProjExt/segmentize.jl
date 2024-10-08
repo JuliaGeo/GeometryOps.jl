@@ -1,6 +1,6 @@
 # This holds the `segmentize` geodesic functionality.
 
-import GeometryOps: GeodesicSegments, _fill_linear_kernel!
+import GeometryOps: GeodesicSegments, _segmentize, _fill_linear_kernel!
 import Proj
 
 function GeometryOps.GeodesicSegments(; max_distance, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563, geodesic::Proj.geod_geodesic = Proj.geod_geodesic(equatorial_radius, flattening))
@@ -10,7 +10,7 @@ end
 # This is the same method as in `transformations/segmentize.jl`,
 # but it constructs a Proj geodesic line every time.
 # Maybe this should be better...
-function _segmentize(method::Geodesic, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait}; max_distance)
+function _segmentize(method::Geodesic, geom, ::Union{GI.LineStringTrait, GI.LinearRingTrait}; max_distance)
     proj_geodesic = Proj.geod_geodesic(method.equatorial_radius, method.flattening)
     first_coord = GI.getpoint(geom, 1)
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
