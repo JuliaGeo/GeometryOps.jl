@@ -2,16 +2,16 @@
 
 module GeometryOps
 
-include("../GeometryOpsCore/src/GeometryOpsCore.jl") # TODO: replace this with `using GeometryOpsCore`
-import .GeometryOpsCore
-for name in setdiff(names(GeometryOpsCore, all = true), (:eval, :var"#eval", :include, :var"#include"))
-    # Import all symbols from GeometryOpsCore
-    @eval import .GeometryOpsCore: $name
-    # Re-export all exported symbols
-    if Base.isexported(GeometryOpsCore, name)
-        @eval export $name
-    end
-end
+import GeometryOpsCore
+import GeometryOpsCore: 
+                TraitTarget,
+                Manifold, Planar, Spherical, Geodesic,
+                BoolsAsTypes, _True, _False, _booltype,
+                apply, applyreduce, 
+                flatten, reconstruct, rebuild, unwrap, _linearring,
+                APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
+
+export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
 
 using GeoInterface
 using GeometryBasics
