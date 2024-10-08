@@ -169,7 +169,7 @@ This is useful for plotting geometries with a limited number of vertices, or for
 Returns a geometry of similar type to the input geometry, but resampled.
 """
 function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False())
-    return segmentize(Planar(), geom; threaded = _booltype(threaded))
+    return segmentize(Planar(), geom; max_distance, threaded = _booltype(threaded))
 end
 
 # allow three-arg method as well, just in case
