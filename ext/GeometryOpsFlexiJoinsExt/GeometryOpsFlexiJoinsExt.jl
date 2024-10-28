@@ -28,9 +28,12 @@ FlexiJoins.supports_mode(::FlexiJoins.Mode.Tree, ::FlexiJoins.ByPred{F}, datas) 
 
 FlexiJoins.prepare_for_join(::FlexiJoins.Mode.Tree, X, cond::FlexiJoins.ByPred{<: GO_DE9IM_FUNCS}) = (X, SortTileRecursiveTree.STRtree(map(cond.Rf, X)))
 function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{F}, ix_a, a, (B, tree)::Tuple, multi::typeof(identity)) where F <: GO_DE9IM_FUNCS
+    # Implementation note:
+    # here, `a` is a row, and `b` is the full table.
+    # We extract the relevant columns using cond.Lf and cond.Rf.
     idxs = SortTileRecursiveTree.query(tree, cond.Lf(a))
     intersecting_idxs = filter!(idxs) do idx
-        cond.pred(a, cond.Rf(B[idx]))
+        cond.pred(cond.Lf(a), cond.Rf(B[idx]))
     end
     return intersecting_idxs
 end
