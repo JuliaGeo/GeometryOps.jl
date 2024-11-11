@@ -50,18 +50,18 @@ using ..TestHelpers
 end
 
 lr = GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
-@testset_implementations "LinearSegments" begin
+@testset_implementations "Planar" begin
     ct = GO.centroid($lr)
     ar = GO.area($lr)
     for max_distance in exp10.(LinRange(log10(0.01), log10(1), 10))
-        segmentized = GO.segmentize(GO.Linear(), $lr; max_distance)
+        segmentized = GO.segmentize(GO.Planar(), $lr; max_distance)
         @test all(GO.centroid(segmentized) .≈ ct)
         @test GO.area(segmentized) ≈ ar
     end
 end
 
 lr = GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
-@testset_implementations "GeodesicSegments" begin
+@testset_implementations "Geodesic" begin
     for max_distance in exp10.(LinRange(log10(0.01), log10(1), 10)) .* 900
         @test_nowarn segmentized = GO.segmentize(GO.Geodesic(), $lr; max_distance)
     end
