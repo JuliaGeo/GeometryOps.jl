@@ -11,7 +11,7 @@ end
 # but it constructs a Proj geodesic line every time.
 # Maybe this should be better...
 function _segmentize(method::Geodesic, geom, ::Union{GI.LineStringTrait, GI.LinearRingTrait}; max_distance)
-    proj_geodesic = Proj.geod_geodesic(method.equatorial_radius, method.flattening)
+    proj_geodesic = Proj.geod_geodesic(method.semimajor_axis #= same thing as equatorial radius =#, 1/method.inv_flattening)
     first_coord = GI.getpoint(geom, 1)
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
     new_coords = NTuple{2, Float64}[]
