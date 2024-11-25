@@ -50,6 +50,14 @@ a point, an edge, or area for points, lines, and polygons/multipolygons
 respectively, without being contained. 
 =#
 
+
+const OVERLAPS_POINT_ALLOWS = (in_allow = true, on_allow = true, out_allow = true)
+const OVERLAPS_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = true)
+const OVERLAPS_POLYGON_ALLOWS = (in_allow = true, on_allow = true, out_allow = true)
+const OVERLAPS_REQUIRES = (in_require = true, on_require = false, out_require = false)
+const OVERLAPS_EXACT = (exact = _False(),)
+
+
 """
     overlaps(geom1, geom2)::Bool
 
@@ -75,6 +83,14 @@ overlaps(geom1, geom2)::Bool = overlaps(
     GI.trait(geom2),
     geom2,
 )
+
+
+# # Convert features to geometries
+overlaps(::GI.FeatureTrait, g1, ::Any, g2) = overlaps(GI.geometry(g1), g2)
+overlaps(::Any, g1, t2::GI.FeatureTrait, g2) = overlaps(g1, GI.geometry(g2))
+overlaps(::FeatureTrait, g1, ::FeatureTrait, g2) = overlaps(GI.geometry(g1), GI.geometry(g2))
+
+
 
 """
     overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2)::Bool
@@ -132,35 +148,56 @@ If the curves overlap, meaning that at least one edge of each curve overlaps,
 return true. Else false.
 """
 function overlaps(
-    ::Union{GI.LineStringTrait, GI.LinearRing}, line1,
-    ::Union{GI.LineStringTrait, GI.LinearRing}, line2,
+    ::Union{GI.LineStringTrait, GI.LineTrait}, line1,
+    ::Union{GI.LineStringTrait, GI.LineTrait}, line2,
 )
-    edges_a, edges_b = map(sort! ∘ to_edges, (line1, line2))
-    for edge_a in edges_a
-        for edge_b in edges_b
-            _overlaps(edge_a, edge_b) && return true
-        end
-    end
-    return false
+    return !equals(line1, line2) && _line_curve_process(
+        line1, line2;
+        OVERLAPS_CURVE_ALLOWS...,
+        OVERLAPS_REQUIRES...,
+        OVERLAPS_EXACT...,
+        closed_line = false,
+        closed_curve = false,
+    ) 
 end
 
-"""
-    overlaps(
-        trait_a::GI.PolygonTrait, poly_a,
-        trait_b::GI.PolygonTrait, poly_b,
-    )::Bool
-
-If the two polygons intersect with one another, but are not equal, return true.
-Else false.
-"""
 function overlaps(
-    trait_a::GI.PolygonTrait, poly_a,
-    trait_b::GI.PolygonTrait, poly_b,
+    ::GI.LinearRingTrait, ring1,
+    ::Union{GI.LineStringTrait, GI.LineTrait}, line2,
 )
-    edges_a, edges_b = map(sort! ∘ to_edges, (poly_a, poly_b))
-    return _line_intersects(edges_a, edges_b) &&
-        !equals(trait_a, poly_a, trait_b, poly_b)
+    return  !equals(ring1, line2) && _line_curve_process(
+        ring1, line2;
+        OVERLAPS_CURVE_ALLOWS...,
+        OVERLAPS_REQUIRES...,
+        OVERLAPS_EXACT...,
+        closed_line = true,
+        closed_curve = false,
+    )
 end
+
+function overlaps(
+    ::Union{GI.LineStringTrait, GI.LineTrait}, line1,
+    ::GI.LinearRingTrait, ring2,
+)
+    return !equals(line1, ring2) && _line_curve_process(
+        line1, ring2; OVERLAPS_CURVE_ALLOWS..., OVERLAPS_REQUIRES..., OVERLAPS_EXACT...,
+        closed_line = false,
+        closed_curve = true,
+    )
+end
+
+function overlaps(
+    ::GI.PolygonTrait, poly1,
+    ::GI.PolygonTrait, poly2,
+)
+    return !equals(poly1, poly2) && _polygon_polygon_process(
+        poly1, poly2; 
+        OVERLAPS_POLYGON_ALLOWS..., 
+        OVERLAPS_REQUIRES..., 
+        OVERLAPS_EXACT...,
+    ) 
+end
+
 
 """
     overlaps(
