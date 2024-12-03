@@ -138,6 +138,10 @@ outside of the other line, return true. Else false.
 overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line) =
     _overlaps((a1, a2), (b1, b2))
 
+# The code below is more robust, 
+# but fails when a linestring is contained within another linestring.
+# TODO: make this work better, maybe with full de9im support...
+#=
 """
     overlaps(
         ::Union{GI.LineStringTrait, GI.LinearRing}, line1,
@@ -184,6 +188,22 @@ function overlaps(
         closed_line = false,
         closed_curve = true,
     )
+end
+
+=#
+# This is the old code which was previously working.
+
+function overlaps(
+    ::Union{GI.LineStringTrait, GI.LinearRingTrait}, line1,
+    ::Union{GI.LineStringTrait, GI.LinearRingTrait}, line2,
+)
+    edges_a, edges_b = map(sort! ∘ to_edges, (line1, line2))
+    for edge_a in edges_a
+        for edge_b in edges_b
+            _overlaps(edge_a, edge_b) && return true
+        end
+    end
+    return false
 end
 
 function overlaps(
