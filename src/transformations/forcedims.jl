@@ -30,7 +30,7 @@ If it does, then the z value will be kept.
 function forcexyz(geom, z = 0)
     return apply(GI.PointTrait(), geom) do point
         x, y = GI.x(point), GI.y(point)
-        z = GI.is3d(geom) ? GI.z(point) : z
+        z = GI.is3d(geom) ? GI.z(point) : convert(typeof(x), z)
         (x, y, z)
     end
 end
