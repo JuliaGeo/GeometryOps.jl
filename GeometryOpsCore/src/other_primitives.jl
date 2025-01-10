@@ -159,21 +159,10 @@ on geometries from other packages and specify how to rebuild them.
 rebuild(geom, child_geoms; kw...) = rebuild(GI.trait(geom), geom, child_geoms; kw...)
 function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom), extent=nothing)
     T = GI.geointerface_geomtype(trait)
-    haveZ = (GI.is3d(child) for child in child_geoms)
-    haveM = (GI.ismeasured(child) for child in child_geoms)
-
-    consistentZ = length(child_geoms) == 1 ? true : all(==(first(haveZ)), haveZ)
-    consistentM = length(child_geoms) == 1 ? true : all(==(first(haveM)), haveM)
-
-    if !consistentZ || !consistentM
-        @show consistentZ consistentM
-        @show GI.is3d.(child_geoms)
-        @show GI.ismeasured.(child_geoms)
-        throw(ArgumentError("child geometries do not have consistent 3d or measure attributes."))
-    end
-
-    hasZ = first(haveZ)
-    hasM = first(haveM)
+    # Check the dimensionality of the first child geometry, since it may have changed
+    # NOTE that without this, 2D to 3D conversions will fail
+    hasZ = GI.is3d(first(child_geoms))
+    hasM = GI.ismeasured(first(child_geoms))
 
     return T{hasZ,hasM}(child_geoms; crs, extent)
 end
