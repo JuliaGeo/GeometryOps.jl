@@ -19,7 +19,7 @@ polygonize
 
 Here's a basic example, using the `Makie.peaks()` function.  First, let's investigate the nature of the function:
 ```@example polygonize
-using Makie, GeometryOps
+using Makie, GeometryOps, GeoInterfaceMakie, CairoMakie
 n = 49
 xs, ys = LinRange(-3, 3, n), LinRange(-3, 3, n)
 zs = Makie.peaks(n)
