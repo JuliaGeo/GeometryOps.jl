@@ -4,6 +4,3 @@
 # via an extension, but there is no native-Julia implementation for them.
 
 function symdifference end
-function buffer end
-function convexhull end
-function concavehull end

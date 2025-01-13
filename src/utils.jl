@@ -40,7 +40,7 @@ import GeometryOps as GO, GeoInterface as GI
 poly = GI.Polygon([[(-2.275543, 53.464547), (-2.275543, 53.489271), (-2.215118, 53.489271), (-2.215118, 53.464547), (-2.275543, 53.464547)]])
 GO.polygon_to_line(poly)
 # output
-GeoInterface.Wrappers.LineString{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}([(-2.275543, 53.464547), (-2.275543, 53.489271), (-2.215118, 53.489271), (-2.215118, 53.464547), (-2.275543, 53.464547)], nothing, nothing)
+GeoInterface.Wrappers.LineString{false, false}([(-2.275543, 53.464547), … (3) … , (-2.275543, 53.464547)])
 ```
 """
 function polygon_to_line(poly)

@@ -113,6 +113,7 @@ makedocs(;
         "Explanations" => [
             "Paradigms" => "explanations/paradigms.md",
             "Peculiarities" => "explanations/peculiarities.md",
+            "Manifolds" => "explanations/manifolds.md",
         ],
         "Source code" => literate_pages,
     ],

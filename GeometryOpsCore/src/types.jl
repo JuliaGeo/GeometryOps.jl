@@ -51,6 +51,8 @@ end
 
 A spherical manifold means that the geometry is on the 3-sphere (but is represented by 2-D longitude and latitude).  
 
+By default, the radius is defined as the mean radius of the Earth, `6371008.8 m`.
+
 ## Extended help
 
 !!! note
@@ -74,7 +76,7 @@ and `inv_flattening` (``1/f``).
 Usually, this is only relevant for area and segmentization calculations.  It becomes more relevant as one grows closer to the poles (or equator).
 """
 Base.@kwdef struct Geodesic{T} <: Manifold
-    semimajor_axis::T = 6378137,0
+    semimajor_axis::T = 6378137.0
     inv_flattening::T = 298.257223563
 end
 

@@ -27,6 +27,7 @@ include("helpers.jl")
 @safetestset "Simplify" begin include("transformations/simplify.jl") end
 @safetestset "Segmentize" begin include("transformations/segmentize.jl") end
 @safetestset "Transform" begin include("transformations/transform.jl") end
+@safetestset "Force Dimensions" begin include("transformations/forcedims.jl") end
 @safetestset "Geometry Correction" begin include("transformations/correction/geometry_correction.jl") end
 @safetestset "Closed Rings" begin include("transformations/correction/closed_ring.jl")  end
 @safetestset "Intersecting Polygons" begin include("transformations/correction/intersecting_polygons.jl") end

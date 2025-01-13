@@ -343,9 +343,12 @@ using Base.Threads: nthreads, @threads, @spawn
     return mapreduce(fetch, vcat, tasks)
 end
 #=
-Here we use the compiler directive `@assume_effects :foldable` to force the compiler
+Here we used to use the compiler directive `@assume_effects :foldable` to force the compiler
 to lookup through the closure. This alone makes e.g. `flip` 2.5x faster!
+
+But it caused inference to fail, so we've removed it.  No effect on runtime so far as we can tell, 
+at least in Julia 1.11.
 =#
-Base.@assume_effects :foldable @inline function _maptasks(f::F, taskrange, threaded::_False)::Vector where F
+@inline function _maptasks(f::F, taskrange, threaded::_False)::Vector where F
     map(f, taskrange)
 end
