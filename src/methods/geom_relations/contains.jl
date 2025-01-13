@@ -1,6 +1,6 @@
 # # Contains
 
-export contains
+# do not export to avoid conflict with Base.contains
 
 #=
 ## What is contains?
