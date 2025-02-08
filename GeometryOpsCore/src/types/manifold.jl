@@ -4,6 +4,11 @@
 
 A manifold is mathematically defined as a topological space that resembles Euclidean space locally.
 
+In GeometryOps, this represents the domain or space on which your geometries live.  
+Manifolds can be accessible via the crs info of the geometry - OR can be specified explicitly.
+For example you may pass planar geometry around using GeoJSON, but because the spec says GeoJSON is only geographic,
+GeometryOps will interpret GeoJSON geometries as geographic on WGS84, unless told otherwise.
+
 In GeometryOps (and geodesy more generally), there are three manifolds we care about:
 - [`Planar`](@ref): the 2d plane, a completely Euclidean manifold
 - [`Spherical`](@ref): the unit sphere, but one where areas are multiplied by the radius of the Earth.  This is not Euclidean globally, but all map projections attempt to represent the sphere on the Euclidean 2D plane to varying degrees of success.

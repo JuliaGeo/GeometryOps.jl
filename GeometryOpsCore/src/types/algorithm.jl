@@ -5,6 +5,13 @@ An `Algorithm` is a type that describes the algorithm used to perform some [`Ope
 
 An algorithm may be associated with one or many [`Manifold`](@ref)s.  It may either have the manifold as a field, or have it as a static parameter (e.g. `struct GEOS <: Manifold{Planar}`).
 
+
+Algorithms are:
+* Ways to perform an operation
+* For example: LHuilier, Bessel, Ericsson for spherical area
+* May be manifold agnostic (like simplification) or restrictive (like GEOS only works on planar, PROJ algorithm for arclength and area only works on geodesic)
+* May or may not carry manifolds around, but manifold should always be accessible from manifold(alg) - it's not necessary that fixed manifold args can skip carrying the manifold around, eg in the case of Proj{Geodesic}.
+
 =#
 
 abstract type Algorithm{M <: Manifold} end
