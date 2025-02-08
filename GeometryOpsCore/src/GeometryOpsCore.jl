@@ -18,7 +18,13 @@ using Tables
 using DataAPI
 
 include("keyword_docs.jl")
-include("types.jl")
+
+include("types/manifold.jl")
+include("types/algorithm.jl")
+include("types/operation.jl")
+include("types/exceptions.jl")
+include("types/booltypes.jl")
+include("types/traittarget.jl")
 
 include("apply.jl")
 include("applyreduce.jl")
