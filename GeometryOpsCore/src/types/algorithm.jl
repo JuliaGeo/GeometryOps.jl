@@ -20,6 +20,14 @@ abstract type ManifoldIndependentAlgorithm{M <: Manifold} <: Algorithm{M} end
 
 abstract type SingleManifoldAlgorithm{M <: Manifold} <: Algorithm{M} end
 
+struct NoAlgorithm{M <: Manifold} <: Algorithm{M} 
+    m::M
+end
+
+NoAlgorithm() = NoAlgorithm(Planar()) # TODO: add a NoManifold or AutoManifold type?
+# Maybe AutoManifold
+# and then we have DD.format like materialization  
+
 function (Alg::Type{<: SingleManifoldAlgorithm{M}})(m::M; kwargs...) where {M}
     # successful - the algorithm is designed for this manifold
     # in this case, just return `Alg(; kwargs...)`

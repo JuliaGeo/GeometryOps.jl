@@ -40,7 +40,3 @@ abstract type Operation{Alg <: Algorithm} end
 struct XPlusOneOperation <: Operation{NoAlgorithm}
     x::Int
 end
-
-struct XPlusTwoOperation <: Operation{NoAlgorithm}
-    x::Int
-end
