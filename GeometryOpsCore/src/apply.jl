@@ -352,3 +352,24 @@ at least in Julia 1.11.
 @inline function _maptasks(f::F, taskrange, threaded::_False)::Vector where F
     map(f, taskrange)
 end
+
+@inline function _maptasks(f::F, taskrange, threaded::_TrueButStable)::Vector where F
+    ntasks = length(taskrange)
+    # Customize this as needed.
+    # More tasks have more overhead, but better load balancing
+    tasks_per_thread = 2
+    chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
+    # partition the range into chunks
+    task_chunks = Iterators.partition(taskrange, chunk_size)
+    # Map over the chunks
+    tasks = map(task_chunks) do chunk
+        # Spawn a task to process this chunk
+        StableTasks.@spawn begin
+            # Where we map `f` over the chunk indices
+            map(f, chunk)
+        end
+    end
+
+    # Finally we join the results into a new vector
+    return mapreduce(fetch, vcat, tasks)
+end

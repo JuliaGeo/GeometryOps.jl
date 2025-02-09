@@ -6,7 +6,7 @@ import GeoInterface
 import GeoInterface as GI
 import GeoInterface: Extents
 
-# Import all names from GeoInterface and Extents, so users can do `GO.extent` or `GO.trait`.
+# Import all exported names from GeoInterface and Extents, so users can do `GO.extent` or `GO.trait`.
 for name in names(GeoInterface)
     @eval using GeoInterface: $name
 end
@@ -16,6 +16,7 @@ end
 
 using Tables
 using DataAPI
+import StableTasks
 
 include("keyword_docs.jl")
 
