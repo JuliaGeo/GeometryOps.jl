@@ -1,15 +1,13 @@
-#=
-# Types
-
-This defines core types that the GeometryOps ecosystem uses, 
-and that are usable in more than just GeometryOps.
-
-=#
 
 #=
-## `Manifold`
+# `Manifold`s
 
 A manifold is mathematically defined as a topological space that resembles Euclidean space locally.
+
+In GeometryOps, this represents the domain or space on which your geometries live.  
+Manifolds can be accessible via the crs info of the geometry - OR can be specified explicitly.
+For example you may pass planar geometry around using GeoJSON, but because the spec says GeoJSON is only geographic,
+GeometryOps will interpret GeoJSON geometries as geographic on WGS84, unless told otherwise.
 
 In GeometryOps (and geodesy more generally), there are three manifolds we care about:
 - [`Planar`](@ref): the 2d plane, a completely Euclidean manifold
@@ -20,10 +18,7 @@ Generally, we aim to have `Linear` and `Spherical` be operable everywhere, where
 Currently, those circumstances are `area` and `segmentize`, but this could be extended with time and https://github.com/JuliaGeo/SphericalGeodesics.jl.
 =#
 
-export Planar, Spherical, Geodesic
-export TraitTarget
-export BoolsAsTypes, _True, _False, _booltype
-
+export Manifold, Planar, Spherical, Geodesic
 """
     abstract type Manifold
 
@@ -50,8 +45,6 @@ end
     Spherical(; radius)
 
 A spherical manifold means that the geometry is on the 3-sphere (but is represented by 2-D longitude and latitude).  
-
-By default, the radius is defined as the mean radius of the Earth, `6371008.8 m`.
 
 ## Extended help
 
@@ -80,87 +73,19 @@ Base.@kwdef struct Geodesic{T} <: Manifold
     inv_flattening::T = 298.257223563
 end
 
-#=
-## `TraitTarget`
 
-This struct holds a trait parameter or a union of trait parameters.
-It's essentially a way to construct unions.
-=#
+# specifically for manifolds
+abstract type EllipsoidParametrization end
 
-"""
-    TraitTarget{T}
+struct SemimajorAxisInvFlattening{T} <: EllipsoidParametrization
+    semimajor_axis::T
+    inv_flattening::T
+end
 
-This struct holds a trait parameter or a union of trait parameters.
+# this should be the full Ellipsoid parametrization from 
+struct FullEllipsoidParametrization{T} <: EllipsoidParametrization
+    semimajor_axis::T
+    semiminor_axis::T
+    inv_flattening::T
+end
 
-It is primarily used for dispatch into methods which select trait levels, 
-like `apply`, or as a parameter to `target`.
-
-## Constructors
-```julia
-TraitTarget(GI.PointTrait())
-TraitTarget(GI.LineStringTrait(), GI.LinearRingTrait()) # and other traits as you may like
-TraitTarget(TraitTarget(...))
-# There are also type based constructors available, but that's not advised.
-TraitTarget(GI.PointTrait)
-TraitTarget(Union{GI.LineStringTrait, GI.LinearRingTrait})
-# etc.
-```
-
-"""
-struct TraitTarget{T} end
-TraitTarget(::Type{T}) where T = TraitTarget{T}()
-TraitTarget(::T) where T<:GI.AbstractTrait = TraitTarget{T}()
-TraitTarget(::TraitTarget{T}) where T = TraitTarget{T}()
-TraitTarget(::Type{<:TraitTarget{T}}) where T = TraitTarget{T}()
-TraitTarget(traits::GI.AbstractTrait...) = TraitTarget{Union{map(typeof, traits)...}}()
-
-
-Base.in(::Trait, ::TraitTarget{Target}) where {Trait <: GI.AbstractTrait, Target} = Trait <: Target
-
-
-
-#=
-## `BoolsAsTypes`
-
-In `apply` and `applyreduce`, we pass `threading` and `calc_extent` as types, not simple boolean values.  
-
-This is to help compilation - with a type to hold on to, it's easier for 
-the compiler to separate threaded and non-threaded code paths.
-
-Note that if we didn't include the parent abstract type, this would have been really 
-type unstable, since the compiler couldn't tell what would be returned!
-
-We had to add the type annotation on the `_booltype(::Bool)` method for this reason as well.
-
-TODO: should we switch to `Static.jl`?
-=#
-
-"""
-    abstract type BoolsAsTypes
-
-"""
-abstract type BoolsAsTypes end
-
-"""
-    struct _True <: BoolsAsTypes
-
-A struct that means `true`.
-"""
-struct _True <: BoolsAsTypes end
-
-"""
-    struct _False <: BoolsAsTypes
-
-A struct that means `false`.
-"""
-struct _False <: BoolsAsTypes end
-
-"""
-    _booltype(x)
-
-Returns a [`BoolsAsTypes`](@ref) from `x`, whether it's a boolean or a BoolsAsTypes.
-"""
-function _booltype end
-
-@inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
-@inline _booltype(x::BoolsAsTypes)::BoolsAsTypes = x
