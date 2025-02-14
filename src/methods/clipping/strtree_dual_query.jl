@@ -1,3 +1,10 @@
+"""
+    STRDualQuery
+
+A module for performing dual-tree traversals on STRtrees to find potentially overlapping geometry pairs.
+
+The main entry point is `maybe_overlapping_geoms_and_query_lists_in_order`.
+"""
 module STRDualQuery
 
 using SortTileRecursiveTree
@@ -6,7 +13,7 @@ using SortTileRecursiveTree: STRtree, STRNode, STRLeafNode
 using GeoInterface.Extents
 
 # first define AbstractTrees interface for STRtree
-# include("strtree_abstracttrees.jl")
+include("strtree_abstracttrees.jl")
 
 """
     maybe_overlapping_geoms_and_query_lists_in_order(tree_a::STRtree, tree_b::STRtree)

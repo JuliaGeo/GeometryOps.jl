@@ -156,7 +156,7 @@ circle_difference_suite = circle_suite["difference"] = BenchmarkGroup(["title:Ci
 circle_intersection_suite = circle_suite["intersection"] = BenchmarkGroup(["title:Circle intersection", "subtitle:Tested on a regular circle"])
 circle_union_suite = circle_suite["union"] = BenchmarkGroup(["title:Circle union", "subtitle:Tested on a regular circle"])
 
-n_points_values = round.(Int, exp10.(LinRange(1, 4, 10)))
+n_points_values = round.(Int, exp10.(LinRange(1, 6, 15)))
 @time for n_points in n_points_values
     circle = GI.Wrappers.Polygon([tuple.((cos(θ) for θ in LinRange(0, 2π, n_points)), (sin(θ) for θ in LinRange(0, 2π, n_points)))])
     closed_circle = GO.ClosedRing()(circle)
