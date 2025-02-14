@@ -10,8 +10,9 @@
 import GeometryOps as GO, 
     GeoInterface as GI, 
     GeometryBasics as GB, 
-    LibGEOS as LG
-import GeoJSON, NaturalEarth
+    LibGEOS as LG,
+    GeoFormatTypes as GFT
+import GeoJSON, NaturalEarth, WellKnownGeometry
 using CoordinateTransformations: Translation, LinearMap
 # In order to benchmark, we'll actually use the new [Chairmarks.jl](https://github.com/lilithhafner/Chairmarks.jl), 
 # since it's significantly faster than BenchmarkTools.  To keep benchmarks organized, though, we'll still use BenchmarkTools' 
@@ -22,6 +23,8 @@ import BenchmarkTools: BenchmarkGroup
 using CairoMakie, MakieThemes, GeoInterfaceMakie
 # Finally, we import some general utility packages:
 using Statistics, CoordinateTransformations
+
+include("benchmark_plots.jl")
 
 # We also set up some utility functions for later on.
 """
@@ -56,87 +59,6 @@ n_points_values = round.(Int, exp10.(LinRange(log10(10), log10(100_000), 5)))
 end
 
 plot_trials(circle_area_suite)
-
-
-# ## Vancouver watershed benchmarks
-#=
-
-Vancouver Island has ~1,300 watersheds.  LibGEOS uses this exact data
-in their tests, so we'll use it in ours as well!
-
-We'll start by loading the data, and then we'll use it to benchmark various operations.
-
-=#
-
-# The CRS for this file is EPSG:3005, or as a PROJ string,
-# `"+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"`
-# TODO: this doesn't work with WellKnownGeometry.  Why?
-wkt_geoms = LG.readgeom.(eachline("/Users/anshul/Downloads/watersheds.wkt"), (LG.WKTReader(LG.get_global_context()),))
-vancouver_polygons = GI.getgeom.(wkt_geoms, 1); #.|> GO.tuples;
-
-import SortTileRecursiveTree as STR
-tree = STR.STRtree(vancouver_polygons)
-query_result = STR.query(tree, GI.extent(vancouver_polygons[1]))
-
-GO.intersects.((vancouver_polygons[1],), vancouver_polygons[query_result])
-
-go_vp = GO.tuples.(vancouver_polygons[1:2])
-@be GO.union($(go_vp[1]), $(go_vp[2]); target = $GI.PolygonTrait())
-@be LG.union($(vancouver_polygons[1]), $(vancouver_polygons[2]))
-
-all_intersected = falses(length(vancouver_polygons))
-accumulator = deepcopy(vancouver_polygons[1])
-all_intersected[1] = true
-i = 1
-# query_result = STR.query(tree, GI.extent(accumulator))
-# for idx in query_result
-#     println("Assessing $idx")
-#     if !all_intersected[idx] && LG.intersects(vancouver_polygons[idx], accumulator)
-#         println("Assimilating $idx")
-#         result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
-#         # @show length(result)
-#         accumulator = result#[1]
-#         all_intersected[idx] = true
-#     end
-# end
-display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
-display(poly(accumulator))
-@time while !(all(all_intersected)) && i < length(vancouver_polygons)
-    println("Began iteration $i")
-    query_result = STR.query(tree, GI.extent(accumulator))
-    for idx in query_result
-        if !(all_intersected[idx] || !(LG.intersects(vancouver_polygons[idx], accumulator)))
-            println("Assimilating $idx")
-            result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
-            # @show length(result)
-            accumulator = result#[1]
-            all_intersected[idx] = true
-        end
-    end
-    display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
-    println("Finished iteration $i")
-    # wait_for_key("Press any key to continue to the next iteration.")
-    i += 1
-end 
-
-fig = Figure()
-ax = Axis(fig[1, 1]; title = "STRTree query for polygons", aspect = DataAspect())
-for (i, result_index) in enumerate(query_result)
-    poly!(ax, vancouver_polygons[result_index]; color = Makie.wong_colors()[i], label = "$result_index")
-end
-Legend(fig[1, 2], ax)
-fig
-
-
-
-# TODO: 
-# - Vancouver watersheds:
-#    - Intersection on pre-buffered geometry
-#    - Polygon union by reduction (perhaps pre-sort by border order, so we don't end up with useless polygons)
-#    - Queries using STRTree.jl
-#    - Potentially using a prepared geometry based approach to multithreaded reductive joining
-#    - Implement multipolygon joining.  How?  Query intersection or touching for each individual geometry,
-#      and implement a 
 
 
 ## Segmentization
@@ -231,3 +153,96 @@ begin
     println()
     display(@be GO.difference(usa_o_go, usa_r_go; target = GI.PolygonTrait) seconds=5)
 end
+
+
+
+
+# ## Vancouver watershed benchmarks
+#=
+
+Vancouver Island has ~1,300 watersheds.  LibGEOS uses this exact data
+in their tests, so we'll use it in ours as well!
+
+We'll start by loading the data, and then we'll use it to benchmark various operations.
+
+=#
+
+# The CRS for this file is EPSG:3005, or as a PROJ string,
+# `"+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"`
+# TODO: this doesn't work with WellKnownGeometry.  Why?
+
+watersheds = mktempdir() do dir
+    cd(dir) do
+        wkt_gz = download("https://github.com/pramsey/geos-performance/raw/refs/heads/master/data/watersheds.wkt.gz", "watersheds.wkt.gz")
+        run(`gunzip watersheds.wkt.gz`)
+        return [
+            GO.tuples(GFT.WellKnownText(GFT.Geom(), line))
+            for line in eachline("watersheds.wkt")
+        ]
+    end
+end
+vancouver_polygons = GI.getgeom.(wkt_geoms, 1); #.|> GO.tuples;
+
+import SortTileRecursiveTree as STR
+tree = STR.STRtree(vancouver_polygons)
+query_result = STR.query(tree, GI.extent(vancouver_polygons[1]))
+
+GO.intersects.((vancouver_polygons[1],), vancouver_polygons[query_result])
+
+go_vp = GO.tuples.(vancouver_polygons[1:2])
+@be GO.union($(go_vp[1]), $(go_vp[2]); target = $GI.PolygonTrait())
+@be LG.union($(vancouver_polygons[1]), $(vancouver_polygons[2]))
+
+all_intersected = falses(length(vancouver_polygons))
+accumulator = deepcopy(vancouver_polygons[1])
+all_intersected[1] = true
+i = 1
+# query_result = STR.query(tree, GI.extent(accumulator))
+# for idx in query_result
+#     println("Assessing $idx")
+#     if !all_intersected[idx] && LG.intersects(vancouver_polygons[idx], accumulator)
+#         println("Assimilating $idx")
+#         result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
+#         # @show length(result)
+#         accumulator = result#[1]
+#         all_intersected[idx] = true
+#     end
+# end
+display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
+display(poly(accumulator))
+@time while !(all(all_intersected)) && i < length(vancouver_polygons)
+    println("Began iteration $i")
+    query_result = STR.query(tree, GI.extent(accumulator))
+    for idx in query_result
+        if !(all_intersected[idx] || !(LG.intersects(vancouver_polygons[idx], accumulator)))
+            println("Assimilating $idx")
+            result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
+            # @show length(result)
+            accumulator = result#[1]
+            all_intersected[idx] = true
+        end
+    end
+    display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
+    println("Finished iteration $i")
+    # wait_for_key("Press any key to continue to the next iteration.")
+    i += 1
+end 
+
+fig = Figure()
+ax = Axis(fig[1, 1]; title = "STRTree query for polygons", aspect = DataAspect())
+for (i, result_index) in enumerate(query_result)
+    poly!(ax, vancouver_polygons[result_index]; color = Makie.wong_colors()[i], label = "$result_index")
+end
+Legend(fig[1, 2], ax)
+fig
+
+
+
+# TODO: 
+# - Vancouver watersheds:
+#    - Intersection on pre-buffered geometry
+#    - Polygon union by reduction (perhaps pre-sort by border order, so we don't end up with useless polygons)
+#    - Queries using STRTree.jl
+#    - Potentially using a prepared geometry based approach to multithreaded reductive joining
+#    - Implement multipolygon joining.  How?  Query intersection or touching for each individual geometry,
+#      and implement a 
