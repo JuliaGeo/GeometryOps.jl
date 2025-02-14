@@ -66,6 +66,57 @@ function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_boun
     return a_list, b_list, a_idx_list
 end
 
+
+# f(((a1, a2), i), ((b1, b2), j))
+
+function eachpairofpoints(geom)
+    return ((GI.getpoint(geom, i), GI.getpoint(geom, i+1)) for i in 1:GI.npoint(geom)-1)
+end
+
+const GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS = 75
+function foreach_pair_of_maybe_intersecting_edges_in_order(f_a, f_a_after, f_intersect, poly_a, poly_b, T = Float64)
+    na = GI.npoint(poly_a)
+    nb = GI.npoint(poly_b)
+
+    if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+        for i in 1:(na - 1)
+            a1, a2 = GI.getpoint(poly_a, i), GI.getpoint(poly_a, i+1)
+            a1t, a2t = _tuple_point(a1, T), _tuple_point(a2, T)
+            f_a(a1t, i)
+            for j in 1:(nb - 1)
+                b1, b2 = GI.getpoint(poly_b, j), GI.getpoint(poly_b, j+1)
+                b1t, b2t = _tuple_point(b1, T), _tuple_point(b2, T)
+                f_intersect(((a1t, a2t), i), ((b1t, b2t), j))
+            end
+            f_a_after(a1t, i)
+        end
+        # f_a(GI.getpoint(poly_a, na), na)
+    else # run single STRtree for now, dual STRtrees later
+        # edges_a = [GI.Line(SVector{2}(p1, p2)) for (p1, p2) in eachpairofpoints(poly_a)]
+        edges_b = [GI.Line(SVector{2}(p1, p2)) for (p1, p2) in eachpairofpoints(poly_b)]
+        # tree_a = STRtree(edges_a)
+        tree_b = STRtree(edges_b)::STRtree
+        
+        for i in 1:(GI.npoint(poly_a) - 1)
+            a1, a2 = GI.getpoint(poly_a, i), GI.getpoint(poly_a, i+1)
+            a1t, a2t = _tuple_point(a1, T), _tuple_point(a2, T)
+            f_a(a1t, i)
+            for j in sort!(query(tree_b, GI.extent(GI.Line(SVector{2}(a1t, a2t)))))
+                b1, b2 = edges_b[j].geom
+                b1t, b2t = _tuple_point(b1, T), _tuple_point(b2, T)
+                f_intersect(((a1t, a2t), i), ((b1t, b2t), j))
+            end
+            f_a_after(a1t, i)
+        end
+        # f_a(GI.getpoint(poly_a, na), na)
+        
+    end
+
+    return nothing
+
+end
+
+
 #=
     _build_a_list(::Type{T}, poly_a, poly_b) -> (a_list, a_idx_list)
 
@@ -85,100 +136,101 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
     a_list = PolyNode{T}[]  # list of points in poly_a
     sizehint!(a_list, n_a_edges)
     a_idx_list = Vector{Int}()  # finds indices of intersection points in a_list
-    a_count = 0  # number of points added to a_list
-    n_b_intrs = 0
+    local a_count::Int = 0  # number of points added to a_list
+    local n_b_intrs::Int = 0
+    local prev_counter::Int = 0
 
-    function eachpairofpoints(geom)
-        return ((GI.getpoint(geom, i), GI.getpoint(geom, i+1)) for i in 1:GI.npoint(geom)-1)
-    end
-
-    pairs_of_b_points = [GI.Line(SVector{2}(p1, p2)) for (p1, p2) in eachpairofpoints(poly_b)]
-
-    b_tree = STRtree(pairs_of_b_points)
-
-    # Loop through points of poly_a
-    local a_pt1
-    for (i, a_p2) in enumerate(GI.getpoint(poly_a))
-        a_pt2 = (T(GI.x(a_p2)), T(GI.y(a_p2)))
-        if i <= 1 || (a_pt1 == a_pt2)  # don't repeat points
-            a_pt1 = a_pt2
-            continue
-        end
-        # Add the first point of the edge to the list of points in a_list
-        new_point = PolyNode{T}(;point = a_pt1)
+    function on_each_a(a_pt, i)
+        new_point = PolyNode{T}(;point = a_pt)
         a_count += 1
         push!(a_list, new_point)
-        # Find intersections with edges of poly_b
-        local b_pt1 = GI.getpoint(poly_b, 1)
         prev_counter = a_count
-        for j in query(b_tree, GI.extent(GI.Line(SVector{2}(a_pt1, a_pt2))))
-            b_p1, b_p2 = pairs_of_b_points[j].geom
-            b_pt1 = _tuple_point(b_p1, T)
-            b_pt2 = _tuple_point(b_p2, T)
-            if (b_pt1 == b_pt2)  # don't repeat points
-                b_pt1 = b_pt2
-                continue
-            end
-            # Determine if edges intersect and how they intersect
-            line_orient, intr1, intr2 = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2); exact)
-            if line_orient != line_out  # edges intersect
-                if line_orient == line_cross  # Intersection point that isn't a vertex
-                    int_pt, fracs = intr1
-                    new_intr = PolyNode{T}(;
-                        point = int_pt, inter = true, neighbor = j, # j is now equivalent to old j-1
-                        crossing = true, fracs = fracs,
-                    )
-                    a_count += 1
-                    n_b_intrs += 1
-                    push!(a_list, new_intr)
-                    push!(a_idx_list, a_count)
-                else
-                    (_, (α1, β1)) = intr1
-                    # Determine if a1 or b1 should be added to a_list
-                    add_a1 = α1 == 0 && 0 ≤ β1 < 1
-                    a1_β = add_a1 ? β1 : zero(T)
-                    add_b1 = β1 == 0 && 0 < α1 < 1
-                    b1_α = add_b1 ? α1 : zero(T)
-                    # If lines are collinear and overlapping, a second intersection exists
-                    if line_orient == line_over
-                        (_, (α2, β2)) = intr2
-                        if α2 == 0 && 0 ≤ β2 < 1
-                            add_a1, a1_β = true, β2
-                        end
-                        if β2 == 0 && 0 < α2 < 1
-                            add_b1, b1_α = true, α2
-                        end
-                    end
-                    # Add intersection points determined above
-                    if add_a1
-                        n_b_intrs += a1_β == 0 ? 0 : 1
-                        a_list[prev_counter] = PolyNode{T}(;
-                            point = a_pt1, inter = true, neighbor = j,
-                            fracs = (zero(T), a1_β),
-                        )
-                        push!(a_idx_list, prev_counter)
-                    end
-                    if add_b1
-                        new_intr = PolyNode{T}(;
-                            point = b_pt1, inter = true, neighbor = j,
-                            fracs = (b1_α, zero(T)),
-                        )
-                        a_count += 1
-                        push!(a_list, new_intr)
-                        push!(a_idx_list, a_count)
-                    end
-                end
-            end
-            b_pt1 = b_pt2
-        end
+        return nothing
+    end
+
+    function after_each_a(a_pt, i)
         # Order intersection points by placement along edge using fracs value
         if prev_counter < a_count
             Δintrs = a_count - prev_counter
             inter_points = @view a_list[(a_count - Δintrs + 1):a_count]
             sort!(inter_points, by = x -> x.fracs[1])
         end
-        a_pt1 = a_pt2
+        return nothing
     end
+
+    function on_each_maybe_intersect(((a_pt1, a_pt2), i), ((b_pt1, b_pt2), j))
+        if (b_pt1 == b_pt2)  # don't repeat points
+            b_pt1 = b_pt2
+            return
+        end
+        # Determine if edges intersect and how they intersect
+        line_orient, intr1, intr2 = _intersection_point(T, (a_pt1, a_pt2), (b_pt1, b_pt2); exact)
+        if line_orient != line_out  # edges intersect
+            if line_orient == line_cross  # Intersection point that isn't a vertex
+                int_pt, fracs = intr1
+                new_intr = PolyNode{T}(;
+                    point = int_pt, inter = true, neighbor = j, # j is now equivalent to old j-1
+                    crossing = true, fracs = fracs,
+                )
+                a_count += 1
+                n_b_intrs += 1
+                push!(a_list, new_intr)
+                push!(a_idx_list, a_count)
+            else
+                (_, (α1, β1)) = intr1
+                # Determine if a1 or b1 should be added to a_list
+                add_a1 = α1 == 0 && 0 ≤ β1 < 1
+                a1_β = add_a1 ? β1 : zero(T)
+                add_b1 = β1 == 0 && 0 < α1 < 1
+                b1_α = add_b1 ? α1 : zero(T)
+                # If lines are collinear and overlapping, a second intersection exists
+                if line_orient == line_over
+                    (_, (α2, β2)) = intr2
+                    if α2 == 0 && 0 ≤ β2 < 1
+                        add_a1, a1_β = true, β2
+                    end
+                    if β2 == 0 && 0 < α2 < 1
+                        add_b1, b1_α = true, α2
+                    end
+                end
+                # Add intersection points determined above
+                if add_a1
+                    n_b_intrs += a1_β == 0 ? 0 : 1
+                    a_list[prev_counter] = PolyNode{T}(;
+                        point = a_pt1, inter = true, neighbor = j,
+                        fracs = (zero(T), a1_β),
+                    )
+                    push!(a_idx_list, prev_counter)
+                end
+                if add_b1
+                    new_intr = PolyNode{T}(;
+                        point = b_pt1, inter = true, neighbor = j,
+                        fracs = (b1_α, zero(T)),
+                    )
+                    a_count += 1
+                    push!(a_list, new_intr)
+                    push!(a_idx_list, a_count)
+                end
+            end
+        end
+        return nothing
+    end
+
+    # do the iteration but in an accelerated way
+    # this is equivalent to (but faster than)
+    #=
+    ```julia
+    for ((a1, a2), i) in eachedge(poly_a)
+        on_each_a(a1, i)
+        for ((b1, b2), j) in eachedge(poly_b)
+            on_each_maybe_intersect(((a1, a2), i), ((b1, b2), j))
+        end
+        after_each_a(a1, i)
+    end
+    ```
+    =#
+    foreach_pair_of_maybe_intersecting_edges_in_order(on_each_a, after_each_a, on_each_maybe_intersect, poly_a, poly_b, T)
+
     return a_list, a_idx_list, n_b_intrs
 end
 
