@@ -89,8 +89,10 @@ function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code
         # Manually define the testset macrocall and all string interpolation
         # This instantiates a ContextTestSet that holds the contents of the let block as "context"
         # and displays it as:
-        #   Expression: compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
-        #   Context: GEOMETRY_MODULE = GeoInterface
+        # ```
+        # Expression: compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
+        # Context: Testing geometry from module = GeoInterface
+        # ```
         # This is a bit of a hack to get around the 90000 different testsets you see if we did this
         # per testset.
         # Ideally, we'd have a custom testset that can (a) display whether the test failed for _every_ geom
@@ -100,7 +102,7 @@ function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code
             :macrocall, 
             Symbol("@testset"), 
             LineNumberNode(@__LINE__, @__FILE__), 
-            Expr(:let, :(GEOMETRY_MODULE=$(mod)), code1),
+            Expr(:let, :(var"Testing geometry from module"=$(mod)), code1),
         )
         push!(expr.args, testset)
         push!(testsets.args, expr)
