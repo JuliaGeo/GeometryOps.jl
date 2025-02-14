@@ -4,6 +4,7 @@ authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "Rafael Schouten <rafaels
 version = "0.1.12"
 
 [deps]
+AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
 DataAPI = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 DelaunayTriangulation = "927a84f5-c5f4-47a5-9785-b46e178433df"
@@ -27,6 +28,7 @@ GeometryOpsLibGEOSExt = "LibGEOS"
 GeometryOpsProjExt = "Proj"
 
 [compat]
+AbstractTrees = "0.4.5"
 CoordinateTransformations = "0.5, 0.6"
 DataAPI = "1"
 DelaunayTriangulation = "1.0.4"

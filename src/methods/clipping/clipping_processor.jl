@@ -96,7 +96,48 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::F
             f_a_after(a1t, i)
         end
         # f_a(GI.getpoint(poly_a, na), na)
-    else # run single STRtree for now, dual STRtrees later
+    else # dual STRtrees
+        edges_a = [GI.Line(SVector{2,  NTuple{2, T}}(p1, p2)) for (p1, p2) in eachedge(poly_a, T)]
+        edges_b = [GI.Line(SVector{2,  NTuple{2, T}}(p1, p2)) for (p1, p2) in eachedge(poly_b, T)]
+
+        tree_a = STRtree(edges_a)
+        tree_b = STRtree(edges_b)
+
+        index_list = STRDualQuery.maybe_overlapping_geoms_and_query_lists_in_order(tree_a, tree_b)
+
+        last_a_idx = 1
+
+        for (a_idx, b_idxs) in index_list
+            if a_idx > (last_a_idx + 1)
+                for i in (last_a_idx+1):a_idx-1
+                    f_a(GI.getpoint(poly_a, i), i)
+                    f_a_after(GI.getpoint(poly_a, i), i)
+                end
+            end
+            last_a_idx = a_idx
+            
+            aedge = edges_a[a_idx]
+            aedge_extent = GI.extent(aedge)
+            a1t, a2t = aedge.geom
+
+            f_a(a1t, a_idx)
+
+            for b_idx in b_idxs
+                bedge = edges_b[b_idx]
+                b1t, b2t = bedge.geom
+
+                if GI.Extents.intersects(aedge_extent, GI.extent(bedge))
+                    f_intersect(((a1t, a2t), a_idx), ((b1t, b2t), b_idx))
+                end
+            end
+
+            f_a_after(a1t, a_idx)
+
+            last_a_idx = a_idx
+
+        end
+    end
+    if false# run single STRtree for now, dual STRtrees later
         edges_b = [GI.Line(SVector{2,  NTuple{2, T}}(p1, p2)) for (p1, p2) in eachedge(poly_b, T)]
         # tree_a = STRtree(edges_a)
         tree_b = STRtree(edges_b)::STRtree
