@@ -69,12 +69,17 @@ end
 
 # f(((a1, a2), i), ((b1, b2), j))
 
-function eachpairofpoints(geom)
-    return ((GI.getpoint(geom, i), GI.getpoint(geom, i+1)) for i in 1:GI.npoint(geom)-1)
+function eachedge(geom, ::Type{T}) where T
+    return (_tuple_point.((GI.getpoint(geom, i), GI.getpoint(geom, i+1)), T) for i in 1:GI.npoint(geom)-1)
 end
+eachedge(geom) = eachedge(geom, Float64)
 
 const GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS = 75
-function foreach_pair_of_maybe_intersecting_edges_in_order(f_a, f_a_after, f_intersect, poly_a, poly_b, T = Float64)
+function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::FAAfter, f_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64) where {FA, FAAfter, FI, T}
+    # TODO: dispatch on manifold
+    # this is suitable for planar
+    # but spherical / geodesic will need s2 support at some point,
+    # or -- even now -- just buffering
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
 
@@ -92,8 +97,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(f_a, f_a_after, f_int
         end
         # f_a(GI.getpoint(poly_a, na), na)
     else # run single STRtree for now, dual STRtrees later
-        # edges_a = [GI.Line(SVector{2}(p1, p2)) for (p1, p2) in eachpairofpoints(poly_a)]
-        edges_b = [GI.Line(SVector{2}(p1, p2)) for (p1, p2) in eachpairofpoints(poly_b)]
+        edges_b = [GI.Line(SVector{2,  NTuple{2, T}}(p1, p2)) for (p1, p2) in eachedge(poly_b, T)]
         # tree_a = STRtree(edges_a)
         tree_b = STRtree(edges_b)::STRtree
         
