@@ -43,13 +43,20 @@ Continue to the next iteration of the loop.
 const Continue = Action{:Continue, Nothing}
 
 """
+    Return(x)
+
+Cause the function executing the loop to return.  Use with great caution!
+"""
+const Return = Action{:Return}
+
+"""
     @processloopaction f(...)
 
-Process the result of `f(...)` and return the result if it's not a `Continue` or `Break`.
+Process the result of `f(...)` and return the result if it's not a [`Continue`](@ref), [`Break`](@ref), or [`Return`](@ref) [`Action`](@ref).
 
-If the result is a `Continue`, continue to the next iteration of the loop.
-
-If the result is a `Break`, break out of the loop.
+- `Continue`: continue to the next iteration of the loop.
+- `Break`: break out of the loop.
+- `Return`: cause the function executing the loop to return with the wrapped value.
 
 !!! warning
     Only use this inside a loop, otherwise you'll get a syntax error!
@@ -62,6 +69,8 @@ macro processloopaction(expr)
             continue
         elseif $varname isa Break
             break
+        elseif $varname isa Return
+            return $varname.x
         else
             $varname
         end
