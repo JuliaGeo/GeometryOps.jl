@@ -87,18 +87,35 @@ function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code
             push!(expr.args, :($genkey = $GeoInterface.convert($mod, $var)))
         end
         # Manually define the testset macrocall and all string interpolation
+        # This instantiates a ContextTestSet that holds the contents of the let block as "context"
+        # and displays it as:
+        #   Expression: compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
+        #   Context: GEOMETRY_MODULE = GeoInterface
+        # This is a bit of a hack to get around the 90000 different testsets you see if we did this
+        # per testset.
+        # Ideally, we'd have a custom testset that can (a) display whether the test failed for _every_ geom
+        # or just some, and (b) display the context in a more readable way.
+        # But for now this is good enough.
         testset = Expr(
             :macrocall, 
             Symbol("@testset"), 
             LineNumberNode(@__LINE__, @__FILE__), 
-            Expr(:string, mod, " ", title), 
-            code1
+            Expr(:let, :(GEOMETRY_MODULE=$(mod)), code1),
         )
         push!(expr.args, testset)
         push!(testsets.args, expr)
     end
 
-    return esc(testsets)
+    # Construct a toplevel testset that displays the title and contains all the context testsets
+    toplevel = Expr(
+        :macrocall,
+        Symbol("@testset"),
+        LineNumberNode(@__LINE__, @__FILE__),
+        Expr(:string, title),
+        testsets
+    )
+
+    return esc(toplevel)
 end
 
 # Taken from BenchmarkTools.jl
