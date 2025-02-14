@@ -4,7 +4,54 @@ using Test, GeoInterface, ArchGDAL, GeometryBasics, LibGEOS
 
 export @test_implementations, @testset_implementations
 
-const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS]
+"Segmentizes geometries to a max distance of 1% of the max dimension of the bounding box when converting.  Useful to test densified geoms in tests!"
+module DensifiedGeometries 
+
+    using GeoInterface
+    import GeoInterface as GI
+
+    import GeometryOps as GO
+
+    struct DensifiedWrapperGeometry{T, Trait}
+        trait::Trait
+        geom::T
+    end
+
+    geointerface_geomtype(x) = DensifiedWrapperGeometry
+
+    function GeoInterface.convert(::Type{DensifiedWrapperGeometry}, t::GI.AbstractGeometryTrait, geom)
+        ext = GI.extent(geom)
+        xrange = ext.X[2] - ext.X[1]
+        yrange = ext.Y[2] - ext.Y[1]
+        max_range = max(max(xrange, yrange), 1.0)
+        densified_geom = GO.segmentize(geom, max_distance = max_range / 100)
+        return DensifiedWrapperGeometry(t, densified_geom)
+    end
+    # you can't densify a point
+    # NO, MULTIPOINT DOES NOT COUNT
+    GeoInterface.convert(::Type{DensifiedWrapperGeometry}, t::Union{GI.AbstractPointTrait, GI.MultiPointTrait}, geom) = DensifiedWrapperGeometry(t, geom)
+
+    GeoInterface.trait(geom::DensifiedWrapperGeometry) = geom.trait
+    GeoInterface.geomtrait(geom::DensifiedWrapperGeometry) = geom.trait
+    GeoInterface.isgeometry(geom::DensifiedWrapperGeometry) = geom.trait <: GI.AbstractGeometryTrait
+
+    GeoInterface.ngeom(geom::DensifiedWrapperGeometry) = GeoInterface.ngeom(geom.trait, geom.geom)
+    GeoInterface.getgeom(geom::DensifiedWrapperGeometry, i) = GeoInterface.getgeom(geom.trait, geom.geom, i)
+
+    GeoInterface.getexterior(geom::DensifiedWrapperGeometry) = GeoInterface.getexterior(geom.trait, geom.geom)
+    GeoInterface.nhole(geom::DensifiedWrapperGeometry) = GeoInterface.nhole(geom.trait, geom.geom)
+    GeoInterface.gethole(geom::DensifiedWrapperGeometry, i) = GeoInterface.gethole(geom.trait, geom.geom, i)
+
+    GeoInterface.npoint(geom::DensifiedWrapperGeometry) = GeoInterface.npoint(geom.trait, geom.geom)
+    GeoInterface.getpoint(geom::DensifiedWrapperGeometry, i) = GeoInterface.getpoint(geom.trait, geom.geom, i)
+
+    GeoInterface.ncoord(geom::DensifiedWrapperGeometry) = GeoInterface.ncoord(geom.trait, geom.geom)
+    GeoInterface.getcoord(geom::DensifiedWrapperGeometry, i) = GeoInterface.getcoord(geom.trait, geom.geom, i)
+    GeoInterface.coordnames(geom::DensifiedWrapperGeometry) = GeoInterface.coordnames(geom.trait, geom.geom)
+
+end # module DensifiedGeometries
+
+const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS, DensifiedGeometries]
 
 # Monkey-patch GeometryBasics to have correct methods.
 # TODO: push this up to GB!
@@ -87,18 +134,37 @@ function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code
             push!(expr.args, :($genkey = $GeoInterface.convert($mod, $var)))
         end
         # Manually define the testset macrocall and all string interpolation
+        # This instantiates a ContextTestSet that holds the contents of the let block as "context"
+        # and displays it as:
+        # ```
+        # Expression: compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
+        # Context: Testing geometry from module = GeoInterface
+        # ```
+        # This is a bit of a hack to get around the 90000 different testsets you see if we did this
+        # per testset.
+        # Ideally, we'd have a custom testset that can (a) display whether the test failed for _every_ geom
+        # or just some, and (b) display the context in a more readable way.
+        # But for now this is good enough.
         testset = Expr(
             :macrocall, 
             Symbol("@testset"), 
             LineNumberNode(@__LINE__, @__FILE__), 
-            Expr(:string, mod, " ", title), 
-            code1
+            Expr(:let, :(var"Testing geometry from module"=$(mod)), code1),
         )
         push!(expr.args, testset)
         push!(testsets.args, expr)
     end
 
-    return esc(testsets)
+    # Construct a toplevel testset that displays the title and contains all the context testsets
+    toplevel = Expr(
+        :macrocall,
+        Symbol("@testset"),
+        LineNumberNode(@__LINE__, @__FILE__),
+        Expr(:string, title),
+        testsets
+    )
+
+    return esc(toplevel)
 end
 
 # Taken from BenchmarkTools.jl
