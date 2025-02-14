@@ -103,8 +103,8 @@ function _dual_tree_traverse!(
     end
     
     # Case 4: Both nodes are internal
-    for child_a in children(node_a)
-        for child_b in children(node_b)
+    for child_a in node_a.children
+        for child_b in node_b.children
             _dual_tree_traverse!(overlap_map, child_a, child_b, edges_a, edges_b)
         end
     end
