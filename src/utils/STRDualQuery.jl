@@ -8,7 +8,7 @@ The main entry point is `maybe_overlapping_geoms_and_query_lists_in_order`.
 module STRDualQuery
 
 using SortTileRecursiveTree
-using AbstractTrees
+
 using SortTileRecursiveTree: STRtree, STRNode, STRLeafNode
 using GeoInterface.Extents
 
@@ -104,7 +104,7 @@ function _dual_tree_traverse!(
     # Case 4: Both nodes are internal
     for child_a in children(node_a)
         for child_b in children(node_b)
-            _dual_tree_traverse(child_a, child_b, overlap_map)
+            _dual_tree_traverse!(overlap_map, child_a, child_b, edges_a, edges_b)
         end
     end
 end

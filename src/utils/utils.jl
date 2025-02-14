@@ -126,3 +126,45 @@ function _point_in_extent(p, extent::Extents.Extent)
     (x1, x2), (y1, y2) = extent.X, extent.Y
     return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
 end
+
+#=
+# `eachedge`, `to_edgelist`
+
+These functions are used to decompose geometries into lists of edges.
+Currently they only work on linear rings.
+=#
+
+"""
+    eachedge(geom, [::Type{T}])
+
+Decompose a geometry into a list of edges.
+Currently only works for LineString and LinearRing.
+
+Returns some iterator, which yields tuples of points.  Each tuple is an edge.
+
+It goes `(p1, p2), (p2, p3), (p3, p4), ...` etc.
+"""
+eachedge(geom) = eachedge(GI.trait(geom), geom, Float64)
+
+function eachedge(geom, ::Type{T}) where T
+    eachedge(GI.trait(geom), geom, T)
+end
+
+# implementation for LineString and LinearRing
+function eachedge(trait::GI.AbstractCurveTrait, geom, ::Type{T}) where T
+    return (_tuple_point.((GI.getpoint(geom, i), GI.getpoint(geom, i+1)), T) for i in 1:GI.npoint(geom)-1)
+end
+
+"""
+    to_edgelist(geom, [::Type{T}])
+
+Convert a geometry into a vector of `GI.Line` objects with attached extents.
+"""
+to_edgelist(geom, ::Type{T}) where T = [
+    begin
+        l = GI.Line(SVector{2,  NTuple{2, T}}(p1, p2))  # TODO: make this flexible in dimension
+        e = GI.extent(l)
+        GI.Line(l.geom; extent = e)
+    end 
+    for (p1, p2) in eachedge(geom, T)
+]

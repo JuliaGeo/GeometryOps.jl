@@ -5,6 +5,8 @@ using SafeTestsets
 include("helpers.jl")
 
 @safetestset "Primitives" begin include("primitives.jl") end
+@safetestset "LoopStateMachine" begin include("utils/LoopStateMachine.jl") end
+@safetestset "STRDualQuery" begin include("utils/STRDualQuery.jl") end
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
 @safetestset "Area" begin include("methods/area.jl") end

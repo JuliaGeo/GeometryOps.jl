@@ -35,8 +35,19 @@ PolyNode(node::PolyNode{T};
     point = point, inter = inter, neighbor = neighbor, idx = idx, ent_exit = ent_exit,
     crossing = crossing, endpoint = endpoint, fracs = fracs)
 
+# Let's also define the GeoInterface on PolyNodes, just in 
+GeoInterface.isgeometry(geom::PolyNode)::Bool = true
+
+GI.geomtrait(::Type{PolyNode{T}}) where T = GI.PointTrait()
+GI.geomtrait(::PolyNode{T}) where T = GI.PointTrait()
+
+GI.ncoord(::GI.PointTrait, p::PolyNode{T}) where T = 2 # TODO: change this to accomodate 3D spherical points
+GI.getcoord(::GI.PointTrait, p::PolyNode{T}, i::Int) where T = p.point[i]
+GI.crs(p::PolyNode{T}) where T = nothing # TODO: change this to accomodate 3D spherical points
+
 # Checks equality of two PolyNodes by backing point value, fractional value, and intersection status
 equals(pn1::PolyNode, pn2::PolyNode) = pn1.point == pn2.point && pn1.inter == pn2.inter && pn1.fracs == pn2.fracs
+Base.:(==)(pn1::PolyNode, pn2::PolyNode) = equals(pn1, pn2)
 
 #=
     _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f; exact) ->
@@ -66,23 +77,7 @@ function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_boun
     return a_list, b_list, a_idx_list
 end
 
-
-# f(((a1, a2), i), ((b1, b2), j))
-
-function eachedge(geom, ::Type{T}) where T
-    return (_tuple_point.((GI.getpoint(geom, i), GI.getpoint(geom, i+1)), T) for i in 1:GI.npoint(geom)-1)
-end
-eachedge(geom) = eachedge(geom, Float64)
-
-to_edgelist(geom, ::Type{T}) where T = [
-    begin
-        l = GI.Line(SVector{2,  NTuple{2, T}}(p1, p2)) 
-        e = GI.extent(l)
-        GI.Line(l.geom; extent = e)
-    end 
-    for (p1, p2) in eachedge(geom, T)
-    ]
-
+"The number of vertices past which we should use a STRtree for edge intersection checking."
 const GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS = 75
 function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::FAAfter, f_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64) where {FA, FAAfter, FI, T}
     # TODO: dispatch on manifold
@@ -106,11 +101,36 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::F
             f_a(a1t, i)
             for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
                 b1t == b2t && continue
-                f_intersect(((a1t, a2t), i), ((b1t, b2t), j))
+                LoopStateMachine.@processloopaction f_intersect(((a1t, a2t), i), ((b1t, b2t), j))
             end
             f_a_after(a1t, i)
         end
         # And we're done!
+    elseif na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb > GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+        # This is the "middle ground" case - run only a strtree 
+        # on poly_b without doing so on poly_a.
+        # This is less complex than running a dual tree traversal,
+        # and reduces the overhead of constructing an edge list and tree on poly_a.
+        edges_b = to_edgelist(poly_b, T)
+        tree_b = STRtree(edges_b)
+        
+        # Loop over each vertex in poly_a
+        for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
+            a1t == a2t && continue
+            f_a(a1t, i)
+            # Query the STRtree for any edges in b that may intersect this edge
+            # This is sorted because we want to pretend we're doing the same thing
+            # as the nested loop above, and iterating through poly_b in order.
+            candidates = sort!(
+                SortTileRecursiveTree.query(tree_b, GI.extent(GI.Line(SVector{2}(a1t, a2t))))
+            )
+            for j in candidates
+                b1t, b2t = edges_b[j].geom
+                b1t == b2t && continue
+                LoopStateMachine.@processloopaction f_intersect(((a1t, a2t), i), ((b1t, b2t), j))
+            end
+            f_a_after(a1t, i)
+        end
     elseif na >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
         # If both of the polygons are quite large,
         # then we do a dual-tree traversal of the STRtrees
@@ -168,7 +188,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::F
                 b1t == b2t && continue
 
                 if GI.Extents.intersects(aedge_extent, GI.extent(bedge))
-                    f_intersect(((a1t, a2t), a_idx), ((b1t, b2t), b_idx))
+                    LoopStateMachine.@processloopaction f_intersect(((a1t, a2t), a_idx), ((b1t, b2t), b_idx))
                 end
             end
 
@@ -178,42 +198,6 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::F
 
             last_a_idx = a_idx
 
-        end
-    elseif nb >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
-        # run single STRtree for now, dual STRtrees later
-        edges_b = [GI.Line(SVector{2,  NTuple{2, T}}(p1, p2)) for (p1, p2) in eachedge(poly_b, T)]
-        # tree_a = STRtree(edges_a)
-        tree_b = STRtree(edges_b)::STRtree
-        
-        for i in 1:(GI.npoint(poly_a) - 1)
-            a1, a2 = GI.getpoint(poly_a, i), GI.getpoint(poly_a, i+1)
-            a1t, a2t = _tuple_point(a1, T), _tuple_point(a2, T)
-            a1t == a2t && continue
-            f_a(a1t, i)
-            for j in sort!(query(tree_b, GI.extent(GI.Line(SVector{2}(a1t, a2t)))))
-                b1t, b2t = edges_b[j].geom
-                b1t == b2t && continue
-                f_intersect(((a1t, a2t), i), ((b1t, b2t), j))
-            end
-            f_a_after(a1t, i)
-        end
-    elseif na >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
-
-        # this is kind of a "dual query" over the tree of poly_a,
-        # except that there's no tree on poly_b.
-        # run an STRtree for poly_a but loop over poly_b
-        ## edges_a = to_edgelist(poly_a, T)
-        ## tree_a = STRtree(edges_a)
-        ## potential_a_matches = [query(tree_a, GI.extent(GI.Line(SVector{2}(a1t, a2t)))) for (b1t, b2t) in eachedge(poly_b, T)]
-        # I'm too lazy to actually implement this right now, so let's just do the naive thing again...
-        for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
-            a1t == a2t && continue
-            f_a(a1t, i)
-            for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
-                b1t == b2t && continue
-                f_intersect(((a1t, a2t), i), ((b1t, b2t), j))
-            end
-            f_a_after(a1t, i)
         end
     end
 
