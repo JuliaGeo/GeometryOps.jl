@@ -18,7 +18,7 @@ Action(x::T) where T = Action{:unnamed, T}(x)
 Action{name, Nothing}() where name = Action{name, Nothing}(nothing)
 
 function Base.show(io::IO, action::Action{name, T}) where {name, T}
-    print(io, "Action ", action.name)
+    print(io, "Action ", name)
     if isnothing(action.x)
         print(io, "()")
     else
@@ -33,14 +33,14 @@ end
 
 Break out of the loop.
 """
-const Break = Action{:break, Nothing}
+const Break = Action{:Break, Nothing}
 
 """
     Continue()
 
 Continue to the next iteration of the loop.
 """
-const Continue = Action{:continue, Nothing}
+const Continue = Action{:Continue, Nothing}
 
 """
     @processloopaction f(...)

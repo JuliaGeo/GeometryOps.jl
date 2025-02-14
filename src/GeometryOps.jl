@@ -18,14 +18,14 @@ using GeometryBasics
 using LinearAlgebra, Statistics
 
 using GeometryBasics.StaticArrays
-using SortTileRecursiveTree
-
 
 import Tables, DataAPI
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
 import GeoInterface.Extents: Extents
+import SortTileRecursiveTree
+import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
 const GB = GeometryBasics
@@ -33,10 +33,13 @@ const GB = GeometryBasics
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
-include("types.jl")
-include("primitives.jl")
-include("utils.jl")
-include("not_implemented_yet.jl")
+include("types.jl") # backend / algorithm types like GEOS, PROJ, etc.
+include("primitives.jl") # moved to GeometryOpsCore
+include("not_implemented_yet.jl") # functions that are not implemented yet, but we want stubs for, or the implementations might be in extensions
+
+include("utils/LoopStateMachine.jl") # Utils for functions that can tell the loop they run in to do something via the return value
+include("utils/STRDualQuery.jl") # Dual tree traversal for edge intersection queries over STRtrees (from SortTileRecursiveTree.jl)
+include("utils/utils.jl") # More general utility functions
 
 include("methods/angles.jl")
 include("methods/area.jl")
@@ -46,7 +49,6 @@ include("methods/centroid.jl")
 include("methods/convex_hull.jl")
 include("methods/distance.jl")
 include("methods/equals.jl")
-include("methods/clipping/strtree_dual_query.jl")
 include("methods/clipping/predicates.jl")
 include("methods/clipping/clipping_processor.jl")
 include("methods/clipping/coverage.jl")
