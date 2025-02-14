@@ -12,6 +12,7 @@ import GeometryOps as GO,
     GeometryBasics as GB, 
     LibGEOS as LG
 import GeoJSON, NaturalEarth
+using CoordinateTransformations: Translation, LinearMap
 # In order to benchmark, we'll actually use the new [Chairmarks.jl](https://github.com/lilithhafner/Chairmarks.jl), 
 # since it's significantly faster than BenchmarkTools.  To keep benchmarks organized, though, we'll still use BenchmarkTools' 
 # `BenchmarkGroup` structure.
@@ -167,11 +168,11 @@ n_points_values = round.(Int, exp10.(LinRange(1, 4, 10)))
         return (x+0.6, y)
     end
     lg_circle_left, go_circle_left = lg_and_go(circle_left)
-    circle_difference_suite["GeometryOps"][n_points] = @be GO.difference($go_circle_left, $go_circle_right; target = GI.PolygonTrait())
+    circle_difference_suite["GeometryOps"][n_points] = @be GO.difference($go_circle_left, $go_circle_right; target = $(GI.PolygonTrait()))
     circle_difference_suite["LibGEOS"][n_points]     = @be LG.difference($lg_circle_left, $lg_circle_right)
-    circle_intersection_suite["GeometryOps"][n_points] = @be GO.intersection($go_circle_left, $go_circle_right; target = GI.PolygonTrait())
+    circle_intersection_suite["GeometryOps"][n_points] = @be GO.intersection($go_circle_left, $go_circle_right; target = $(GI.PolygonTrait()))
     circle_intersection_suite["LibGEOS"][n_points]     = @be LG.intersection($lg_circle_left, $lg_circle_right)
-    circle_union_suite["GeometryOps"][n_points] = @be GO.union($go_circle_left, $go_circle_right; target = GI.PolygonTrait())
+    circle_union_suite["GeometryOps"][n_points] = @be GO.union($go_circle_left, $go_circle_right; target = $(GI.PolygonTrait()))
     circle_union_suite["LibGEOS"][n_points]     = @be LG.union($lg_circle_left, $lg_circle_right)
 end
 
@@ -197,29 +198,36 @@ f
 # Now, we get to benchmarking:
 
 
-usa_o_lg, usa_o_go = lg_and_go(usa_poly)
-usa_r_lg, usa_r_go = lg_and_go(usa_reflected)
+usa_o_lg, usa_o_go = lg_and_go(usa_poly);
+usa_r_lg, usa_r_go = lg_and_go(usa_reflected);
 
 # First, we'll test union:
-printstyled("LibGEOS"; color = :red, bold = true)
-println()
-@be LG.union($usa_o_lg, $usa_r_lg) seconds=5
-printstyled("GeometryOps"; color = :blue, bold = true)
-println()
-@be GO.union($usa_o_go, $usa_r_go; target = GI.PolygonTrait) seconds=5
-
-# Next, intersection:
-printstyled("LibGEOS"; color = :red, bold = true)
-println()
-@be LG.intersection($usa_o_lg, $usa_r_lg) seconds=5
-printstyled("GeometryOps"; color = :blue, bold = true)
-println()
-@be GO.intersection($usa_o_go, $usa_r_go; target = GI.PolygonTrait) seconds=5
-
-# and finally the difference:
-printstyled("LibGEOS"; color = :red, bold = true)
-println()
-@be LG.difference(usa_o_lg, usa_r_lg) seconds=5
-printstyled("GeometryOps"; color = :blue, bold = true)
-println()
-@be go_diff = GO.difference(usa_o_go, usa_r_go; target = GI.PolygonTrait) seconds=5
+begin
+    printstyled("Union"; color = :green, bold = true)
+    println()
+    printstyled("LibGEOS"; color = :red, bold = true)
+    println()
+    display(@be LG.union($usa_o_lg, $usa_r_lg) seconds=5)
+    printstyled("GeometryOps"; color = :blue, bold = true)
+    println()
+    display(@be GO.union($usa_o_go, $usa_r_go; target = GI.PolygonTrait) seconds=5)
+    println()
+    # Next, intersection:
+    printstyled("Intersection"; color = :green, bold = true)
+    println()
+    printstyled("LibGEOS"; color = :red, bold = true)
+    println()
+    display(@be LG.intersection($usa_o_lg, $usa_r_lg) seconds=5)
+    printstyled("GeometryOps"; color = :blue, bold = true)
+    println()
+    display(@be GO.intersection($usa_o_go, $usa_r_go; target = GI.PolygonTrait) seconds=5)
+    # and finally the difference:
+    printstyled("Difference"; color = :green, bold = true)
+    println()
+    printstyled("LibGEOS"; color = :red, bold = true)
+    println()
+    display(@be LG.difference(usa_o_lg, usa_r_lg) seconds=5)
+    printstyled("GeometryOps"; color = :blue, bold = true)
+    println()
+    display(@be GO.difference(usa_o_go, usa_r_go; target = GI.PolygonTrait) seconds=5)
+end
