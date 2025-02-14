@@ -154,7 +154,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::F
         # all potentially overlapping pairs of edges.
         # The `STRDualQuery` module is defined in this folder,
         # in `strtree_dual_query.jl`.
-        index_list = STRDualQuery.maybe_overlapping_geoms_and_query_lists_in_order(tree_a, tree_b)
+        index_list = STRDualQuery.maybe_overlapping_geoms_and_query_lists_in_order(tree_a, tree_b, edges_a, edges_b)
 
         # Track the last index in `poly_a` that we've processed.
         last_a_idx = 1

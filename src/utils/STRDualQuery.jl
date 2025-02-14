@@ -19,7 +19,7 @@ node_extent(node::STRNode) = node.extent
 node_extent(node::STRLeafNode) = reduce(Extents.union, node.extents)
 
 """
-    maybe_overlapping_geoms_and_query_lists_in_order(tree_a::STRtree, tree_b::STRtree)
+    maybe_overlapping_geoms_and_query_lists_in_order(tree_a::STRtree, tree_b::STRtree, edges_a::Vector{<: GI.Line}, edges_b::Vector{<: GI.Line})
 
 Performs an efficient dual-tree traversal to find potentially overlapping geometry pairs.
 Returns a vector of pairs, where each pair contains an index from tree_a and a sorted vector 
@@ -77,6 +77,7 @@ function _dual_tree_traverse!(
         for idx_a in node_a.indices
             dict_vec = get!(() -> Int[], overlap_map, idx_a)
             for idx_b in node_b.indices
+                # Final extent rejection, this is cheaper than the allocation for `push!`
                 if Extents.intersects(GI.extent(edges_a[idx_a]), GI.extent(edges_b[idx_b]))
                     push!(dict_vec, idx_b)
                 end
