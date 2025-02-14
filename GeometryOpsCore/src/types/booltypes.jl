@@ -19,6 +19,9 @@ We had to add the type annotation on the `_booltype(::Bool)` method for this rea
 TODO: should we switch to `Static.jl`?
 =#
 
+export BoolsAsTypes, _True, _False, _TrueButStable
+export _booltype
+
 """
     abstract type BoolsAsTypes
 
@@ -38,6 +41,9 @@ struct _True <: BoolsAsTypes end
 A struct that means `false`.
 """
 struct _False <: BoolsAsTypes end
+
+# specifically for my StableTasks experiment
+struct _TrueButStable <: BoolsAsTypes end
 
 """
     _booltype(x)

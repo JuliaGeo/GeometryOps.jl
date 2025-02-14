@@ -124,6 +124,7 @@ import Base.Threads: nthreads, @threads, @spawn
 # 
 # If you absolutely need a single chunk, then `threaded = false` will always decompose
 # to straight `mapreduce` without grouping.
+
 @inline function _mapreducetasks(f::F, op, taskrange, threaded::_True; init) where F
     ntasks = length(taskrange)
     # Customize this as needed.
@@ -135,7 +136,7 @@ import Base.Threads: nthreads, @threads, @spawn
     # Map over the chunks
     tasks = map(task_chunks) do chunk
         # Spawn a task to process this chunk
-        @spawn begin
+        Threads.@spawn begin
             # Where we map `f` over the chunk indices
             mapreduce(f, op, chunk; init)
         end
@@ -144,6 +145,28 @@ import Base.Threads: nthreads, @threads, @spawn
     # Finally we join the results into a new vector
     return mapreduce(fetch, op, tasks; init)
 end
-Base.@assume_effects :foldable function _mapreducetasks(f::F, op, taskrange, threaded::_False; init) where F
+
+@inline function _mapreducetasks(f::F, op, taskrange, threaded::_TrueButStable; init) where F
+    ntasks = length(taskrange)
+    # Customize this as needed.
+    # More tasks have more overhead, but better load balancing
+    tasks_per_thread = 2
+    chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
+    # partition the range into chunks
+    task_chunks = Iterators.partition(taskrange, chunk_size)
+    # Map over the chunks
+    tasks = map(task_chunks) do chunk
+        # Spawn a task to process this chunk
+        StableTasks.@spawn begin
+            # Where we map `f` over the chunk indices
+            mapreduce(f, op, chunk; init)
+        end
+    end
+
+    # Finally we join the results into a new vector
+    return mapreduce(fetch, op, tasks; init)
+end
+
+function _mapreducetasks(f::F, op, taskrange, threaded::_False; init) where F
     mapreduce(f, op, taskrange; init)
 end
