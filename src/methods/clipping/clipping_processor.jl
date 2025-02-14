@@ -87,6 +87,15 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
     a_idx_list = Vector{Int}()  # finds indices of intersection points in a_list
     a_count = 0  # number of points added to a_list
     n_b_intrs = 0
+
+    function eachpairofpoints(geom)
+        return ((GI.getpoint(geom, i), GI.getpoint(geom, i+1)) for i in 1:GI.npoint(geom)-1)
+    end
+
+    pairs_of_b_points = [GI.Line(SVector{2}(p1, p2)) for (p1, p2) in eachpairofpoints(poly_b)]
+
+    b_tree = STRtree(pairs_of_b_points)
+
     # Loop through points of poly_a
     local a_pt1
     for (i, a_p2) in enumerate(GI.getpoint(poly_a))
@@ -100,11 +109,13 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
         a_count += 1
         push!(a_list, new_point)
         # Find intersections with edges of poly_b
-        local b_pt1
+        local b_pt1 = GI.getpoint(poly_b, 1)
         prev_counter = a_count
-        for (j, b_p2) in enumerate(GI.getpoint(poly_b))
+        for j in query(b_tree, GI.extent(GI.Line(SVector{2}(a_pt1, a_pt2))))
+            b_p1, b_p2 = pairs_of_b_points[j].geom
+            b_pt1 = _tuple_point(b_p1, T)
             b_pt2 = _tuple_point(b_p2, T)
-            if j <= 1 || (b_pt1 == b_pt2)  # don't repeat points
+            if (b_pt1 == b_pt2)  # don't repeat points
                 b_pt1 = b_pt2
                 continue
             end
@@ -114,7 +125,7 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
                 if line_orient == line_cross  # Intersection point that isn't a vertex
                     int_pt, fracs = intr1
                     new_intr = PolyNode{T}(;
-                        point = int_pt, inter = true, neighbor = j - 1,
+                        point = int_pt, inter = true, neighbor = j, # j is now equivalent to old j-1
                         crossing = true, fracs = fracs,
                     )
                     a_count += 1
@@ -142,14 +153,14 @@ function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
                     if add_a1
                         n_b_intrs += a1_β == 0 ? 0 : 1
                         a_list[prev_counter] = PolyNode{T}(;
-                            point = a_pt1, inter = true, neighbor = j - 1,
+                            point = a_pt1, inter = true, neighbor = j,
                             fracs = (zero(T), a1_β),
                         )
                         push!(a_idx_list, prev_counter)
                     end
                     if add_b1
                         new_intr = PolyNode{T}(;
-                            point = b_pt1, inter = true, neighbor = j - 1,
+                            point = b_pt1, inter = true, neighbor = j,
                             fracs = (b1_α, zero(T)),
                         )
                         a_count += 1
