@@ -64,6 +64,7 @@ function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_boun
     a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b; exact)
     b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
 
+    @show length(a_list) length(b_list)
     # Flag crossings
     _classify_crossing!(T, a_list, b_list; exact)
 
@@ -79,7 +80,9 @@ end
 
 "The number of vertices past which we should use a STRtree for edge intersection checking."
 const GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS = 75
-function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::FAAfter, f_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64) where {FA, FAAfter, FI, T}
+function foreach_pair_of_maybe_intersecting_edges_in_order(
+    f_a::FA, f_a_after::FAAfter, f_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+) where {FA, FAAfter, FI, T}
     # TODO: dispatch on manifold
     # this is suitable for planar
     # but spherical / geodesic will need s2 support at some point,

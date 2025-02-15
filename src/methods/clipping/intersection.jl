@@ -260,8 +260,8 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) w
     a1_orient = Predicates.orient(b1, b2, a1; exact)
     a2_orient = Predicates.orient(b1, b2, a2; exact)
     !iszero(a1_orient) && a1_orient == a2_orient && return no_intr_result  # α < 0 or α > 1
-    b1_orient = Predicates.orient(a1, a2, b1; exact)::Int
-    b2_orient = Predicates.orient(a1, a2, b2; exact)::Int
+    b1_orient = Predicates.orient(a1, a2, b1; exact)
+    b2_orient = Predicates.orient(a1, a2, b2; exact)
     !iszero(b1_orient) && b1_orient == b2_orient && return no_intr_result  # β < 0 or β > 1
     # Determine intersection type and intersection point(s)
     if a1_orient == a2_orient == b1_orient == b2_orient == 0

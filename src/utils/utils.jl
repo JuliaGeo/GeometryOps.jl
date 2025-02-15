@@ -190,7 +190,6 @@ function _intersects(ext::Extent, l::GI.Line, ::Type{T}) where T
     # Check if the points are in the extent
     ext.X[1] <= p1[1] <= ext.X[2] && ext.Y[1] <= p1[2] <= ext.Y[2] || 
     ext.X[1] <= p2[1] <= ext.X[2] && ext.Y[1] <= p2[2] <= ext.Y[2] && return true
-    Extents.intersects(ext, GI.extent(l)) && return true
     # Otherwise check if the line intersects the extent square
     a = GI.Line(SVector{2,NTuple{2,T}}((ext.X[1], ext.Y[1]), (ext.X[1], ext.Y[2])))
     b = GI.Line(SVector{2,NTuple{2,T}}((ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2])))
