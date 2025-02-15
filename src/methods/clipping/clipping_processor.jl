@@ -216,6 +216,17 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         # and reduces the overhead of constructing an edge list and tree on poly_a.
         ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
         edges_b, indices_b = to_edgelist(ext_a, poly_b, T)
+        if isempty(edges_b)
+            # shortcut - nothing can possibly intersect
+            # so we just call f_on_each_a for each edge in poly_a
+            for i in 1:GI.npoint(poly_a)-1
+                pt = _tuple_point(GI.getpoint(poly_a, i), T)
+                f_on_each_a(pt, i)
+                f_after_each_a(pt, i)
+            end
+            return nothing
+        end
+
         tree_b = STRtree(edges_b)
         
         # Loop over each vertex in poly_a
