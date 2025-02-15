@@ -19,6 +19,7 @@ using CoordinateTransformations: Translation, LinearMap
 # `BenchmarkGroup` structure.
 using Chairmarks
 import BenchmarkTools: BenchmarkGroup
+using ProgressMeter
 # We use CairoMakie to visualize our results!
 using CairoMakie, MakieThemes, GeoInterfaceMakie
 # Finally, we import some general utility packages:
@@ -181,68 +182,53 @@ watersheds = mktempdir() do dir
         ]
     end
 end
-vancouver_polygons = GI.getgeom.(wkt_geoms, 1); #.|> GO.tuples;
+ 
+watershed_polygons = only.(GI.getgeom.(watersheds))
 
 import SortTileRecursiveTree as STR
-tree = STR.STRtree(vancouver_polygons)
-query_result = STR.query(tree, GI.extent(vancouver_polygons[1]))
+tree = STR.STRtree(watershed_polygons)
+query_result = STR.query(tree, GI.extent(watershed_polygons[1]))
 
-GO.intersects.((vancouver_polygons[1],), vancouver_polygons[query_result])
+GO.intersects.((watershed_polygons[1],), watershed_polygons[query_result])
 
-go_vp = GO.tuples.(vancouver_polygons[1:2])
-@be GO.union($(go_vp[1]), $(go_vp[2]); target = $GI.PolygonTrait())
-@be LG.union($(vancouver_polygons[1]), $(vancouver_polygons[2]))
+@be GO.union($(watershed_polygons[1]), $(watershed_polygons[2]); target = $GI.PolygonTrait())
+@be LG.union($(watershed_polygons[1] |> GI.convert(LG)), $(watershed_polygons[2] |> GI.convert(LG)))
 
-all_intersected = falses(length(vancouver_polygons))
-accumulator = deepcopy(vancouver_polygons[1])
-all_intersected[1] = true
-i = 1
-# query_result = STR.query(tree, GI.extent(accumulator))
-# for idx in query_result
-#     println("Assessing $idx")
-#     if !all_intersected[idx] && LG.intersects(vancouver_polygons[idx], accumulator)
-#         println("Assimilating $idx")
-#         result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
-#         # @show length(result)
-#         accumulator = result#[1]
-#         all_intersected[idx] = true
-#     end
-# end
-display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
-display(poly(accumulator))
-@time while !(all(all_intersected)) && i < length(vancouver_polygons)
-    println("Began iteration $i")
-    query_result = STR.query(tree, GI.extent(accumulator))
-    for idx in query_result
-        if !(all_intersected[idx] || !(LG.intersects(vancouver_polygons[idx], accumulator)))
-            println("Assimilating $idx")
-            result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
-            # @show length(result)
-            accumulator = result#[1]
-            all_intersected[idx] = true
+function union_coverage(intersection_f::IF, union_f::UF, polygons::Vector{T}; showplot = true, showprogress = true) where {T, IF, UF}
+    tree = STR.STRtree(polygons)
+    all_intersected = falses(length(polygons))
+    accumulator = polygons[1]
+    all_intersected[1] = true
+    i = 1
+
+    (showprogress && (prog = Progress(length(all_intersected))))
+
+    while !(all(all_intersected)) && i < length(polygons)
+        query_result = STR.query(tree, GI.extent(accumulator))
+        for idx in query_result
+            if !(all_intersected[idx] || !(intersection_f(polygons[idx], accumulator)))
+                result = union_f(polygons[idx], accumulator)
+                accumulator = result
+                all_intersected[idx] = true
+                (showprogress && next!(prog))
+            end
         end
+        showplot && display(poly(view(polygons, all_intersected); color = rand(RGBf, sum(all_intersected))), axis = (; title = "$(GI.trait(accumulator) isa GI.PolygonTrait ? "Polygon" : "MultiPolygon with $(GI.ngeom(accumulator)) individual polys")"))
     end
-    display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
-    println("Finished iteration $i")
-    # wait_for_key("Press any key to continue to the next iteration.")
-    i += 1
-end 
-
-fig = Figure()
-ax = Axis(fig[1, 1]; title = "STRTree query for polygons", aspect = DataAspect())
-for (i, result_index) in enumerate(query_result)
-    poly!(ax, vancouver_polygons[result_index]; color = Makie.wong_colors()[i], label = "$result_index")
 end
-Legend(fig[1, 2], ax)
-fig
+
+@time union_coverage(LG.intersects, LG.union, watershed_polygons .|> GI.convert(LG); showplot = false, showprogress = true)
+
+@time union_coverage(GO.intersects, (x, y) -> (GO.union(x, y; target = GI.MultiPolygonTrait())), watershed_polygons; showplot = false, showprogress = true)
+
+
+using GADM
+
+# austria is landlocked and will form a coverage
+# something like India will not -- because it has islands
+ind_fc = GADM.get("AUT"; depth = 1)
+ind_polys = GI.geometry.(GI.getfeature(ind_fc)) |> x -> GO.tuples(x; calc_extent = true)
 
 
 
-# TODO: 
-# - Vancouver watersheds:
-#    - Intersection on pre-buffered geometry
-#    - Polygon union by reduction (perhaps pre-sort by border order, so we don't end up with useless polygons)
-#    - Queries using STRTree.jl
-#    - Potentially using a prepared geometry based approach to multithreaded reductive joining
-#    - Implement multipolygon joining.  How?  Query intersection or touching for each individual geometry,
-#      and implement a 
+@time union_coverage(GO.intersects, (x, y) -> (GO.union(x, y; target = GI.MultiPolygonTrait())), ind_polys; showplot = true, showprogress = true)
