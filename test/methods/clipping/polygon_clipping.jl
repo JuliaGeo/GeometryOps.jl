@@ -166,7 +166,7 @@ test_pairs = [
 const ϵ = 1e-10
 # Compare clipping results from GeometryOps and LibGEOS
 function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
-    GO_result_list = GO_f(p1, p2; target = GI.PolygonTrait())
+    
     LG_result_geom = LG_f(p1, p2)
     if LG_result_geom isa LG.GeometryCollection
         poly_list = LG.Polygon[]
@@ -175,38 +175,43 @@ function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         end
         LG_result_geom = LG.MultiPolygon(poly_list)
     end
-    # Check if nothing is returned
-    if isempty(GO_result_list) && (LG.isEmpty(LG_result_geom) || LG.area(LG_result_geom) == 0)
-        return true
-    end
-    # Check for unnecessary points
-    if sum(GI.npoint, GO_result_list; init = 0.0) > GI.npoint(LG_result_geom)
-        return false
-    end
-    # Make sure last point is repeated
-    for poly in GO_result_list
-        for ring in GI.getring(poly)
-            GI.getpoint(ring, 1) != GI.getpoint(ring, GI.npoint(ring)) && return false
-        end
-    end
 
-    # Check if polygons cover the same area
-    local GO_result_geom
-    if length(GO_result_list) == 1
-        GO_result_geom = GO_result_list[1]
-    else
-        GO_result_geom = GI.MultiPolygon(GO_result_list)
-    end
-    diff_1_area = LG.area(LG.difference(GO_result_geom, LG_result_geom))
-    diff_2_area = LG.area(LG.difference(LG_result_geom, GO_result_geom))
-    return diff_1_area ≤ ϵ && diff_2_area ≤ ϵ
+    for _accelerator in (GO.AutoAccelerator(), GO.NestedLoop(), GO.SingleSTRtree(), GO.DoubleSTRtree())
+    @testset let accelerator = _accelerator # this is a ContextTestSet that is otherwise invisible but adds context to the testset
+        GO_result_list = GO_f(GO.FosterHormannClipping(accelerator), p1, p2; target = GI.PolygonTrait())
+        # Check if nothing is returned
+        if isempty(GO_result_list) && (LG.isEmpty(LG_result_geom) || LG.area(LG_result_geom) == 0)
+            @test true
+            continue
+        end
+        # Check for unnecessary points
+        @test !(sum(GI.npoint, GO_result_list; init = 0.0) > GI.npoint(LG_result_geom))
+        # Make sure last point is repeated
+        for poly in GO_result_list
+            for ring in GI.getring(poly)
+                @test !(GI.getpoint(ring, 1) != GI.getpoint(ring, GI.npoint(ring)))
+            end
+        end
+
+        # Check if polygons cover the same area
+        local GO_result_geom
+        if length(GO_result_list) == 1
+            GO_result_geom = GO_result_list[1]
+        else
+            GO_result_geom = GI.MultiPolygon(GO_result_list)
+        end
+        diff_1_area = LG.area(LG.difference(GO_result_geom, LG_result_geom))
+        diff_2_area = LG.area(LG.difference(LG_result_geom, GO_result_geom))
+        @test diff_1_area ≤ ϵ && diff_2_area ≤ ϵ
+    end # testset
+    end # loop
 end
 
 # Test clipping functions and print error message if tests fail
 function test_clipping(GO_f, LG_f, f_name)
     for (p1, p2, sg1, sg2, sdesc) in test_pairs
         @testset_implementations "$sg1 $f_name $sg2 - $sdesc" begin
-            @test compare_GO_LG_clipping(GO_f, LG_f, $p1, $p2) 
+            compare_GO_LG_clipping(GO_f, LG_f, $p1, $p2) # this executes tests internally
         end
     end
     return

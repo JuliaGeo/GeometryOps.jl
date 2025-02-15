@@ -892,7 +892,7 @@ or they are separate polygons with no intersection (other than an edge or point)
 Return two booleans that represent if a is inside b (potentially with shared edges / points)
 and visa versa if b is inside of a.
 =#
-function _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)
+function _find_non_cross_orientation(m::M, a_list, b_list, a_poly, b_poly; exact) where {M <: Manifold}
     non_intr_a_idx = findfirst(x -> !x.inter, a_list)
     non_intr_b_idx = findfirst(x -> !x.inter, b_list)
     #= Determine if non-intersection point is in or outside of polygon - if there isn't A
@@ -905,6 +905,9 @@ function _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)
     b_in_a = b_pt_orient != point_out && a_pt_orient != point_in
     return a_in_b, b_in_a
 end
+
+_find_non_cross_orientation(alg::FosterHormannClipping{M}, a_list, b_list, a_poly, b_poly; exact) where {M <: Manifold} =
+    _find_non_cross_orientation(alg.manifold, a_list, b_list, a_poly, b_poly; exact)
 
 #=
     _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_poly_idx; exact)
