@@ -91,17 +91,22 @@ n_points_values = round.(Int, exp10.(LinRange(1, 6, 15)))
         return (x+0.6, y)
     end
     lg_circle_left, go_circle_left = lg_and_go(circle_left)
-    circle_difference_suite["GeometryOps"][n_points] = @be GO.difference($go_circle_left, $go_circle_right; target = $(GI.PolygonTrait()))
+    for accelerator in (GO.NestedLoop(), GO.SingleSTRtree(), GO.DoubleSTRtree(), GO.AutoAccelerator())
+        if n_points > 1000 && accelerator isa GO.NestedLoop
+            continue
+        end
+        circle_difference_suite[repr(accelerator)][n_points] = @be GO.difference($(GO.FosterHormannClipping(accelerator)), $go_circle_left, $go_circle_right; target = $(GI.PolygonTrait()))
+        circle_intersection_suite[repr(accelerator)][n_points] = @be GO.intersection($(GO.FosterHormannClipping(accelerator)), $go_circle_left, $go_circle_right; target = $(GI.PolygonTrait()))
+        circle_union_suite[repr(accelerator)][n_points] = @be GO.union($(GO.FosterHormannClipping(accelerator)), $go_circle_left, $go_circle_right; target = $(GI.PolygonTrait()))
+    end
     circle_difference_suite["LibGEOS"][n_points]     = @be LG.difference($lg_circle_left, $lg_circle_right)
-    circle_intersection_suite["GeometryOps"][n_points] = @be GO.intersection($go_circle_left, $go_circle_right; target = $(GI.PolygonTrait()))
     circle_intersection_suite["LibGEOS"][n_points]     = @be LG.intersection($lg_circle_left, $lg_circle_right)
-    circle_union_suite["GeometryOps"][n_points] = @be GO.union($go_circle_left, $go_circle_right; target = $(GI.PolygonTrait()))
     circle_union_suite["LibGEOS"][n_points]     = @be LG.union($lg_circle_left, $lg_circle_right)
 end
 
-plot_trials(circle_difference_suite)
-plot_trials(circle_intersection_suite)
-plot_trials(circle_union_suite)
+plot_trials(circle_difference_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
+plot_trials(circle_intersection_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
+plot_trials(circle_union_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
 
 usa_poly_suite = BenchmarkGroup()
 usa_difference_suite = usa_poly_suite["difference"] = BenchmarkGroup(["title:USA difference", "subtitle:Tested on CONUS"])
