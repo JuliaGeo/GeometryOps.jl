@@ -15,8 +15,6 @@ using GeoInterface.Extents
 import GeoInterface as GI
 
 "helper function to get the extent of any STR node, since leaf nodes don't store global extent."
-node_extent(node::STRNode) = node.extent
-node_extent(node::STRLeafNode) = reduce(Extents.union, node.extents)
 
 """
     maybe_overlapping_geoms_and_query_lists_in_order(tree_a::STRtree, tree_b::STRtree, edges_a::Vector{<: GI.Line}, edges_b::Vector{<: GI.Line})
@@ -68,7 +66,7 @@ function _dual_tree_traverse!(
 )
     
     # Early exit if bounding boxes don't overlap
-    if !Extents.intersects(node_extent(node_a), node_extent(node_b))
+    if !Extents.intersects(GI.extent(node_a), GI.extent(node_b))
         return
     end
     
