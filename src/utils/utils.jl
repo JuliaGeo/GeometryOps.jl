@@ -162,8 +162,6 @@ Convert a geometry into a vector of `GI.Line` objects with attached extents.
 """
 to_edgelist(geom, ::Type{T}) where T = 
     [_lineedge(ps, T) for ps in eachedge(geom, T)]
-
-
 function to_edgelist(ext::E, geom, ::Type{T}) where {E<:Extents.Extent,T}
     edges_in = eachedge(geom, T)
     l1 = _lineedge(first(edges_in), T)

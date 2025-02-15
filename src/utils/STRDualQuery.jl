@@ -36,9 +36,7 @@ The result looks like this:
 ```
 in which the overlap map is sorted by the tree_a indices, and within each group, the tree_b indices are sorted.
 """
-function maybe_overlapping_geoms_and_query_lists_in_order(
-    tree_a::STRtree, tree_b::STRtree, edges_a::Vector{<: GI.Line}, edges_b::Vector{<: GI.Line}
-)
+function maybe_overlapping_geoms_and_query_lists_in_order(tree_a::STRtree, tree_b::STRtree, edges_a::Vector{<: GI.Line}, edges_b::Vector{<: GI.Line})
     # Use DefaultDict to automatically create empty vectors for new keys
     overlap_map = Dict{Int, Vector{Int}}()
     
@@ -66,7 +64,7 @@ function _dual_tree_traverse!(
     node_a::Union{STRNode,STRLeafNode}, 
     node_b::Union{STRNode,STRLeafNode}, 
     edges_a::Vector{<: GI.Line}, 
-    edges_b::Vector{<: GI.Line},
+    edges_b::Vector{<: GI.Line}
 )
     
     # Early exit if bounding boxes don't overlap
@@ -76,12 +74,12 @@ function _dual_tree_traverse!(
     
     # Case 1: Both nodes are leaves
     if node_a isa STRLeafNode && node_b isa STRLeafNode
-        for (ia, idx_a) in enumerate(node_a.indices)
-            dict_vec = get!(() -> Int[], overlap_map, ia)
-            for (ib, idx_b) in enumerate(node_b.indices)
+        for idx_a in node_a.indices
+            dict_vec = get!(() -> Int[], overlap_map, idx_a)
+            for idx_b in node_b.indices
                 # Final extent rejection, this is cheaper than the allocation for `push!`
-                if Extents.intersects(GI.extent(edges_a[ia]), GI.extent(edges_b[ib]))
-                    push!(dict_vec, ib)
+                if Extents.intersects(GI.extent(edges_a[idx_a]), GI.extent(edges_b[idx_b]))
+                    push!(dict_vec, idx_b)
                 end
             end
         end
