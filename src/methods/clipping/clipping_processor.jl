@@ -692,7 +692,7 @@ function _pt_off_edge_status(alg::FosterHormannClipping{M, A}, ::Type{T}, pt_lis
     else
         (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
     end
-    start_status = !_point_filled_curve_orientation(#=TODO: alg.manifold=#start_pt, poly; in = true, on = false, out = false, exact)
+    start_status = !_point_filled_curve_orientation(alg.manifold, start_pt, poly; in = true, on = false, out = false, exact)
     return next_idx, start_status
 end
 # Check if a PolyNode is an intersection point
@@ -741,7 +741,7 @@ function _flag_ent_exit!(alg::FosterHormannClipping{M, A}, ::Type{T}, ::GI.Linea
                 else  # delayed bouncing
                     next_idx = ii < npts ? (ii + 1) : 1
                     next_val = (curr_pt.point .+ pt_list[next_idx].point) ./ 2
-                    pt_in_poly = _point_filled_curve_orientation(#=TODO: alg.manifold=#next_val, poly; in = true, on = false, out = false, exact)
+                    pt_in_poly = _point_filled_curve_orientation(alg.manifold, next_val, poly; in = true, on = false, out = false, exact)
                     #= start and end crossing status are the same and depend on if adjacent
                     edges of pt_list are within poly =#
                     start_crossing = delay_bounce_f(pt_in_poly)
@@ -937,7 +937,7 @@ function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, retur
                     if !on_ext && !out_ext  # hole is completely within exterior
                         push!(curr_poly.geom, new_hole)
                     else  # hole is partially within and outside of polygon's exterior
-                        new_polys = difference(#=TODO: alg=#curr_poly_ext, new_hole_poly, T; target=GI.PolygonTrait())
+                        new_polys = difference(alg, curr_poly_ext, new_hole_poly, T; target=GI.PolygonTrait())
                         n_new_polys = length(new_polys) - 1
                         # replace original
                         curr_poly.geom[1] = GI.getexterior(new_polys[1])
