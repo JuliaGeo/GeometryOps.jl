@@ -160,11 +160,25 @@ end
 
 Convert a geometry into a vector of `GI.Line` objects with attached extents.
 """
-to_edgelist(geom, ::Type{T}) where T = [
-    begin
-        l = GI.Line(SVector{2,  NTuple{2, T}}(p1, p2))  # TODO: make this flexible in dimension
-        e = GI.extent(l)
-        GI.Line(l.geom; extent = e)
+to_edgelist(geom, ::Type{T}) where T = 
+    [_lineedge(ps, T) for ps in eachedge(geom, T)]
+function to_edgelist(ext::E, geom, ::Type{T}) where {E<:Extents.Extent,T}
+    edges_in = eachedge(geom, T)
+    l1 = _lineedge(first(edges_in), T)
+    edges_out = typeof(l1)[]
+    indices = Int[]
+    for (i, ps) in enumerate(edges_in) 
+        l = _lineedge(ps, T)
+        if Extents.intersects(ext, GI.extent(l))
+            push!(edges_out, l)
+            push!(indices, i)
+        end
     end 
-    for (p1, p2) in eachedge(geom, T)
-]
+    return edges_out, indices
+end
+
+function _lineedge(ps::Tuple, ::Type{T}) where T
+    l = GI.Line(SVector{2,NTuple{2, T}}(ps))  # TODO: make this flexible in dimension
+    e = GI.extent(l)
+    return GI.Line(l.geom; extent=e)
+end
