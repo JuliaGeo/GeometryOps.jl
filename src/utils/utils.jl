@@ -164,14 +164,14 @@ to_edgelist(geom, ::Type{T}) where T =
     [_lineedge(ps, T) for ps in eachedge(geom, T)]
 
 
-function to_edgelist(ext::E, geom, ::Type{T}) where {E<:Extent,T}
-    indices = Int[]
+function to_edgelist(ext::E, geom, ::Type{T}) where {E<:Extents.Extent,T}
     edges_in = eachedge(geom, T)
     l1 = _lineedge(first(edges_in), T)
     edges_out = typeof(l1)[]
+    indices = Int[]
     for (i, ps) in enumerate(edges_in) 
         l = _lineedge(ps, T)
-        if _intersects(ext, l, T)
+        if Extents.intersects(ext, GI.extent(l))
             push!(edges_out, l)
             push!(indices, i)
         end
@@ -183,17 +183,4 @@ function _lineedge(ps::Tuple, ::Type{T}) where T
     l = GI.Line(SVector{2,NTuple{2, T}}(ps))  # TODO: make this flexible in dimension
     e = GI.extent(l)
     return GI.Line(l.geom; extent=e)
-end
-
-function _intersects(ext::Extent, l::GI.Line, ::Type{T}) where T
-    p1, p2 = GI.getpoint(l)
-    # Check if the points are in the extent
-    ext.X[1] <= p1[1] <= ext.X[2] && ext.Y[1] <= p1[2] <= ext.Y[2] || 
-    ext.X[1] <= p2[1] <= ext.X[2] && ext.Y[1] <= p2[2] <= ext.Y[2] && return true
-    # Otherwise check if the line intersects the extent square
-    a = GI.Line(SVector{2,NTuple{2,T}}((ext.X[1], ext.Y[1]), (ext.X[1], ext.Y[2])))
-    b = GI.Line(SVector{2,NTuple{2,T}}((ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2])))
-    c = GI.Line(SVector{2,NTuple{2,T}}((ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1])))
-    d = GI.Line(SVector{2,NTuple{2,T}}((ext.X[1], ext.Y[2]), (ext.X[2], ext.Y[2])))
-    return intersects(a, l) || intersects(b, l) || intersects(c, l) || intersects(d, l)
 end

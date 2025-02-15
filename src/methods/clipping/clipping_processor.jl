@@ -64,7 +64,6 @@ function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_boun
     a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b; exact)
     b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
 
-    @show length(a_list) length(b_list)
     # Flag crossings
     _classify_crossing!(T, a_list, b_list; exact)
 
@@ -81,7 +80,7 @@ end
 "The number of vertices past which we should use a STRtree for edge intersection checking."
 const GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS = 75
 function foreach_pair_of_maybe_intersecting_edges_in_order(
-    f_a::FA, f_a_after::FAAfter, f_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+    f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T}
     # TODO: dispatch on manifold
     # this is suitable for planar
@@ -101,110 +100,198 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         # First, loop over "each edge" in poly_a
         for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
             a1t == a2t && continue
-            f_a(a1t, i)
+            f_on_each_a(a1t, i)
             for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
                 b1t == b2t && continue
-                LoopStateMachine.@processloopaction f_intersect(((a1t, a2t), i), ((b1t, b2t), j))
+                LoopStateMachine.@processloopaction f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j))
             end
-            f_a_after(a1t, i)
+            f_after_each_a(a1t, i)
         end
         # And we're done!
-    elseif na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb > GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+    else #if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb > GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
         # This is the "middle ground" case - run only a strtree 
         # on poly_b without doing so on poly_a.
         # This is less complex than running a dual tree traversal,
         # and reduces the overhead of constructing an edge list and tree on poly_a.
-        edges_b, indices_b = to_edgelist(extent(poly_a), poly_b, T)
-        tree_b = STRtree(edges_b, indices_b)
+        ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
+        edges_b, indices_b = to_edgelist(ext_a, poly_b, T)
+        tree_b = STRtree(edges_b)
         
         # Loop over each vertex in poly_a
         for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
             a1t == a2t && continue
-            f_a(a1t, i)
+            l1 = GI.Line(SVector{2}(a1t, a2t))
+            ext_l = GI.extent(l1)
+            l = GI.Line(SVector{2}(a1t, a2t); extent=ext_l)
+            f_on_each_a(a1t, i)
             # Query the STRtree for any edges in b that may intersect this edge
             # This is sorted because we want to pretend we're doing the same thing
             # as the nested loop above, and iterating through poly_b in order.
-            candidates = sort!(
-                SortTileRecursiveTree.query(tree_b, GI.extent(GI.Line(SVector{2}(a1t, a2t))))
-            )
-            for j in candidates
-                b1t, b2t = edges_b[j].geom
-                b1t == b2t && continue
-                LoopStateMachine.@processloopaction f_intersect(((a1t, a2t), i), ((b1t, b2t), j))
-            end
-            f_a_after(a1t, i)
-        end
-    elseif na >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
-        # If both of the polygons are quite large,
-        # then we do a dual-tree traversal of the STRtrees
-        # and find all potentially overlapping edges.
-        # This is kind of like an adjacency list of a graph or a sparse matrix that we're constructing.
-
-        # First, we materialize an edge list for each polygon as a vector of `GI.Line` objects.
-        edges_a, indices_a = to_edgelist(GI.extent(poly_b), poly_a, T) # ::Vector{GI.Line} # with precalculated extents
-        edges_b, indices_b = to_edgelist(GI.extent(poly_a), poly_b, T) # ::Vector{GI.Line} # with precalculated extents
-
-        # Now, construct STRtrees from the edge lists.
-        # TODO: we can optimize the strtrees by passing in only edges that reside within the area of extent overlap
-        # between poly_a and poly_b.
-        # this would greatly help for e.g. coverage transactions
-        # BUT this needs fixes in SortTileRecursiveTree.jl to allow you to pass in a vector of indices
-        # as well as extents / geometries.
-        tree_a = STRtree(edges_a, indices_a)
-        tree_b = STRtree(edges_b, indices_b)
-
-        # Now we perform a dual-tree traversal to find 
-        # all potentially overlapping pairs of edges.
-        # The `STRDualQuery` module is defined in this folder,
-        # in `strtree_dual_query.jl`.
-        index_list = STRDualQuery.maybe_overlapping_geoms_and_query_lists_in_order(
-            tree_a, tree_b, edges_a, edges_b
-        )
-
-        # Track the last index in `poly_a` that we've processed.
-        last_a_idx = 1
-
-        # Iterate over the indices in `poly_a` that may potentially overlap with any edge in `poly_b`.
-        for (a_idx, b_idxs) in index_list
-            # If we've skipped any indices in `poly_a`,
-            # then we need to process those indices.
-            # But we know that they will never intersect, so we can skip calling `f_intersect`.
-            if a_idx > (last_a_idx + 1)
-                for i in (last_a_idx+1):a_idx-1
-                    a1, a2 = edges_a[i].geom
-                    a1 == a2 && continue
-                    f_a(GI.getpoint(poly_a, i), i)
-                    f_a_after(GI.getpoint(poly_a, i), i)
+            if Extents.intersects(ext_l, ext_b)
+                candidates = sort!(
+                    SortTileRecursiveTree.query(tree_b, l)
+                )
+                for j in candidates
+                    b1t, b2t = edges_b[j].geom
+                    b1t == b2t && continue
+                    LoopStateMachine.@processloopaction f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), indices_b[j]))
                 end
             end
-            last_a_idx = a_idx
-            
-            # Get the edge in `poly_a` that we're currently processing.
-            aedge = edges_a[a_idx]
-            aedge_extent = GI.extent(aedge)
-            a1t, a2t = aedge.geom
-
-            # Call `f_a` for the start point of the edge.
-            f_a(a1t, a_idx)
-
-            for b_idx in b_idxs
-                bedge = edges_b[b_idx]
-                b1t, b2t = bedge.geom
-                b1t == b2t && continue
-
-                if GI.Extents.intersects(aedge_extent, GI.extent(bedge))
-                    LoopStateMachine.@processloopaction f_intersect(((a1t, a2t), a_idx), ((b1t, b2t), b_idx))
-                end
-            end
-
-            # Call `f_a_after` for the start point of the edge - postprocess once
-            # we're done with tracing.
-            f_a_after(a1t, a_idx)
-
-            last_a_idx = a_idx
-
+            f_after_each_a(a1t, i)
         end
     end
+    # elseif na >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+    #     # If both of the polygons are quite large,
+    #     # then we do a dual-tree traversal of the STRtrees
+    #     # and find all potentially overlapping edges.
+    #     # This is kind of like an adjacency list of a graph or a sparse matrix that we're constructing.
+
+    #     # First, we materialize an edge list for each polygon as a vector of `GI.Line` objects.
+    #     edges_a = to_edgelist(poly_a, T) # ::Vector{GI.Line} # with precalculated extents
+    #     edges_b = to_edgelist(poly_b, T) # ::Vector{GI.Line} # with precalculated extents
+
+    #     # Now, construct STRtrees from the edge lists.
+    #     # TODO: we can optimize the strtrees by passing in only edges that reside within the area of extent overlap
+    #     # between poly_a and poly_b.
+    #     # this would greatly help for e.g. coverage transactions
+    #     # BUT this needs fixes in SortTileRecursiveTree.jl to allow you to pass in a vector of indices
+    #     # as well as extents / geometries.
+    #     tree_a = STRtree(edges_a)
+    #     tree_b = STRtree(edges_b)
+
+    #     # Now we perform a dual-tree traversal to find 
+    #     # all potentially overlapping pairs of edges.
+    #     # The `STRDualQuery` module is defined in this folder,
+    #     # in `strtree_dual_query.jl`.
+    #     index_list = STRDualQuery.maybe_overlapping_geoms_and_query_lists_in_order(tree_a, tree_b, edges_a, edges_b)
+
+    #     # Track the last index in `poly_a` that we've processed.
+    #     last_a_idx = 1
+
+    #     # Iterate over the indices in `poly_a` that may potentially overlap with any edge in `poly_b`.
+    #     for (a_idx, b_idxs) in index_list
+    #         # If we've skipped any indices in `poly_a`,
+    #         # then we need to process those indices.
+    #         # But we know that they will never intersect, so we can skip calling `f_intersect`.
+    #         if a_idx > (last_a_idx + 1)
+    #             for i in (last_a_idx+1):a_idx-1
+    #                 # a1, a2 = edges_a[i].geom
+    #                 # a1 == a2 && continue
+    #                 f_on_each_a(GI.getpoint(poly_a, i), i)
+    #                 f_after_each_a(GI.getpoint(poly_a, i), i)
+    #             end
+    #         end
+    #         last_a_idx = a_idx
+            
+    #         # Get the edge in `poly_a` that we're currently processing.
+    #         aedge = edges_a[a_idx]
+    #         aedge_extent = GI.extent(aedge)
+    #         a1t, a2t = aedge.geom
+
+    #         # Call `f_a` for the start point of the edge.
+    #         f_on_each_a(a1t, a_idx)
+
+    #         for b_idx in b_idxs
+    #             bedge = edges_b[b_idx]
+    #             b1t, b2t = bedge.geom
+    #             b1t == b2t && continue
+
+    #             if GI.Extents.intersects(aedge_extent, GI.extent(bedge))
+    #                 LoopStateMachine.@processloopaction f_on_each_maybe_intersect(((a1t, a2t), a_idx), ((b1t, b2t), b_idx))
+    #             end
+    #         end
+
+    #         # Call `f_a_after` for the start point of the edge - postprocess once
+    #         # we're done with tracing.
+    #         f_after_each_a(a1t, a_idx)
+
+    #         last_a_idx = a_idx
+
+    #     end
+    # end
+    # elseif na >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+    #     # If both of the polygons are quite large,
+    #     # then we do a dual-tree traversal of the STRtrees
+    #     # and find all potentially overlapping edges.
+    #     # This is kind of like an adjacency list of a graph or a sparse matrix that we're constructing.
+
+    #     # First, we materialize an edge list for each polygon as a vector of `GI.Line` objects.
+    #     # edges_a, indices_a = to_edgelist(GI.extent(poly_b), poly_a, T) # ::Vector{GI.Line} # with precalculated extents
+    #     # edges_b, indices_b = to_edgelist(GI.extent(poly_a), poly_b, T) # ::Vector{GI.Line} # with precalculated extents
+    #     edges_a = to_edgelist(poly_a, T) # ::Vector{GI.Line} # with precalculated extents
+    #     edges_b = to_edgelist(poly_b, T) # ::Vector{GI.Line} # with precalculated extents
+    #     indices_a = eachindex(edges_a)
+    #     indices_b = eachindex(edges_b)
+
+    #     # Now, construct STRtrees from the edge lists.
+    #     # TODO: we can optimize the strtrees by passing in only edges that reside within the area of extent overlap
+    #     # between poly_a and poly_b.
+    #     # this would greatly help for e.g. coverage transactions
+    #     # BUT this needs fixes in SortTileRecursiveTree.jl to allow you to pass in a vector of indices
+    #     # as well as extents / geometries.
+    #     tree_a = STRtree(edges_a)
+    #     tree_b = STRtree(edges_b)
+
+    #     # Now we perform a dual-tree traversal to find 
+    #     # all potentially overlapping pairs of edges.
+    #     # The `STRDualQuery` module is defined in this folder,
+    #     # in `strtree_dual_query.jl`.
+    #     index_list = STRDualQuery.maybe_overlapping_geoms_and_query_lists_in_order(
+    #         tree_a, tree_b, edges_a, edges_b
+    #     )
+
+    #     # Track the last index in `poly_a` that we've processed.
+    #     last_a_idx_orig = indices_a[1]
+
+    #     # Iterate over the indices in `poly_a` that may potentially overlap with any edge in `poly_b`.
+    #     for (a_idx, b_idxs) in index_list
+    #         a_idx_orig = indices_a[a_idx]
+    #         @assert a_idx_orig == a_idx
+    #         # If we've skipped any indices in `poly_a`,
+    #         # then we need to process those indices.
+    #         # But we know that they will never intersect, so we can skip calling `f_intersect`.
+    #         if a_idx_orig > (last_a_idx_orig + 1)
+    #             for i in (last_a_idx_orig + 1:a_idx_orig - 1)
+    #                 # TODO explain this check
+    #                 # a1, a2 = edges_a[i].geom
+    #                 # a1 == a2 && continue
+    #                 point_a = GI.getpoint(poly_a, i)
+    #                 f_on_each_a(point_a, i)
+    #                 f_after_each_a(point_a, i)
+    #             end
+    #         end
+    #         last_a_idx_orig = a_idx_orig
+            
+    #         # Get the edge in `poly_a` that we're currently processing.
+    #         aedge = edges_a[a_idx]
+    #         aedge_extent = GI.extent(aedge)
+    #         a1t, a2t = aedge.geom
+
+    #         # Call `f_a` for the start point of the edge.
+    #         f_on_each_a(a1t, a_idx_orig)
+
+    #         for b_idx in b_idxs
+    #             b_idx_orig = indices_b[b_idx]
+    #             @assert b_idx_orig == b_idx
+    #             bedge = edges_b[b_idx]
+    #             b1t, b2t = bedge.geom
+    #             b1t == b2t && continue
+
+    #             if GI.Extents.intersects(aedge_extent, GI.extent(bedge))
+    #                 LoopStateMachine.@processloopaction f_on_each_maybe_intersect(
+    #                     ((a1t, a2t), a_idx_orig), ((b1t, b2t), b_idx_orig)
+    #                 )
+    #             end
+    #         end
+
+    #         # Call `f_after_each_a` for the start point of the edge - postprocess once
+    #         # we're done with tracing.
+    #         f_after_each_a(a1t, a_idx_orig)
+
+    #         last_a_idx_orig = a_idx_orig
+
+    #     end
+    # end
 
     return nothing
 

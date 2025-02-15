@@ -36,7 +36,9 @@ The result looks like this:
 ```
 in which the overlap map is sorted by the tree_a indices, and within each group, the tree_b indices are sorted.
 """
-function maybe_overlapping_geoms_and_query_lists_in_order(tree_a::STRtree, tree_b::STRtree, edges_a::Vector{<: GI.Line}, edges_b::Vector{<: GI.Line})
+function maybe_overlapping_geoms_and_query_lists_in_order(
+    tree_a::STRtree, tree_b::STRtree, edges_a::Vector{<: GI.Line}, edges_b::Vector{<: GI.Line}
+)
     # Use DefaultDict to automatically create empty vectors for new keys
     overlap_map = Dict{Int, Vector{Int}}()
     
