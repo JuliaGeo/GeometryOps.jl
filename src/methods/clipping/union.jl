@@ -73,7 +73,7 @@ function _union(
     # Check if one polygon totally within other and if so, return the larger polygon
     a_in_b, b_in_a = false, false
     if n_pieces == 0 # no crossing points, determine if either poly is inside the other
-        a_in_b, b_in_a = _find_non_cross_orientation(alg, T, a_list, b_list, ext_a, ext_b; exact)
+        a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
             push!(polys, GI.Polygon([_linearring(tuples(ext_b))]))
         elseif b_in_a

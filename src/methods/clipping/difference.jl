@@ -63,7 +63,7 @@ function _difference(
     polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b)
     # if no crossing points, determine if either poly is inside of the other
     if isempty(polys)
-        a_in_b, b_in_a = _find_non_cross_orientation(#=TODO: alg=#a_list, b_list, ext_a, ext_b; exact)
+        a_in_b, b_in_a = _find_non_cross_orientation(alg.manifold, a_list, b_list, ext_a, ext_b; exact)
         # add case for if they polygons are the same (all intersection points!)
         # add a find_first check to find first non-inter poly!
         if b_in_a && !a_in_b  # b in a and can't be the same polygon
