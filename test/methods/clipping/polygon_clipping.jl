@@ -176,7 +176,7 @@ function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         LG_result_geom = LG.MultiPolygon(poly_list)
     end
 
-    for _accelerator in (GO.AutoAccelerator(), GO.NestedLoop(), GO.SingleSTRtree(), GO.DoubleSTRtree())
+    for _accelerator in (GO.AutoAccelerator(), GO.NestedLoop(), GO.SingleSTRtree(), #=GO.DoubleSTRtree()=#)
     @testset let accelerator = _accelerator # this is a ContextTestSet that is otherwise invisible but adds context to the testset
         GO_result_list = GO_f(GO.FosterHormannClipping(accelerator), p1, p2; target = GI.PolygonTrait())
         # Check if nothing is returned

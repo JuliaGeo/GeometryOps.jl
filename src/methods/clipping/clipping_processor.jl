@@ -184,10 +184,8 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     accelerator = if accelerator isa AutoAccelerator
         if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
             NestedLoop()
-        elseif na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb > GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
-            SingleSTRtree()
         else
-            DoubleSTRtree()
+            SingleSTRtree()
         end
     else
         accelerator
