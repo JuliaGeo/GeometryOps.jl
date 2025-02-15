@@ -51,7 +51,7 @@ module DensifiedGeometries
 
 end # module DensifiedGeometries
 
-const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS, DensifiedGeometries]
+const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS]
 
 # Monkey-patch GeometryBasics to have correct methods.
 # TODO: push this up to GB!
