@@ -13,12 +13,14 @@ In GeometryOps (and geodesy more generally), there are three manifolds we care a
 - [`Planar`](@ref): the 2d plane, a completely Euclidean manifold
 - [`Spherical`](@ref): the unit sphere, but one where areas are multiplied by the radius of the Earth.  This is not Euclidean globally, but all map projections attempt to represent the sphere on the Euclidean 2D plane to varying degrees of success.
 - [`Geodesic`](@ref): the ellipsoid, the closest we can come to representing the Earth by a simple geometric shape.  Parametrized by `semimajor_axis` and `inv_flattening`.
+- [`AutoManifold`](@ref): a special manifold that automatically selects the best manifold for the operation when it's executed.  Resolves to [`Planar`](@ref), [`Spherical`](@ref), or [`Geodesic`](@ref) depending on the input geometry.
 
 Generally, we aim to have `Linear` and `Spherical` be operable everywhere, whereas `Geodesic` will only apply in specific circumstances.
-Currently, those circumstances are `area` and `segmentize`, but this could be extended with time and https://github.com/JuliaGeo/SphericalGeodesics.jl.
+Currently, those circumstances are [`area`](@ref), [`arclength`](@ref), and [`segmentize`](@ref), but this could be extended with time and https://github.com/JuliaGeo/SphericalGeodesics.jl.
 =#
 
-export Manifold, Planar, Spherical, Geodesic
+export Manifold, AutoManifold, Planar, Spherical, Geodesic
+
 """
     abstract type Manifold
 
@@ -29,6 +31,16 @@ We use the manifold definition to define the space in which an operation should 
 Currently we have [`Planar`](@ref), [`Spherical`](@ref), and [`Geodesic`](@ref) manifolds.
 """
 abstract type Manifold end
+
+"""
+    AutoManifold()
+
+The `AutoManifold` is a special manifold that automatically selects the best manifold for the operation.
+It does not carry any parameters, nor does it indicate anything about the nature of the space.
+
+This gets resolved to a specific manifold when an operation is applied.  
+"""
+struct AutoManifold <: Manifold end
 
 """
     Planar()
@@ -57,7 +69,7 @@ A spherical manifold means that the geometry is on the 3-sphere (but is represen
     `-90` (south pole) and `90` (north pole).
 """
 Base.@kwdef struct Spherical{T} <: Manifold
-    radius::T = 6371008.8
+    radius::T = 6371008.8 # this should be theWGS84 defined mean radius
 end
 
 """
@@ -69,12 +81,13 @@ and `inv_flattening` (``1/f``).
 Usually, this is only relevant for area and segmentization calculations.  It becomes more relevant as one grows closer to the poles (or equator).
 """
 Base.@kwdef struct Geodesic{T} <: Manifold
-    semimajor_axis::T = 6378137.0
-    inv_flattening::T = 298.257223563
+    semimajor_axis::T = 6378137.0     # WGS84 by default
+    inv_flattening::T = 298.257223563 # WGS84 by default
 end
 
 
 # specifically for manifolds
+# not used now but will be used later
 abstract type EllipsoidParametrization end
 
 struct SemimajorAxisInvFlattening{T} <: EllipsoidParametrization
