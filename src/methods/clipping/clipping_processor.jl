@@ -111,8 +111,8 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::F
         # on poly_b without doing so on poly_a.
         # This is less complex than running a dual tree traversal,
         # and reduces the overhead of constructing an edge list and tree on poly_a.
-        edges_b = to_edgelist(poly_b, T)
-        tree_b = STRtree(edges_b)
+        edges_b, indices_b = to_edgelist(extent(poly_a), poly_b, T)
+        tree_b = STRtree(edges_b, indices_b)
         
         # Loop over each vertex in poly_a
         for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
@@ -138,8 +138,8 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::F
         # This is kind of like an adjacency list of a graph or a sparse matrix that we're constructing.
 
         # First, we materialize an edge list for each polygon as a vector of `GI.Line` objects.
-        edges_a = to_edgelist(poly_a, T) # ::Vector{GI.Line} # with precalculated extents
-        edges_b = to_edgelist(poly_b, T) # ::Vector{GI.Line} # with precalculated extents
+        edges_a, indices_a = to_edgelist(GI.extent(poly_b), poly_a, T) # ::Vector{GI.Line} # with precalculated extents
+        edges_b, indices_b = to_edgelist(GI.extent(poly_a), poly_b, T) # ::Vector{GI.Line} # with precalculated extents
 
         # Now, construct STRtrees from the edge lists.
         # TODO: we can optimize the strtrees by passing in only edges that reside within the area of extent overlap
@@ -147,14 +147,16 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(f_a::FA, f_a_after::F
         # this would greatly help for e.g. coverage transactions
         # BUT this needs fixes in SortTileRecursiveTree.jl to allow you to pass in a vector of indices
         # as well as extents / geometries.
-        tree_a = STRtree(edges_a)
-        tree_b = STRtree(edges_b)
+        tree_a = STRtree(edges_a, indices_a)
+        tree_b = STRtree(edges_b, indices_b)
 
         # Now we perform a dual-tree traversal to find 
         # all potentially overlapping pairs of edges.
         # The `STRDualQuery` module is defined in this folder,
         # in `strtree_dual_query.jl`.
-        index_list = STRDualQuery.maybe_overlapping_geoms_and_query_lists_in_order(tree_a, tree_b, edges_a, edges_b)
+        index_list = STRDualQuery.maybe_overlapping_geoms_and_query_lists_in_order(
+            tree_a, tree_b, edges_a, edges_b
+        )
 
         # Track the last index in `poly_a` that we've processed.
         last_a_idx = 1

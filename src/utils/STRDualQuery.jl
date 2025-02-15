@@ -64,7 +64,7 @@ function _dual_tree_traverse!(
     node_a::Union{STRNode,STRLeafNode}, 
     node_b::Union{STRNode,STRLeafNode}, 
     edges_a::Vector{<: GI.Line}, 
-    edges_b::Vector{<: GI.Line}
+    edges_b::Vector{<: GI.Line},
 )
     
     # Early exit if bounding boxes don't overlap
@@ -74,12 +74,12 @@ function _dual_tree_traverse!(
     
     # Case 1: Both nodes are leaves
     if node_a isa STRLeafNode && node_b isa STRLeafNode
-        for idx_a in node_a.indices
-            dict_vec = get!(() -> Int[], overlap_map, idx_a)
-            for idx_b in node_b.indices
+        for (ia, idx_a) in enumerate(node_a.indices)
+            dict_vec = get!(() -> Int[], overlap_map, ia)
+            for (ib, idx_b) in enumerate(node_b.indices)
                 # Final extent rejection, this is cheaper than the allocation for `push!`
-                if Extents.intersects(GI.extent(edges_a[idx_a]), GI.extent(edges_b[idx_b]))
-                    push!(dict_vec, idx_b)
+                if Extents.intersects(GI.extent(edges_a[ia]), GI.extent(edges_b[ib]))
+                    push!(dict_vec, ib)
                 end
             end
         end
@@ -103,8 +103,8 @@ function _dual_tree_traverse!(
     end
     
     # Case 4: Both nodes are internal
-    for child_a in children(node_a)
-        for child_b in children(node_b)
+    for child_a in node_a.children
+        for child_b in node_b.children
             _dual_tree_traverse!(overlap_map, child_a, child_b, edges_a, edges_b)
         end
     end
