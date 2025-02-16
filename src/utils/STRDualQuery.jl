@@ -178,7 +178,7 @@ end # module
 #             b1t == b2t && continue
 
 #             if GI.Extents.intersects(aedge_extent, GI.extent(bedge))
-#                 LoopStateMachine.@processloopaction f_on_each_maybe_intersect(
+#                 LoopStateMachine.@controlflow f_on_each_maybe_intersect(
 #                     ((a1t, a2t), a_idx_orig), ((b1t, b2t), b_idx_orig)
 #                 )
 #             end
