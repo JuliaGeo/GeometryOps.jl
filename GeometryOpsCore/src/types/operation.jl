@@ -37,6 +37,18 @@ but if we ever implement e.g. RelateNG in GeometryOps, we can add that in.
 abstract type Operation{Alg <: Algorithm} end
 
 # example
-struct XPlusOneOperation <: Operation{NoAlgorithm}
-    x::Int
+# struct XPlusOneOperation{M <: Manifold} <: Operation{NoAlgorithm{M}}
+#     m::M # the manifold always needs to be stored, since it's not a singleton
+#     x::Int
+# end
+
+
+struct Area{Alg<: Algorithm} <: Operation{Alg}
+    alg::Alg
+end
+
+Area() = Area(NoAlgorithm(Planar()))
+
+function (op::Area{Alg})(data; threaded = _False(), init = 0.0) where {Alg <: Algorithm}
+    return GO.area(op.alg, data; threaded, init)
 end

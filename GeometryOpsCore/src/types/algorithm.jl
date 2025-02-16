@@ -16,6 +16,15 @@ Algorithms are:
 
 abstract type Algorithm{M <: Manifold} end
 
+struct AutoAlgorithm{T, M <: Manifold} <: Algorithm{M} 
+    manifold::M
+    x::T
+end
+
+AutoAlgorithm(m::Manifold; kwargs...) = AutoAlgorithm(m, kwargs)
+AutoAlgorithm(; kwargs...) = AutoAlgorithm(AutoManifold(), kwargs)
+
+
 abstract type ManifoldIndependentAlgorithm{M <: Manifold} <: Algorithm{M} end
 
 abstract type SingleManifoldAlgorithm{M <: Manifold} <: Algorithm{M} end
