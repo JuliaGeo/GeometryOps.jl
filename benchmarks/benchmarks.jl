@@ -208,7 +208,7 @@ function union_coverage(intersection_f::IF, union_f::UF, polygons::Vector{T}; sh
 
     (showprogress && (prog = Progress(length(all_intersected))))
 
-    while !(all(all_intersected)) && i < length(polygons)
+    for i in 1:length(polygons)
         query_result = STR.query(tree, GI.extent(accumulator))
         for idx in query_result
             if !(all_intersected[idx] || !(intersection_f(polygons[idx], accumulator)))
@@ -219,7 +219,10 @@ function union_coverage(intersection_f::IF, union_f::UF, polygons::Vector{T}; sh
             end
         end
         showplot && display(poly(view(polygons, all_intersected); color = rand(RGBf, sum(all_intersected))), axis = (; title = "$(GI.trait(accumulator) isa GI.PolygonTrait ? "Polygon" : "MultiPolygon with $(GI.ngeom(accumulator)) individual polys")"))
+        all(all_intersected) && break # if done then finish
     end
+
+    return accumulator
 end
 
 @time union_coverage(LG.intersects, LG.union, watershed_polygons .|> GI.convert(LG); showplot = false, showprogress = true)
