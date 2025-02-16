@@ -181,11 +181,26 @@ function _difference(
     return polys
 end
 
+function _difference(
+    alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
+    trait_a::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_a,
+    trait_b::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...
+) where T
+    polys = _difference(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; kwargs...)
+    if isnothing(fix_multipoly)
+        return GI.MultiPolygon(polys)
+    else
+        return fix_multipoly(GI.MultiPolygon(polys))
+    end
+end
+
 # Many type and target combos aren't implemented
 function _difference(
     alg::GeometryOpsCore.Algorithm, target::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
+    kw...
 ) where {Target, T}
     @assert(
         false,
