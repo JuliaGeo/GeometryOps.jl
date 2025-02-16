@@ -38,7 +38,6 @@ include("primitives.jl") # moved to GeometryOpsCore
 include("not_implemented_yet.jl") # functions that are not implemented yet, but we want stubs for, or the implementations might be in extensions
 
 include("utils/LoopStateMachine.jl") # Utils for functions that can tell the loop they run in to do something via the return value
-include("utils/STRDualQuery.jl") # Dual tree traversal for edge intersection queries over STRtrees (from SortTileRecursiveTree.jl)
 include("utils/utils.jl") # More general utility functions
 
 include("methods/angles.jl")
