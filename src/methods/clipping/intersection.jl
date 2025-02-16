@@ -173,6 +173,22 @@ function _intersection(
     return polys
 end
 
+# catch-all method for multipolygontraits
+function intersection(
+    alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
+    trait_a::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_a,
+    trait_b::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...
+) where T
+    polys = _intersection(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; kwargs...)
+    if isnothing(fix_multipoly)
+        return GI.MultiPolygon(polys)
+    else
+        return fix_multipoly(GI.MultiPolygon(polys))
+    end
+end
+
+
 # Many type and target combos aren't implemented
 function _intersection(
     alg::GeometryOpsCore.Algorithm, target::TraitTarget{Target}, ::Type{T},
