@@ -1,5 +1,5 @@
 using Test
-using GeometryOps.LoopStateMachine: @processloopaction, Continue, Break
+using GeometryOps.LoopStateMachine: @controlflow, Continue, Break
 
 @testset "Continue action" begin
     count = 0
@@ -11,7 +11,7 @@ using GeometryOps.LoopStateMachine: @processloopaction, Continue, Break
         count += 1
     end
     for i in 1:5
-        @processloopaction f(i)
+        @controlflow f(i)
     end
     @test count == 9 # Adds 1 for each iteration, but skips second +1 on i=3
 end
@@ -26,7 +26,7 @@ end
         count += 1
     end
     for i in 1:5
-        @processloopaction f(i)
+        @controlflow f(i)
     end
     @test count == 5 # Counts up to i=3, adding 2 for i=1,2 and 1 for i=3
 end
@@ -34,7 +34,7 @@ end
 @testset "Return value" begin
     results = Int[]
     for i in 1:3
-        val = @processloopaction begin
+        val = @controlflow begin
             i * 2
         end
         push!(results, val)

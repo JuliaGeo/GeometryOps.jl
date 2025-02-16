@@ -4,6 +4,13 @@
 Utilities for returning state from functions that run inside a loop.
 
 This is used in e.g clipping, where we may need to break or transition states.
+
+The main entry point is to return an [`Action`](@ref) from a function that 
+is wrapped in a `@controlflow f(...)` macro in a loop.  When a known `Action`
+(currently, `Continue`, `Break`, or `Return`) is returned, it is processed
+by the `@controlflow` macro, which allows the function to break out of the loop
+early, continue to the next iteration, or return a value, without being 
+syntactically inside the loop.
 """
 module LoopStateMachine
 
@@ -50,7 +57,7 @@ Cause the function executing the loop to return.  Use with great caution!
 const Return = Action{:Return}
 
 """
-    @processloopaction f(...)
+    @controlflow f(...)
 
 Process the result of `f(...)` and return the result if it's not a [`Continue`](@ref), [`Break`](@ref), or [`Return`](@ref) [`Action`](@ref).
 
@@ -61,7 +68,7 @@ Process the result of `f(...)` and return the result if it's not a [`Continue`](
 !!! warning
     Only use this inside a loop, otherwise you'll get a syntax error!
 """
-macro processloopaction(expr)
+macro controlflow(expr)
     varname = gensym("lsm-f-ret")
     return quote
         $varname = $(esc(expr))

@@ -246,7 +246,11 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
                 for j in candidates
                     b1t, b2t = edges_b[j].geom
                     b1t == b2t && continue
-                    LoopStateMachine.@processloopaction f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), indices_b[j]))
+                    # Manage control flow if the function returns a LoopStateMachine.Action
+                    # like Break(), Continue(), or Return()
+                    # This allows the function to break out of the loop early if it wants
+                    # without being syntactically inside the loop.
+                    LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), indices_b[j]))
                 end
             end
             f_after_each_a(a1t, i)
