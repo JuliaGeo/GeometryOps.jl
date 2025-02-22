@@ -752,14 +752,14 @@ function _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
                 else
                     p3 = p
                     # check if p2 is approximately on the edge formed by p1 and p3 - remove if so
-                    if Predicates.orient(p1, p2, p3; exact = _False()) == 0
+                    if Predicates.orient(p1, p2, p3; exact = False()) == 0
                         remove_idx[i - 1] = true
                     end
                 end
                 p1, p2 = p2, p3
             end
             # Check if the first point (which is repeated as the last point) is needed 
-            if Predicates.orient(ring.geom[end - 1], ring.geom[1], ring.geom[2]; exact = _False()) == 0
+            if Predicates.orient(ring.geom[end - 1], ring.geom[1], ring.geom[2]; exact = False()) == 0
                 remove_idx[1], remove_idx[end] = true, true
             end
             # Remove unneeded collinear points
