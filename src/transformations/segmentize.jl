@@ -178,8 +178,8 @@ segmentize(method::Manifold, geom, max_distance::Real; threaded = False()) = seg
 
 # generic implementation
 function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
-    if max_distance > 0 
-        throw(ArgumentError("`max_distance` should be positive and nonzero!  Found $(method.max_distance)."))
+    if max_distance <= 0 
+        throw(ArgumentError("`max_distance` should be positive and nonzero!  Found $(max_distance)."))
     end
     _segmentize_function(geom) = _segmentize(method, geom, GI.trait(geom); max_distance)
     return apply(_segmentize_function, TraitTarget(GI.LinearRingTrait(), GI.LineStringTrait()), geom; threaded)
