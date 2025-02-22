@@ -44,7 +44,7 @@ function intersection(
 ) where {T<:AbstractFloat}
     return _intersection(
         alg, TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
-        exact = _True(), kwargs...,
+        exact = True(), kwargs...,
     )
 end
 
@@ -234,7 +234,7 @@ end
 
 #= Calculates the list of intersection points between two geometries, including line
 segments, line strings, linear rings, polygons, and multipolygons. =#
-function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = _True()) where {M <: Manifold, A <: IntersectionAccelerator, T}
+function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = True()) where {M <: Manifold, A <: IntersectionAccelerator, T}
     # Initialize an empty list of points
     result = Tuple{T, T}[]
     # Check if the geometries extents even overlap
