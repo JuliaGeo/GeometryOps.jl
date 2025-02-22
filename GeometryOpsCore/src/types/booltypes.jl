@@ -1,10 +1,5 @@
-
-export BoolsAsTypes, _True, _False, _booltype
-
-
-
 #=
-## `BoolsAsTypes`
+# `BoolsAsTypes`
 
 In `apply` and `applyreduce`, we pass `threading` and `calc_extent` as types, not simple boolean values.  
 
@@ -19,8 +14,7 @@ We had to add the type annotation on the `_booltype(::Bool)` method for this rea
 TODO: should we switch to `Static.jl`?
 =#
 
-export BoolsAsTypes, _True, _False, _TrueButStable
-export _booltype
+export BoolsAsTypes, True, False, booltype
 
 """
     abstract type BoolsAsTypes
@@ -33,14 +27,14 @@ abstract type BoolsAsTypes end
 
 A struct that means `true`.
 """
-struct _True <: BoolsAsTypes end
+struct True <: BoolsAsTypes end
 
 """
-    struct _False <: BoolsAsTypes
+    struct False <: BoolsAsTypes
 
 A struct that means `false`.
 """
-struct _False <: BoolsAsTypes end
+struct False <: BoolsAsTypes end
 
 # specifically for my StableTasks experiment
 struct _TrueButStable <: BoolsAsTypes end
@@ -50,7 +44,7 @@ struct _TrueButStable <: BoolsAsTypes end
 
 Returns a [`BoolsAsTypes`](@ref) from `x`, whether it's a boolean or a BoolsAsTypes.
 """
-function _booltype end
+function booltype end
 
-@inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
-@inline _booltype(x::BoolsAsTypes)::BoolsAsTypes = x
+@inline booltype(x::Bool)::BoolsAsTypes = x ? True() : False()
+@inline booltype(x::BoolsAsTypes)::BoolsAsTypes = x

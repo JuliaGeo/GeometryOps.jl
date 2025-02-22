@@ -62,7 +62,7 @@ cut(geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} = cut(FosterHorm
 cut(m::Manifold, geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} = cut(FosterHormannClipping(m), geom, line, T)
 
 cut(alg::FosterHormannClipping{M, A}, geom, line, ::Type{T} = Float64) where {T <: AbstractFloat, M, A} =
-    _cut(alg, T, GI.trait(geom), geom, GI.trait(line), line; exact = _True())
+    _cut(alg, T, GI.trait(geom), geom, GI.trait(line), line; exact = True())
 
 #= Cut a given polygon by given line. Add polygon holes back into resulting pieces if there
 are any holes. =#
