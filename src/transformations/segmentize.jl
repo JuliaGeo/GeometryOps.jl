@@ -178,14 +178,15 @@ segmentize(method::Manifold, geom, max_distance::Real; threaded = False()) = seg
 
 # generic implementation
 function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
-    @assert max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
+    if max_distance > 0 
+        throw(ArgumentError("`max_distance` should be positive and nonzero!  Found $(method.max_distance)."))
+    end
     _segmentize_function(geom) = _segmentize(method, geom, GI.trait(geom); max_distance)
     return apply(_segmentize_function, TraitTarget(GI.LinearRingTrait(), GI.LineStringTrait()), geom; threaded)
 end
 
 function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = False())
     @warn "`segmentize(method::$(typeof(method)), geom) is deprecated; use `segmentize($(method isa LinearSegments ? "Planar()" : "Geodesic()"), geom; max_distance, threaded) instead!"  maxlog=3
-    @assert method.max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
     new_method = method isa LinearSegments ? Planar() : Geodesic()
     segmentize(new_method, geom; max_distance = method.max_distance, threaded)
 end
