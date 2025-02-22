@@ -34,7 +34,7 @@ GI.coordinates.(union_poly)
 """
 function union(
     alg::FosterHormannClipping, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
-) where {T<:AbstractFloat}
+) where {T<:Number}
     return _union(
         alg, TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
         exact = _True(), kwargs...,
@@ -45,12 +45,12 @@ end
 # if no manifold - assume planar (until we have best_manifold)
 function union(
     geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
-) where {T<:AbstractFloat}
+) where {T<:Number}
     return union(FosterHormannClipping(Planar()), geom_a, geom_b; target, kwargs...)
 end
 
 # if manifold but no algorithm - assume FosterHormannClipping with provided manifold.
-function union(m::Manifold, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...) where {T<:AbstractFloat}
+function union(m::Manifold, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...) where {T <: Number}
     return union(FosterHormannClipping(m), geom_a, geom_b; target, kwargs...)
 end
 
@@ -75,12 +75,12 @@ function _union(
     if n_pieces == 0 # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([_linearring(tuples(ext_b))]))
+            push!(polys, GI.Polygon([_linearring(tuples(ext_b, T))]))
         elseif b_in_a
-            push!(polys,  GI.Polygon([_linearring(tuples(ext_a))]))
+            push!(polys,  GI.Polygon([_linearring(tuples(ext_a, T))]))
         else
-            push!(polys, tuples(poly_a))
-            push!(polys, tuples(poly_b))
+            push!(polys, tuples(poly_a, T))
+            push!(polys, tuples(poly_b, T))
             return polys
         end
     elseif n_pieces > 1
