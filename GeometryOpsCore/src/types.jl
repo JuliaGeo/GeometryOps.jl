@@ -22,7 +22,7 @@ Currently, those circumstances are `area` and `segmentize`, but this could be ex
 
 export Planar, Spherical, Geodesic
 export TraitTarget
-export BoolsAsTypes, _True, _False, _booltype
+export BoolsAsTypes, True, False, booltype
 
 """
     abstract type Manifold
@@ -51,6 +51,8 @@ end
 
 A spherical manifold means that the geometry is on the 3-sphere (but is represented by 2-D longitude and latitude).  
 
+By default, the radius is defined as the mean radius of the Earth, `6371008.8 m`.
+
 ## Extended help
 
 !!! note
@@ -74,7 +76,7 @@ and `inv_flattening` (``1/f``).
 Usually, this is only relevant for area and segmentization calculations.  It becomes more relevant as one grows closer to the poles (or equator).
 """
 Base.@kwdef struct Geodesic{T} <: Manifold
-    semimajor_axis::T = 6378137,0
+    semimajor_axis::T = 6378137.0
     inv_flattening::T = 298.257223563
 end
 
@@ -128,7 +130,7 @@ the compiler to separate threaded and non-threaded code paths.
 Note that if we didn't include the parent abstract type, this would have been really 
 type unstable, since the compiler couldn't tell what would be returned!
 
-We had to add the type annotation on the `_booltype(::Bool)` method for this reason as well.
+We had to add the type annotation on the `booltype(::Bool)` method for this reason as well.
 
 TODO: should we switch to `Static.jl`?
 =#
@@ -140,25 +142,25 @@ TODO: should we switch to `Static.jl`?
 abstract type BoolsAsTypes end
 
 """
-    struct _True <: BoolsAsTypes
+    struct True <: BoolsAsTypes
 
 A struct that means `true`.
 """
-struct _True <: BoolsAsTypes end
+struct True <: BoolsAsTypes end
 
 """
-    struct _False <: BoolsAsTypes
+    struct False <: BoolsAsTypes
 
 A struct that means `false`.
 """
-struct _False <: BoolsAsTypes end
+struct False <: BoolsAsTypes end
 
 """
-    _booltype(x)
+    booltype(x)
 
 Returns a [`BoolsAsTypes`](@ref) from `x`, whether it's a boolean or a BoolsAsTypes.
 """
-function _booltype end
+function booltype end
 
-@inline _booltype(x::Bool)::BoolsAsTypes = x ? _True() : _False()
-@inline _booltype(x::BoolsAsTypes)::BoolsAsTypes = x
+@inline booltype(x::Bool)::BoolsAsTypes = x ? True() : False()
+@inline booltype(x::BoolsAsTypes)::BoolsAsTypes = x
