@@ -6,7 +6,7 @@ import GeometryOpsCore
 import GeometryOpsCore: 
                 TraitTarget,
                 Manifold, Planar, Spherical, Geodesic,
-                BoolsAsTypes, _True, _False, _booltype,
+                BoolsAsTypes, True, False, booltype,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD

@@ -126,8 +126,8 @@ end
 @inline function apply(
     f::F, target, geom; calc_extent=false, threaded=false, kw...
 ) where F
-    threaded = _booltype(threaded)
-    calc_extent = _booltype(calc_extent)
+    threaded = booltype(threaded)
+    calc_extent = booltype(calc_extent)
     _apply(f, TraitTarget(target), geom; threaded, calc_extent, kw...)
 end
 
@@ -139,7 +139,7 @@ end
     # For an Array there is nothing else to do but map `_apply` over all values
     # _maptasks may run this level threaded if `threaded==true`,
     # but deeper `_apply` called in the closure will not be threaded
-    apply_to_array(i) = _apply(f, target, A[i]; threaded=_False(), kw...)
+    apply_to_array(i) = _apply(f, target, A[i]; threaded=False(), kw...)
     _maptasks(apply_to_array, eachindex(A), threaded)
 end
 # There is no trait and this is not an AbstractArray.
@@ -150,7 +150,7 @@ end
     if Tables.istable(iterable)
     _apply_table(f, target, iterable; threaded, kw...)
     else # this is probably some form of iterable...
-        if threaded isa _True
+        if threaded isa True
             # `collect` first so we can use threads
             _apply(f, target, collect(iterable); threaded, kw...)
         else
@@ -226,14 +226,14 @@ end
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
 # Maybe use threads to call _apply on component features
 @inline function _apply(f::F, target, ::GI.FeatureCollectionTrait, fc;
-    crs=GI.crs(fc), calc_extent=_False(), threaded
+    crs=GI.crs(fc), calc_extent=False(), threaded
 ) where F
 
     # Run _apply on all `features` in the feature collection, possibly threaded
     apply_to_feature(i) =
-        _apply(f, target, GI.getfeature(fc, i); crs, calc_extent, threaded=_False())::GI.Feature
+        _apply(f, target, GI.getfeature(fc, i); crs, calc_extent, threaded=False())::GI.Feature
     features = _maptasks(apply_to_feature, 1:GI.nfeature(fc), threaded)
-    if calc_extent isa _True
+    if calc_extent isa True
         # Calculate the extent of the features
         extent = mapreduce(GI.extent, Extents.union, features)
         # Return a FeatureCollection with features, crs and calculated extent
@@ -245,13 +245,13 @@ end
 end
 # Rewrap all FeatureTrait features as GI.Feature, keeping the properties
 @inline function _apply(f::F, target, ::GI.FeatureTrait, feature;
-    crs=GI.crs(feature), calc_extent=_False(), threaded
+    crs=GI.crs(feature), calc_extent=False(), threaded
 ) where F
     # Run _apply on the contained geometry
     geometry = _apply(f, target, GI.geometry(feature); crs, calc_extent, threaded)
     # Get the feature properties
     properties = GI.properties(feature)
-    if calc_extent isa _True
+    if calc_extent isa True
         # Calculate the extent of the geometry
         extent = GI.extent(geometry)
         # Return a new Feature with the new geometry and calculated extent, but the original properties and crs
@@ -264,36 +264,36 @@ end
 # Reconstruct nested geometries,
 # maybe using threads to call _apply on component geoms
 @inline function _apply(f::F, target, trait, geom;
-    crs=GI.crs(geom), calc_extent=_False(), threaded
+    crs=GI.crs(geom), calc_extent=False(), threaded
 )::(GI.geointerface_geomtype(trait)) where F
     # Map `_apply` over all sub geometries of `geom`
     # to create a new vector of geometries
     # TODO handle zero length
-    apply_to_geom(i) = _apply(f, target, GI.getgeom(geom, i); crs, calc_extent, threaded=_False())
+    apply_to_geom(i) = _apply(f, target, GI.getgeom(geom, i); crs, calc_extent, threaded=False())
     geoms = _maptasks(apply_to_geom, 1:GI.ngeom(geom), threaded)
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
 @inline function _apply(f::F, target::TraitTarget{<:PointTrait}, trait::GI.PolygonTrait, geom;
-    crs=GI.crs(geom), calc_extent=_False(), threaded
+    crs=GI.crs(geom), calc_extent=False(), threaded
 )::(GI.geointerface_geomtype(trait)) where F
     # We need to force rebuilding a LinearRing not a LineString
     geoms = _maptasks(1:GI.ngeom(geom), threaded) do i
         lr = GI.getgeom(geom, i)
         points = map(GI.getgeom(lr)) do p
-            _apply(f, target, p; crs, calc_extent, threaded=_False())
+            _apply(f, target, p; crs, calc_extent, threaded=False())
         end
         _linearring(_apply_inner(lr, points, crs, calc_extent))
     end
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
-function _apply_inner(geom, geoms, crs, calc_extent::_True)
+function _apply_inner(geom, geoms, crs, calc_extent::True)
     # Calculate the extent of the sub geometries
     extent = mapreduce(GI.extent, Extents.union, geoms)
     # Return a new geometry of the same trait as `geom`,
     # holding the new `geoms` with `crs` and calculated extent
     return rebuild(geom, geoms; crs, extent)
 end
-function _apply_inner(geom, geoms, crs, calc_extent::_False)
+function _apply_inner(geom, geoms, crs, calc_extent::False)
     # Return a new geometry of the same trait as `geom`, holding the new `geoms` with `crs`
     return rebuild(geom, geoms; crs)
 end
@@ -322,7 +322,7 @@ using Base.Threads: nthreads, @threads, @spawn
 # Threading utility, modified Mason Protters threading PSA
 # run `f` over ntasks, where f receives an AbstractArray/range
 # of linear indices
-@inline function _maptasks(f::F, taskrange, threaded::_True)::Vector where F
+@inline function _maptasks(f::F, taskrange, threaded::True)::Vector where F
     ntasks = length(taskrange)
     # Customize this as needed.
     # More tasks have more overhead, but better load balancing
@@ -349,7 +349,7 @@ to lookup through the closure. This alone makes e.g. `flip` 2.5x faster!
 But it caused inference to fail, so we've removed it.  No effect on runtime so far as we can tell, 
 at least in Julia 1.11.
 =#
-@inline function _maptasks(f::F, taskrange, threaded::_False)::Vector where F
+@inline function _maptasks(f::F, taskrange, threaded::False)::Vector where F
     map(f, taskrange)
 end
 
