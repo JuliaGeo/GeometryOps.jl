@@ -168,22 +168,22 @@ This is useful for plotting geometries with a limited number of vertices, or for
 
 Returns a geometry of similar type to the input geometry, but resampled.
 """
-function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False())
-    return segmentize(Planar(), geom; max_distance, threaded = _booltype(threaded))
+function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
+    return segmentize(Planar(), geom; max_distance, threaded = booltype(threaded))
 end
 
 # allow three-arg method as well, just in case
-segmentize(geom, max_distance::Real; threaded = _False()) = segmentize(Planar(), geom, max_distance; threaded)
-segmentize(method::Manifold, geom, max_distance::Real; threaded = _False()) = segmentize(Planar(), geom; max_distance, threaded)
+segmentize(geom, max_distance::Real; threaded = False()) = segmentize(Planar(), geom, max_distance; threaded)
+segmentize(method::Manifold, geom, max_distance::Real; threaded = False()) = segmentize(Planar(), geom; max_distance, threaded)
 
 # generic implementation
-function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False())
+function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
     @assert max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
     _segmentize_function(geom) = _segmentize(method, geom, GI.trait(geom); max_distance)
     return apply(_segmentize_function, TraitTarget(GI.LinearRingTrait(), GI.LineStringTrait()), geom; threaded)
 end
 
-function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = _False())
+function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = False())
     @warn "`segmentize(method::$(typeof(method)), geom) is deprecated; use `segmentize($(method isa LinearSegments ? "Planar()" : "Geodesic()"), geom; max_distance, threaded) instead!"  maxlog=3
     @assert method.max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
     new_method = method isa LinearSegments ? Planar() : Geodesic()

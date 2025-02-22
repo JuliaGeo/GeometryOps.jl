@@ -37,7 +37,7 @@ function union(
 ) where {T<:AbstractFloat}
     return _union(
         TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
-        exact = _True(), kwargs...,
+        exact = True(), kwargs...,
     )
 end
 

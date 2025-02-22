@@ -54,7 +54,7 @@ const TOUCHES_POINT_ALLOWED = (in_allow = false, on_allow = true, out_allow = fa
 const TOUCHES_CURVE_ALLOWED = (over_allow = false, cross_allow = false, on_allow = true, out_allow = true)
 const TOUCHES_POLYGON_ALLOWS = (in_allow = false, on_allow = true, out_allow = true)
 const TOUCHES_REQUIRES = (in_require = false, on_require = true, out_require = false)
-const TOUCHES_EXACT = (exact = _False(),)
+const TOUCHES_EXACT = (exact = False(),)
 
 """
     touches(geom1, geom2)::Bool
