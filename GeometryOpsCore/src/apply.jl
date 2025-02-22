@@ -319,29 +319,6 @@ end
 
 using Base.Threads: nthreads, @threads, @spawn
 
-# Threading utility, modified Mason Protters threading PSA
-# run `f` over ntasks, where f receives an AbstractArray/range
-# of linear indices
-@inline function _maptasks(f::F, taskrange, threaded::True)::Vector where F
-    ntasks = length(taskrange)
-    # Customize this as needed.
-    # More tasks have more overhead, but better load balancing
-    tasks_per_thread = 2
-    chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
-    # partition the range into chunks
-    task_chunks = Iterators.partition(taskrange, chunk_size)
-    # Map over the chunks
-    tasks = map(task_chunks) do chunk
-        # Spawn a task to process this chunk
-        @spawn begin
-            # Where we map `f` over the chunk indices
-            map(f, chunk)
-        end
-    end
-
-    # Finally we join the results into a new vector
-    return mapreduce(fetch, vcat, tasks)
-end
 #=
 Here we used to use the compiler directive `@assume_effects :foldable` to force the compiler
 to lookup through the closure. This alone makes e.g. `flip` 2.5x faster!
@@ -353,7 +330,11 @@ at least in Julia 1.11.
     map(f, taskrange)
 end
 
-@inline function _maptasks(f::F, taskrange, threaded::_TrueButStable)::Vector where F
+
+# Threading utility, modified Mason Protters threading PSA
+# run `f` over ntasks, where f receives an AbstractArray/range
+# of linear indices
+@inline function _maptasks(f::F, taskrange, threaded::True)::Vector where F
     ntasks = length(taskrange)
     # Customize this as needed.
     # More tasks have more overhead, but better load balancing
