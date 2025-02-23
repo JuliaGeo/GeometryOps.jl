@@ -237,12 +237,12 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         # First, loop over "each edge" in poly_a
         for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
             a1t == a2t && continue
-            f_on_each_a(a1t, i)
+            isnothing(f_on_each_a) ||f_on_each_a(a1t, i)
             for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
                 b1t == b2t && continue
                 LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # this should be aware of manifold by construction.
             end
-            f_after_each_a(a1t, i)
+            isnothing(f_after_each_a) || f_after_each_a(a1t, i)
         end
         # And we're done!
     elseif accelerator isa SingleSTRtree
@@ -252,7 +252,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         # and reduces the overhead of constructing an edge list and tree on poly_a.
         ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
         edges_b, indices_b = to_edgelist(ext_a, poly_b, T)
-        if isempty(edges_b)
+        if isempty(edges_b) && !isnothing(f_on_each_a) && !isnothing(f_after_each_a)
             # shortcut - nothing can possibly intersect
             # so we just call f_on_each_a for each edge in poly_a
             for i in 1:GI.npoint(poly_a)-1
@@ -263,33 +263,37 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
             return nothing
         end
 
+        # This is the STRtree generated from the edges of poly_b
         tree_b = STRtree(edges_b)
+
+        # this is a pre-allocation that will store the resuits of the query into tree_b
+        query_result = Int[] 
         
         # Loop over each vertex in poly_a
         for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
             a1t == a2t && continue
             l1 = GI.Line(SVector{2}(a1t, a2t))
             ext_l = GI.extent(l1)
-            l = GI.Line(SVector{2}(a1t, a2t); extent=ext_l)
-            f_on_each_a(a1t, i)
+            # l = GI.Line(SVector{2}(a1t, a2t); extent=ext_l) # this seems to be unused - TODO remove
+            isnothing(f_on_each_a) || f_on_each_a(a1t, i)
             # Query the STRtree for any edges in b that may intersect this edge
             # This is sorted because we want to pretend we're doing the same thing
             # as the nested loop above, and iterating through poly_b in order.
             if Extents.intersects(ext_l, ext_b)
-                candidates = sort!(
-                    SortTileRecursiveTree.query(tree_b, l)
-                )
-                for j in candidates
+                empty!(query_result)
+                SortTileRecursiveTree.query!(query_result, tree_b.rootnode, ext_l) # this is already sorted and uniqueified in STRtree.
+                # Loop over the edges in b that might intersect the edges in a
+                for j in query_result
                     b1t, b2t = edges_b[j].geom
                     b1t == b2t && continue
                     # Manage control flow if the function returns a LoopStateMachine.Action
                     # like Break(), Continue(), or Return()
                     # This allows the function to break out of the loop early if it wants
                     # without being syntactically inside the loop.
-                    LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), indices_b[j]))
+                    LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), indices_b[j])) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
                 end
             end
-            f_after_each_a(a1t, i)
+            isnothing(f_after_each_a) || f_after_each_a(a1t, i)
         end
     else
         error("Unsupported accelerator type: $accelerator.  FosterHormannClipping only supports NestedLoop() or SingleSTRtree().")
@@ -298,7 +302,6 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     return nothing
 
 end
-
 
 #=
     _build_a_list(::Type{T}, poly_a, poly_b) -> (a_list, a_idx_list)
