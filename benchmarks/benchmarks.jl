@@ -91,7 +91,7 @@ n_points_values = round.(Int, exp10.(LinRange(1, 6, 15)))
         return (x+0.6, y)
     end
     lg_circle_left, go_circle_left = lg_and_go(circle_left)
-    for accelerator in (GO.NestedLoop(), GO.SingleSTRtree(), GO.DoubleSTRtree(), GO.AutoAccelerator())
+    for accelerator in (GO.NestedLoop(), GO.SingleSTRtree(), GO.AutoAccelerator())
         if n_points > 1000 && accelerator isa GO.NestedLoop
             continue
         end
