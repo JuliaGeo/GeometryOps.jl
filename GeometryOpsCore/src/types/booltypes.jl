@@ -23,7 +23,7 @@ export BoolsAsTypes, True, False, booltype
 abstract type BoolsAsTypes end
 
 """
-    struct _True <: BoolsAsTypes
+    struct True <: BoolsAsTypes
 
 A struct that means `true`.
 """
@@ -40,7 +40,7 @@ struct False <: BoolsAsTypes end
 struct _TrueButStable <: BoolsAsTypes end
 
 """
-    _booltype(x)
+    booltype(x)
 
 Returns a [`BoolsAsTypes`](@ref) from `x`, whether it's a boolean or a BoolsAsTypes.
 """
