@@ -155,6 +155,19 @@ function eachedge(trait::GI.AbstractCurveTrait, geom, ::Type{T}) where T
     return (_tuple_point.((GI.getpoint(geom, i), GI.getpoint(geom, i+1)), T) for i in 1:GI.npoint(geom)-1)
 end
 
+# implementation for Polygon, MultiPolygon, MultiLineString, GeometryCollection
+function eachedge(trait::GI.AbstractGeometryTrait, geom, ::Type{T}) where T
+    return Iterators.flatten((eachedge(r, T) for r in flatten(GI.AbstractCurveTrait, geom)))
+end
+
+function eachedge(trait::GI.PointTrait, geom, ::Type{T}) where T
+    return ArgumentError("Can't get edges from points, $geom was a PointTrait.")
+end
+
+function eachedge(trait::GI.MultiPointTrait, geom, ::Type{T}) where T
+    return ArgumentError("Can't get edges from MultiPoint, $geom was a MultiPointTrait.")
+end
+
 """
     to_edgelist(geom, [::Type{T}])
 
