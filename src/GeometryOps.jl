@@ -6,7 +6,7 @@ import GeometryOpsCore
 import GeometryOpsCore: 
                 TraitTarget,
                 Manifold, Planar, Spherical, Geodesic,
-                BoolsAsTypes, _True, _False, _booltype,
+                BoolsAsTypes, True, False, booltype,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
@@ -70,6 +70,7 @@ include("transformations/segmentize.jl")
 include("transformations/simplify.jl")
 include("transformations/tuples.jl")
 include("transformations/transform.jl")
+include("transformations/forcedims.jl")
 include("transformations/correction/geometry_correction.jl")
 include("transformations/correction/closed_ring.jl")
 include("transformations/correction/intersecting_polygons.jl")

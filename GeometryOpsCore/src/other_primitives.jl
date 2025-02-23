@@ -159,10 +159,10 @@ on geometries from other packages and specify how to rebuild them.
 rebuild(geom, child_geoms; kw...) = rebuild(GI.trait(geom), geom, child_geoms; kw...)
 function rebuild(trait::GI.AbstractTrait, geom, child_geoms; crs=GI.crs(geom), extent=nothing)
     T = GI.geointerface_geomtype(trait)
-    if GI.is3d(geom)
-        # The Boolean type parameters here indicate "3d-ness" and "measure" coordinate, respectively.
-        return T{true,false}(child_geoms; crs, extent)
-    else
-        return T{false,false}(child_geoms; crs, extent)
-    end
+    # Check the dimensionality of the first child geometry, since it may have changed
+    # NOTE that without this, 2D to 3D conversions will fail
+    hasZ = GI.is3d(first(child_geoms))
+    hasM = GI.ismeasured(first(child_geoms))
+
+    return T{hasZ,hasM}(child_geoms; crs, extent)
 end
