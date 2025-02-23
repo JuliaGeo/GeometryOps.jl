@@ -267,16 +267,7 @@ function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.Abstr
         b,
         T
     )
-    # for a_edge in edges_a, b_edge in edges_b
-    #     line_orient, intr1, intr2 = _intersection_point(manifold, T, a_edge, b_edge; exact)
-    #     line_orient == line_out && continue  # no intersection points
-    #     pt1, _ = intr1
-    #     push!(result, pt1)  # if not line_out, there is at least one intersection point
-    #     if line_orient == line_over # if line_over, there are two intersection points
-    #         pt2, _ = intr2
-    #         push!(result, pt2)
-    #     end
-    # end
+    
     #= TODO: We might be able to just add unique points with checks on the α and β values
     returned from `_intersection_point`, but this would be different for curves vs polygons
     vs multipolygons depending on if the shape is closed. This then wouldn't allow using the
