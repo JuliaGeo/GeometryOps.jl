@@ -55,7 +55,7 @@ const OVERLAPS_POINT_ALLOWS = (in_allow = true, on_allow = true, out_allow = tru
 const OVERLAPS_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = true)
 const OVERLAPS_POLYGON_ALLOWS = (in_allow = true, on_allow = true, out_allow = true)
 const OVERLAPS_REQUIRES = (in_require = true, on_require = false, out_require = false)
-const OVERLAPS_EXACT = (exact = _False(),)
+const OVERLAPS_EXACT = (exact = False(),)
 
 
 """
