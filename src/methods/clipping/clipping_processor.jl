@@ -163,7 +163,7 @@ function _build_ab_list(alg::FosterHormannClipping, ::Type{T}, poly_a, poly_b, d
 end
 
 "The number of vertices past which we should use a STRtree for edge intersection checking."
-const GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS = 75
+const GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS = 30
 # Fallback convenience method so we can just pass the algorithm in
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     alg::FosterHormannClipping{M, A}, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
@@ -171,6 +171,42 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     return foreach_pair_of_maybe_intersecting_edges_in_order(alg.manifold, alg.accelerator, f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
 end
 
+"""
+    foreach_pair_of_maybe_intersecting_edges_in_order(
+        manifold::M, accelerator::A,
+        f_on_each_a::FA,
+        f_after_each_a::FAAfter,
+        f_on_each_maybe_intersect::FI,
+        geom_a,
+        geom_b,
+        ::Type{T} = Float64
+    ) where {FA, FAAfter, FI, T, M <: Manifold, A <: IntersectionAccelerator}
+
+Decompose `geom_a` and `geom_b` into edge lists (unsorted), and then, logically, 
+perform the following iteration:
+
+```julia
+for (a_edge, i) in enumerate(eachedge(geom_a))
+    f_on_each_a(a_edge, i)
+    for (b_edge, j) in enumerate(eachedge(geom_b))
+        if may_intersect(a_edge, b_edge)
+            f_on_each_maybe_intersect(a_edge, b_edge)
+        end
+    end
+    f_after_each_a(a_edge, i)
+end
+```
+
+This may not be the exact acceleration that is performed - but it is 
+the logical sequence of events.  It also uses the `accelerator`, 
+and can automatically choose the best one based on an internal heuristic
+if you pass in an [`AutoAccelerator`](@ref).  
+
+For example, the `SingleSTRtree` accelerator is used along
+with extent thinning to avoid unnecessary edge intersection 
+checks in the inner loop.
+
+"""
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::A, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold, A <: IntersectionAccelerator}
