@@ -79,7 +79,7 @@ circle_difference_suite = circle_suite["difference"] = BenchmarkGroup(["title:Ci
 circle_intersection_suite = circle_suite["intersection"] = BenchmarkGroup(["title:Circle intersection", "subtitle:Tested on a regular circle"])
 circle_union_suite = circle_suite["union"] = BenchmarkGroup(["title:Circle union", "subtitle:Tested on a regular circle"])
 
-n_points_values = round.(Int, exp10.(LinRange(1, 6, 15)))
+n_points_values = round.(Int, exp10.(LinRange(0.7, 6, 15)))
 @time for n_points in n_points_values
     circle = GI.Wrappers.Polygon([tuple.((cos(θ) for θ in LinRange(0, 2π, n_points)), (sin(θ) for θ in LinRange(0, 2π, n_points)))])
     closed_circle = GO.ClosedRing()(circle)
@@ -104,9 +104,9 @@ n_points_values = round.(Int, exp10.(LinRange(1, 6, 15)))
     circle_union_suite["LibGEOS"][n_points]     = @be LG.union($lg_circle_left, $lg_circle_right)
 end
 
-plot_trials(circle_difference_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 3))
-plot_trials(circle_intersection_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 3))
-plot_trials(circle_union_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 3))
+plot_trials(circle_difference_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
+plot_trials(circle_intersection_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
+plot_trials(circle_union_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
 
 usa_poly_suite = BenchmarkGroup()
 usa_difference_suite = usa_poly_suite["difference"] = BenchmarkGroup(["title:USA difference", "subtitle:Tested on CONUS"])
