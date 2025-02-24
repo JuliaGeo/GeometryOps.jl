@@ -38,7 +38,7 @@ abstract type Manifold end
 The `AutoManifold` is a special manifold that automatically selects the best manifold for the operation.
 It does not carry any parameters, nor does it indicate anything about the nature of the space.
 
-This gets resolved to a specific manifold when an operation is applied.  
+This gets resolved to a specific manifold when an operation is applied, using the `format` method.  
 """
 struct AutoManifold <: Manifold end
 
@@ -69,7 +69,7 @@ A spherical manifold means that the geometry is on the 3-sphere (but is represen
     `-90` (south pole) and `90` (north pole).
 """
 Base.@kwdef struct Spherical{T} <: Manifold
-    radius::T = 6371008.8 # this should be theWGS84 defined mean radius
+    radius::T = WGS84_EARTH_MEAN_RADIUS # this should be theWGS84 defined mean radius
 end
 
 """
@@ -81,8 +81,8 @@ and `inv_flattening` (``1/f``).
 Usually, this is only relevant for area and segmentization calculations.  It becomes more relevant as one grows closer to the poles (or equator).
 """
 Base.@kwdef struct Geodesic{T} <: Manifold
-    semimajor_axis::T = 6378137.0     # WGS84 by default
-    inv_flattening::T = 298.257223563 # WGS84 by default
+    semimajor_axis::T = WGS84_EARTH_SEMI_MAJOR_RADIUS     # WGS84 by default
+    inv_flattening::T = WGS84_EARTH_INV_FLATTENING # WGS84 by default
 end
 
 
