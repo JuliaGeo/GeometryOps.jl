@@ -2,6 +2,9 @@
 
 # Operations
 
+!!! warning
+    Operations are not yet implemented.  If you want to implement them then you may do so at your own risk - or file a PR!
+
 Operations are callable structs, that contain the entire specification for what the algorithm will do.
 
 Sometimes they may be underspecified and only materialized fully when you see the geometry, so you can extract
@@ -43,12 +46,12 @@ abstract type Operation{Alg <: Algorithm} end
 # end
 
 
-struct Area{Alg<: Algorithm} <: Operation{Alg}
-    alg::Alg
-end
+# struct Area{Alg<: Algorithm} <: Operation{Alg}
+#     alg::Alg
+# end
 
-Area() = Area(NoAlgorithm(Planar()))
+# Area() = Area(NoAlgorithm(Planar()))
 
-function (op::Area{Alg})(data; threaded = _False(), init = 0.0) where {Alg <: Algorithm}
-    return GO.area(op.alg, data; threaded, init)
-end
+# function (op::Area{Alg})(data; threaded = _False(), init = 0.0) where {Alg <: Algorithm}
+#     return GO.area(op.alg, data; threaded, init)
+# end
