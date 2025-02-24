@@ -9,9 +9,15 @@ the compiler to separate threaded and non-threaded code paths.
 Note that if we didn't include the parent abstract type, this would have been really 
 type unstable, since the compiler couldn't tell what would be returned!
 
-We had to add the type annotation on the `_booltype(::Bool)` method for this reason as well.
+We had to add the type annotation on the `booltype(::Bool)` method for this reason as well.
 
-TODO: should we switch to `Static.jl`?
+
+!!! note Static.jl
+
+    Static.jl is a package that provides a way to store and manipulate static values.
+    But it creates a lot of invalidations since it breaks the assumption that operations
+    like `<`, `>` and `==` can only return booleans.  So we don't use it here.
+
 =#
 
 export BoolsAsTypes, True, False, booltype
@@ -35,9 +41,6 @@ struct True <: BoolsAsTypes end
 A struct that means `false`.
 """
 struct False <: BoolsAsTypes end
-
-# specifically for my StableTasks experiment
-struct _TrueButStable <: BoolsAsTypes end
 
 """
     booltype(x)
