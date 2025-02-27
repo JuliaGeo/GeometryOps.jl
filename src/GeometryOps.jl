@@ -5,7 +5,8 @@ module GeometryOps
 import GeometryOpsCore
 import GeometryOpsCore: 
                 TraitTarget,
-                Manifold, Planar, Spherical, Geodesic,
+                Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
+                Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
@@ -37,7 +38,9 @@ include("types.jl") # backend / algorithm types like GEOS, PROJ, etc.
 include("primitives.jl") # moved to GeometryOpsCore
 include("not_implemented_yet.jl") # functions that are not implemented yet, but we want stubs for, or the implementations might be in extensions
 
-include("utils/LoopStateMachine.jl") # Utils for functions that can tell the loop they run in to do something via the return value
+# Include utility modules first!
+include("utils/LoopStateMachine/LoopStateMachine.jl") # Utils for functions that can tell the loop they run in to do something via the return value
+# include("utils/SpatialTreeInterface/SpatialTreeInterface.jl") # Utils for spatial trees
 include("utils/utils.jl") # More general utility functions
 
 include("methods/angles.jl")

@@ -5,17 +5,21 @@ We create a few custom exception types in this file,
 that have nice show methods that we can use for certain errors.
 
 This makes it substantially easier to catch specific kinds of errors and show them.
-For example 
+For example, we can catch `WrongManifoldException` and show a nice error message,
+and error hinters can be specialized to that as well.
 =#
+
+export WrongManifoldException
+
 """
-    WrongManifoldError{InputManifold, DesiredManifold, Algorithm} <: Error
+    WrongManifoldException{InputManifold, DesiredManifold, Algorithm} <: Exception
 
 This error is thrown when an `Algorithm` is called with a manifold that it was not designed for.
 
 It's mainly called for [`SingleManifoldAlgorithm`](@ref) types.
 """
 struct WrongManifoldException{InputManifold, DesiredManifold, Algorithm} <: Base.Exception
-    extra_text::String
+    description::String
 end
 
 WrongManifoldException{I, D, A}() where {I, D, A} = WrongManifoldException{I, D, A}("")
@@ -34,8 +38,8 @@ function Base.showerror(io::IO, e::WrongManifoldException{I,D,A}) where {I,D,A}
     To fix this issue, you can specify the manifold explicitly, 
     e.g. `$A($D(); kwargs...)`, when constructing the algorithm.
     """)
-    if !isempty(e.extra_text)
+    if !isempty(e.description)
         print(io, "\n\n")
-        print(io, e.extra_text)
+        print(io, e.description)
     end
 end

@@ -14,6 +14,8 @@ Algorithms are:
 
 =#
 
+export Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm
+
 abstract type Algorithm{M <: Manifold} end
 
 struct AutoAlgorithm{T, M <: Manifold} <: Algorithm{M} 
