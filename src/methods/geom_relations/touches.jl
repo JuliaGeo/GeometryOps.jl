@@ -251,8 +251,10 @@ function _touches(
     }, g1,
     ::GI.AbstractGeometryTrait, g2,
 )
+    touched_yet = false
     for sub_g1 in GI.getgeom(g1)
-        !touches(sub_g1, g2) && return false
+        touched_yet = touches(sub_g1, g2)
+        touched_yet && break
     end
-    return true
+    return touched_yet
 end
