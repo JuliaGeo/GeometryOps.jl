@@ -21,11 +21,13 @@ Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
 FlexiJoins = "e37f2e79-19fa-4eb7-8510-b63b51fe0a37"
 LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
 Proj = "c94c279d-25a6-4763-9509-64d165bea63e"
+TGGeometry = "d7e755d2-3c95-4bcf-9b3c-79ab1a78647b"
 
 [extensions]
 GeometryOpsFlexiJoinsExt = "FlexiJoins"
 GeometryOpsLibGEOSExt = "LibGEOS"
 GeometryOpsProjExt = "Proj"
+GeometryOpsTGGeometryExt = "TGGeometry"
 
 [compat]
 AbstractTrees = "0.4.5"
@@ -43,6 +45,7 @@ Proj = "1"
 SortTileRecursiveTree = "0.1.2"
 Statistics = "1"
 Tables = "1"
+TGGeometry = "0.1"
 julia = "1.10"
 
 [extras]
