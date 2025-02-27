@@ -1,14 +1,21 @@
 #=
 # Types
 
-This file defines some fundamental types used in GeometryOps.
+This file defines some types used in GeometryOps.  
 
 !!! warning
-    Unlike in other Julia packages, only some types are defined in this file, not all. 
-    This is because we define types in the files where they are used, to make it easier to understand the code.
+    Many type definitions are in `GeometryOpsCore`, not here.  Look there for the definitions of the basic types like `Manifold`, `Algorithm`, etc.
+
+
+## Naming
+
+We force all our external algorithm types to be uppercase, to make them different
+from the package names.  This is really relevant for the `PROJ` algorithm, since 
+the Julia package is called `Proj.jl`.  If we called our type `Proj`, it would
+conflict with the package's name - as we saw with GeoFormatTypes' `GeoJSON` and `GeoJSON.jl`.
 
 =#
-export GEOS
+export GEOS, TG, PROJ
 #=
 
 ## `GEOS`
@@ -22,6 +29,8 @@ useful for two reasons:
 2. It's a good way to test the correctness of the native implementations.
 
 =#
+
+# ## C-library planar algorithms
 """
     abstract type CLibraryPlanarAlgorithm <: GeometryOpsCore.SingleManifoldAlgorithm{Planar} end
 
@@ -75,7 +84,7 @@ function enforce(alg::CLibraryPlanarAlgorithm, kw::Symbol, f)
     end
 end
 
-
+# ## GEOS - call into LibGEOS.jl
 
 """
     GEOS(; params...)
@@ -100,6 +109,8 @@ struct GEOS <: CLibraryPlanarAlgorithm # SingleManifoldAlgorithm{Planar}
     params::NamedTuple
 end
 
+# ## TG - call into TGGeometry.jl
+
 """
     TG(; params...)
 
@@ -123,4 +134,31 @@ struct TG <: CLibraryPlanarAlgorithm
     params::NamedTuple
 end
 
+# ## PROJ - call into Proj.jl
 
+"""
+    PROJ(; params...)
+
+A struct which instructs the method it's passed to as an algorithm
+to use the appropriate PROJ function via `Proj.jl` for the operation.
+
+## Extended help
+
+This is the default algorithm for [`reproject`](@ref), and is also the default algorithm for 
+"""
+struct PROJ{M <: Manifold} <: Algorithm{M}
+    manifold::M
+    params::NamedTuple
+end
+
+# We repeat these functions here because PROJ does not subtype `CLibraryPlanarAlgorithm`.
+
+Base.get(alg::PROJ, key, value) = Base.get(alg.params, key, value)
+Base.get(f::Function, alg::PROJ, key) = Base.get(f, alg.params, key)
+function enforce(alg::PROJ, kw::Symbol, f)
+    if haskey(alg.params, kw)
+        return alg.params[kw]
+    else
+        error("$(f) requires a `$(kw)` keyword argument to the `GEOS` algorithm, which was not provided.")
+    end
+end
