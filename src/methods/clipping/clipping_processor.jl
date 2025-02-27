@@ -822,7 +822,7 @@ function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b
             same_status, prev_status = true, curr.ent_exit
             while same_status
                 if visited_pts >= total_pts
-                    throw(TracingHitEveryPointError(poly_a, poly_b, a_list, b_list, a_idx_list))
+                    throw(TracingError("Clipping tracing hit every point - clipping error.", poly_a, poly_b, a_list, b_list, a_idx_list))
                 end
                 # Traverse polygon either forwards or backwards
                 idx += step
