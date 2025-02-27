@@ -103,14 +103,15 @@ Base.:(==)(pn1::PolyNode, pn2::PolyNode) = equals(pn1, pn2)
 # This stores the polygons, the a_list, and the b_list, and the a_idx_list.
 # allowing the user to understand what happened and why.
 """
-    TracingHitEveryPointError{T1, T2} <: Exception
+    TracingError{T1, T2} <: Exception
 
-An error that is thrown when the clipping tracing algorithm hits every point in a polygon.
+An error that is thrown when the clipping tracing algorithm fails somehow.
 This is a bug in the algorithm, and should be reported.
 
 The polygons are contained in the exception object, accessible by try-catch or as `err` in the REPL.
 """
-struct TracingHitEveryPointError{T1, T2, T} <: Exception
+struct TracingError{T1, T2, T} <: Exception
+    message::String
     poly_a::T1
     poly_b::T2
     a_list::Vector{PolyNode{T}}
@@ -118,8 +119,10 @@ struct TracingHitEveryPointError{T1, T2, T} <: Exception
     a_idx_list::Vector{Int}
 end
 
-function Base.showerror(io::IO, e::TracingHitEveryPointError{T1, T2}) where {T1, T2}
-    println(io, "TracingHitEveryPointError: Clipping tracing hit every point - clipping error. Please open an issue with the polygons contained in this error object.")
+function Base.showerror(io::IO, e::TracingError{T1, T2}) where {T1, T2}
+    print(io, "TracingError: ")
+    println(io, e.message)
+    println(io, "Please open an issue with the polygons contained in this error object.")
     println(io)
     if max(GI.npoint(e.poly_a), GI.npoint(e.poly_b)) < 10
         println(io, "Polygon A:")
