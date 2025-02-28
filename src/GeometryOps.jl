@@ -40,7 +40,8 @@ include("not_implemented_yet.jl") # functions that are not implemented yet, but 
 
 # Include utility modules first!
 include("utils/LoopStateMachine/LoopStateMachine.jl") # Utils for functions that can tell the loop they run in to do something via the return value
-# include("utils/SpatialTreeInterface/SpatialTreeInterface.jl") # Utils for spatial trees
+include("utils/SpatialTreeInterface/SpatialTreeInterface.jl") # Utils for spatial trees
+include("utils/NaturalIndexing.jl") # Utils for natural indexing
 include("utils/utils.jl") # More general utility functions
 
 include("methods/angles.jl")

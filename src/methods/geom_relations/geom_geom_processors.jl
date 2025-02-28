@@ -495,12 +495,13 @@ function _point_filled_curve_orientation(
     in::T = point_in, on::T = point_on, out::T = point_out, exact,
 ) where {T}
     x, y = GI.x(point), GI.y(point)
-    n = GI.npoint(curve)
-    n -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, n)) ? 1 : 0
+    # n = GI.npoint(curve)
+    # n -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, n)) ? 1 : 0
     k = 0  # counter for ray crossings
-    p_start = GI.getpoint(curve, n)
-    for (i, p_end) in enumerate(GI.getpoint(curve))
-        i > n && break
+    # p_start = GI.getpoint(curve, n)
+    index = NaturalIndexing.NaturallyIndexedRing(curve).index
+    SpatialTreeInterface.do_query(Base.Fix2(_yintersects, y), index) do edge_idx
+        p_start, p_end = (GI.getpoint(curve, edge_idx), GI.getpoint(curve, edge_idx + 1))
         v1 = GI.y(p_start) - y
         v2 = GI.y(p_end) - y
         if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
@@ -521,10 +522,11 @@ function _point_filled_curve_orientation(
                 u1 ≤ 0 && u2 ≥ 0 && return on  # Case 2
             end
         end
-        p_start = p_end
     end
     return iseven(k) ? out : in
 end
+
+_yintersects(ext, y) = ext.Y[1] <= y <= ext.Y[2]
 
 _point_filled_curve_orientation(
     point, curve;
