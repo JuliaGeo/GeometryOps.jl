@@ -7,7 +7,7 @@ This is used in e.g clipping, where we may need to break or transition states.
 
 The main entry point is to return an [`Action`](@ref) from a function that 
 is wrapped in a `@controlflow f(...)` macro in a loop.  When a known `Action`
-(currently, `Continue`, `Break`, or `Return`) is returned, it is processed
+(currently, `Continue`, `Break`, `Return`, or `FullReturn`) is returned, it is processed
 by the `@controlflow` macro, which allows the function to break out of the loop
 early, continue to the next iteration, or return a value, without being 
 syntactically inside the loop.
@@ -57,6 +57,15 @@ Cause the function executing the loop to return.  Use with great caution!
 const Return = Action{:Return}
 
 """
+    FullReturn(x)
+
+Cause the function executing the loop to return `FullReturn(x)`.
+
+This allows you to break completely out of a recursive function.
+"""
+const FullReturn = Action{:FullReturn}
+
+"""
     @controlflow f(...)
 
 Process the result of `f(...)` and return the result if it's not a [`Continue`](@ref), [`Break`](@ref), or [`Return`](@ref) [`Action`](@ref).
@@ -64,6 +73,7 @@ Process the result of `f(...)` and return the result if it's not a [`Continue`](
 - `Continue`: continue to the next iteration of the loop.
 - `Break`: break out of the loop.
 - `Return`: cause the function executing the loop to return with the wrapped value.
+- `FullReturn`: cause the function executing the loop to return `FullReturn(x)`.
 
 !!! warning
     Only use this inside a loop, otherwise you'll get a syntax error!
@@ -78,6 +88,8 @@ macro controlflow(expr)
             break
         elseif $varname isa Return
             return $varname.x
+        elseif $varname isa FullReturn
+            return $varname
         else
             $varname
         end
