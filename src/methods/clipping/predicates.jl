@@ -4,15 +4,17 @@ module Predicates
     import ExactPredicates.Codegen: group!, @genpredicate
     import GeometryOps: False, True, booltype, _tuple_point
     import GeoInterface as GI
+    import AdaptivePredicates
 
     #= Determine the orientation of c with regards to the oriented segment (a, b).
     Return 1 if c is to the left of (a, b).
     Return -1 if c is to the right of (a, b).
     Return 0 if c is on (a, b) or if a == b. =#
-    orient(a, b, c; exact) = _orient(booltype(exact), a, b, c)
+    orient(a, b, c; exact) = _orient(booltype(exact), _tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
     
     # If `exact` is `true`, use `ExactPredicates` to calculate the orientation.
-    _orient(::True, a, b, c) = ExactPredicates.orient(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
+    _orient(::True, a, b, c) = AdaptivePredicates.orient2(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
+    #ExactPredicates.orient(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
     # If `exact` is `false`, calculate the orientation without using `ExactPredicates`.
     function _orient(exact::False, a, b, c)
         a = a .- c
