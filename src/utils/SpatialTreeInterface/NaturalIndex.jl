@@ -36,8 +36,11 @@ function NaturalIndex(geoms; nodecapacity = 32)
 end
 
 function NaturalIndex{E}(geoms; nodecapacity = 32) where E <: Extents.Extent
-
     last_level_extents = GI.extent.(geoms)
+    return NaturalIndex{E}(last_level_extents; nodecapacity = nodecapacity)
+end
+
+function NaturalIndex{E}(last_level_extents::Vector{E}; nodecapacity = 32) where E <: Extents.Extent
     ngeoms = length(last_level_extents)
     last_level = NaturalLevel(last_level_extents)
 
@@ -99,18 +102,6 @@ struct NaturalTreeNode{E <: Extents.Extent}
 end
 
 Extents.extent(node::NaturalTreeNode) = node.extent
-
-"""
-    query(f, index::NaturalIndex, pred)
-
-Query the index for all extents that satisfy the predicate `pred`.
-
-`pred` must be a 1-argument function that returns a Boolean.
-`pred` may also be an Extent or a geometry.
-
-Whenever a leaf node is encountered, which 
-"""
-function query end
 
 """
     sanitize_pred(pred)
@@ -273,5 +264,46 @@ function do_dual_query(f::F, predicate::P, node1::N1, node2::N2) where {F, P, N1
                 end
             end
         end
+    end
+end
+
+
+struct NaturallyIndexedRing
+    points::Vector{Tuple{Float64, Float64}}
+    index::NaturalIndex{Extents.Extent{(:X, :Y), NTuple{2, NTuple{2, Float64}}}}
+end
+
+function NaturallyIndexedRing(points::Vector{Tuple{Float64, Float64}}; nodecapacity = 32)
+    index = NaturalIndex(GO.edge_extents(GI.LinearRing(points)); nodecapacity)
+    return NaturallyIndexedRing(points, index)
+end
+
+NaturallyIndexedRing(ring::NaturallyIndexedRing) = ring
+
+function GI.convert(::Type{NaturallyIndexedRing}, ::GI.LinearRingTrait, geom)
+    points = GO.tuples(geom).geom
+    return NaturallyIndexedRing(points)
+end
+
+GI.ncoord(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = 2
+GI.is3d(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = false
+GI.ismeasured(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = false
+
+GI.npoint(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = length(ring.points)
+GI.getpoint(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = ring.points[i]
+GI.getpoint(::GI.LinearRingTrait, ring::NaturallyIndexedRing, i::Int) = ring.points[i]
+
+GI.ngeom(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = length(ring.points)
+GI.getgeom(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = ring.points
+GI.getgeom(::GI.LinearRingTrait, ring::NaturallyIndexedRing, i::Int) = ring.points[i]
+
+Extents.extent(ring::NaturallyIndexedRing) = ring.index.extent
+
+GI.isgeometry(::NaturallyIndexedRing) = true
+GI.geomtrait(::NaturallyIndexedRing) = GI.LinearRingTrait()
+
+function prepare_naturally(geom)
+    return GO.apply(GI.PolygonTrait(), geom) do poly
+        return GI.Polygon([GI.convert(NaturallyIndexedRing, GI.LinearRingTrait(), ring) for ring in GI.getring(poly)])
     end
 end
