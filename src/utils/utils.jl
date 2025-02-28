@@ -195,3 +195,21 @@ function _lineedge(ps::Tuple, ::Type{T}) where T
     e = GI.extent(l)
     return GI.Line(l.geom; extent=e)
 end
+
+function lazy_edgelist(geom, ::Type{T}) where T
+    (_lineedge(ps, T) for ps in eachedge(geom, T))
+end
+
+function edge_extents(geom)
+    return [begin
+        Extents.Extent(X=extrema(GI.x, edge), Y=extrema(GI.y, edge)) 
+    end
+    for edge in eachedge(geom, Float64)]
+end
+
+function lazy_edge_extents(geom)
+    return (begin
+        Extents.Extent(X=extrema(GI.x, edge), Y=extrema(GI.y, edge)) 
+    end
+    for edge in eachedge(geom, Float64))
+end
