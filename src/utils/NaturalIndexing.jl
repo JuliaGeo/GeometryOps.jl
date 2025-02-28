@@ -1,16 +1,33 @@
+module NaturalIndexing
+
 import GeoInterface as GI
 import Extents
 
-import GeometryOps.LoopStateMachine: @controlflow
+using ..SpatialTreeInterface
 
+"""
+    NaturalLevel{E <: Extents.Extent}
 
+A level in the natural tree.  Stored in a vector in [`NaturalIndex`](@ref).
+
+- `extents` is a vector of extents of the children of the node
+"""
 struct NaturalLevel{E <: Extents.Extent}
-    # level::Int      # level of node in tree
-    # node_index::Int # index of the node in the level
-    # extent::E       # extent of the node - precomputed and cached
     extents::Vector{E} # child extents
 end
 
+Base.show(io::IO, level::NaturalLevel) = print(io, "NaturalLevel($(length(level.extents)) extents)")
+Base.show(io::IO, ::MIME"text/plain", level::NaturalLevel) = Base.show(io, level)
+
+"""
+    NaturalIndex{E <: Extents.Extent}
+
+A natural tree index.  Stored in a vector in [`NaturalIndex`](@ref).
+
+- `nodecapacity` is the "spread", number of children per node
+- `extent` is the extent of the tree
+- `levels` is a vector of [`NaturalLevel`](@ref)s
+"""
 struct NaturalIndex{E <: Extents.Extent}
     nodecapacity::Int # "spread", number of children per node
     extent::E
@@ -37,6 +54,10 @@ end
 
 function NaturalIndex{E}(geoms; nodecapacity = 32) where E <: Extents.Extent
     last_level_extents = GI.extent.(geoms)
+    return NaturalIndex{E}(last_level_extents; nodecapacity = nodecapacity)
+end
+
+function NaturalIndex(last_level_extents::Vector{E}; nodecapacity = 32) where E <: Extents.Extent
     return NaturalIndex{E}(last_level_extents; nodecapacity = nodecapacity)
 end
 
@@ -94,6 +115,16 @@ end
 
 
 # This is like a pointer to a node in the tree.
+"""
+    NaturalTreeNode{E <: Extents.Extent}
+
+A reference to a node in the natural tree.  Kind of like a tree cursor.
+
+- `parent_index` is a pointer to the parent index
+- `level` is the level of the node in the tree
+- `index` is the index of the node in the level
+- `extent` is the extent of the node
+"""
 struct NaturalTreeNode{E <: Extents.Extent}
     parent_index::NaturalIndex{E}
     level::Int
@@ -135,13 +166,13 @@ sanitize_query_predicate(pred::Extents.Extent) = Base.Fix1(Extents.intersects, p
 # - `isleaf(node)` returns a boolean indicating whether the node is a leaf
 # - `child_indices_extents(node)` returns an iterator over the indices and extents of the children of the node
 
-function nchild(node::NaturalTreeNode)
+function SpatialTreeInterface.nchild(node::NaturalTreeNode)
     start_idx = (node.index - 1) * node.parent_index.nodecapacity + 1
     stop_idx = min(start_idx + node.parent_index.nodecapacity - 1, length(node.parent_index.levels[node.level+1].extents))
     return stop_idx - start_idx + 1
 end
 
-function getchild(node::NaturalTreeNode, i::Int)
+function SpatialTreeInterface.getchild(node::NaturalTreeNode, i::Int)
     child_index = (node.index - 1) * node.parent_index.nodecapacity + i
     return NaturalTreeNode(
         node.parent_index, 
@@ -152,13 +183,13 @@ function getchild(node::NaturalTreeNode, i::Int)
 end
 
 # Get all children of a node
-function getchild(node::NaturalTreeNode)
+function SpatialTreeInterface.getchild(node::NaturalTreeNode)
     return (getchild(node, i) for i in 1:nchild(node))
 end
 
-isleaf(node::NaturalTreeNode) = node.level == length(node.parent_index.levels) - 1
+SpatialTreeInterface.isleaf(node::NaturalTreeNode) = node.level == length(node.parent_index.levels) - 1
 
-function child_indices_extents(node::NaturalTreeNode)
+function SpatialTreeInterface.child_indices_extents(node::NaturalTreeNode)
     start_idx = (node.index - 1) * node.parent_index.nodecapacity + 1
     stop_idx = min(start_idx + node.parent_index.nodecapacity - 1, length(node.parent_index.levels[node.level+1].extents))
     return ((i, node.parent_index.levels[node.level+1].extents[i]) for i in start_idx:stop_idx)
@@ -166,107 +197,14 @@ end
 
 # implementation for "root node" / top level tree
 
-isleaf(node::NaturalIndex) = length(node.levels) == 1
+SpatialTreeInterface.isleaf(node::NaturalIndex) = length(node.levels) == 1
 
-nchild(node::NaturalIndex) = length(node.levels[1].extents)
+SpatialTreeInterface.nchild(node::NaturalIndex) = length(node.levels[1].extents)
 
-getchild(node::NaturalIndex) = getchild(NaturalTreeNode(node, 0, 1, node.extent))
-getchild(node::NaturalIndex, i) = getchild(NaturalTreeNode(node, 0, 1, node.extent), i)
+SpatialTreeInterface.getchild(node::NaturalIndex) = SpatialTreeInterface.getchild(NaturalTreeNode(node, 0, 1, node.extent))
+SpatialTreeInterface.getchild(node::NaturalIndex, i) = SpatialTreeInterface.getchild(NaturalTreeNode(node, 0, 1, node.extent), i)
 
-child_indices_extents(node::NaturalIndex) = (i_ext for i_ext in enumerate(node.levels[1].extents))
-
-
-"""
-    do_query(f, predicate, tree)
-
-Call `f(i)` for each index `i` in the tree that satisfies `predicate(extent(i))`.
-
-This is generic to anything that implements the SpatialTreeInterface, particularly the methods
-[`isleaf`](@ref), [`getchild`](@ref), and [`child_extents`](@ref).
-"""
-function do_query(f::F, predicate::P, node::N) where {F, P, N}
-    if isleaf(node)
-        for (i, leaf_geometry_extent) in child_indices_extents(node)
-            if predicate(leaf_geometry_extent)
-                @controlflow f(i)
-            end
-        end
-    else
-        for child in getchild(node)
-            if predicate(GI.extent(child))
-                do_query(f, predicate, child)
-            end
-        end
-    end
-end
-
-function do_query(predicate, node)
-    a = Int[]
-    do_query(Base.Fix1(push!, a), predicate, node)
-    return a
-end
-
-# implement spatial tree interface for SortTileRecursiveTree.jl
-
-nchild(tree::STRtree) = nchild(tree.rootnode)
-getchild(tree::STRtree) = getchild(tree.rootnode)
-getchild(tree::STRtree, i) = getchild(tree.rootnode, i)
-isleaf(tree::STRtree) = isleaf(tree.rootnode)
-child_indices_extents(tree::STRtree) = child_indices_extents(tree.rootnode)
-
-
-nchild(node::STRNode) = length(node.children)
-getchild(node::STRNode) = node.children
-getchild(node::STRNode, i) = node.children[i]
-isleaf(node::STRNode) = false # STRNodes are not leaves by definition
-
-isleaf(node::STRLeafNode) = true
-child_indices_extents(node::STRLeafNode) = zip(node.indices, node.extents)
-
-# now a `do_query` function call "just works"!
-
-
-"""
-    do_dual_query(f, predicate, node1, node2)
-
-Call `f(i1, i2)` for each index `i1` in `node1` and `i2` in `node2` that satisfies `predicate(extent(i1), extent(i2))`.
-
-This is generic to anything that implements the SpatialTreeInterface, particularly the methods
-[`isleaf`](@ref), [`getchild`](@ref), and [`child_extents`](@ref).
-"""
-function do_dual_query(f::F, predicate::P, node1::N1, node2::N2) where {F, P, N1, N2}
-    if isleaf(node1) && isleaf(node2)
-        # both nodes are leaves, so we can just iterate over the indices and extents
-        for (i1, extent1) in child_indices_extents(node1)
-            for (i2, extent2) in child_indices_extents(node2)
-                if predicate(extent1, extent2)
-                    @controlflow f(i1, i2)
-                end
-            end
-        end
-    elseif isleaf(node1) # node2 is not a leaf, node1 is - recurse further into node2
-        for child in getchild(node2)
-            if predicate(GI.extent(node1), GI.extent(child))
-                do_dual_query(f, predicate, node1, child)
-            end
-        end
-    elseif isleaf(node2) # node1 is not a leaf, node2 is - recurse further into node1
-        for child in getchild(node1)
-            if predicate(GI.extent(child), GI.extent(node2))
-                do_dual_query(f, predicate, child, node2)
-            end
-        end
-    else # neither node is a leaf, recurse into both children
-        for child1 in getchild(node1)
-            for child2 in getchild(node2)
-                if predicate(GI.extent(child1), GI.extent(child2))
-                    do_dual_query(f, predicate, child1, child2)
-                end
-            end
-        end
-    end
-end
-
+SpatialTreeInterface.child_indices_extents(node::NaturalIndex) = (i_ext for i_ext in enumerate(node.levels[1].extents))
 
 struct NaturallyIndexedRing
     points::Vector{Tuple{Float64, Float64}}
@@ -284,6 +222,10 @@ function GI.convert(::Type{NaturallyIndexedRing}, ::GI.LinearRingTrait, geom)
     points = GO.tuples(geom).geom
     return NaturallyIndexedRing(points)
 end
+
+Base.show(io::IO, ::MIME"text/plain", ring::NaturallyIndexedRing) = Base.show(io, ring)
+
+Base.show(io::IO, ring::NaturallyIndexedRing) = print(io, "NaturallyIndexedRing($(length(ring.points)) points) with index $(sprint(show, ring.index))")
 
 GI.ncoord(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = 2
 GI.is3d(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = false
@@ -307,3 +249,9 @@ function prepare_naturally(geom)
         return GI.Polygon([GI.convert(NaturallyIndexedRing, GI.LinearRingTrait(), ring) for ring in GI.getring(poly)])
     end
 end
+
+export NaturalTree, NaturallyIndexedRing, prepare_naturally
+
+end # module NaturalIndexing
+
+using .NaturalIndexing
