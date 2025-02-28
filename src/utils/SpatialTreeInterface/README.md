@@ -32,6 +32,11 @@ These are the only methods that are required to be implemented.  They enable the
 - `do_query(f, predicate, node)` - call `f(i)` for each index `i` in `node` that satisfies `predicate(extent(i))`.
 - `do_dual_query(f, predicate, tree1, tree2)` - call `f(i1, i2)` for each index `i1` in `tree1` and `i2` in `tree2` that satisfies `predicate(extent(i1), extent(i2))`.
 
-
-
+These are both completely non-allocating, and will only call `f` for indices that satisfy the predicate.
+You can of course build a standard query interface on top of `do_query` if you want - that's simply:
+```julia
+a = Int[]
+do_query(Base.Fix1(push!, a), predicate, node)
+```
+where `predicate` might be `Base.Fix1(Extents.intersects, extent_to_query)`.
 
