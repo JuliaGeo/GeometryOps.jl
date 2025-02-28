@@ -90,7 +90,7 @@ function do_query(f::F, predicate::P, node::N) where {F, P, N}
     else
         for child in getchild(node)
             if predicate(GI.extent(child))
-                do_query(f, predicate, child)
+                @controlflow do_query(f, predicate, child)
             end
         end
     end
@@ -125,20 +125,20 @@ function do_dual_query(f::F, predicate::P, node1::N1, node2::N2) where {F, P, N1
     elseif isleaf(node1) # node2 is not a leaf, node1 is - recurse further into node2
         for child in getchild(node2)
             if predicate(GI.extent(node1), GI.extent(child))
-                do_dual_query(f, predicate, node1, child)
+                @controlflow do_dual_query(f, predicate, node1, child)
             end
         end
     elseif isleaf(node2) # node1 is not a leaf, node2 is - recurse further into node1
         for child in getchild(node1)
             if predicate(GI.extent(child), GI.extent(node2))
-                do_dual_query(f, predicate, child, node2)
+                @controlflow do_dual_query(f, predicate, child, node2)
             end
         end
     else # neither node is a leaf, recurse into both children
         for child1 in getchild(node1)
             for child2 in getchild(node2)
                 if predicate(GI.extent(child1), GI.extent(child2))
-                    do_dual_query(f, predicate, child1, child2)
+                    @controlflow do_dual_query(f, predicate, child1, child2)
                 end
             end
         end
@@ -164,5 +164,6 @@ isleaf(node::STRNode) = false # STRNodes are not leaves by definition
 isleaf(node::STRLeafNode) = true
 child_indices_extents(node::STRLeafNode) = zip(node.indices, node.extents)
 
-end
+end # module SpatialTreeInterface
 
+using .SpatialTreeInterface
