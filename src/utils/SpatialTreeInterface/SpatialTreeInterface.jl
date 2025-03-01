@@ -103,6 +103,36 @@ function do_query(predicate, node)
 end
 
 
+"""
+    query(tree, predicate)
+
+Return a sorted list of indices of the tree that satisfy the predicate.
+"""
+function query(tree, predicate)
+    a = Int[]
+    do_query(Base.Fix1(push!, a), sanitize_predicate(predicate), tree)
+    return sort!(a)
+end
+
+
+"""
+    sanitize_predicate(pred)
+
+Convert a predicate to a function that returns a Boolean.
+
+If `pred` is an Extent, convert it to a function that returns a Boolean by intersecting with the extent.
+If `pred` is a geometry, convert it to an extent first, then wrap in Extents.intersects.
+
+Otherwise, return the predicate unchanged.
+
+
+Users and developers may overload this function to provide custom behaviour when something is passed in.
+"""
+sanitize_predicate(pred::P) where P = sanitize_predicate(GI.trait(pred), pred)
+sanitize_predicate(::Nothing, pred::P) where P = pred
+sanitize_predicate(::GI.AbstractTrait, pred::P) where P = sanitize_predicate(GI.extent(pred))
+sanitize_predicate(pred::Extents.Extent) = Base.Fix1(Extents.intersects, pred)
+
 
 """
     do_dual_query(f, predicate, node1, node2)
@@ -163,6 +193,33 @@ isleaf(node::STRNode) = false # STRNodes are not leaves by definition
 
 isleaf(node::STRLeafNode) = true
 child_indices_extents(node::STRLeafNode) = zip(node.indices, node.extents)
+
+
+"""
+    FlatNoTree(iterable_of_geoms_or_extents)
+
+Represents a flat collection with no tree structure, i.e., a brute force search.
+This is cost free, so particularly useful when you don't want to build a tree!
+"""
+struct FlatNoTree{T}
+    geometries::T
+end
+
+isleaf(tree::FlatNoTree) = true
+
+# NOTE: use pairs instead of enumerate here, so that we can support 
+# iterators or collections that define custom `pairs` methods.
+# This includes things like filtered extent lists, for example,
+# so we can perform extent thinning with no allocations.
+function child_indices_extents(tree::FlatNoTree{T}) where T
+    # This test only applies at compile time and should be optimized away in any case.
+    # And we can use multiple dispatch to override anyway, but it should be cost free I think.
+    if applicable(Base.keys, T) 
+        return ((i, GI.extent(obj)) for (i, obj) in pairs(tree.geometries))
+    else
+        return ((i, GI.extent(obj)) for (i, obj) in enumerate(tree.geometries))
+    end
+end
 
 end # module SpatialTreeInterface
 

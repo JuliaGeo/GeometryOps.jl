@@ -134,28 +134,6 @@ end
 
 Extents.extent(node::NaturalTreeNode) = node.extent
 
-"""
-    sanitize_pred(pred)
-
-Convert a predicate to a function that returns a Boolean.
-
-If `pred` is an Extent, convert it to a function that returns a Boolean by intersecting with the extent.
-If `pred` is a geometry, convert it to an extent first, then wrap in Extents.intersects.
-
-Otherwise, return the predicate unchanged.
-
-
-Users and developers may overload this function to provide custom behaviour when something is passed in.
-"""
-function sanitize_query_predicate(pred::P) where P
-    sanitize_query_predicate(GI.trait(pred), pred)
-end
-
-sanitize_query_predicate(::Nothing, pred::P) where P = pred
-sanitize_query_predicate(::GI.AbstractTrait, pred) = sanitize_pred(GI.extent(pred))
-
-sanitize_query_predicate(pred::Extents.Extent) = Base.Fix1(Extents.intersects, pred)
-
 # What does SpatialTreeInterface require of trees?
 # - Parents completely cover their children
 # - `GI.extent(node)` returns `Extent` 
@@ -184,7 +162,7 @@ end
 
 # Get all children of a node
 function SpatialTreeInterface.getchild(node::NaturalTreeNode)
-    return (getchild(node, i) for i in 1:nchild(node))
+    return (SpatialTreeInterface.getchild(node, i) for i in 1:SpatialTreeInterface.nchild(node))
 end
 
 SpatialTreeInterface.isleaf(node::NaturalTreeNode) = node.level == length(node.parent_index.levels) - 1
