@@ -13,8 +13,8 @@ module Predicates
     orient(a, b, c; exact) = _orient(booltype(exact), _tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
     
     # If `exact` is `true`, use `ExactPredicates` to calculate the orientation.
-    _orient(::True, a, b, c) = AdaptivePredicates.orient2(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
-    #ExactPredicates.orient(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
+    _orient(::True, a, b, c) = AdaptivePredicates.orient2p(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
+    # _orient(::True, a, b, c) = ExactPredicates.orient(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
     # If `exact` is `false`, calculate the orientation without using `ExactPredicates`.
     function _orient(exact::False, a, b, c)
         a = a .- c
