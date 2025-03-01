@@ -78,6 +78,8 @@ true
 ```
 """
 coveredby(g1, g2) = _coveredby(trait(g1), g1, trait(g2), g2)
+coveredby(g1) = Base.Fix1(coveredby, g1)
+
 
 # # Convert features to geometries
 _coveredby(::GI.FeatureTrait, g1, ::Any, g2) = coveredby(GI.geometry(g1), g2)

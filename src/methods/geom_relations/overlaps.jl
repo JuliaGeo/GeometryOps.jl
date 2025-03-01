@@ -69,12 +69,8 @@ GO.overlaps(poly1, poly2)
 true
 ```
 """
-overlaps(geom1, geom2)::Bool = overlaps(
-    GI.trait(geom1),
-    geom1,
-    GI.trait(geom2),
-    geom2,
-)
+overlaps(geom1, geom2)::Bool = overlaps(GI.trait(geom1), geom1, GI.trait(geom2), geom2)
+overlaps(geom1) = Base.Fix1(overlaps, geom1)
 
 """
     overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2)::Bool

@@ -16,6 +16,8 @@ import GeoInterface as GI, GeometryOps as GO
 ```
 """
 crosses(g1, g2)::Bool = crosses(trait(g1), g1, trait(g2), g2)::Bool
+crosses(g1) = Base.Fix1(crosses, g1)
+
 crosses(t1::FeatureTrait, g1, t2, g2)::Bool = crosses(GI.geometry(g1), g2)
 crosses(t1, g1, t2::FeatureTrait, g2)::Bool = crosses(g1, geometry(g2))
 crosses(::MultiPointTrait, g1, ::LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)

@@ -74,6 +74,7 @@ true
 ```
 """
 disjoint(g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)
+disjoint(g1) = Base.Fix1(disjoint, g1)
 
 # # Convert features to geometries
 _disjoint(::FeatureTrait, g1, ::Any, g2) = disjoint(GI.geometry(g1), g2)

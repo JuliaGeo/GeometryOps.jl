@@ -81,6 +81,7 @@ true
 ```
 """
 within(g1, g2) = _within(trait(g1), g1, trait(g2), g2)
+within(g1) = Base.Fix1(within, g1)
 
 # # Convert features to geometries
 _within(::GI.FeatureTrait, g1, ::Any, g2) = within(GI.geometry(g1), g2)

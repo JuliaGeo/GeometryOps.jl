@@ -62,3 +62,4 @@ true
 ```
 """
 covers(g1, g2)::Bool = GeometryOps.coveredby(g2, g1)
+covers(g1) = Base.Fix1(covers, g1)

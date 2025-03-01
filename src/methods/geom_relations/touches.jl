@@ -77,6 +77,7 @@ true
 ```
 """
 touches(g1, g2)::Bool = _touches(trait(g1), g1, trait(g2), g2)
+touches(g1) = Base.Fix1(touches, g1)
 
 # # Convert features to geometries
 _touches(::GI.FeatureTrait, g1, ::Any, g2) = touches(GI.geometry(g1), g2)

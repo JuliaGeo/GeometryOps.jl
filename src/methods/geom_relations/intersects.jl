@@ -56,3 +56,4 @@ true
 ```
 """
 intersects(geom1, geom2) = !disjoint(geom1, geom2)
+intersects(geom1) = Base.Fix1(intersects, geom1)
