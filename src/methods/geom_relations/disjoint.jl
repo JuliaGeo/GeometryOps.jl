@@ -51,7 +51,7 @@ The code for the specific implementations is in the geom_geom_processors file.
 const DISJOINT_ALLOWS = (in_allow = false, on_allow = false, out_allow = true)
 const DISJOINT_CURVE_ALLOWS = (over_allow = false, cross_allow = false, on_allow = false, out_allow = true)
 const DISJOINT_REQUIRES = (in_require = false, on_require = false, out_require = false)
-const DISJOINT_EXACT = (exact = _False(),)
+const DISJOINT_EXACT = (exact = False(),)
 
 """
     disjoint(geom1, geom2)::Bool

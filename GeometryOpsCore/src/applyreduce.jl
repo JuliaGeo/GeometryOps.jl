@@ -34,7 +34,7 @@ feature collections and nested geometries.
 @inline function applyreduce(
     f::F, op::O, target, geom; threaded=false, init=nothing
 ) where {F, O}
-    threaded = _booltype(threaded)
+    threaded = booltype(threaded)
     _applyreduce(f, op, TraitTarget(target), geom; threaded, init)
 end
 
@@ -42,7 +42,7 @@ end
     _applyreduce(f, op, target, GI.trait(geom), geom; threaded, init)
 # Maybe use threads reducing over arrays
 @inline function _applyreduce(f::F, op::O, target, ::Nothing, A::AbstractArray; threaded, init) where {F, O}
-    applyreduce_array(i) = _applyreduce(f, op, target, A[i]; threaded=_False(), init)
+    applyreduce_array(i) = _applyreduce(f, op, target, A[i]; threaded=False(), init)
     _mapreducetasks(applyreduce_array, op, eachindex(A), threaded; init)
 end
 # Try to applyreduce over iterables
@@ -50,8 +50,8 @@ end
     if Tables.istable(iterable)
         _applyreduce_table(f, op, target, iterable; threaded, init)
     else
-        applyreduce_iterable(i) = _applyreduce(f, op, target, i; threaded=_False(), init)
-        if threaded isa _True # Try to `collect` and reduce over the vector with threads
+        applyreduce_iterable(i) = _applyreduce(f, op, target, i; threaded=False(), init)
+        if threaded isa True # Try to `collect` and reduce over the vector with threads
             _applyreduce(f, op, target, collect(iterable); threaded, init)
         else
             # Try to `mapreduce` the iterable as-is
@@ -77,7 +77,7 @@ function _applyreduce_table(f::F, op::O, target::GI.FeatureTrait, iterable::Iter
 end
 # Maybe use threads reducing over features of feature collections
 @inline function _applyreduce(f::F, op::O, target, ::GI.FeatureCollectionTrait, fc; threaded, init) where {F, O}
-    applyreduce_fc(i) = _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=_False(), init)
+    applyreduce_fc(i) = _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=False(), init)
     _mapreducetasks(applyreduce_fc, op, 1:GI.nfeature(fc), threaded; init)
 end
 # Features just applyreduce to their geometry
@@ -85,7 +85,7 @@ end
     _applyreduce(f, op, target, GI.geometry(feature); threaded, init)
 # Maybe use threads over components of nested geometries
 @inline function _applyreduce(f::F, op::O, target, trait, geom; threaded, init) where {F, O}
-    applyreduce_geom(i) = _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=_False(), init)
+    applyreduce_geom(i) = _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=False(), init)
     _mapreducetasks(applyreduce_geom, op, 1:GI.ngeom(geom), threaded; init)
 end
 # Don't thread over points it won't pay off
@@ -93,7 +93,7 @@ end
     f::F, op::O, target, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom;
     threaded, init
 ) where {F, O}
-    _applyreduce(f, op, target, GI.getgeom(geom); threaded=_False(), init)
+    _applyreduce(f, op, target, GI.getgeom(geom); threaded=False(), init)
 end
 # Apply f to the target
 @inline function _applyreduce(f::F, op::O, ::TraitTarget{Target}, ::Trait, x; kw...) where {F,O,Target,Trait<:Target} 
@@ -124,29 +124,7 @@ import Base.Threads: nthreads, @threads, @spawn
 # 
 # If you absolutely need a single chunk, then `threaded = false` will always decompose
 # to straight `mapreduce` without grouping.
-
-@inline function _mapreducetasks(f::F, op, taskrange, threaded::_True; init) where F
-    ntasks = length(taskrange)
-    # Customize this as needed.
-    # More tasks have more overhead, but better load balancing
-    tasks_per_thread = 2
-    chunk_size = max(1, ntasks ÷ (tasks_per_thread * nthreads()))
-    # partition the range into chunks
-    task_chunks = Iterators.partition(taskrange, chunk_size)
-    # Map over the chunks
-    tasks = map(task_chunks) do chunk
-        # Spawn a task to process this chunk
-        Threads.@spawn begin
-            # Where we map `f` over the chunk indices
-            mapreduce(f, op, chunk; init)
-        end
-    end
-
-    # Finally we join the results into a new vector
-    return mapreduce(fetch, op, tasks; init)
-end
-
-@inline function _mapreducetasks(f::F, op, taskrange, threaded::_TrueButStable; init) where F
+@inline function _mapreducetasks(f::F, op, taskrange, threaded::True; init) where F
     ntasks = length(taskrange)
     # Customize this as needed.
     # More tasks have more overhead, but better load balancing
@@ -167,6 +145,6 @@ end
     return mapreduce(fetch, op, tasks; init)
 end
 
-function _mapreducetasks(f::F, op, taskrange, threaded::_False; init) where F
+function _mapreducetasks(f::F, op, taskrange, threaded::False; init) where F
     mapreduce(f, op, taskrange; init)
 end

@@ -73,7 +73,7 @@ end
 _coverage(::Type{T}, ::GI.AbstractGeometryTrait, geom, xmin, xmax, ymin, ymax; kwargs...) where T = zero(T)
 
 # Polygons
-function _coverage(::Type{T}, ::GI.PolygonTrait, poly, xmin, xmax, ymin, ymax; exact = _False()) where T
+function _coverage(::Type{T}, ::GI.PolygonTrait, poly, xmin, xmax, ymin, ymax; exact = False()) where T
     GI.isempty(poly) && return zero(T)
     cov_area = _coverage(T, GI.getexterior(poly), xmin, xmax, ymin, ymax; exact)
     cov_area == 0 && return cov_area

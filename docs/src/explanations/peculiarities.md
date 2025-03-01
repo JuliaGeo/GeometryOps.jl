@@ -14,7 +14,7 @@ We use the `target` keyword to allow the user to control which kinds of geometry
 
 This also allows for a lot more type stability - when you ask for polygons, we won't return a geometrycollection with line segments.  Especially in simulation workflows, this is excellent for simplified data processing.
 
-## `_True` and `_False` (or `BoolsAsTypes`)
+## `True` and `False` (or `BoolsAsTypes`)
 
 !!! warning
     These are internals and explicitly *not* public API,

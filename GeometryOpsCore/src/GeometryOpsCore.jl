@@ -19,6 +19,7 @@ using DataAPI
 import StableTasks
 
 include("keyword_docs.jl")
+include("constants.jl")
 
 include("types/manifold.jl")
 include("types/algorithm.jl")

@@ -1,4 +1,4 @@
-import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, _True, _False
+import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, True, False
 import Proj
 
 function reproject(geom;

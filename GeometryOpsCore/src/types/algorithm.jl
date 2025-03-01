@@ -14,7 +14,18 @@ Algorithms are:
 
 =#
 
+export Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm
+
 abstract type Algorithm{M <: Manifold} end
+
+struct AutoAlgorithm{T, M <: Manifold} <: Algorithm{M} 
+    manifold::M
+    x::T
+end
+
+AutoAlgorithm(m::Manifold; kwargs...) = AutoAlgorithm(m, kwargs)
+AutoAlgorithm(; kwargs...) = AutoAlgorithm(AutoManifold(), kwargs)
+
 
 abstract type ManifoldIndependentAlgorithm{M <: Manifold} <: Algorithm{M} end
 

@@ -5,8 +5,9 @@ module GeometryOps
 import GeometryOpsCore
 import GeometryOpsCore: 
                 TraitTarget,
-                Manifold, Planar, Spherical, Geodesic,
-                BoolsAsTypes, _True, _False, _booltype,
+                Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
+                Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
+                BoolsAsTypes, True, False, booltype,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
@@ -17,12 +18,15 @@ using GeoInterface
 using GeometryBasics
 using LinearAlgebra, Statistics
 
+using GeometryBasics.StaticArrays
+
 import Tables, DataAPI
-import GeometryBasics.StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
 import GeoInterface.Extents: Extents
+import SortTileRecursiveTree
+import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
 const GB = GeometryBasics
@@ -30,10 +34,15 @@ const GB = GeometryBasics
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
-include("types.jl")
-include("primitives.jl")
-include("utils.jl")
-include("not_implemented_yet.jl")
+include("types.jl") # backend / algorithm types like GEOS, PROJ, etc.
+include("primitives.jl") # moved to GeometryOpsCore
+include("not_implemented_yet.jl") # functions that are not implemented yet, but we want stubs for, or the implementations might be in extensions
+
+# Include utility modules first!
+include("utils/LoopStateMachine/LoopStateMachine.jl") # Utils for functions that can tell the loop they run in to do something via the return value
+include("utils/SpatialTreeInterface/SpatialTreeInterface.jl") # Utils for spatial trees
+include("utils/NaturalIndexing.jl") # Utils for natural indexing
+include("utils/utils.jl") # More general utility functions
 
 include("methods/angles.jl")
 include("methods/area.jl")
