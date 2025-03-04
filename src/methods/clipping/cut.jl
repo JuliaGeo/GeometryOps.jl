@@ -83,7 +83,7 @@ function _cut(alg::FosterHormannClipping{M, A}, ::Type{T}, ::GI.PolygonTrait, po
     cut_polys = [GI.Polygon([c]) for c in cut_coords]
     # Add original polygon holes back in
     remove_idx = falses(length(cut_polys))
-    _add_holes_to_polys!(T, cut_polys, GI.gethole(poly), remove_idx; exact)
+    _add_holes_to_polys!(alg, T, cut_polys, GI.gethole(poly), remove_idx; exact)
     return cut_polys
 end
 
@@ -100,10 +100,10 @@ end
 of cut geometry in Vector{Vector{Tuple}} format. 
 
 Note: degenerate cases where intersection points are vertices do not work right now. =#
-function _cut(::Type{T}, geom, line, geom_list, intr_list, n_intr_pts; exact) where T
+function _cut(alg::FosterHormannClipping{M, A}, ::Type{T}, geom, line, geom_list, intr_list, n_intr_pts; exact) where {T, M, A}
     # Sort and categorize the intersection points
     sort!(intr_list, by = x -> geom_list[x].fracs[2])
-    _flag_ent_exit!(GI.LineTrait(), line, geom_list; exact)
+    _flag_ent_exit!(alg, GI.LineTrait(), line, geom_list; exact)
     # Add first point to output list
     return_coords = [[geom_list[1].point]]
     cross_backs = [(T(Inf),T(Inf))]
