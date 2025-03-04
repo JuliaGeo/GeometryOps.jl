@@ -27,6 +27,7 @@ GeoMakie = "db073c08-6b98-4ee5-b6a4-5efafb3259c6"
 GeoParquet = "e99870d8-ce00-4fdd-aeee-e09192881159"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
 GeometryOps = "3251bfac-6a57-4b6d-aa61-ac1fef2975ab"
+GeometryOpsCore = "05efe853-fabf-41c8-927e-7063c8b9f013"
 LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
 Literate = "98b081ad-f1c9-55d3-8b20-4c87d4299306"
 Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
@@ -41,3 +42,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Shapefile = "8e980c4a-a4fe-5da2-b3a7-4b4b0353a2f4"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 Weave = "44d3d7a6-8a23-5bf8-98c5-b353f8df5ec9"
+
+[sources]
+GeometryOps = { path = "../" }
+GeometryOpsCore = { path = "../GeometryOpsCore" }
