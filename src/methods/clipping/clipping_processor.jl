@@ -661,7 +661,9 @@ function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b
             # changed curr_not_intr to curr_not_same_ent_flag
             same_status, prev_status = true, curr.ent_exit
             while same_status
-                @assert visited_pts < total_pts "Clipping tracing hit every point - clipping error. Please open an issue with polygons: $(GI.coordinates(poly_a)) and $(GI.coordinates(poly_b))."
+                if visited_pts >= total_pts
+                    throw(TracingError("Clipping tracing hit every point - clipping error.", poly_a, poly_b, a_list, b_list, a_idx_list))
+                end
                 # Traverse polygon either forwards or backwards
                 idx += step
                 idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
