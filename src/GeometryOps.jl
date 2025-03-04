@@ -5,7 +5,8 @@ module GeometryOps
 import GeometryOpsCore
 import GeometryOpsCore: 
                 TraitTarget,
-                Manifold, Planar, Spherical, Geodesic,
+                Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
+                Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
