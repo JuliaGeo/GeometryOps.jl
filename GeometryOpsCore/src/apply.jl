@@ -30,18 +30,11 @@ Functions like [`flip`](@ref), [`reproject`](@ref), [`transform`](@ref), even [`
 using the `apply` framework.  Similarly, [`centroid`](@ref), [`area`](@ref) and [`distance`](@ref) have been implemented using the 
 [`applyreduce`](@ref) framework.
 
-## Docstrings
-
-### Functions
-
 ```@docs; collapse=true, canonical=false
 apply
-applyreduce
 ```
 
-=#
 
-#=
 ## What is `apply`?
 
 `apply` applies some function to every geometry matching the `Target`
@@ -69,7 +62,7 @@ Be careful making a union across "levels" of nesting, e.g.
 `Union{FeatureTrait,PolygonTrait}`, as `_apply` will just never reach
 `PolygonTrait` when all the polygons are wrapped in a `FeatureTrait` object.
 
-## Embedding:
+### Embedding
 
 `extent` and `crs` can be embedded in all geometries, features, and
 feature collections as part of `apply`. Geometries deeper than `Target`
@@ -78,7 +71,7 @@ will of course not have new `extent` or `crs` embedded.
 - `calc_extent` signals to recalculate an `Extent` and embed it.
 - `crs` will be embedded as-is
 
-## Threading
+### Threading
 
 Threading is used at the outermost level possible - over
 an array, feature collection, or e.g. a MultiPolygonTrait where
@@ -86,6 +79,22 @@ each `PolygonTrait` sub-geometry may be calculated on a different thread.
 
 Currently, threading defaults to `false` for all objects, but can be turned on
 by passing the keyword argument `threaded=true` to `apply`.
+
+Threading uses [StableTasks.jl](https://github.com/JuliaFolds2/StableTasks.jl) to provide
+type-stable tasks (base Julia `Threads.@spawn` is not type stable).  This is completely cost-free
+and saves some allocations when running multithreaded. 
+
+The current strategy is to launch 2 tasks for each CPU thread, to provide load balancing.  We
+assume Julia will manage these tasks efficiently, and we don't want to run too many tasks
+since each task does have some overhead when it's created.  This may need revisiting in the future,
+but it's a pretty easy heuristic to use.
+
+## Implementation
+
+Literate.jl source code is below.
+
+***
+
 =#
 
 """
