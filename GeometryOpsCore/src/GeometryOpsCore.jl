@@ -16,6 +16,7 @@ end
 
 using Tables
 using DataAPI
+import StableTasks
 
 include("keyword_docs.jl")
 include("types.jl")

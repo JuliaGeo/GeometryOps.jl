@@ -135,7 +135,7 @@ import Base.Threads: nthreads, @threads, @spawn
     # Map over the chunks
     tasks = map(task_chunks) do chunk
         # Spawn a task to process this chunk
-        @spawn begin
+        StableTasks.@spawn begin
             # Where we map `f` over the chunk indices
             mapreduce(f, op, chunk; init)
         end
@@ -144,6 +144,7 @@ import Base.Threads: nthreads, @threads, @spawn
     # Finally we join the results into a new vector
     return mapreduce(fetch, op, tasks; init)
 end
-Base.@assume_effects :foldable function _mapreducetasks(f::F, op, taskrange, threaded::False; init) where F
+
+function _mapreducetasks(f::F, op, taskrange, threaded::False; init) where F
     mapreduce(f, op, taskrange; init)
 end

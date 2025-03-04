@@ -319,6 +319,18 @@ end
 
 using Base.Threads: nthreads, @threads, @spawn
 
+#=
+Here we used to use the compiler directive `@assume_effects :foldable` to force the compiler
+to lookup through the closure. This alone makes e.g. `flip` 2.5x faster!
+
+But it caused inference to fail, so we've removed it.  No effect on runtime so far as we can tell, 
+at least in Julia 1.11.
+=#
+@inline function _maptasks(f::F, taskrange, threaded::False)::Vector where F
+    map(f, taskrange)
+end
+
+
 # Threading utility, modified Mason Protters threading PSA
 # run `f` over ntasks, where f receives an AbstractArray/range
 # of linear indices
@@ -333,7 +345,7 @@ using Base.Threads: nthreads, @threads, @spawn
     # Map over the chunks
     tasks = map(task_chunks) do chunk
         # Spawn a task to process this chunk
-        @spawn begin
+        StableTasks.@spawn begin
             # Where we map `f` over the chunk indices
             map(f, chunk)
         end
@@ -341,14 +353,4 @@ using Base.Threads: nthreads, @threads, @spawn
 
     # Finally we join the results into a new vector
     return mapreduce(fetch, vcat, tasks)
-end
-#=
-Here we used to use the compiler directive `@assume_effects :foldable` to force the compiler
-to lookup through the closure. This alone makes e.g. `flip` 2.5x faster!
-
-But it caused inference to fail, so we've removed it.  No effect on runtime so far as we can tell, 
-at least in Julia 1.11.
-=#
-@inline function _maptasks(f::F, taskrange, threaded::False)::Vector where F
-    map(f, taskrange)
 end
