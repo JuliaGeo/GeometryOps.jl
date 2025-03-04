@@ -1,6 +1,59 @@
 # # Polygon clipping helpers
 # This file contains the shared helper functions for the polygon clipping functionalities.
 
+# This file specifically defines helpers for the Foster-Hormann clipping algorithm.
+
+
+"""
+    abstract type IntersectionAccelerator
+
+The abstract supertype for all intersection accelerator types.
+
+The idea is that these speed up the edge-edge intersection checking process,
+perhaps at the cost of memory.
+
+The naive case is [`NestedLoop`](@ref), which is just a nested loop, running in O(n*m) time.
+
+Then we have [`SingleSTRtree`](@ref), which is a single STRtree, running in O(n*log(m)) time.
+
+Then we have [`DoubleSTRtree`](@ref), which is am simultaneous double-tree traversal of two STRtrees.
+
+Finally, we have [`AutoAccelerator`](@ref), which is an automatic accelerator that chooses the best
+accelerator based on the size of the input polygons.  This gets materialized in build_a_list for now.
+"""
+abstract type IntersectionAccelerator end
+struct NestedLoop <: IntersectionAccelerator end
+struct SingleSTRtree <: IntersectionAccelerator end
+struct DoubleSTRtree <: IntersectionAccelerator end
+struct SingleNaturalTree <: IntersectionAccelerator end
+struct DoubleNaturalTree <: IntersectionAccelerator end
+struct ThinnedDoubleNaturalTree <: IntersectionAccelerator end
+struct AutoAccelerator <: IntersectionAccelerator end
+
+"""
+    FosterHormannClipping{M <: Manifold, A <: Union{Nothing, Accelerator}} <: GeometryOpsCore.Algorithm{M} 
+
+A type that represents the Foster-Hormann clipping algorithm.
+
+# Arguments
+- `manifold::M`: The manifold on which the algorithm operates.
+- `accelerator::A`: The accelerator to use for the algorithm.  Can be `nothing` for automatic choice, or a custom accelerator.
+"""
+struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: GeometryOpsCore.Algorithm{M} 
+    manifold::M
+    accelerator::A
+    # TODO: add exact flag
+    # TODO: should exact flag be in the type domain?
+end
+
+
+FosterHormannClipping(; manifold::Manifold = Planar(), accelerator = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? AutoAccelerator() : accelerator)
+FosterHormannClipping(manifold::Manifold, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? AutoAccelerator() : accelerator)
+FosterHormannClipping(accelerator::Union{Nothing, IntersectionAccelerator}) = FosterHormannClipping(Planar(), isnothing(accelerator) ? AutoAccelerator() : accelerator)
+# special case for spherical / geodesic manifolds
+# since they can't use STRtrees (because those don't work on the sphere)
+FosterHormannClipping(manifold::Union{Spherical, Geodesic}, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : (accelerator isa AutoAccelerator ? NestedLoop() : accelerator))
+
 # This enum defines which side of an edge a point is on
 @enum PointEdgeSide left=1 right=2 unknown=3
 
