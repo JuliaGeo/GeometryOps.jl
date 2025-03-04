@@ -21,12 +21,16 @@ export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, f
 using GeoInterface
 using LinearAlgebra, Statistics
 
+using GeometryBasics.StaticArrays
+
 import Tables, DataAPI
 import StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
 import GeoInterface.Extents: Extents
+import SortTileRecursiveTree
+import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
 
