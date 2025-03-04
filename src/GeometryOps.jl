@@ -47,6 +47,9 @@ include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
 
 using .LoopStateMachine, .SpatialTreeInterface
 
+include("utils/NaturalIndexing.jl")
+using .NaturalIndexing
+
 
 include("methods/angles.jl")
 include("methods/area.jl")
