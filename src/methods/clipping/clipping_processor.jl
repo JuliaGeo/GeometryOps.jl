@@ -90,6 +90,45 @@ PolyNode(node::PolyNode{T};
 
 # Checks equality of two PolyNodes by backing point value, fractional value, and intersection status
 equals(pn1::PolyNode, pn2::PolyNode) = pn1.point == pn2.point && pn1.inter == pn2.inter && pn1.fracs == pn2.fracs
+Base.:(==)(pn1::PolyNode, pn2::PolyNode) = equals(pn1, pn2)
+
+# Finally, we define a nice error type for when the clipping tracing algorithm hits every point in a polygon.
+# This stores the polygons, the a_list, and the b_list, and the a_idx_list.
+# allowing the user to understand what happened and why.
+"""
+    TracingError{T1, T2} <: Exception
+
+An error that is thrown when the clipping tracing algorithm fails somehow.
+This is a bug in the algorithm, and should be reported.
+
+The polygons are contained in the exception object, accessible by try-catch or as `err` in the REPL.
+"""
+struct TracingError{T1, T2, T} <: Exception
+    message::String
+    poly_a::T1
+    poly_b::T2
+    a_list::Vector{PolyNode{T}}
+    b_list::Vector{PolyNode{T}}
+    a_idx_list::Vector{Int}
+end
+
+function Base.showerror(io::IO, e::TracingError{T1, T2}) where {T1, T2}
+    print(io, "TracingError: ")
+    println(io, e.message)
+    println(io, "Please open an issue with the polygons contained in this error object.")
+    println(io)
+    if max(GI.npoint(e.poly_a), GI.npoint(e.poly_b)) < 10
+        println(io, "Polygon A:")
+        println(io, GI.coordinates(e.poly_a))
+        println(io)
+        println(io, "Polygon B:")
+        println(io, GI.coordinates(e.poly_b))
+    else
+        println(io, "The polygons are contained in the exception object, accessible by try-catch or as `err` in the REPL.")
+    end
+end
+
+
 
 #=
     _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f; exact) ->
