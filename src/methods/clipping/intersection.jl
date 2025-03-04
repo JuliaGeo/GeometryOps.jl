@@ -40,28 +40,41 @@ GI.coordinates.(inter_points)
 ```
 """
 function intersection(
-    geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...,
+    alg::FosterHormannClipping, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
 ) where {T<:AbstractFloat}
     return _intersection(
-        TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
+        alg, TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
         exact = True(), kwargs...,
     )
 end
 
+# fallback definitions
+# if no manifold - assume planar (until we have best_manifold)
+function intersection(
+    geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
+) where {T<:AbstractFloat}
+    return intersection(FosterHormannClipping(Planar()), geom_a, geom_b; target, kwargs...)
+end
+
+# if manifold but no algorithm - assume FosterHormannClipping with provided manifold.
+function intersection(m::Manifold, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...) where {T<:AbstractFloat}
+    return intersection(FosterHormannClipping(m), geom_a, geom_b; target, kwargs...)
+end
+
 # Curve-Curve Intersections with target Point
 _intersection(
-    ::TraitTarget{GI.PointTrait}, ::Type{T},
+    alg::FosterHormannClipping, ::TraitTarget{GI.PointTrait}, ::Type{T},
     trait_a::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_a,
     trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b;
     kwargs...,
-) where T = _intersection_points(T, trait_a, geom_a, trait_b, geom_b)
+) where T = _intersection_points(alg.manifold, alg.accelerator, T, trait_a, geom_a, trait_b, geom_b)
 
 #= Polygon-Polygon Intersections with target Polygon
 The algorithm to determine the intersection was adapted from "Efficient clipping
 of efficient polygons," by Greiner and Hormann (1998).
 DOI: https://doi.org/10.1145/274363.274364 =#
 function _intersection(
-    ::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    alg::FosterHormannClipping, ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
     exact, kwargs...,
@@ -70,10 +83,10 @@ function _intersection(
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact)
-    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b)
+    a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact)
+    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b)
     if isempty(polys) # no crossing points, determine if either poly is inside the other
-        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b; exact)
+        a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
             push!(polys, GI.Polygon([tuples(ext_a)]))
         elseif b_in_a
@@ -84,10 +97,10 @@ function _intersection(
     # If the original polygons had holes, take that into account.
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
         hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
-        _add_holes_to_polys!(T, polys, hole_iterator, remove_idx; exact)
+        _add_holes_to_polys!(alg, T, polys, hole_iterator, remove_idx; exact)
     end
     # Remove unneeded collinear points on same edge
-    _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
+    _remove_collinear_points!(alg, polys, remove_idx, poly_a, poly_b)
     return polys
 end
 
@@ -112,7 +125,7 @@ _inter_step(x, _) =  x ? 1 : (-1)
 Unless specified with `fix_multipoly = nothing`, `multipolygon_b` will be validated using
 the given (default is `UnionIntersectingPolygons()`) correction. =#
 function _intersection(
-    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
@@ -122,7 +135,7 @@ function _intersection(
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(poly_a, poly_b; target))
+        append!(polys, intersection(alg, poly_a, poly_b; target))
     end
     return polys
 end
@@ -131,11 +144,11 @@ end
 polygon with the multipolygon and thus simply switches the order of operations and calls the
 above method. =#
 _intersection(
-    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     kwargs...,
-) where T = intersection(poly_b, multipoly_a; target , kwargs...)
+) where T = intersection(alg, poly_b, multipoly_a; target , kwargs...)
 
 #= Multipolygon with multipolygon intersection - note that all intersection regions between
 any sub-polygons of `multipoly_a` and any of the sub-polygons of `multipoly_b` are counted
@@ -143,7 +156,7 @@ as intersection polygons. Unless specified with `fix_multipoly = nothing`, both
 `multipolygon_a` and `multipolygon_b` will be validated using the given (default is
 `UnionIntersectingPolygons()`) correction. =#
 function _intersection(
-    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
@@ -155,21 +168,37 @@ function _intersection(
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(poly_a, multipoly_b; target, fix_multipoly))
+        append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly))
     end
     return polys
 end
 
+# catch-all method for multipolygontraits
+function intersection(
+    alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
+    trait_a::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_a,
+    trait_b::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...
+) where T
+    polys = _intersection(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; kwargs...)
+    if isnothing(fix_multipoly)
+        return GI.MultiPolygon(polys)
+    else
+        return fix_multipoly(GI.MultiPolygon(polys))
+    end
+end
+
+
 # Many type and target combos aren't implemented
 function _intersection(
-    ::TraitTarget{Target}, ::Type{T},
+    alg::GeometryOpsCore.Algorithm, target::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b;
     kwargs...,
 ) where {Target, T}
     @assert(
         false,
-        "Intersection between $trait_a and $trait_b with target $Target isn't implemented yet.",
+        "Intersection between $trait_a and $trait_b with target $Target and algorithm $alg isn't implemented yet.",
     )
     return nothing
 end
@@ -193,13 +222,19 @@ inter_points = GO.intersection_points(line1, line2)
 1-element Vector{Tuple{Float64, Float64}}:
  (125.58375366067548, -14.83572303404496)
 """
-intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat =
-    _intersection_points(T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat = intersection_points(FosterHormannClipping(Planar()), geom_a, geom_b, T)
+function intersection_points(alg::FosterHormannClipping{M, A}, geom_a, geom_b, ::Type{T} = Float64) where {M, A, T <: AbstractFloat}
+    return _intersection_points(alg.manifold, alg.accelerator, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+end
+
+function intersection_points(m::Manifold, a::IntersectionAccelerator, geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat
+    return _intersection_points(m, a, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+end
 
 
 #= Calculates the list of intersection points between two geometries, including line
 segments, line strings, linear rings, polygons, and multipolygons. =#
-function _intersection_points(::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = True()) where T
+function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = True()) where {M <: Manifold, A <: IntersectionAccelerator, T}
     # Initialize an empty list of points
     result = Tuple{T, T}[]
     # Check if the geometries extents even overlap
@@ -243,7 +278,7 @@ intersection point (x,y) while the second is the ratio along the initial lines (
 that point. 
 
 Calculation derivation can be found here: https://stackoverflow.com/questions/563198/ =#
-function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T
+function _intersection_point(manifold::M, ::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where {M <: Manifold, T}
     # Default answer for no intersection
     line_orient = line_out
     intr1 = ((zero(T), zero(T)), (zero(T), zero(T)))
@@ -266,7 +301,7 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) w
     # Determine intersection type and intersection point(s)
     if a1_orient == a2_orient == b1_orient == b2_orient == 0
         # Intersection is collinear if all endpoints lie on the same line
-        line_orient, intr1, intr2 = _find_collinear_intersection(T, a1, a2, b1, b2, a_ext, b_ext, no_intr_result)
+        line_orient, intr1, intr2 = _find_collinear_intersection(manifold, T, a1, a2, b1, b2, a_ext, b_ext, no_intr_result)
     elseif a1_orient == 0 || a2_orient == 0 || b1_orient == 0 || b2_orient == 0
         # Intersection is a hinge if the intersection point is an endpoint
         line_orient = line_hinge
@@ -279,13 +314,16 @@ function _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) w
     return line_orient, intr1, intr2
 end
 
+# TODO: deprecate this
+_intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T = _intersection_point(Planar(), T, (a1, a2), (b1, b2); exact)
+
 #= If lines defined by (a1, a2) and (b1, b2) are collinear, find endpoints of overlapping
 region if they exist. This could result in three possibilities. First, there could be no
 overlapping region, in which case, the default 'no_intr_result' intersection information is
 returned. Second, the two regions could just meet at one shared endpoint, in which case it
 is a hinge intersection with one intersection point. Otherwise, it is a overlapping
 intersection defined by two of the endpoints of the line segments. =#
-function _find_collinear_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext, no_intr_result) where T
+function _find_collinear_intersection(manifold::M, ::Type{T}, a1, a2, b1, b2, a_ext, b_ext, no_intr_result) where {M <: Manifold, T}
     # Define default return for no intersection points
     line_orient, intr1, intr2 = no_intr_result
     # Determine collinear line overlaps
