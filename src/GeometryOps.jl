@@ -50,10 +50,12 @@ using .LoopStateMachine, .SpatialTreeInterface
 include("utils/NaturalIndexing.jl")
 using .NaturalIndexing
 
+# Preparations and prepared geometry
+include("preparations/preparations.jl")
+include("preparations/monotone_chain.jl")
 
-# Load utility modules in
-using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
-
+# Methods - things that don't change the contents
+# of the geometry
 include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
@@ -82,6 +84,8 @@ include("methods/geom_relations/within.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 
+# Transformations - things that return a copy of the input geometry,
+# but transformed in some way.
 include("transformations/extent.jl")
 include("transformations/flip.jl")
 include("transformations/reproject.jl")
