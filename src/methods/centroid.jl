@@ -54,15 +54,15 @@ repeat computation.
 Returns the centroid of a given line segment, linear ring, polygon, or
 mutlipolygon.
 """
-centroid(geom, ::Type{T} = Float64; threaded=false) where T =
-    centroid(GI.trait(geom), geom, T; threaded)
+centroid(geom; threaded=false) =
+    centroid(GI.trait(geom), geom, Float64; threaded)
 function centroid(
-    trait::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T}=Float64; threaded=false
+    trait::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, _t::Type{T}=Float64; threaded=false
 ) where T
-    centroid_and_length(trait, geom, T)[1]
+    first(centroid_and_length(trait, geom, T))
 end
 centroid(trait, geom, ::Type{T}; threaded=false) where T = 
-    centroid_and_area(geom, T; threaded)[1]
+    first(centroid_and_area(trait, geom, T; threaded))
 
 """
     centroid_and_length(geom, [T=Float64])::(::Tuple{T, T}, ::Real)
@@ -74,7 +74,7 @@ centroid_and_length(geom, ::Type{T}=Float64) where T =
     centroid_and_length(GI.trait(geom), geom, T)
 function centroid_and_length(
     ::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T},
-) where T
+)::Tuple{Tuple{T, T}, T} where T
     # Initialize starting values
     xcentroid = T(0)
     ycentroid = T(0)
@@ -98,7 +98,7 @@ function centroid_and_length(
     end
     xcentroid /= length
     ycentroid /= length
-    return (xcentroid, ycentroid), length
+    return ((xcentroid, ycentroid), length)
 end
 
 """
@@ -106,7 +106,10 @@ end
 
 Returns the centroid and area of a given geometry.
 """
-function centroid_and_area(geom, ::Type{T}=Float64; threaded=false) where T
+function centroid_and_area(geom, ::Type{T}=Float64; threaded=false)::Tuple{Tuple{T, T}, T} where T
+    centroid_and_area(GI.trait(geom), geom, T; threaded)
+end
+function centroid_and_area(_trait::Trait, geom, ::Type{T} = Float64; threaded = false)::Tuple{Tuple{T, T}, T} where {T, Trait <: Union{GI.AbstractTrait, Nothing}}
     target = TraitTarget{Union{GI.PolygonTrait,GI.LineStringTrait,GI.LinearRingTrait}}()
     init = (zero(T), zero(T)), zero(T)
     applyreduce(_combine_centroid_and_area, target, geom; threaded, init) do g
@@ -114,9 +117,9 @@ function centroid_and_area(geom, ::Type{T}=Float64; threaded=false) where T
     end
 end
 
-function _centroid_and_area(
-    ::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T}
-) where T
+function centroid_and_area(
+    ::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T}; threaded = false
+)::Tuple{Tuple{T, T}, T} where T
     # Check that the geometry is closed
     @assert(
         GI.getpoint(geom, 1) == GI.getpoint(geom, GI.ngeom(geom)),
@@ -144,7 +147,7 @@ function _centroid_and_area(
     ycentroid /= 6area
     return (xcentroid, ycentroid), abs(area)
 end
-function _centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}) where T
+function centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}; threaded = false)::Tuple{Tuple{T, T}, T} where T
     # Exterior ring's centroid and area
     (xcentroid, ycentroid), area = centroid_and_area(GI.getexterior(geom), T)
     # Weight exterior centroid by area
