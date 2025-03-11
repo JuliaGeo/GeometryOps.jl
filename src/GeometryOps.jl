@@ -52,6 +52,7 @@ using .NaturalIndexing
 
 # Preparations and prepared geometry
 include("preparations/preparations.jl")
+include("preparations/prepared_geometry.jl")
 include("preparations/monotone_chain.jl")
 
 # Methods - things that don't change the contents
