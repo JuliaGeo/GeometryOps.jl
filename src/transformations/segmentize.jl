@@ -29,8 +29,8 @@ You can see that this geometry was segmentized correctly, and now has 8 vertices
 Now, we'll also segmentize this using the geodesic method, which is more accurate for lat/lon coordinates.
 
 ```@example segmentize
-using Proj # required to activate the `GeodesicSegments` method!
-geodesic = GO.segmentize(GO.GeodesicSegments(max_distance = 1000), rectangle)
+using Proj # required to activate the `Geodesic` method!
+geodesic = GO.segmentize(GO.Geodesic(#=ellipsoid params here=#), rectangle; max_distance = 1000)
 length(GI.getpoint(geodesic) |> collect)
 ```
 This has a lot of points!  It's important to keep in mind that the `max_distance` is in meters, so this is a very fine-grained segmentation.
@@ -40,18 +40,19 @@ Now, let's see what they look like!  To make this fair, we'll use approximately 
 ```@example segmentize
 using CairoMakie
 linear = GO.segmentize(rectangle; max_distance = 0.01)
-geodesic = GO.segmentize(GO.GeodesicSegments(; max_distance = 1000), rectangle)
+geodesic = GO.segmentize(GO.Geodesic(), rectangle; max_distance = 1000)
 f, a, p = poly(collect(GI.getpoint(linear)); label = "Linear", axis = (; aspect = DataAspect()))
 p2 = poly!(collect(GI.getpoint(geodesic)); label = "Geodesic")
 axislegend(a; position = :lt)
 f
 ```
 
-There are two methods available for segmentizing geometries at the moment: 
+There are two methods available for segmentizing geometries at the moment, 
+and you can invoke them by passing the relevant [`Manifold`](@ref):
 
-```@docs
-LinearSegments
-GeodesicSegments
+```@docs; canonical=false
+Planar
+Geodesic
 ```
 
 ## Benchmark
@@ -92,11 +93,11 @@ for scalefactor in exp10.(LinRange(log10(0.1), log10(10), 5))
     geo_dist = init_geo * scalefactor
 
     npoints_linear = GI.npoint(GO.segmentize(rectangle; max_distance = lin_dist))
-    npoints_geodesic = GO.segmentize(GO.GeodesicSegments(; max_distance = geo_dist), rectangle) |> GI.npoint
+    npoints_geodesic = GI.npoint(GO.segmentize(GO.Geodesic(), rectangle; max_distance = geo_dist))
     npoints_libgeos = GI.npoint(densify(lg_rectangle, lin_dist))
     
-    segmentize_suite["Linear"][npoints_linear] = @be GO.segmentize(GO.LinearSegments(; max_distance = $lin_dist), $rectangle) seconds=1
-    segmentize_suite["Geodesic"][npoints_geodesic] = @be GO.segmentize(GO.GeodesicSegments(; max_distance = $geo_dist), $rectangle) seconds=1
+    segmentize_suite["Linear"][npoints_linear] = @be GO.segmentize($(GO.Planar()), $rectangle; max_distance = $lin_dist) seconds=1
+    segmentize_suite["Geodesic"][npoints_geodesic] = @be GO.segmentize($(GO.Geodesic()), $rectangle; max_distance = $geo_dist) seconds=1
     segmentize_suite["LibGEOS"][npoints_libgeos] = @be densify($lg_rectangle, $lin_dist) seconds=1
     
 end
