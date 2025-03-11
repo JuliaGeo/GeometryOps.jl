@@ -71,7 +71,7 @@ function (Alg::Type{<: SingleManifoldAlgorithm{M}})(m::M; kwargs...) where {M}
     return Alg(; kwargs...)
 end
 
-function (Alg::Type{<: ManifoldIndependentAlgorithm{M}})(m::Manifold; kwargs...) where {M}
+function (Alg::Type{<: SingleManifoldAlgorithm{M}})(m::Manifold; kwargs...) where {M}
     # this catches the case where the algorithm doesn't match the manifold
     # throw a WrongManifoldException and be done with it
     throw(WrongManifoldException{typeof(m), M, Alg}())
