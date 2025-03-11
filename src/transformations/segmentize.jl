@@ -111,6 +111,9 @@ abstract type SegmentizeMethod end
 """
     LinearSegments(; max_distance::Real)
 
+!!! warning
+    This is deprecated - call `segmentize(Planar(), geom; max_distance)` instead.
+
 A method for segmentizing geometries by adding extra vertices to the geometry so that no segment is longer than a given distance.
 
 Here, `max_distance` is a purely nondimensional quantity and will apply in the input space.   This is to say, that if the polygon is
@@ -123,6 +126,9 @@ end
 
 """
     GeodesicSegments(; max_distance::Real, equatorial_radius::Real=6378137, flattening::Real=1/298.257223563)
+
+!!! warning
+    This is deprecated - call `segmentize(Geodesic(; semimajor_axis, inv_flattening), geom; max_distance)` instead.
 
 A method for segmentizing geometries by adding extra vertices to the geometry so that no segment is longer than a given distance.  
 This method calculates the distance between points on the geodesic, and assumes input in lat/long coordinates.
