@@ -51,6 +51,9 @@ include("utils/NaturalIndexing.jl")
 using .NaturalIndexing
 
 
+# Load utility modules in
+using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
+
 include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
