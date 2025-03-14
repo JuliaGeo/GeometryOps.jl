@@ -174,7 +174,7 @@ function _intersection(
 end
 
 # catch-all method for multipolygontraits
-function intersection(
+function _intersection(
     alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     trait_a::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_a,
     trait_b::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_b;
