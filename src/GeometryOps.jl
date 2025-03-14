@@ -44,6 +44,9 @@ include("utils/SpatialTreeInterface/SpatialTreeInterface.jl") # Utils for spatia
 include("utils/NaturalIndexing.jl") # Utils for natural indexing
 include("utils/utils.jl") # More general utility functions
 
+# Load utility modules in
+using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
+
 include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
