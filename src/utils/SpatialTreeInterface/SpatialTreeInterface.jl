@@ -130,9 +130,9 @@ Otherwise, return the predicate unchanged.
 
 Users and developers may overload this function to provide custom behaviour when something is passed in.
 """
-sanitize_predicate(pred::P) where P = sanitize_predicate(GI.trait(pred), pred)
-sanitize_predicate(::Nothing, pred::P) where P = pred
-sanitize_predicate(::GI.AbstractTrait, pred::P) where P = sanitize_predicate(GI.extent(pred))
+sanitize_predicate(pred) = sanitize_predicate(GI.trait(pred), pred)
+sanitize_predicate(::Nothing, pred) = pred
+sanitize_predicate(::GI.AbstractTrait, pred) = sanitize_predicate(GI.extent(pred))
 sanitize_predicate(pred::Extents.Extent) = Base.Fix1(Extents.intersects, pred)
 
 
