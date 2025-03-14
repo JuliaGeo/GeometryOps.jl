@@ -4,6 +4,7 @@ import GeoInterface as GI
 import Extents
 
 using ..SpatialTreeInterface
+export NaturalTree, NaturallyIndexedRing, prepare_naturally
 
 """
     NaturalLevel{E <: Extents.Extent}
@@ -228,8 +229,4 @@ function prepare_naturally(geom)
     end
 end
 
-export NaturalTree, NaturallyIndexedRing, prepare_naturally
-
 end # module NaturalIndexing
-
-using .NaturalIndexing

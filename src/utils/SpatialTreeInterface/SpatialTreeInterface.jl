@@ -6,6 +6,9 @@ import Extents
 import GeoInterface as GI
 import AbstractTrees
 
+# public isspatialtree, getchild, nchild, child_indices_extents
+export query, do_query
+
 # ## Interface
 # Interface definition for spatial tree types.
 # There is no abstract supertype here since it's impossible to enforce,
@@ -95,7 +98,6 @@ function do_query(f::F, predicate::P, node::N) where {F, P, N}
         end
     end
 end
-
 function do_query(predicate, node)
     a = Int[]
     do_query(Base.Fix1(push!, a), predicate, node)
@@ -222,5 +224,3 @@ function child_indices_extents(tree::FlatNoTree{T}) where T
 end
 
 end # module SpatialTreeInterface
-
-using .SpatialTreeInterface
