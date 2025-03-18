@@ -75,6 +75,7 @@ include("transformations/forcedims.jl")
 include("transformations/correction/geometry_correction.jl")
 include("transformations/correction/closed_ring.jl")
 include("transformations/correction/intersecting_polygons.jl")
+include("transformations/correction/cut_at_antimeridian.jl")
 
 # Import all names from GeoInterface and Extents, so users can do `GO.extent` or `GO.trait`.
 for name in names(GeoInterface)
