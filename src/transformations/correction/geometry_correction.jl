@@ -43,6 +43,9 @@ Any `GeometryCorrection` must implement two functions:
 """
 abstract type GeometryCorrection end
 
+# Make sure that geometry corrections are treated as scalars when broadcasting.
+Base.Broadcast.broadcastable(c::GeometryCorrection) = (c,)
+
 application_level(gc::GeometryCorrection) = error("Not implemented yet for $(gc)")
 
 (gc::GeometryCorrection)(geometry) = gc(GI.trait(geometry), geometry)
