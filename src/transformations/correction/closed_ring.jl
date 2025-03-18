@@ -46,7 +46,7 @@ See also [`GeometryCorrection`](@ref).
 """
 struct ClosedRing <: GeometryCorrection end
 
-application_level(::ClosedRing) = GI.PolygonTrait
+application_level(::ClosedRing) = TraitTarget(GI.PolygonTrait())
 
 function (::ClosedRing)(::GI.PolygonTrait, polygon)
     exterior = _close_linear_ring(GI.getexterior(polygon))
