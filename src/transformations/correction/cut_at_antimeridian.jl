@@ -301,6 +301,8 @@ function cut_at_antimeridian(
             end
         end
     end
+
+    filter!(poly -> !iszero(GO.area(poly)), result_polygons)
     
     return length(result_polygons) == 1 ? result_polygons[1] : GI.MultiPolygon(result_polygons)
 end
