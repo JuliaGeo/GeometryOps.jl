@@ -44,7 +44,7 @@ function Base.show(io::IO, cut::CutAtAntimeridian)
 end
 Base.show(io::IO, ::MIME"text/plain", cut::CutAtAntimeridian) = Base.show(io, cut)
 
-application_level(::CutAtAntimeridian) = Union{GI.PolygonTrait, GI.LineStringTrait, GI.MultiLineStringTrait, GI.MultiPolygonTrait}
+application_level(::CutAtAntimeridian) = TraitTarget(GI.PolygonTrait(), GI.LineStringTrait(), GI.MultiLineStringTrait(), GI.MultiPolygonTrait())
 
 function (c::CutAtAntimeridianAndPoles)(trait::GI.AbstractTrait, geom)
     return _AntimeridianHelpers.cut_at_antimeridian(trait, geom)

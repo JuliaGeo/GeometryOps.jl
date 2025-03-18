@@ -33,8 +33,13 @@ This abstract type represents a geometry correction.
 ## Interface
 
 Any `GeometryCorrection` must implement two functions:
-    * `application_level(::GeometryCorrection)::AbstractGeometryTrait`: This function should return the `GeoInterface` trait that the correction is intended to be applied to, like `PointTrait` or `LineStringTrait` or `PolygonTrait`.
-    * `(::GeometryCorrection)(::AbstractGeometryTrait, geometry)::(some_geometry)`: This function should apply the correction to the given geometry, and return a new geometry.
+  - `application_level(::GeometryCorrection)::TraitTarget`: This function should 
+  return the `GeoInterface` trait that the correction is intended to be applied to, 
+  like `PointTrait` or `LineStringTrait` or `PolygonTrait`.  It can also return a 
+  union of traits via `TraitTarget`, but that behaviour is a bit tricky...
+  - `(::GeometryCorrection)(::AbstractGeometryTrait, geometry)::(some_geometry)`: 
+  This function should apply the correction to the given geometry, and return a new 
+  geometry.
 """
 abstract type GeometryCorrection end
 
@@ -44,15 +49,17 @@ application_level(gc::GeometryCorrection) = error("Not implemented yet for $(gc)
 
 (gc::GeometryCorrection)(trait::GI.AbstractGeometryTrait, geometry) = error("Not implemented yet for $(gc) and $(trait).")
 
-function fix(geometry; corrections = GeometryCorrection[ClosedRing(),], kwargs...)
-    traits = application_level.(corrections)
+function fix(geometry; corrections = GeometryCorrection[ClosedRing(), CutAtAntimeridianAndPoles()], kwargs...)
+    application_levels = application_level.(corrections)
     final_geometry = geometry
-    for Trait in (GI.PointTrait, GI.MultiPointTrait, GI.LineStringTrait, GI.LinearRingTrait, GI.MultiLineStringTrait, GI.PolygonTrait, GI.MultiPolygonTrait)
-        available_corrections = findall(x -> x == Trait, traits)
+    for trait in (GI.PointTrait(), GI.MultiPointTrait(), GI.LineStringTrait(), GI.LinearRingTrait(), GI.MultiLineStringTrait(), GI.PolygonTrait(), GI.MultiPolygonTrait())
+        available_corrections = findall(x -> trait in x, application_levels)
         isempty(available_corrections) && continue
-        @debug "Correcting for $(Trait)"
+        @debug "Correcting for $(trait), with corrections: " available_corrections
         net_function = reduce(∘, corrections[available_corrections])
-        final_geometry = apply(net_function, Trait, final_geometry; kwargs...)
+        # TODO: this allocates too much, because it keeps reconstructing higher level geoms.
+        # We might want some way to embed the fixes in reconstruct/rebuild, which would imply a modified apply pipeline...
+        final_geometry = apply(net_function, trait, final_geometry; kwargs...)
     end
     return final_geometry
 end
