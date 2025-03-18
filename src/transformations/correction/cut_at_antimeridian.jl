@@ -186,7 +186,7 @@ function segment_ring(coords::Vector{Tuple{Float64,Float64}}, great_circle::Bool
         push!(segments, current_segment)
     end
     
-    return normalize_coords.(segments)
+    return segments
 end
 
 # Check if a segment is self-closing
