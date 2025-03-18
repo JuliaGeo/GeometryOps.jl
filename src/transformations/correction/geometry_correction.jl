@@ -52,7 +52,16 @@ application_level(gc::GeometryCorrection) = error("Not implemented yet for $(gc)
 
 (gc::GeometryCorrection)(trait::GI.AbstractGeometryTrait, geometry) = error("Not implemented yet for $(gc) and $(trait).")
 
-function fix(geometry; corrections = GeometryCorrection[ClosedRing(), CutAtAntimeridianAndPoles()], kwargs...)
+function fix(geometry; corrections = GeometryCorrection[CutAtAntimeridianAndPoles(), ClosedRing()], kwargs...)
+    final_geoms = geometry
+    # Iterate through the corrections and apply them to the input.
+    # This allocates a _lot_, especially when reconstructing tables,
+    # but it's the only fully general way to do this that I can think of.
+    for correction in corrections
+        final_geoms = apply(correction, application_level(correction), final_geoms; kwargs...)
+    end
+    #=
+    # This was the old implementation
     application_levels = application_level.(corrections)
     final_geometry = geometry
     for trait in (GI.PointTrait(), GI.MultiPointTrait(), GI.LineStringTrait(), GI.LinearRingTrait(), GI.MultiLineStringTrait(), GI.PolygonTrait(), GI.MultiPolygonTrait())
@@ -65,6 +74,8 @@ function fix(geometry; corrections = GeometryCorrection[ClosedRing(), CutAtAntim
         final_geometry = apply(net_function, trait, final_geometry; kwargs...)
     end
     return final_geometry
+    =#
+    return final_geoms
 end
 
 # ## Available corrections
