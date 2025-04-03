@@ -9,15 +9,30 @@ CurrentModule = GeometryOps
 
 Documentation for [GeometryOps](https://github.com/JuliaGeo/GeometryOps.jl)'s full API (only for reference!).
 
-```@index
-```
-
 ## `apply` and associated functions
 ```@docs
 apply
 applyreduce
 reproject
 transform
+```
+
+## Manifolds
+
+```@docs
+Manifold
+Planar
+Spherical
+Geodesic
+AutoManifold
+```
+
+## Algorithms
+
+```@docs
+Algorithm
+ManifoldIndependentAlgorithm
+SingleManifoldAlgorithm
 ```
 
 ## General geometry methods
@@ -55,7 +70,12 @@ barycentric_coordinates!
 barycentric_interpolate
 ```
 
-## Other methods
+## All other methods
+
+
+```@index
+```
+
 ```@autodocs
-Modules = [GeometryOps]
+Modules = [GeometryOps, GeometryOpsCore]
 ```
