@@ -23,9 +23,14 @@ This is also a zero cost interface if implemented correctly!  Verified implement
 - `getchild(node)` - get the children of a node.  This may be materialized if necessary or available, but can also be lazy (like a generator).
 - `getchild(node, i)` - get the `i`-th child of a node.
 - `nchild(node)::Int` - the number of children of a node.
-- `child_indices_extents(node)` - an iterator over the indices and extents of the children of a node.
+- `child_indices_extents(node)` - an iterator over the indices and extents of the children of a **leaf** node.
 
-These are the only methods that are required to be implemented.  They enable the generic query functions described below:
+These are the only methods that are required to be implemented.  
+
+Optionally, one may define:
+- `node_extent(node)` - get the extent of a node.  This falls back to `GI.extent` but can potentially be overridden if you want to return a different but extent-like object.
+
+They enable the generic query functions described below:
 
 ## Query functions
 
