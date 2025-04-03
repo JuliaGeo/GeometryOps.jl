@@ -6,7 +6,7 @@ import Extents
 import GeoInterface as GI
 import AbstractTrees
 
-# public isspatialtree, getchild, nchild, child_indices_extents
+# public isspatialtree, getchild, nchild, child_indices_extents, node_extent
 export query, do_query
 
 # ## Interface
@@ -66,10 +66,28 @@ isleaf(node) = error("isleaf is not implemented for node type $(typeof(node))")
 Return an iterator over the indices and extents of the children of a node.
 
 Each value of the iterator should take the form `(i, extent)`.
+
+This can only be invoked on leaf nodes!
 """
 function child_indices_extents(node)
     return zip(1:nchild(node), getchild(node))
 end
+
+"""
+    node_extent(node)
+
+Return the extent like object of the node.  
+Falls back to `GI.extent` by default, which falls back
+to `Extents.extent`.  
+
+Generally, defining `Extents.extent(node)` is sufficient here, and you
+won't need to define this
+
+The reason we don't use that directly is to give users of this interface
+a way to define bounding boxes that are not extents, like spherical caps 
+and other such things.
+"""
+node_extent(node) = GI.extent(node)
 
 # ## Query functions
 # These are generic functions that work with any spatial tree type that implements the interface.
@@ -92,7 +110,7 @@ function do_query(f::F, predicate::P, node::N) where {F, P, N}
         end
     else
         for child in getchild(node)
-            if predicate(GI.extent(child))
+            if predicate(node_extent(child))
                 @controlflow do_query(f, predicate, child)
             end
         end
@@ -156,20 +174,20 @@ function do_dual_query(f::F, predicate::P, node1::N1, node2::N2) where {F, P, N1
         end
     elseif isleaf(node1) # node2 is not a leaf, node1 is - recurse further into node2
         for child in getchild(node2)
-            if predicate(GI.extent(node1), GI.extent(child))
+            if predicate(node_extent(node1), node_extent(child))
                 @controlflow do_dual_query(f, predicate, node1, child)
             end
         end
     elseif isleaf(node2) # node1 is not a leaf, node2 is - recurse further into node1
         for child in getchild(node1)
-            if predicate(GI.extent(child), GI.extent(node2))
+            if predicate(node_extent(child), node_extent(node2))
                 @controlflow do_dual_query(f, predicate, child, node2)
             end
         end
     else # neither node is a leaf, recurse into both children
         for child1 in getchild(node1)
             for child2 in getchild(node2)
-                if predicate(GI.extent(child1), GI.extent(child2))
+                if predicate(node_extent(child1), node_extent(child2))
                     @controlflow do_dual_query(f, predicate, child1, child2)
                 end
             end
