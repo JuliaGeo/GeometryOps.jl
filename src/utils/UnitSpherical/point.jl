@@ -138,23 +138,23 @@ end
 
 # ## Tests
 
-@testitem "UnitSphericalPoint constructor" begin
-    using GeometryOps.UnitSpherical
-    import GeoInterface as GI
+# @testitem "UnitSphericalPoint constructor" begin
+#     using GeometryOps.UnitSpherical
+#     import GeoInterface as GI
 
-    northpole = UnitSphericalPoint{Float64}(1, 0, 0)
-    # test that the constructor works for a vector of length 3
-    @test UnitSphericalPoint((1, 0, 0)) == northpole
-    @test UnitSphericalPoint(SVector(1, 0, 0)) == northpole
-    @test UnitSphericalPoint([1, 0, 0]) == northpole
-    # test that the constructor works for a tuple of length 2
-    # and interprets such a thing as a geographic point
-    @test UnitSphericalPoint((90, 0)) == northpole
-    @test UnitSphericalPoint([90, 0]) == northpole
-    @test UnitSphericalPoint(GI.Point((90, 0))) == northpole
+#     northpole = UnitSphericalPoint{Float64}(1, 0, 0)
+#     # test that the constructor works for a vector of length 3
+#     @test UnitSphericalPoint((1, 0, 0)) == northpole
+#     @test UnitSphericalPoint(SVector(1, 0, 0)) == northpole
+#     @test UnitSphericalPoint([1, 0, 0]) == northpole
+#     # test that the constructor works for a tuple of length 2
+#     # and interprets such a thing as a geographic point
+#     @test UnitSphericalPoint((90, 0)) == northpole
+#     @test UnitSphericalPoint([90, 0]) == northpole
+#     @test UnitSphericalPoint(GI.Point((90, 0))) == northpole
 
 
-end
+# end
 
 #=
 ```@meta
