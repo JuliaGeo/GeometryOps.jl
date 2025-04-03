@@ -42,8 +42,10 @@ include("not_implemented_yet.jl")
 include("utils/utils.jl")
 include("utils/LoopStateMachine/LoopStateMachine.jl")
 include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
+include("utils/UnitSpherical/UnitSpherical.jl")
 
-using .LoopStateMachine, .SpatialTreeInterface
+# Load utility modules in
+using .LoopStateMachine, .SpatialTreeInterface, .UnitSpherical
 
 
 include("methods/angles.jl")
