@@ -4,6 +4,11 @@ using SafeTestsets
 
 include("helpers.jl")
 
+@testset "Core" begin
+    @safetestset "Algorithm" begin include("core/algorithm.jl") end
+    @safetestset "Manifold" begin include("core/manifold.jl") end
+end
+
 @safetestset "Primitives" begin include("primitives.jl") end
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
