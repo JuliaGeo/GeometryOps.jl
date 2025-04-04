@@ -139,8 +139,8 @@ end
 
 function Makie.convert_arguments(::Makie.SampleBased, labels::AbstractVector{<: AbstractString}, bs::AbstractVector{<: Chairmarks.Benchmark})
     ts = map(b -> getproperty.(b.samples, :time), bs)
-    labels = 
-    return flatten
+    labels = reduce(vcat, (fill(l, length(t)) for (l, t) in zip(labels, ts)))
+    return flatten(labels), flatten(ts)
 end
 
 function Makie.convert_arguments(::Type{Makie.Errorbars}, xs, bs::AbstractVector{<: Chairmarks.Benchmark})

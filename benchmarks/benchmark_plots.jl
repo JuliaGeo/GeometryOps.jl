@@ -73,6 +73,7 @@ function plot_trials(
         legend_orientation = :horizontal,
         legend_halign = 1.0,
         legend_valign = -0.25,
+        legend_kws = (;),
     )
 
     xs, ys, labels = [], [], []
@@ -118,7 +119,8 @@ function plot_trials(
             tellheight = legend_position isa Union{Tuple, Makie.Automatic} && (legend_position isa Makie.Automatic || length(legend_position) != 3) && legend_orientation == :horizontal, 
             halign = legend_halign, 
             valign = legend_valign, 
-            orientation = legend_orientation
+            orientation = legend_orientation,
+            legend_kws...,
         )
         ax.xtickcolor[] = ax.xgridcolor[]
         ax
