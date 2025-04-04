@@ -26,11 +26,11 @@ Base.@kwdef struct CutAtAntimeridianAndPoles <: GeometryCorrection
     "The value at the south pole, in your angular units"
     southpole::Float64 = -90.0 # TODO not used!!!
     "The value at the left edge of the antimeridian, in your angular units"
-    left::Float64 = -180.0 # TODO not used!!!
+    left::Float64 = -180.0
     "The value at the right edge of the antimeridian, in your angular units"
-    right::Float64 = 180.0 # TODO not used!!!
+    right::Float64 = 180.0
     "The period of the cyclic / cylindrical coordinate system's x value, usually computed automatically so you don't have to provide it."
-    period::Float64 = right - left # TODO not used!!!
+    period::Float64 = right - left
     "If the polygon is known to enclose the north pole, set this to true"
     force_north_pole::Bool=false # TODO not used!!!
     "If the polygon is known to enclose the south pole, set this to true"
@@ -77,7 +77,7 @@ function spherical_degrees_to_cartesian(point::Tuple{Float64,Float64})::Tuple{Fl
 end
 
 # Calculate crossing latitude using great circle method
-function crossing_latitude_great_circle(start::Tuple{Float64,Float64}, endpoint::Tuple{Float64,Float64})::Float64
+function crossing_latitude_great_circle(c::CutAtAntimeridianAndPoles, start::Tuple{Float64,Float64}, endpoint::Tuple{Float64,Float64})::Float64
     # Convert points to 3D vectors
     p1 = spherical_degrees_to_cartesian(start)
     p2 = spherical_degrees_to_cartesian(endpoint)
@@ -85,8 +85,8 @@ function crossing_latitude_great_circle(start::Tuple{Float64,Float64}, endpoint:
     # Cross product defines plane through both points
     n1 = _cross(p1, p2)
     
-    # Unit vector -Y defines meridian plane
-    n2 = (0.0, -1.0, 0.0)
+    # Unit vector that defines the meridian plane
+    n2 = spherical_degrees_to_cartesian(c.left, 0.0)
     
     # Intersection of planes defined by cross product
     intersection = _cross(n1, n2)
@@ -98,31 +98,31 @@ function crossing_latitude_great_circle(start::Tuple{Float64,Float64}, endpoint:
 end
 
 # Calculate crossing latitude using flat projection method
-function crossing_latitude_flat(start::Tuple{Float64,Float64}, endpoint::Tuple{Float64,Float64})::Float64
-    lat_delta = endpoint[2] - start[2]
-    if endpoint[1] > 0
+function crossing_latitude_flat(c::CutAtAntimeridianAndPoles, start::Tuple{Float64,Float64}, stop::Tuple{Float64,Float64})::Float64
+    lat_delta = stop[2] - start[2]
+    if stop[1] > 0
         round(
-            start[2] + (180.0 - start[1]) * lat_delta / (endpoint[1] + 360.0 - start[1]),
+            start[2] + (c.right - start[1]) * lat_delta / (stop[1] + c.period - start[1]),
             digits=7
         )
     else
         round(
-            start[2] + (start[1] + 180.0) * lat_delta / (start[1] + 360.0 - endpoint[1]),
+            start[2] + (start[1] - c.left) * lat_delta / (start[1] + c.period - stop[1]),
             digits=7
         )
     end
 end
 
 # Main crossing latitude calculation function
-function crossing_latitude(start::Tuple{Float64,Float64}, endpoint::Tuple{Float64,Float64}, great_circle::Bool)::Float64
+function crossing_latitude(c::CutAtAntimeridianAndPoles, start::Tuple{Float64,Float64}, endpoint::Tuple{Float64,Float64}, great_circle::Bool)::Float64
     abs(start[1]) == 180 && return start[2]
     abs(endpoint[1]) == 180 && return endpoint[2]
     
-    return great_circle ? crossing_latitude_great_circle(start, endpoint) : crossing_latitude_flat(start, endpoint)
+    return great_circle ? crossing_latitude_great_circle(c, start, endpoint) : crossing_latitude_flat(c, start, endpoint)
 end
 
 # Normalize coordinates to ensure longitudes are between -180 and 180
-function normalize_coords(coords::Vector{Tuple{Float64,Float64}})::Vector{Tuple{Float64,Float64}}
+function normalize_coords(c::CutAtAntimeridianAndPoles, coords::Vector{Tuple{Float64,Float64}})::Vector{Tuple{Float64,Float64}}
     normalized = deepcopy(coords)
     all_on_antimeridian = true
     
@@ -130,20 +130,20 @@ function normalize_coords(coords::Vector{Tuple{Float64,Float64}})::Vector{Tuple{
         point = normalized[i]
         prev_point = normalized[mod1(i-1, length(normalized))]
         
-        if isapprox(point[1], 180)
-            if abs(point[2]) != 90 && isapprox(prev_point[1], -180)
-                normalized[i] = (-180.0, point[2])
+        if isapprox(point[1], c.right)
+            if abs(point[2]) != c.northpole && isapprox(prev_point[1], c.left)
+                normalized[i] = (c.left, point[2])
             else
-                normalized[i] = (180.0, point[2])
+                normalized[i] = (c.right, point[2])
             end
-        elseif isapprox(point[1], -180)
-            if abs(point[2]) != 90 && isapprox(prev_point[1], 180)
-                normalized[i] = (180.0, point[2])
+        elseif isapprox(point[1], c.left)
+            if abs(point[2]) != c.northpole && isapprox(prev_point[1], c.right)
+                normalized[i] = (c.right, point[2])
             else
-                normalized[i] = (-180.0, point[2])
+                normalized[i] = (c.left, point[2])
             end
         else
-            normalized[i] = (((point[1] + 180) % 360) - 180, point[2])
+            normalized[i] = (((point[1] - c.left) % c.period) + c.left, point[2])
             all_on_antimeridian = false
         end
     end
@@ -152,7 +152,7 @@ function normalize_coords(coords::Vector{Tuple{Float64,Float64}})::Vector{Tuple{
 end
 
 # Segment a ring of coordinates at antimeridian crossings
-function segment_ring(coords::Vector{Tuple{Float64,Float64}}, great_circle::Bool)::Vector{Vector{Tuple{Float64,Float64}}}
+function segment_ring(c::CutAtAntimeridianAndPoles, coords::Vector{Tuple{Float64,Float64}}, great_circle::Bool)::Vector{Vector{Tuple{Float64,Float64}}}
     segments = Vector{Vector{Tuple{Float64,Float64}}}()
     current_segment = Tuple{Float64,Float64}[]
     
@@ -163,12 +163,12 @@ function segment_ring(coords::Vector{Tuple{Float64,Float64}}, great_circle::Bool
         
         # Check for antimeridian crossing
         if (endpoint[1] - start[1] > 180) && (endpoint[1] - start[1] != 360)  # left crossing
-            lat = crossing_latitude(start, endpoint, great_circle)
+            lat = crossing_latitude(c, start, endpoint, great_circle)
             push!(current_segment, (-180.0, lat))
             push!(segments, current_segment)
             current_segment = [(180.0, lat)]
         elseif (start[1] - endpoint[1] > 180) && (start[1] - endpoint[1] != 360)  # right crossing
-            lat = crossing_latitude(endpoint, start, great_circle)
+            lat = crossing_latitude(c, endpoint, start, great_circle)
             push!(current_segment, (180.0, lat))
             push!(segments, current_segment)
             current_segment = [(-180.0, lat)]
@@ -190,8 +190,8 @@ function segment_ring(coords::Vector{Tuple{Float64,Float64}}, great_circle::Bool
 end
 
 # Check if a segment is self-closing
-function is_self_closing(segment::Vector{Tuple{Float64,Float64}})::Bool
-    is_right = segment[end][1] == 180
+function is_self_closing(c::CutAtAntimeridianAndPoles, segment::Vector{Tuple{Float64,Float64}})::Bool
+    is_right = segment[end][1] == c.right
     return segment[1][1] == segment[end][1] && (
         (is_right && segment[1][2] > segment[end][2]) ||
         (!is_right && segment[1][2] < segment[end][2])
@@ -199,23 +199,23 @@ function is_self_closing(segment::Vector{Tuple{Float64,Float64}})::Bool
 end
 
 # Build polygons from segments
-function build_polygons(segments::Vector{Vector{Tuple{Float64,Float64}}})::Vector{GI.Polygon}
+function build_polygons(c::CutAtAntimeridianAndPoles, segments::Vector{Vector{Tuple{Float64,Float64}}})::Vector{GI.Polygon}
     isempty(segments) && return GI.Polygon[]
     
     segment = pop!(segments)
-    is_right = segment[end][1] == 180
+    is_right = segment[end][1] == c.right
     candidates = Tuple{Union{Nothing,Int},Float64}[]
     
-    if is_self_closing(segment)
+    if is_self_closing(c, segment)
         push!(candidates, (nothing, segment[1][2]))
     end
     
     for (i, s) in enumerate(segments)
         if s[1][1] == segment[end][1]
             if (is_right && s[1][2] > segment[end][2] && 
-                (!is_self_closing(s) || s[end][2] < segment[1][2])) ||
+                (!is_self_closing(c, s) || s[end][2] < segment[1][2])) ||
                (!is_right && s[1][2] < segment[end][2] && 
-                (!is_self_closing(s) || s[end][2] > segment[1][2]))
+                (!is_self_closing(c, s) || s[end][2] > segment[1][2]))
                 push!(candidates, (i, s[1][2]))
             end
         end
@@ -230,10 +230,10 @@ function build_polygons(segments::Vector{Vector{Tuple{Float64,Float64}}})::Vecto
         # Join segments and recurse
         segment = vcat(segment, segments[index])
         segments[index] = segment
-        return build_polygons(segments)
+        return build_polygons(c, segments)
     else
         # Handle self-joining segment
-        polygons = build_polygons(segments)
+        polygons = build_polygons(c, segments)
         if !all(p == segment[1] for p in segment)
             push!(polygons, GI.Polygon([segment]))
         end
@@ -245,9 +245,12 @@ function build_polygons(segments::Vector{Vector{Tuple{Float64,Float64}}})::Vecto
 end
 
 # Main function to cut a polygon at the antimeridian
-cut_at_antimeridian(x) = cut_at_antimeridian(GI.trait(x), x)
+cut_at_antimeridian(x) = cut_at_antimeridian(CutAtAntimeridianAndPoles(), GI.trait(x), x)
+cut_at_antimeridian(c::CutAtAntimeridianAndPoles, x) = cut_at_antimeridian(c, GI.trait(x), x)
+cut_at_antimeridian(t::GI.AbstractTrait, x) = cut_at_antimeridian(CutAtAntimeridianAndPoles(), t, x)
 
 function cut_at_antimeridian(
+    c::CutAtAntimeridianAndPoles,
     ::GI.PolygonTrait,
     polygon::T;
     force_north_pole::Bool=false,
@@ -257,16 +260,16 @@ function cut_at_antimeridian(
 ) where {T}
     # Get exterior ring
     exterior = GO.tuples(GI.getexterior(polygon)).geom
-    exterior = normalize_coords(exterior)
+    exterior = normalize_coords(c, exterior)
     
     # Segment the exterior ring
-    segments = segment_ring(exterior, great_circle)
+    segments = segment_ring(c, exterior, great_circle)
     
     if isempty(segments)
         # No antimeridian crossing
         if fix_winding && GO.isclockwise(GI.LinearRing(exterior))
             coord_vecs = reverse.(getproperty.(GO.tuples.(GI.getring(polygon)), :geom))
-            return GI.Polygon(normalize_coords.(coord_vecs))
+            return GI.Polygon(normalize_coords.((c,), coord_vecs))
         end
         return polygon
     end
@@ -275,13 +278,13 @@ function cut_at_antimeridian(
     holes = Vector{Vector{Tuple{Float64,Float64}}}()
     for hole_idx in 1:GI.nhole(polygon)
         hole = GO.tuples(GI.gethole(polygon, hole_idx)).geom
-        hole_segments = segment_ring(hole, great_circle)
+        hole_segments = segment_ring(c, hole, great_circle)
         
         if !isempty(hole_segments)
             if fix_winding
                 unwrapped = [(x % 360, y) for (x, y) in hole]
                 if !GO.isclockwise(GI.LineString(unwrapped))
-                    hole_segments = segment_ring(reverse(hole), great_circle)
+                    hole_segments = segment_ring(c, reverse(hole), great_circle)
                 end
             end
             append!(segments, hole_segments)
@@ -310,9 +313,9 @@ function cut_at_antimeridian(
     return length(result_polygons) == 1 ? result_polygons[1] : GI.MultiPolygon(result_polygons)
 end
 
-function cut_at_antimeridian(::GI.AbstractCurveTrait, line::T; great_circle::Bool=true) where {T}
+function cut_at_antimeridian(c::CutAtAntimeridianAndPoles, t::GI.AbstractCurveTrait, line::T; great_circle::Bool=true) where {T}
     coords = GO.tuples(line).geom
-    segments = segment_ring(coords, great_circle)
+    segments = segment_ring(c, coords, great_circle)
     
     if isempty(segments)
         return line
@@ -322,10 +325,10 @@ function cut_at_antimeridian(::GI.AbstractCurveTrait, line::T; great_circle::Boo
 end
 
 
-function cut_at_antimeridian(::GI.MultiPolygonTrait, x; kwargs...)
+function cut_at_antimeridian(c::CutAtAntimeridianAndPoles, t::GI.MultiPolygonTrait, x; kwargs...)
     results = GI.Polygon[]
     for poly in GI.getgeom(x)
-        result = cut_at_antimeridian(GI.PolygonTrait(), poly; kwargs...)
+        result = cut_at_antimeridian(c, GI.PolygonTrait(), poly; kwargs...)
         if result isa GI.Polygon
             push!(results, result)
         elseif result isa GI.MultiPolygon
@@ -335,11 +338,11 @@ function cut_at_antimeridian(::GI.MultiPolygonTrait, x; kwargs...)
     return GI.MultiPolygon(results)
 end
 
-function cut_at_antimeridian(::GI.MultiLineStringTrait, multiline::T; great_circle::Bool=true) where {T}
+function cut_at_antimeridian(c::CutAtAntimeridianAndPoles, t::GI.MultiLineStringTrait, multiline::T; great_circle::Bool=true) where {T}
     linestrings = Vector{Vector{Tuple{Float64,Float64}}}()
     
     for line in GI.getgeom(multiline)
-        fixed = cut_at_antimeridian(GI.LineStringTrait(), line; great_circle)
+        fixed = cut_at_antimeridian(c, GI.LineStringTrait(), line; great_circle)
         if fixed isa GI.LineString
             push!(linestrings, GO.tuples(fixed).geom)
         else
