@@ -43,10 +43,16 @@ include("utils/LoopStateMachine/LoopStateMachine.jl") # Utils for functions that
 include("utils/SpatialTreeInterface/SpatialTreeInterface.jl") # Utils for spatial trees
 include("utils/NaturalIndexing.jl") # Utils for natural indexing
 include("utils/utils.jl") # More general utility functions
-
 # Load utility modules in
 using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
 
+# Preparations and prepared geometry
+include("preparations/preparations.jl")
+include("preparations/prepared_geometry.jl")
+include("preparations/monotone_chain.jl")
+
+# Methods - things that don't change the contents
+# of the geometry
 include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
@@ -75,6 +81,8 @@ include("methods/geom_relations/within.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 
+# Transformations - things that return a copy of the input geometry,
+# but transformed in some way.
 include("transformations/extent.jl")
 include("transformations/flip.jl")
 include("transformations/reproject.jl")
