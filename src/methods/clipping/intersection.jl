@@ -67,8 +67,8 @@ function _intersection(
     exact, kwargs...,
 ) where {T}
     # First we get the exteriors of 'poly_a' and 'poly_b'
-    ext_a = GI.getexterior(poly_a)
-    ext_b = GI.getexterior(poly_b)
+    ext_a = LazyClosedRing(GI.getexterior(poly_a))
+    ext_b = LazyClosedRing(GI.getexterior(poly_b))
     # Then we find the intersection of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b)

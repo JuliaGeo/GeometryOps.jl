@@ -51,8 +51,8 @@ function _union(
     exact, kwargs...,
 ) where T
     # First, I get the exteriors of the two polygons
-    ext_a = GI.getexterior(poly_a)
-    ext_b = GI.getexterior(poly_b)
+    ext_a = LazyClosedRing(GI.getexterior(poly_a))
+    ext_b = LazyClosedRing(GI.getexterior(poly_b))
     # Then, I get the union of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _union_delay_cross_f, _union_delay_bounce_f; exact)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _union_step, poly_a, poly_b)

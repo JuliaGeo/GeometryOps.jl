@@ -51,8 +51,8 @@ function _difference(
     exact, kwargs...
 ) where T
     # Get the exterior of the polygons
-    ext_a = GI.getexterior(poly_a)
-    ext_b = GI.getexterior(poly_b)
+    ext_a = LazyClosedRing(GI.getexterior(poly_a))
+    ext_b = LazyClosedRing(GI.getexterior(poly_b))
     # Find the difference of the exterior of the polygons
     a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f; exact)
     polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b)
