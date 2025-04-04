@@ -7,7 +7,7 @@ p26 = GI.Polygon([[(3.0, 1.0), (8.0, 1.0), (8.0, 7.0), (3.0, 7.0), (3.0, 5.0), (
 
 suite = BenchmarkGroup(["title:Polygon intersection timing","subtitle:Single polygon, densified"])
 
-for max_distance in exp10.(LinRange(-1, 1.5, 10))
+for max_distance in exp10.(LinRange(-2, 1.5, 10))
     p25s = GO.segmentize(p25; max_distance)
     p26s = GO.segmentize(p26; max_distance)
     n_verts = GI.npoint(p25s)
