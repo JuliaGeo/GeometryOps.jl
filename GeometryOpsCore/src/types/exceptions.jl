@@ -9,7 +9,7 @@ For example, we can catch `WrongManifoldException` and show a nice error message
 and error hinters can be specialized to that as well.
 
 ```@docs; canonical=false
-WrongManifoldException
+GeometryOpsCore.WrongManifoldException
 ```
 =#
 
