@@ -56,7 +56,7 @@ See also [`GeometryCorrection`](@ref).
 """
 struct UnionIntersectingPolygons <: GeometryCorrection end
 
-application_level(::UnionIntersectingPolygons) = GI.MultiPolygonTrait
+application_level(::UnionIntersectingPolygons) = TraitTarget(GI.MultiPolygonTrait())
 
 function (::UnionIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
     union_multipoly = tuples(multipoly)
@@ -99,7 +99,7 @@ See also [`GeometryCorrection`](@ref), [`UnionIntersectingPolygons`](@ref).
 """
 struct DiffIntersectingPolygons <: GeometryCorrection end
 
-application_level(::DiffIntersectingPolygons) = GI.MultiPolygonTrait
+application_level(::DiffIntersectingPolygons) = TraitTarget(GI.MultiPolygonTrait())
 
 function (::DiffIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
     diff_multipoly = tuples(multipoly)
