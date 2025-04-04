@@ -42,7 +42,7 @@ end
 UnitSphericalPoint{T}(v::SVector{3, T}) where T = UnitSphericalPoint{T}(v...)
 UnitSphericalPoint(v::NTuple{3, T}) where T = UnitSphericalPoint{T}(v...)
 UnitSphericalPoint{T}(v::NTuple{3, T}) where T = UnitSphericalPoint{T}(v...)
-UnitSphericalPoint{T}(v::SVector{3, T}) where T = UnitSphericalPoint{T}(v...)
+
 UnitSphericalPoint(v::SVector{3, T}) where T = UnitSphericalPoint{T}(v...)
 ## handle the 2-tuple case specifically
 UnitSphericalPoint(v::NTuple{2, T}) where T = UnitSphereFromGeographic()(v)
