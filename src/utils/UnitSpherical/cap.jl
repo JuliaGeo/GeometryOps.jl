@@ -25,17 +25,16 @@ SphericalCap(t::GI.PointTrait, geom) = SphericalCap(t, geom, 0)
 # TODO: exact-predicate intersection
 # This is all inexact and thus subject to floating point error
 function _intersects(x::SphericalCap, y::SphericalCap)
-    spherical_distance(x.point, y.point) <= max(x.radius, y.radius)
+    spherical_distance(x.point, y.point) <= x.radius + y.radius
 end
 
 _disjoint(x::SphericalCap, y::SphericalCap) = !_intersects(x, y)
 
 function _contains(big::SphericalCap, small::SphericalCap)
     dist = spherical_distance(big.point, small.point)
-    return dist < big.radius #=small.point in big=# && 
-            dist + small.radius < big.radius # small circle fits in big circle
+    # small circle fits in big circle
+    return dist + small.radius < big.radius 
 end
-
 
 function circumcenter_on_unit_sphere(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
     LinearAlgebra.normalize(a × b + b × c + c × a)
