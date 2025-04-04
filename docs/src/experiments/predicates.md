@@ -7,7 +7,7 @@ Exact vs fast predicates
 ```@example orient
 using CairoMakie
 import GeometryOps as GO, GeoInterface as GI, LibGEOS as LG
-import ExactPredicates
+import ExactPredicates, AdaptivePredicates
 using MultiFloats
 using Chairmarks: @be
 using BenchmarkTools: prettytime
