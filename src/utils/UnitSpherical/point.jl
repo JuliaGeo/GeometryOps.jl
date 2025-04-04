@@ -125,8 +125,8 @@ spherical_distance(x::UnitSphericalPoint, y::UnitSphericalPoint) = acos(clamp(x 
 # ## Random points
 Random.rand(rng::Random.AbstractRNG, ::Random.SamplerType{UnitSphericalPoint}) = rand(rng, UnitSphericalPoint{Float64})
 function Random.rand(rng::Random.AbstractRNG, ::Random.SamplerType{UnitSphericalPoint{T}}) where T <: Number
-    θ = 2π * rand(rng, T)
-    ϕ = acos(2 * rand(rng, T) - 1)
+    ϕ = 2π * rand(rng, T)
+    θ = acos(2 * rand(rng, T) - 1)
     sinθ, cosθ = sincos(θ)
     sinϕ, cosϕ = sincos(ϕ)
     return UnitSphericalPoint(
