@@ -7,6 +7,10 @@ that have nice show methods that we can use for certain errors.
 This makes it substantially easier to catch specific kinds of errors and show them.
 For example, we can catch `WrongManifoldException` and show a nice error message,
 and error hinters can be specialized to that as well.
+
+```@docs; canonical=false
+GeometryOpsCore.WrongManifoldException
+```
 =#
 
 export WrongManifoldException
@@ -16,7 +20,7 @@ export WrongManifoldException
 
 This error is thrown when an `Algorithm` is called with a manifold that it was not designed for.
 
-It's mainly called for [`SingleManifoldAlgorithm`](@ref) types.
+It's mainly thrown when constructing `SingleManifoldAlgorithm` types.
 """
 struct WrongManifoldException{InputManifold, DesiredManifold, Algorithm} <: Base.Exception
     description::String
