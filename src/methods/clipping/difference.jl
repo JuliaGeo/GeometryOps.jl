@@ -33,19 +33,24 @@ GI.coordinates.(diff_poly)
 ```
 """
 function difference(
-    geom_a, geom_b, ::Type{T} = Float64; target=nothing, kwargs...,
+    alg::FosterHormannClipping, geom_a, geom_b, ::Type{T} = Float64; target=nothing, kwargs...,
 ) where {T<:AbstractFloat}
     return _difference(
-        TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
+        alg, TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
         exact = True(), kwargs...,
     )
 end
+
+# fallback definitions
+difference(geom_a, geom_b, ::Type{T} = Float64; target=nothing, kwargs...) where T = difference(FosterHormannClipping(Planar()), geom_a, geom_b, T; target, kwargs...)
+# if manifold but no algorithm - assume FosterHormannClipping with provided manifold.
+difference(m::Manifold, geom_a, geom_b, ::Type{T} = Float64; target=nothing, kwargs...) where T = difference(FosterHormannClipping(m), geom_a, geom_b, T; target, kwargs...)
 
 #= The 'difference' function returns the difference of two polygons as a list of polygons.
 The algorithm to determine the difference was adapted from "Efficient clipping of efficient
 polygons," by Greiner and Hormann (1998). DOI: https://doi.org/10.1145/274363.274364 =#
 function _difference(
-    ::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
     exact, kwargs...
@@ -54,11 +59,11 @@ function _difference(
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
     # Find the difference of the exterior of the polygons
-    a_list, b_list, a_idx_list = _build_ab_list(T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f; exact)
-    polys = _trace_polynodes(T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b)
+    a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f; exact)
+    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b)
     # if no crossing points, determine if either poly is inside of the other
     if isempty(polys)
-        a_in_b, b_in_a = _find_non_cross_orientation(a_list, b_list, ext_a, ext_b; exact)
+        a_in_b, b_in_a = _find_non_cross_orientation(alg.manifold, a_list, b_list, ext_a, ext_b; exact)
         # add case for if they polygons are the same (all intersection points!)
         # add a find_first check to find first non-inter poly!
         if b_in_a && !a_in_b  # b in a and can't be the same polygon
@@ -72,19 +77,19 @@ function _difference(
     remove_idx = falses(length(polys))
     # If the original polygons had holes, take that into account.
     if GI.nhole(poly_a) != 0
-        _add_holes_to_polys!(T, polys, GI.gethole(poly_a), remove_idx; exact)
+        _add_holes_to_polys!(alg, T, polys, GI.gethole(poly_a), remove_idx; exact)
     end
     if GI.nhole(poly_b) != 0
         for hole in GI.gethole(poly_b)
             hole_poly = GI.Polygon(StaticArrays.SVector(hole))
-            new_polys = intersection(hole_poly, poly_a, T; target = GI.PolygonTrait)
+            new_polys = intersection(alg, hole_poly, poly_a, T; target = GI.PolygonTrait)
             if length(new_polys) > 0
                 append!(polys, new_polys)
             end
         end
     end
     # Remove unneeded collinear points on same edge
-    _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
+    _remove_collinear_points!(alg, polys, remove_idx, poly_a, poly_b)
     return polys
 end
 
@@ -110,7 +115,7 @@ _diff_step(x, y) = (x ⊻ y) ? 1 : (-1)
 #= Polygon with multipolygon difference - note that all intersection regions between
 `poly_a` and any of the sub-polygons of `multipoly_b` are removed from `poly_a`. =#
 function _difference(
-    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
     kwargs...,
@@ -118,7 +123,7 @@ function _difference(
     polys = [tuples(poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         isempty(polys) && break
-        polys = mapreduce(p -> difference(p, poly_b; target), append!, polys)
+        polys = mapreduce(p -> difference(alg, p, poly_b; target), append!, polys)
     end
     return polys
 end
@@ -128,7 +133,7 @@ sub-polygons of `multipoly_a` and `poly_b` will be removed from the correspondin
 sub-polygon. Unless specified with `fix_multipoly = nothing`, `multipolygon_a` will be
 validated using the given (default is `UnionIntersectingPolygons()`) correction. =#
 function _difference(
-    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
@@ -139,7 +144,7 @@ function _difference(
     polys = Vector{_get_poly_type(T)}()
     sizehint!(polys, GI.npolygon(multipoly_a))
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, difference(poly_a, poly_b; target))
+        append!(polys, difference(alg, poly_a, poly_b; target))
     end
     return polys
 end
@@ -150,7 +155,7 @@ corresponding sub-polygon of `multipoly_a`. Unless specified with `fix_multipoly
 `multipolygon_a` will be validated using the given (default is `UnionIntersectingPolygons()`)
 correction. =#
 function _difference(
-    target::TraitTarget{GI.PolygonTrait}, ::Type{T},
+    alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
     fix_multipoly = UnionIntersectingPolygons(), kwargs...,
@@ -165,9 +170,9 @@ function _difference(
         pieces of `multipolygon_a`` are removed, continue to take difference with new shape
         `polys` =#
         polys = if i == 1
-            difference(multipoly_a, poly_b; target, fix_multipoly)
+            difference(alg, multipoly_a, poly_b; target, fix_multipoly)
         else
-            difference(GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
+            difference(alg, GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
         end
         #= One multipoly_a has been completely covered (and thus removed) there is no need to
         continue taking the difference =#
@@ -176,15 +181,30 @@ function _difference(
     return polys
 end
 
+function _difference(
+    alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
+    trait_a::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_a,
+    trait_b::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_b;
+    fix_multipoly = UnionIntersectingPolygons(), kwargs...
+) where T
+    polys = _difference(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; kwargs...)
+    if isnothing(fix_multipoly)
+        return GI.MultiPolygon(polys)
+    else
+        return fix_multipoly(GI.MultiPolygon(polys))
+    end
+end
+
 # Many type and target combos aren't implemented
 function _difference(
-    ::TraitTarget{Target}, ::Type{T},
+    alg::GeometryOpsCore.Algorithm, target::TraitTarget{Target}, ::Type{T},
     trait_a::GI.AbstractTrait, geom_a,
     trait_b::GI.AbstractTrait, geom_b,
+    kw...
 ) where {Target, T}
     @assert(
         false,
-        "Difference between $trait_a and $trait_b with target $Target isn't implemented yet.",
+        "Difference between $trait_a and $trait_b with target $Target and algorithm $alg isn't implemented yet.",
     )
     return nothing
 end
