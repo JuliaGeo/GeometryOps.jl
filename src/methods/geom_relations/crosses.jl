@@ -76,7 +76,7 @@ function multipoint_crosses_poly(mp, poly)
     for p in GI.getpoint(mp)
         if _point_polygon_process(
             p, poly;
-            in_allow = true, on_allow = true, out_allow = false, exact = _False()
+            in_allow = true, on_allow = true, out_allow = false, exact = False()
         )
             int_point = true
         else

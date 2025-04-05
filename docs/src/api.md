@@ -12,7 +12,7 @@ Documentation for [GeometryOps](https://github.com/JuliaGeo/GeometryOps.jl)'s fu
 ```@index
 ```
 
-## `apply` and associated functions
+## [`apply` and associated functions](@id Primitive-functions)
 ```@docs
 apply
 applyreduce
@@ -58,4 +58,9 @@ barycentric_interpolate
 ## Other methods
 ```@autodocs
 Modules = [GeometryOps]
+```
+
+## Core types
+```@autodocs
+Modules = [GeometryOpsCore]
 ```
