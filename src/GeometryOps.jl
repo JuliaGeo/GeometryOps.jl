@@ -42,10 +42,11 @@ include("not_implemented_yet.jl") # functions that are not implemented yet, but 
 include("utils/LoopStateMachine/LoopStateMachine.jl") # Utils for functions that can tell the loop they run in to do something via the return value
 include("utils/SpatialTreeInterface/SpatialTreeInterface.jl") # Utils for spatial trees
 include("utils/NaturalIndexing.jl") # Utils for natural indexing
+include("utils/UnitSpherical/UnitSpherical.jl") # Utils for unit spherical
 include("utils/utils.jl") # More general utility functions
 
 # Load utility modules in
-using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
+using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine, .UnitSpherical
 
 include("methods/angles.jl")
 include("methods/area.jl")
