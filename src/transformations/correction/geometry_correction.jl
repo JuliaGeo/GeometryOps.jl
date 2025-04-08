@@ -52,7 +52,7 @@ application_level(gc::GeometryCorrection) = error("Not implemented yet for $(gc)
 
 (gc::GeometryCorrection)(trait::GI.AbstractGeometryTrait, geometry) = error("Not implemented yet for $(gc) and $(trait).")
 
-function fix(geometry; corrections = GeometryCorrection[CutAtAntimeridianAndPoles(), ClosedRing()], kwargs...)
+function fix(geometry; corrections = GeometryCorrection[ClosedRing()], kwargs...)
     final_geoms = geometry
     # Iterate through the corrections and apply them to the input.
     # This allocates a _lot_, especially when reconstructing tables,
