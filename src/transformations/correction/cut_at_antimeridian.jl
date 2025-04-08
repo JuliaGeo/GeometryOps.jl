@@ -54,6 +54,7 @@ module _AntimeridianHelpers
 
 import GeoInterface as GI
 import ..GeometryOps as GO
+using ..GeometryOps: CutAtAntimeridianAndPoles
 
 # Custom cross product for 3D tuples
 function _cross(a::Tuple{Float64,Float64,Float64}, b::Tuple{Float64,Float64,Float64})
@@ -65,7 +66,8 @@ function _cross(a::Tuple{Float64,Float64,Float64}, b::Tuple{Float64,Float64,Floa
 end
 
 # Convert spherical degrees to cartesian coordinates
-function spherical_degrees_to_cartesian(point::Tuple{Float64,Float64})::Tuple{Float64,Float64,Float64}
+function spherical_degrees_to_cartesian(c::CutAtAntimeridianAndPoles, point::Tuple{Float64,Float64})::Tuple{Float64,Float64,Float64}
+    # TODO: handle non-degree domains somehow
     lon, lat = point
     slon, clon = sincosd(lon)
     slat, clat = sincosd(lat)
@@ -79,14 +81,14 @@ end
 # Calculate crossing latitude using great circle method
 function crossing_latitude_great_circle(c::CutAtAntimeridianAndPoles, start::Tuple{Float64,Float64}, endpoint::Tuple{Float64,Float64})::Float64
     # Convert points to 3D vectors
-    p1 = spherical_degrees_to_cartesian(start)
-    p2 = spherical_degrees_to_cartesian(endpoint)
+    p1 = spherical_degrees_to_cartesian(c, start)
+    p2 = spherical_degrees_to_cartesian(c, endpoint)
     
     # Cross product defines plane through both points
     n1 = _cross(p1, p2)
     
     # Unit vector that defines the meridian plane
-    n2 = spherical_degrees_to_cartesian(c.left, 0.0)
+    n2 = spherical_degrees_to_cartesian(c, (c.left, 0.0))
     
     # Intersection of planes defined by cross product
     intersection = _cross(n1, n2)
@@ -294,7 +296,7 @@ function cut_at_antimeridian(
     end
     
     # Build final polygons
-    result_polygons = build_polygons(segments)
+    result_polygons = build_polygons(c, segments)
     
     # Add holes to appropriate polygons
     for hole in holes

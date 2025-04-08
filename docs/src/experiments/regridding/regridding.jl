@@ -93,8 +93,8 @@ grid2 = rand(FullGaussianGrid, 4 + 100)
 faces1 = SpeedyWeatherGeoMakieExt.get_faces(grid1)
 faces2 = SpeedyWeatherGeoMakieExt.get_faces(grid2)
 
-polys1 = GI.Polygon.(GI.LinearRing.(eachcol(faces1))) .|> GO.fix
-polys2 = GI.Polygon.(GI.LinearRing.(eachcol(faces2))) .|> GO.fix
+polys1 = GI.Polygon.(GI.LinearRing.(eachcol(faces1))) .|> GO.CutAtAntimeridianAndPoles() .|> GO.fix
+polys2 = GI.Polygon.(GI.LinearRing.(eachcol(faces2))) .|> GO.CutAtAntimeridianAndPoles() .|> GO.fix
 
 A = @time area_of_intersection_operator(polys1, polys2)
 
