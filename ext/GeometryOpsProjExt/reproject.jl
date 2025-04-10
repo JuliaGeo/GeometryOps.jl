@@ -70,13 +70,24 @@ function reproject(geom, transform::Proj.Transformation; context = C_NULL, targe
         # Assign the context to the transformation
         Proj.proj_assign_context.(getproperty.(proj_transforms, :pj), contexts)
 
-        functors = ApplyToPoint{_is3d(geom)}.(proj_transforms)
-        functors = ThreadFunctors(functors, tasks_per_thread)
+        appliers = if _is3d(geom)
+            ApplyToPoint{true}.(proj_transforms)
+        else
+            ApplyToPoint{false}.(proj_transforms)
+        end
+
+        functors = ThreadFunctors(appliers, tasks_per_thread)
         results = apply(functors, GI.PointTrait(), geom; crs=target_crs, threaded, kw...)
         # Destroy the temporary threading contexts that we created
         Proj.proj_destroy.(contexts)
+        # Return the results
         return results
     else # threaded isa False
-        return apply(ApplyToPoint{_is3d(geom)}(transform), GI.PointTrait(), geom; threaded, crs = target_crs, kw...)
+        applier = if _is3d(geom)
+            ApplyToPoint{true}(transform)
+        else
+            ApplyToPoint{false}(transform)
+        end
+        return apply(applier, GI.PointTrait(), geom; threaded, crs = target_crs, kw...)
     end    
 end
