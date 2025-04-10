@@ -22,15 +22,6 @@ function reproject(geom;
         reproject(geom, transform; kw...)
     end
 end
-struct ApplyToPoint2{F}
-    f::F
-end
-struct ApplyToPoint3{F}
-    f::F
-end
-
-(t::ApplyToPoint2)(p) = t.f(GI.x(p), GI.y(p))
-(t::ApplyToPoint3)(p) = t.f(GI.x(p), GI.y(p), GI.z(p))
 
 function reproject(geom, source_crs, target_crs;
     time=Inf,
@@ -45,11 +36,11 @@ function reproject(geom, source_crs, target_crs;
         n = Threads.nthreads() * tasks_per_thread
         if _is3d(geom)
             functors = [ApplyToPoint3(Proj.Transformation(s, t; always_xy)) for _ in 1:n]
-            transforms = ThreadFunctors(functors, tasks_per_thread)
+            transforms = TaskFunctors(functors, tasks_per_thread)
             return apply(transforms, GI.PointTrait(), geom; crs=target_crs, kw...)
         else
             functors = [ApplyToPoint2(Proj.Transformation(s, t; always_xy)) for _ in 1:n]
-            transforms = ThreadFunctors(functors, tasks_per_thread)
+            transforms = TaskFunctors(functors, tasks_per_thread)
             return apply(transforms, GI.PointTrait(), geom; crs=target_crs, kw...)
         end
     else

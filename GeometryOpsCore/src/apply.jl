@@ -2,31 +2,6 @@
 
 export apply
 
-abstract type Applicator{F,T} end
-
-for T in (:ApplyToGeom, :ApplyToArray, :ApplyToFeatures)
-    @eval begin
-        struct $T{F,T,O,K} <: Applicator{F,T}
-            f::F
-            target::T
-            obj::O
-            kw::K
-        end
-        $T(f, target; kw...) = $T(f, target, geom, kw)
-    end
-    # rebuild lets us swap out the function, such as with ThreadFunctors
-    rebuild(a::Applicator, f) = $T(f, a.target, a.obj, a.kw) 
-end
-
-# Functor definitions
-# _maptasks may run this level threaded if `threaded==true`
-# but deeper `_apply` calls will not be threaded
-# For an Array there is nothing to do but map `_apply` over all values
-(a::ApplyToArray)(i::Int) = _apply(a.f, a.target, a.obj[i]; a.kw..., threaded=False())
-# For a FeatureCollection or Geometry we need getfeature or getgeom calls
-(a::ApplyToFeatures)(i::Int) = _apply(f, target, GI.getfeature(a.obj, i); a.kw..., threaded=False())
-(a::ApplyToGeom)(i::Int) = _apply(a.f, a.target, GI.getgeom(a.obj, i); a.kw..., threaded=False())
-
 #=
 
 This file mainly defines the [`apply`](@ref) function.
@@ -384,7 +359,7 @@ end
     # Finally we join the results into a new vector
     return mapreduce(fetch, vcat, tasks)
 end
-@inline function _maptasks(a::Applicator{<:ThreadFunctors}, taskrange, threaded::True)::Vector
+@inline function _maptasks(a::Applicator{<:TaskFunctors}, taskrange, threaded::True)::Vector
     ntasks = length(taskrange)
     chunk_size = max(1, ntasks ÷ (tf.tasks_per_thread * nthreads()))
     # partition the range into chunks
