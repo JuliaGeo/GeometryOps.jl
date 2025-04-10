@@ -44,6 +44,15 @@ function reproject(geom, source_crs, target_crs;
     always_xy=true,
     kw...
 )
+    return reproject(geom, Proj.Transformation(convert(String, source_crs), convert(String, target_crs); always_xy); target_crs, time, threaded, kw...)
+end
+
+function reproject(geom, source_crs::CRSType, target_crs::CRSType;
+    time=Inf,
+    threaded=False(),
+    always_xy=true,
+    kw...
+) where CRSType <: Union{GeoFormatTypes.GeoFormat}
     return reproject(geom, Proj.Transformation(source_crs, target_crs; always_xy); target_crs, time, threaded, kw...)
 end
 
