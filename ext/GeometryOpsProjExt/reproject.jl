@@ -1,4 +1,5 @@
 import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, True, False, booltype, ThreadFunctors
+import GeoFormatTypes
 import Proj
 
 # TODO:
@@ -43,10 +44,13 @@ function reproject(geom, source_crs, target_crs;
     always_xy=true,
     kw...
 )
-    return reproject(geom, Proj.Transformation(source_crs, target_crs; always_xy); time, threaded, transcode)
+    return reproject(geom, Proj.Transformation(source_crs, target_crs; always_xy); target_crs, time, threaded, kw...)
 end
 
-function reproject(geom, transform::Proj.Transformation; time=Inf, threaded = False(), kw...)
+function reproject(geom, transform::Proj.Transformation; target_crs = nothing, time=Inf, threaded = False(), kw...)
+    if isnothing(target_crs)
+        target_crs = GeoFormatTypes.ESRIWellKnownText(Proj.CRS(Proj.proj_get_target_crs(transform.pj)))
+    end
     if booltype(threaded) isa True
         isnothing(transform) || throw(ArgumentError("threaded reproject doesn't accept a single Transformation"))
         tasks_per_thread = 2
@@ -55,6 +59,6 @@ function reproject(geom, transform::Proj.Transformation; time=Inf, threaded = Fa
         transforms = ThreadFunctors(functors, tasks_per_thread)
         return apply(transforms, GI.PointTrait(), geom; crs=target_crs, kw...)
     else # threaded isa False
-        return apply(ApplyToPoint{_is3d(geom)}(transform), GI.PointTrait(), geom; time, target_crs, kw...)
+        return apply(ApplyToPoint{_is3d(geom)}(transform), GI.PointTrait(), geom; crs = target_crs, kw...)
     end    
 end
