@@ -1,5 +1,19 @@
-import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, True, False, ThreadFunctors
+import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, True, False, booltype, ThreadFunctors
 import Proj
+
+# TODO:
+# - respect `time`
+# - respect measured values
+
+struct ApplyToPoint{Z, F}
+    f::F
+end
+
+ApplyToPoint{Z}(f::F) where {Z, F} = ApplyToPoint{Z, F}(f)
+
+(t::ApplyToPoint{false})(p) = t.f(GI.x(p), GI.y(p))
+(t::ApplyToPoint{true})(p) = t.f(GI.x(p), GI.y(p), GI.z(p))
+
 
 function reproject(geom;
     source_crs=nothing, target_crs=nothing, transform=nothing, kw...
@@ -22,51 +36,25 @@ function reproject(geom;
         reproject(geom, transform; kw...)
     end
 end
-struct ApplyToPoint2{F}
-    f::F
-end
-struct ApplyToPoint3{F}
-    f::F
-end
-
-(t::ApplyToPoint2)(p) = t.f(GI.x(p), GI.y(p))
-(t::ApplyToPoint3)(p) = t.f(GI.x(p), GI.y(p), GI.z(p))
 
 function reproject(geom, source_crs, target_crs;
     time=Inf,
     threaded=False(),
     always_xy=true,
-    transform=nothing,
     kw...
 )
-    if istrue(threaded)
+    return reproject(geom, Proj.Transformation(source_crs, target_crs; always_xy); time, threaded, transcode)
+end
+
+function reproject(geom, transform::Proj.Transformation; time=Inf, threaded = False(), kw...)
+    if booltype(threaded) isa True
         isnothing(transform) || throw(ArgumentError("threaded reproject doesn't accept a single Transformation"))
         tasks_per_thread = 2
-        n = Threads.nthreads() * tasks_per_thread
-        if _is3d(geom)
-            functors = [ApplyToPoint3(Proj.Transformation(s, t; always_xy)) for _ in 1:n]
-            transforms = ThreadFunctors(functors, tasks_per_thread)
-            return apply(transforms, GI.PointTrait(), geom; crs=target_crs, kw...)
-        else
-            functors = [ApplyToPoint2(Proj.Transformation(s, t; always_xy)) for _ in 1:n]
-            transforms = ThreadFunctors(functors, tasks_per_thread)
-            return apply(transforms, GI.PointTrait(), geom; crs=target_crs, kw...)
-        end
-    else
-        transform = if isnothing(transform) 
-            s = source_crs isa Proj.CRS ? source_crs : convert(String, source_crs)
-            t = target_crs isa Proj.CRS ? target_crs : convert(String, target_crs)
-            Proj.Transformation(s, t; always_xy)
-        else
-            transform
-        end
-        return reproject(geom, transform; time, target_crs, kw...)
-    end
-end
-function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=nothing, kw...)
-    if _is3d(geom)
-        return apply(ApplyToPoint3(transform), GI.PointTrait(), geom; crs=target_crs, kw...)
-    else
-        return apply(ApplyToPoint2(transform), GI.PointTrait(), geom; crs=target_crs, kw...)
-    end
+        ntasks = Threads.nthreads() * tasks_per_thread
+        functors = [ApplyToPoint{_is3d(geom)}(Proj.Transformation(Proj.proj_clone(Proj.proj_context_clone(), transform.pj))) for _ in 1:ntasks]
+        transforms = ThreadFunctors(functors, tasks_per_thread)
+        return apply(transforms, GI.PointTrait(), geom; crs=target_crs, kw...)
+    else # threaded isa False
+        return apply(ApplyToPoint{_is3d(geom)}(transform), GI.PointTrait(), geom; time, target_crs, kw...)
+    end    
 end
