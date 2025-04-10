@@ -2,6 +2,29 @@
 
 export apply
 
+abstract type Applicator{F,T} end
+
+for T in (:ApplyToGeom, :ApplyToArray, :ApplyToFeatures)
+    @eval begin
+        struct $T{F,T,O,K} <: Applicator{F,T}
+            f::F
+            target::T
+            obj::O
+            kw::K
+        end
+        $T(f, target; kw...) = $T(f, target, geom, kw)
+    end
+    # rebuild lets us swap out the function, such as with ThreadFunctors
+    rebuild(a::Applicator, f) = $T(f, a.target, a.obj, a.kw) 
+end
+
+# For an Array there is nothing else to do but map `_apply` over all values
+# _maptasks may run this level threaded if `threaded==true`,
+# but deeper `_apply` called in the closure will not be threaded
+(a::ApplyToArray)(i::Int) = _apply(a.f, a.target, a.obj[i]; a.kw..., threaded=False())
+(a::ApplyToFeatures)(i::Int) = _apply(f, target, GI.getfeature(a.obj, i); a.kw..., threaded=False())
+(a::ApplyToGeom)(i::Int) = _apply(a.f, a.target, GI.getgeom(a.obj, i); a.kw..., threaded=False())
+
 #=
 
 This file mainly defines the [`apply`](@ref) function.
@@ -145,11 +168,8 @@ end
     _apply(f, target, GI.trait(geom), geom; kw...)
 # There is no trait and this is an AbstractArray - so just iterate over it calling _apply on the contents
 @inline function _apply(f::F, target, ::Nothing, A::AbstractArray; threaded, kw...) where F
-    # For an Array there is nothing else to do but map `_apply` over all values
-    # _maptasks may run this level threaded if `threaded==true`,
-    # but deeper `_apply` called in the closure will not be threaded
-    apply_to_array(i) = _apply(f, target, A[i]; threaded=False(), kw...)
-    _maptasks(apply_to_array, eachindex(A), threaded)
+    applicator = ApplyToArray(f, target, A; kw...)
+    _maptasks(applicator, eachindex(A), threaded)
 end
 # There is no trait and this is not an AbstractArray.
 # Try to call _apply over it. We can't use threading
@@ -157,7 +177,7 @@ end
 @inline function _apply(f::F, target, ::Nothing, iterable::IterableType; threaded, kw...) where {F, IterableType}
     # Try the Tables.jl interface first
     if Tables.istable(iterable)
-    _apply_table(f, target, iterable; threaded, kw...)
+        _apply_table(f, target, iterable; threaded, kw...)
     else # this is probably some form of iterable...
         if threaded isa True
             # `collect` first so we can use threads
@@ -239,9 +259,8 @@ end
 ) where F
 
     # Run _apply on all `features` in the feature collection, possibly threaded
-    apply_to_feature(i) =
-        _apply(f, target, GI.getfeature(fc, i); crs, calc_extent, threaded=False())::GI.Feature
-    features = _maptasks(apply_to_feature, 1:GI.nfeature(fc), threaded)
+    applicator = ApplyToFeatures(f, target, fc; crs, calc_extent)
+    features = _maptasks(applicator, 1:GI.nfeature(fc), threaded)
     if calc_extent isa True
         # Calculate the extent of the features
         extent = mapreduce(GI.extent, Extents.union, features)
@@ -278,8 +297,8 @@ end
     # Map `_apply` over all sub geometries of `geom`
     # to create a new vector of geometries
     # TODO handle zero length
-    apply_to_geom(i) = _apply(f, target, GI.getgeom(geom, i); crs, calc_extent, threaded=False())
-    geoms = _maptasks(apply_to_geom, 1:GI.ngeom(geom), threaded)
+    applicator = ApplyToGeom(f, target; crs, calc_extent)
+    geoms = _maptasks(applicator, 1:GI.ngeom(geom), threaded)
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
 @inline function _apply(f::F, target::TraitTarget{<:PointTrait}, trait::GI.PolygonTrait, geom;
@@ -363,13 +382,14 @@ end
     # Finally we join the results into a new vector
     return mapreduce(fetch, vcat, tasks)
 end
-@inline function _maptasks(tf::ThreadFunctors, taskrange, threaded::True)::Vector
+@inline function _maptasks(a::Applicator{<:ThreadFunctors}, taskrange, threaded::True)::Vector
     ntasks = length(taskrange)
     chunk_size = max(1, ntasks ÷ (tf.tasks_per_thread * nthreads()))
     # partition the range into chunks
     task_chunks = Iterators.partition(taskrange, chunk_size)
     # Map over the chunks
-    tasks = map(task_chunks, view(tf.functors, eachindex(task_chunks))) do chunk, f
+    tasks = map(task_chunks, view(a.f.functors, eachindex(task_chunks))) do chunk, ft
+        f = rebuild(a, ft)
         # Spawn a task to process this chunk
         StableTasks.@spawn begin
             # Where we map `f` over the chunk indices
