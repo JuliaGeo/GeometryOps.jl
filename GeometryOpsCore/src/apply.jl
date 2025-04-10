@@ -18,10 +18,12 @@ for T in (:ApplyToGeom, :ApplyToArray, :ApplyToFeatures)
     rebuild(a::Applicator, f) = $T(f, a.target, a.obj, a.kw) 
 end
 
-# For an Array there is nothing else to do but map `_apply` over all values
-# _maptasks may run this level threaded if `threaded==true`,
-# but deeper `_apply` called in the closure will not be threaded
+# Functor definitions
+# _maptasks may run this level threaded if `threaded==true`
+# but deeper `_apply` calls will not be threaded
+# For an Array there is nothing to do but map `_apply` over all values
 (a::ApplyToArray)(i::Int) = _apply(a.f, a.target, a.obj[i]; a.kw..., threaded=False())
+# For a FeatureCollection or Geometry we need getfeature or getgeom calls
 (a::ApplyToFeatures)(i::Int) = _apply(f, target, GI.getfeature(a.obj, i); a.kw..., threaded=False())
 (a::ApplyToGeom)(i::Int) = _apply(a.f, a.target, GI.getgeom(a.obj, i); a.kw..., threaded=False())
 
