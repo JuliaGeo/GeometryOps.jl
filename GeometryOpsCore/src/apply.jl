@@ -356,11 +356,11 @@ end
 end
 @inline function _maptasks(a::Applicator{<:ThreadFunctors}, taskrange, threaded::True)::Vector
     ntasks = length(taskrange)
-    chunk_size = max(1, ntasks ÷ (a.f.tasks_per_thread * Threads.nthreads()))
+    chunk_size = max(1, cld(ntasks, (a.f.tasks_per_thread * Threads.nthreads())))
     # partition the range into chunks
     task_chunks = Iterators.partition(taskrange, chunk_size)
     # Map over the chunks
-    tasks = map(task_chunks, view(a.f.functors, eachindex(task_chunks))) do chunk, ft
+    tasks = map(task_chunks, view(a.f.functors, 1:length(task_chunks))) do chunk, ft
         f = rebuild(a, ft)
         # Spawn a task to process this chunk
         StableTasks.@spawn begin
