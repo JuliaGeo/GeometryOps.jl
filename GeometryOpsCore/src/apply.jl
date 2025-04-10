@@ -282,13 +282,8 @@ end
     crs=GI.crs(geom), calc_extent=False(), threaded
 )::(GI.geointerface_geomtype(trait)) where F
     # We need to force rebuilding a LinearRing not a LineString
-    geoms = _maptasks(1:GI.ngeom(geom), threaded) do i
-        lr = GI.getgeom(geom, i)
-        points = map(GI.getgeom(lr)) do p
-            _apply(f, target, p; crs, calc_extent, threaded=False())
-        end
-        _linearring(_apply_inner(lr, points, crs, calc_extent))
-    end
+    applicator = ApplyPointsToPolygon(f, target, geom; crs, calc_extent)
+    geoms = _maptasks(applicator, 1:GI.ngeom(geom), threaded)
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
 function _apply_inner(geom, geoms, crs, calc_extent::True)
