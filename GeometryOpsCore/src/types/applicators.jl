@@ -1,8 +1,11 @@
 
+struct ApplyToCoords{Z,M,F} 
+    f::F
+end
 ApplyToCoords{Z,M}(f::F) where {Z,M,F} = ApplyTo{Z,M,F}(f)
 ApplyToCoords{Z}(f::F) where {Z,F} = ApplyTo{Z,false,F}(f)
 # Default function is just `tuple`
-(a::Type{<:ApplyToCoords}())() = a(tuple)
+(a::Type{<:ApplyToCoords})() = a(tuple)
 
 # Currently we ignore M by default
 const ToXY = ApplyToCoords{false}
@@ -27,9 +30,9 @@ for T in (:ApplyToGeom, :ApplyToArray, :ApplyToFeatures)
             kw::K
         end
         $T(f, target; kw...) = $T(f, target, geom, kw)
+        # rebuild lets us swap out the function, such as with ThreadFunctors
+        rebuild(a::$T, f) = $T(f, a.target, a.obj, a.kw) 
     end
-    # rebuild lets us swap out the function, such as with ThreadFunctors
-    rebuild(a::Applicator, f) = $T(f, a.target, a.obj, a.kw) 
 end
 
 # Functor definitions
