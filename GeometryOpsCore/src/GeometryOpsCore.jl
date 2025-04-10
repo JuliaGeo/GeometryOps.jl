@@ -28,7 +28,7 @@ include("types/exceptions.jl")
 include("types/booltypes.jl")
 include("types/traittarget.jl")
 include("types/threading.jl")
-
+include("types/applicators.jl")
 include("apply.jl")
 include("applyreduce.jl")
 include("other_primitives.jl")
