@@ -26,6 +26,13 @@ An abstract type for applicators that apply a function to a target object.
 The type parameter `F` is the type of the function to apply, and `T` is the type of the target object.
 
 A common dispatch pattern is to dispatch on `F` which may also be e.g. a ThreadFunctor.
+
+## Interface
+All applicators must be callable by an index integer, and define the following methods:
+
+- `rebuild(a::Applicator, f)` - swap out the function and return a new applicator.
+
+The calling convention is `my_applicator(i::Int)`, so applicators must define this method.
 """
 abstract type Applicator{F,T} end
 
@@ -39,7 +46,7 @@ for T in (:ApplyToGeom, :ApplyToArray, :ApplyToFeatures, :ApplyPointsToPolygon)
         end
         $T(f, target, obj; kw...) = $T(f, target, obj, kw)
         # rebuild lets us swap out the function, such as with ThreadFunctors
-        rebuild(a::Applicator, f) = $T(f, a.target, a.obj, a.kw)
+        rebuild(a::$T, f) = $T(f, a.target, a.obj, a.kw)
     end 
 end
 
