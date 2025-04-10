@@ -363,3 +363,20 @@ end
     # Finally we join the results into a new vector
     return mapreduce(fetch, vcat, tasks)
 end
+@inline function _maptasks(tf::ThreadFunctors, taskrange, threaded::True)::Vector
+    ntasks = length(taskrange)
+    chunk_size = max(1, ntasks ÷ (tf.tasks_per_thread * nthreads()))
+    # partition the range into chunks
+    task_chunks = Iterators.partition(taskrange, chunk_size)
+    # Map over the chunks
+    tasks = map(task_chunks, view(tf.functors, eachindex(task_chunks))) do chunk, f
+        # Spawn a task to process this chunk
+        StableTasks.@spawn begin
+            # Where we map `f` over the chunk indices
+            map(f, chunk)
+        end
+    end
+
+    # Finally we join the results into a new vector
+    return mapreduce(fetch, vcat, tasks)
+end
