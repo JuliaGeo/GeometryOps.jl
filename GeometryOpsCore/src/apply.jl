@@ -354,9 +354,9 @@ end
     # Finally we join the results into a new vector
     return mapreduce(fetch, vcat, tasks)
 end
-@inline function _maptasks(a::Applicator{<:ThreadFunctors}, taskrange, threaded::True)::Vector
+@inline function _maptasks(a::Applicator{<:TaskFunctors}, taskrange, threaded::True)::Vector
     ntasks = length(taskrange)
-    chunk_size = max(1, cld(ntasks, (a.f.tasks_per_thread * Threads.nthreads())))
+    chunk_size = max(1, cld(ntasks, length(a.f.functors)))
     # partition the range into chunks
     task_chunks = Iterators.partition(taskrange, chunk_size)
     # Map over the chunks

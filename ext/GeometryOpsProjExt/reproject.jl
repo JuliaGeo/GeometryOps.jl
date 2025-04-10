@@ -1,4 +1,4 @@
-import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, True, False, booltype, ThreadFunctors
+import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, True, False, booltype, TaskFunctors
 import GeoFormatTypes
 import Proj
 
@@ -76,7 +76,7 @@ function reproject(geom, transform::Proj.Transformation; context = C_NULL, targe
             ApplyToPoint{false}.(proj_transforms)
         end
 
-        functors = ThreadFunctors(appliers, tasks_per_thread)
+        functors = TaskFunctors(appliers)
         results = apply(functors, GI.PointTrait(), geom; crs=target_crs, threaded, kw...)
         # Destroy the temporary threading contexts that we created
         Proj.proj_destroy.(contexts)

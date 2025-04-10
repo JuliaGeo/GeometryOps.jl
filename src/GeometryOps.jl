@@ -8,7 +8,7 @@ import GeometryOpsCore:
                 Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
                 Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype,
-                ThreadFunctors,
+                TaskFunctors,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
