@@ -52,7 +52,7 @@ function reproject(geom, source_crs::CRSType, target_crs::CRSType;
     threaded=False(),
     always_xy=true,
     kw...
-) where CRSType <: Union{GeoFormatTypes.GeoFormat}
+) where CRSType <: Union{GeoFormatTypes.GeoFormat, Proj.CRS}
     return reproject(geom, Proj.Transformation(source_crs, target_crs; always_xy); target_crs, time, threaded, kw...)
 end
 
