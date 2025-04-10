@@ -47,17 +47,27 @@ function reproject(geom, source_crs, target_crs;
     return reproject(geom, Proj.Transformation(source_crs, target_crs; always_xy); target_crs, time, threaded, kw...)
 end
 
-function reproject(geom, transform::Proj.Transformation; target_crs = nothing, time=Inf, threaded = False(), kw...)
+function reproject(geom, transform::Proj.Transformation; context = C_NULL, target_crs = nothing, time=Inf, threaded = False(), kw...)
     if isnothing(target_crs)
         target_crs = GeoFormatTypes.ESRIWellKnownText(Proj.CRS(Proj.proj_get_target_crs(transform.pj)))
     end
     if booltype(threaded) isa True
         tasks_per_thread = 2
         ntasks = Threads.nthreads() * tasks_per_thread
-        functors = [ApplyToPoint{_is3d(geom)}(Proj.Transformation(Proj.proj_clone(Proj.proj_context_clone(), transform.pj))) for _ in 1:ntasks]
-        transforms = ThreadFunctors(functors, tasks_per_thread)
-        return apply(transforms, GI.PointTrait(), geom; crs=target_crs, kw...)
+        # Construct one context per planned task
+        contexts = [Proj.proj_context_clone(context) for _ in 1:ntasks]
+        # Clone the transformation for each context
+        proj_transforms = [Proj.Transformation(Proj.proj_clone(transform.pj)) for context in contexts]
+        # Assign the context to the transformation
+        Proj.proj_assign_context.(getproperty.(proj_transforms, :pj), contexts)
+
+        functors = ApplyToPoint{_is3d(geom)}.(proj_transforms)
+        functors = ThreadFunctors(functors, tasks_per_thread)
+        results = apply(functors, GI.PointTrait(), geom; crs=target_crs, threaded, kw...)
+        # Destroy the temporary threading contexts that we created
+        Proj.proj_destroy.(contexts)
+        return results
     else # threaded isa False
-        return apply(ApplyToPoint{_is3d(geom)}(transform), GI.PointTrait(), geom; crs = target_crs, kw...)
+        return apply(ApplyToPoint{_is3d(geom)}(transform), GI.PointTrait(), geom; threaded, crs = target_crs, kw...)
     end    
 end
