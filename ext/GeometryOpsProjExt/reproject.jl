@@ -1,20 +1,11 @@
-import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, True, False, booltype, ThreadFunctors
+import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, istrue,
+    True, False, TaskFunctors, ToXY, ToXYZ
 import GeoFormatTypes
 import Proj
 
 # TODO:
 # - respect `time`
 # - respect measured values
-
-struct ApplyToPoint{Z, F}
-    f::F
-end
-
-ApplyToPoint{Z}(f::F) where {Z, F} = ApplyToPoint{Z, F}(f)
-
-(t::ApplyToPoint{false})(p) = t.f(GI.x(p), GI.y(p))
-(t::ApplyToPoint{true})(p) = t.f(GI.x(p), GI.y(p), GI.z(p))
-
 
 function reproject(geom;
     source_crs=nothing, target_crs=nothing, transform=nothing, kw...
@@ -44,14 +35,23 @@ function reproject(geom, source_crs, target_crs;
     always_xy=true,
     kw...
 )
-    return reproject(geom, Proj.Transformation(source_crs, target_crs; always_xy); target_crs, time, threaded, kw...)
+    transform = Proj.Transformation(convert(String, source_crs), convert(String, target_crs); always_xy)
+    return reproject(geom, transform; 
+        target_crs, time, threaded, kw...
+    )
 end
-
-function reproject(geom, transform::Proj.Transformation; context = C_NULL, target_crs = nothing, time=Inf, threaded = False(), kw...)
+function reproject(geom, transform::Proj.Transformation; 
+    context=C_NULL, 
+    target_crs=nothing, 
+    time=Inf, 
+    threaded=False(), 
+    kw...
+)
     if isnothing(target_crs)
         target_crs = GeoFormatTypes.ESRIWellKnownText(Proj.CRS(Proj.proj_get_target_crs(transform.pj)))
     end
-    if booltype(threaded) isa True
+    kw1 = (; crs=target_crs, threaded, kw...)
+    if istrue(threaded)
         tasks_per_thread = 2
         ntasks = Threads.nthreads() * tasks_per_thread
         # Construct one context per planned task
@@ -61,13 +61,21 @@ function reproject(geom, transform::Proj.Transformation; context = C_NULL, targe
         # Assign the context to the transformation
         Proj.proj_assign_context.(getproperty.(proj_transforms, :pj), contexts)
 
-        functors = ApplyToPoint{_is3d(geom)}.(proj_transforms)
-        functors = ThreadFunctors(functors, tasks_per_thread)
-        results = apply(functors, GI.PointTrait(), geom; crs=target_crs, threaded, kw...)
+        results = if _is3d(geom)
+            functors = TaskFunctors(ToXYZ.(proj_transforms))
+            apply(functors, GI.PointTrait(), geom; kw1...)
+        else
+            functors = TaskFunctors(ToXY.(proj_transforms))
+            apply(functors, GI.PointTrait(), geom; kw1...)
+        end
         # Destroy the temporary threading contexts that we created
         Proj.proj_destroy.(contexts)
         return results
-    else # threaded isa False
-        return apply(ApplyToPoint{_is3d(geom)}(transform), GI.PointTrait(), geom; threaded, crs = target_crs, kw...)
+    else
+        if _is3d(geom)
+            return apply(ToXYZ(transform), GI.PointTrait(), geom; kw1...)
+        else
+            return apply(ToXY(transform), GI.PointTrait(), geom; kw1...)
+        end
     end    
 end
