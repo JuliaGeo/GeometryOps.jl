@@ -52,7 +52,6 @@ function reproject(geom, transform::Proj.Transformation; target_crs = nothing, t
         target_crs = GeoFormatTypes.ESRIWellKnownText(Proj.CRS(Proj.proj_get_target_crs(transform.pj)))
     end
     if booltype(threaded) isa True
-        isnothing(transform) || throw(ArgumentError("threaded reproject doesn't accept a single Transformation"))
         tasks_per_thread = 2
         ntasks = Threads.nthreads() * tasks_per_thread
         functors = [ApplyToPoint{_is3d(geom)}(Proj.Transformation(Proj.proj_clone(Proj.proj_context_clone(), transform.pj))) for _ in 1:ntasks]
