@@ -77,6 +77,5 @@ _xy(p) = GI.x(p), GI.y(p)
         GO.reproject(multipolygon4326; target_crs="epsg:32632") ==
         GO.reproject(multipolygon4326; target_crs=utm32_wkt)
 
-    GO.reproject(multipolygon4326; target_crs=ProjString("+proj=moll"))
+    GO.reproject(multipolygon4326; target_crs=ProjString("+proj=moll +type=crs"))
 end
-

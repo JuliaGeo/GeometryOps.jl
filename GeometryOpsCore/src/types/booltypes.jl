@@ -51,3 +51,7 @@ function booltype end
 
 @inline booltype(x::Bool)::BoolsAsTypes = x ? True() : False()
 @inline booltype(x::BoolsAsTypes)::BoolsAsTypes = x
+
+@inline istrue(x::True) = true
+@inline istrue(x::False) = false
+@inline istrue(x::Bool) = x

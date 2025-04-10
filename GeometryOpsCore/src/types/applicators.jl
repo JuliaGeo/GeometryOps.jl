@@ -36,6 +36,26 @@ The calling convention is `my_applicator(i::Int)`, so applicators must define th
 """
 abstract type Applicator{F,T} end
 
+struct ApplyToPoint{Z,M,F} <: Applicator{F,Nothing} 
+    f::F
+end
+ApplyToPoint{Z,M}(f::F) where {Z,M,F} = ApplyToPoint{Z,M,F}(f)
+ApplyToPoint{Z}(f::F) where {Z,F} = ApplyToPoint{Z,false,F}(f)
+# Default function is just `tuple`
+(a::Type{<:ApplyToPoint})() = a(tuple)
+
+# Currently we ignore M by default
+const ToXY = ApplyToPoint{false}
+const ToXYZ = ApplyToPoint{true}
+# But these could be used to require M
+const ToXYM = ApplyToPoint{false,true}
+const ToXYZM = ApplyToPoint{true,true}
+
+(t::ToXY)(p) = t.f(GI.x(p), GI.y(p))
+(t::ToXYZ)(p) = t.f(GI.x(p), GI.y(p), GI.z(p))
+(t::ToXYZM)(p) = t.f(GI.x(p), GI.y(p), GI.m(p))
+(t::ToXYM)(p) = t.f(GI.x(p), GI.y(p), GI.z(p), GI.m(p))
+
 for T in (:ApplyToGeom, :ApplyToArray, :ApplyToFeatures, :ApplyPointsToPolygon)
     @eval begin
         struct $T{F,T,O,K} <: Applicator{F,T}
@@ -45,9 +65,9 @@ for T in (:ApplyToGeom, :ApplyToArray, :ApplyToFeatures, :ApplyPointsToPolygon)
             kw::K
         end
         $T(f, target, obj; kw...) = $T(f, target, obj, kw)
-        # rebuild lets us swap out the function, such as with ThreadFunctors
-        rebuild(a::$T, f) = $T(f, a.target, a.obj, a.kw)
-    end 
+        # rebuild lets us swap out the function, such as with TaskFunctors
+        rebuild(a::$T, f) = $T(f, a.target, a.obj, a.kw) 
+    end
 end
 
 # Functor definitions
@@ -58,7 +78,6 @@ end
 # For a FeatureCollection or Geometry we need getfeature or getgeom calls
 (a::ApplyToFeatures)(i::Int) = _apply(a.f, a.target, GI.getfeature(a.obj, i); a.kw..., threaded=False())
 (a::ApplyToGeom)(i::Int) = _apply(a.f, a.target, GI.getgeom(a.obj, i); a.kw..., threaded=False())
-
 function (a::ApplyPointsToPolygon)(i::Int)
     lr = GI.getgeom(a.obj, i)
     points = map(GI.getgeom(lr)) do p
