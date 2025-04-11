@@ -43,18 +43,21 @@ ApplyToPoint{Z,M}(f::F) where {Z,M,F} = ApplyToPoint{Z,M,F}(f)
 ApplyToPoint{Z}(f::F) where {Z,F} = ApplyToPoint{Z,false,F}(f)
 # Default function is just `tuple`
 (a::Type{<:ApplyToPoint})() = a(tuple)
+rebuild(a::ApplyToPoint{Z, M}, f::F) where {Z, M, F} = ApplyToPoint{Z, M, F}(f)
 
 # Currently we ignore M by default
-const ToXY = ApplyToPoint{false}
-const ToXYZ = ApplyToPoint{true}
+const WithXY = ApplyToPoint{false}
+const WithXYZ = ApplyToPoint{true}
 # But these could be used to require M
-const ToXYM = ApplyToPoint{false,true}
-const ToXYZM = ApplyToPoint{true,true}
+const WithXYM = ApplyToPoint{false,true}
+const WithXYZM = ApplyToPoint{true,true}
 
-(t::ToXY)(p) = t.f(GI.x(p), GI.y(p))
-(t::ToXYZ)(p) = t.f(GI.x(p), GI.y(p), GI.z(p))
-(t::ToXYZM)(p) = t.f(GI.x(p), GI.y(p), GI.m(p))
-(t::ToXYM)(p) = t.f(GI.x(p), GI.y(p), GI.z(p), GI.m(p))
+(t::WithXY)(p) = t.f(GI.x(p), GI.y(p))
+(t::WithXYZ)(p) = t.f(GI.x(p), GI.y(p), GI.z(p))
+(t::WithXYZM)(p) = t.f(GI.x(p), GI.y(p), GI.m(p))
+(t::WithXYM)(p) = t.f(GI.x(p), GI.y(p), GI.z(p), GI.m(p))
+
+# ***
 
 for T in (:ApplyToGeom, :ApplyToArray, :ApplyToFeatures, :ApplyPointsToPolygon)
     @eval begin

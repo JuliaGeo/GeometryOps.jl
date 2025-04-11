@@ -1,5 +1,5 @@
 import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, istrue,
-    True, False, TaskFunctors, ToXY, ToXYZ
+    True, False, TaskFunctors, WithXY, WithXYZ
 import GeoFormatTypes
 import Proj
 
@@ -60,10 +60,10 @@ function reproject(geom, transform::Proj.Transformation;
         Proj.proj_assign_context.(getproperty.(proj_transforms, :pj), contexts)
 
         results = if _is3d(geom)
-            functors = TaskFunctors(ToXYZ.(proj_transforms))
+            functors = TaskFunctors(WithXYZ.(proj_transforms))
             apply(functors, GI.PointTrait(), geom; kw1...)
         else
-            functors = TaskFunctors(ToXY.(proj_transforms))
+            functors = TaskFunctors(WithXY.(proj_transforms))
             apply(functors, GI.PointTrait(), geom; kw1...)
         end
         # Destroy the temporary threading contexts that we created
@@ -72,9 +72,9 @@ function reproject(geom, transform::Proj.Transformation;
         return results
     else
         if _is3d(geom)
-            return apply(ToXYZ(transform), GI.PointTrait(), geom; kw1...)
+            return apply(WithXYZ(transform), GI.PointTrait(), geom; kw1...)
         else
-            return apply(ToXY(transform), GI.PointTrait(), geom; kw1...)
+            return apply(WithXY(transform), GI.PointTrait(), geom; kw1...)
         end
     end    
 end

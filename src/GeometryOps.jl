@@ -9,7 +9,7 @@ import GeometryOpsCore:
                 Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype, istrue,
                 TaskFunctors, 
-                ToXY, ToXYZ, ToXYM, ToXYZM,
+                WithXY, WithXYZ, WithXYM, WithXYZM,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
