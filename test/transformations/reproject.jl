@@ -44,7 +44,7 @@ _xy(p) = GI.x(p), GI.y(p)
     @test GI.crs(multipolygon4326) == EPSG(4326)
 
     # Run it threaded over 100 replicates
-    GO.reproject([multipolygon3857 for _ in 1:100]; target_crs=EPSG(4326), threaded=true, calc_extent=true)
+    @test_nowarn GO.reproject([multipolygon3857 for _ in 1:100]; target_crs=EPSG(4326), threaded=true, calc_extent=true)
 
     utm32_wkt = """
     PROJCS["WGS 84 / UTM zone 32N",
@@ -72,11 +72,10 @@ _xy(p) = GI.x(p), GI.y(p)
     """
 
     @test GO.reproject(multipolygon4326; source_crs="epsg:4326", target_crs="+proj=utm +zone=32 +datum=WGS84") ==
-        GO.reproject(multipolygon4326; source_crs=EPSG(4326), target_crs=ProjString("+proj=utm +zone=32 +datum=WGS84")) ==
+        GO.reproject(multipolygon4326; source_crs=EPSG(4326), target_crs=ProjString("+proj=utm +zone=32 +datum=WGS84 +type=crs")) ==
         GO.reproject(multipolygon4326; target_crs=EPSG(32632)) ==
         GO.reproject(multipolygon4326; target_crs="epsg:32632") ==
         GO.reproject(multipolygon4326; target_crs=utm32_wkt)
 
-    GO.reproject(multipolygon4326; target_crs=ProjString("+proj=moll"))
+    GO.reproject(multipolygon4326; target_crs=ProjString("+proj=moll +type=crs"))
 end
-
