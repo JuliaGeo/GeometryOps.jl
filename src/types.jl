@@ -52,13 +52,26 @@ are present.
 """
 abstract type CLibraryPlanarAlgorithm <: GeometryOpsCore.SingleManifoldAlgorithm{Planar} end
 
-
 function (::Type{T})(; params...) where {T <: CLibraryPlanarAlgorithm}
     nt = NamedTuple(params)
     return T(Planar(), nt)
 end
-(T::Type{<: CLibraryPlanarAlgorithm})(params::NamedTuple) = T(Planar(), params)
+(T::Type{<: CLibraryPlanarAlgorithm})(::Planar, params::NamedTuple) = T(params)
 
+manifold(alg::CLibraryPlanarAlgorithm) = Planar()
+best_manifold(alg::CLibraryPlanarAlgorithm, input) = Planar()
+
+function rebuild(alg::T, m::Planar) where {T <: CLibraryPlanarAlgorithm}
+    return T(m, alg.params)
+end
+
+function rebuild(alg::T, m::AutoManifold) where {T <: CLibraryPlanarAlgorithm}
+    return T(Planar(), alg.params)
+end
+
+function rebuild(alg::T, m::M) where {T <: CLibraryPlanarAlgorithm, M <: Manifold}
+    throw(GeometryOpsCore.WrongManifoldException{M, Planar, T}("The algorithm `$(typeof(alg))` is only compatible with planar manifolds."))
+end
 
 # These are definitions for convenience, so we don't have to type out 
 # `alg.params` every time.
@@ -105,7 +118,6 @@ This uses the [LibGEOS.jl](https://github.com/JuliaGeometry/LibGEOS.jl) package,
 which is a Julia wrapper around the C library GEOS (https://trac.osgeo.org/geos).
 """
 struct GEOS <: CLibraryPlanarAlgorithm # SingleManifoldAlgorithm{Planar}
-    manifold::Planar
     params::NamedTuple
 end
 
@@ -130,7 +142,6 @@ This uses the [TGGeometry.jl](https://github.com/JuliaGeo/TGGeometry.jl) package
 which is a Julia wrapper around the `tg` C library (https://github.com/tidwall/tg).
 """
 struct TG <: CLibraryPlanarAlgorithm
-    manifold::Planar
     params::NamedTuple
 end
 
@@ -144,12 +155,21 @@ to use the appropriate PROJ function via `Proj.jl` for the operation.
 
 ## Extended help
 
-This is the default algorithm for [`reproject`](@ref), and is also the default algorithm for 
+This is the default algorithm for [`reproject`](@ref), and will also be the default algorithm for 
+operations on geodesics like [`area`](@ref) and [`arclength`](@ref).
 """
 struct PROJ{M <: Manifold} <: Algorithm{M}
     manifold::M
     params::NamedTuple
 end
+
+PROJ() = PROJ(Planar(), NamedTuple())
+PROJ(; params...) = PROJ(Planar(), NamedTuple(params))
+PROJ(m::Manifold) = PROJ(m, NamedTuple())
+
+manifold(alg::PROJ) = alg.manifold
+rebuild(alg::PROJ, m::Manifold) = PROJ(m, alg.params)
+rebuild(alg::PROJ, params::NamedTuple) = PROJ(alg.manifold, params)
 
 # We repeat these functions here because PROJ does not subtype `CLibraryPlanarAlgorithm`.
 
