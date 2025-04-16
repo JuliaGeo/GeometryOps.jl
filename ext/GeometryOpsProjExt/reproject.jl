@@ -52,12 +52,16 @@ function reproject(geom, transform::Proj.Transformation;
     if istrue(threaded)
         tasks_per_thread = 2
         ntasks = Threads.nthreads() * tasks_per_thread
+        # Clone the transformation once for each task.  
+        # Currently, these transformations live in the same context, but we will soon
+        # assign them to per-task contexts.
+        proj_transforms = [Proj.Transformation(Proj.proj_clone(transform.pj)) for _ in 1:ntasks]
+
         # Construct one context per planned task
         contexts = [Proj.proj_context_clone(context) for _ in 1:ntasks]
-        # Clone the transformation for each context
-        proj_transforms = [Proj.Transformation(Proj.proj_clone(transform.pj)) for context in contexts]
-        # Assign the context to the transformation
-        Proj.proj_assign_context.(getproperty.(proj_transforms, :pj), contexts)
+        # Assign the context to the transformation.  We use `foreach` here 
+        # to avoid generating output where we don't have to.
+        foreach(Proj.proj_assign_context, getproperty.(proj_transforms, :pj), contexts)
 
         results = if _is3d(geom)
             functors = TaskFunctors(WithXYZ.(proj_transforms))
@@ -67,7 +71,7 @@ function reproject(geom, transform::Proj.Transformation;
             apply(functors, GI.PointTrait(), geom; kw1...)
         end
         # Destroy the temporary threading contexts that we created
-        Proj.proj_destroy.(contexts)
+        foreach(Proj.proj_context_destroy, contexts)
         # Return the results
         return results
     else
