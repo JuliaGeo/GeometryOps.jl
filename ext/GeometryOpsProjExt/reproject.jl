@@ -67,7 +67,7 @@ function reproject(geom, transform::Proj.Transformation;
             apply(functors, GI.PointTrait(), geom; kw1...)
         end
         # Destroy the temporary threading contexts that we created
-        Proj.proj_destroy.(contexts)
+        foreach(Proj.proj_context_destroy, contexts)
         # Return the results
         return results
     else
