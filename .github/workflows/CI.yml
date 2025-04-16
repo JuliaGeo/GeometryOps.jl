@@ -67,7 +67,7 @@ jobs:
         with:
           version: '1'
       - name: Build and add versions
-        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(name = "GeoMakie", rev = "master"), PackageSpec(name = "GeometryOpsCore", path = "./GeometryOpsCore"), PackageSpec(name = "GeometryOps", path = ".")])'
+        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(name = "GeoMakie"), PackageSpec(name = "GeometryOpsCore", path = "./GeometryOpsCore"), PackageSpec(name = "GeometryOps", path = ".")])'
       - uses: julia-actions/julia-docdeploy@v1
         with:
           install-package: false
@@ -88,7 +88,7 @@ jobs:
         with:
           version: '1'
       - name: Build and add versions
-        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(name = "GeoMakie", rev = "master"), PackageSpec(name = "GeometryOpsCore", path = "./GeometryOpsCore"), PackageSpec(name = "GeometryOps", path = ".")])'
+        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(name = "GeoMakie"), PackageSpec(name = "GeometryOpsCore", path = "./GeometryOpsCore"), PackageSpec(name = "GeometryOps", path = ".")])'
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
