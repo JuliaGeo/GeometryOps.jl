@@ -1,5 +1,11 @@
-import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, True, False
+import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, istrue,
+    True, False, TaskFunctors, WithXY, WithXYZ
+import GeoFormatTypes
 import Proj
+
+# TODO:
+# - respect `time`
+# - respect measured values
 
 function reproject(geom;
     source_crs=nothing, target_crs=nothing, transform=nothing, kw...
@@ -22,29 +28,53 @@ function reproject(geom;
         reproject(geom, transform; kw...)
     end
 end
-function reproject(geom, source_crs, target_crs;
-    time=Inf,
-    always_xy=true,
-    transform=nothing,
+function reproject(geom, source_crs, target_crs; always_xy=true, kw...)
+    transform = Proj.Transformation(convert(String, source_crs), convert(String, target_crs); always_xy)
+    return reproject(geom, transform; target_crs, kw...)
+end
+function reproject(
+    geom, source_crs::CRSType, target_crs::CRSType; always_xy=true, kw...
+) where CRSType <: Union{GeoFormatTypes.GeoFormat, Proj.CRS}
+    transform = Proj.Transformation(source_crs, target_crs; always_xy)
+    return reproject(geom, transform; target_crs, kw...)
+end
+function reproject(geom, transform::Proj.Transformation; 
+    context=C_NULL, 
+    target_crs=nothing, 
+    time=Inf, 
+    threaded=False(), 
     kw...
 )
-    transform = if isnothing(transform) 
-        s = source_crs isa Proj.CRS ? source_crs : convert(String, source_crs)
-        t = target_crs isa Proj.CRS ? target_crs : convert(String, target_crs)
-        Proj.Transformation(s, t; always_xy)
-    else
-        transform
+    if isnothing(target_crs)
+        target_crs = GeoFormatTypes.ESRIWellKnownText(Proj.CRS(Proj.proj_get_target_crs(transform.pj)))
     end
-    reproject(geom, transform; time, target_crs, kw...)
-end
-function reproject(geom, transform::Proj.Transformation; time=Inf, target_crs=nothing, kw...)
-    if _is3d(geom)
-        return apply(GI.PointTrait(), geom; crs=target_crs, kw...) do p
-            transform(GI.x(p), GI.y(p), GI.z(p))
+    kw1 = (; crs=target_crs, threaded, kw...)
+    if istrue(threaded)
+        tasks_per_thread = 2
+        ntasks = Threads.nthreads() * tasks_per_thread
+        # Construct one context per planned task
+        contexts = [Proj.proj_context_clone(context) for _ in 1:ntasks]
+        # Clone the transformation for each context
+        proj_transforms = [Proj.Transformation(Proj.proj_clone(transform.pj)) for context in contexts]
+        # Assign the context to the transformation
+        Proj.proj_assign_context.(getproperty.(proj_transforms, :pj), contexts)
+
+        results = if _is3d(geom)
+            functors = TaskFunctors(WithXYZ.(proj_transforms))
+            apply(functors, GI.PointTrait(), geom; kw1...)
+        else
+            functors = TaskFunctors(WithXY.(proj_transforms))
+            apply(functors, GI.PointTrait(), geom; kw1...)
         end
+        # Destroy the temporary threading contexts that we created
+        Proj.proj_destroy.(contexts)
+        # Return the results
+        return results
     else
-        return apply(GI.PointTrait(), geom; crs=target_crs, kw...) do p
-            transform(GI.x(p), GI.y(p))
+        if _is3d(geom)
+            return apply(WithXYZ(transform), GI.PointTrait(), geom; kw1...)
+        else
+            return apply(WithXY(transform), GI.PointTrait(), geom; kw1...)
         end
-    end
+    end    
 end
