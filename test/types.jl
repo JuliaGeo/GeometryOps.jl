@@ -23,7 +23,7 @@ using GeometryOps: CLibraryPlanarAlgorithm, GEOS, TG, PROJ
     @test alg.params == (; a=1, b=2)
 
     # Test null constructor
-    alg = TestAlg(())
+    alg = TestAlg()
     @test alg.params == NamedTuple()
 
     # Test manifold methods
