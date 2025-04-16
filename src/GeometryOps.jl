@@ -6,6 +6,7 @@ import GeometryOpsCore
 import GeometryOpsCore: 
                 TraitTarget,
                 Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
+                manifold, best_manifold,
                 Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype, istrue,
                 TaskFunctors, 

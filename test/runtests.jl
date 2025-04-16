@@ -9,6 +9,7 @@ include("helpers.jl")
     @safetestset "Manifold" begin include("core/manifold.jl") end
 end
 
+@safetestset "Types" begin include("types.jl") end
 @safetestset "Primitives" begin include("primitives.jl") end
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
@@ -39,3 +40,4 @@ end
 # Extensions
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end
+@safetestset "TGGeometry" begin include("extensions/tggeometry.jl") end
