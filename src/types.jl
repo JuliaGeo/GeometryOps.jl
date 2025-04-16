@@ -54,24 +54,26 @@ abstract type CLibraryPlanarAlgorithm <: GeometryOpsCore.SingleManifoldAlgorithm
 
 function (::Type{T})(; params...) where {T <: CLibraryPlanarAlgorithm}
     nt = NamedTuple(params)
-    return T(Planar(), nt)
+    return T(nt)
 end
 (T::Type{<: CLibraryPlanarAlgorithm})(::Planar, params::NamedTuple) = T(params)
 
 manifold(alg::CLibraryPlanarAlgorithm) = Planar()
 best_manifold(alg::CLibraryPlanarAlgorithm, input) = Planar()
 
+# Rebuild methods with manifolds are here.
 function rebuild(alg::T, m::Planar) where {T <: CLibraryPlanarAlgorithm}
-    return T(m, alg.params)
+    return T(alg.params) # TODO: should this not rebuild at all, then, since nothing will change?
 end
-
 function rebuild(alg::T, m::AutoManifold) where {T <: CLibraryPlanarAlgorithm}
-    return T(Planar(), alg.params)
+    return T(alg.params) # "rebuild" as a planar algorithm.
 end
-
 function rebuild(alg::T, m::M) where {T <: CLibraryPlanarAlgorithm, M <: Manifold}
     throw(GeometryOpsCore.WrongManifoldException{M, Planar, T}("The algorithm `$(typeof(alg))` is only compatible with planar manifolds."))
 end
+# Rebuild methods for parameters are here.  This ends up being quite useful really.
+rebuild(alg::T, params::NamedTuple) where {T <: CLibraryPlanarAlgorithm} = T(params)
+rebuild(alg::T; params...) where {T <: CLibraryPlanarAlgorithm} = T(NamedTuple(params))
 
 # These are definitions for convenience, so we don't have to type out 
 # `alg.params` every time.
@@ -163,7 +165,6 @@ struct PROJ{M <: Manifold} <: Algorithm{M}
     params::NamedTuple
 end
 
-PROJ() = PROJ(Planar(), NamedTuple())
 PROJ(; params...) = PROJ(Planar(), NamedTuple(params))
 PROJ(m::Manifold) = PROJ(m, NamedTuple())
 
