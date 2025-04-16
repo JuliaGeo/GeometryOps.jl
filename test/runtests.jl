@@ -40,3 +40,4 @@ end
 # Extensions
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end
+@safetestset "TGGeometry" begin include("extensions/tggeometry.jl") end
