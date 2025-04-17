@@ -11,6 +11,11 @@ end
 
 @safetestset "Types" begin include("types.jl") end
 @safetestset "Primitives" begin include("primitives.jl") end
+
+# Utils
+@safetestset "LoopStateMachine" begin include("utils/LoopStateMachine.jl") end
+@safetestset "SpatialTreeInterface" begin include("utils/SpatialTreeInterface.jl") end
+
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
 @safetestset "Area" begin include("methods/area.jl") end
