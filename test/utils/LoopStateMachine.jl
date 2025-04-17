@@ -1,12 +1,12 @@
 using Test
-using GeometryOps.LoopStateMachine: @controlflow, Continue, Break
+using GeometryOps.LoopStateMachine: @controlflow, Action
 
 @testset "Continue action" begin
     count = 0
     f(i) = begin
         count += 1
         if i == 3
-            return Continue()
+            return Action(:continue)
         end
         count += 1
     end
@@ -21,7 +21,7 @@ end
     function f(i)
         count += 1
         if i == 3
-            return Break()
+            return Action(:break)
         end
         count += 1
     end
@@ -29,6 +29,24 @@ end
         @controlflow f(i)
     end
     @test count == 5 # Counts up to i=3, adding 2 for i=1,2 and 1 for i=3
+end
+
+@testset "Return action" begin
+    f(i) = for j in 1:3
+        i == j && @controlflow Action(:return, i)
+    end 
+    @test f(1) == 1
+    @test f(2) == 2
+    @test f(3) == 3
+end
+
+@testset "Full return action" begin
+    f(i) = for j in 1:3
+        i == j && @controlflow Action(:full_return, i)
+    end
+    @test f(1) == Action(:full_return, 1)
+    @test f(2) == Action(:full_return, 2)
+    @test f(3) == Action(:full_return, 3)
 end
 
 @testset "Return value" begin
