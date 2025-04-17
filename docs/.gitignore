@@ -3,3 +3,5 @@ build/
 package-lock.json
 src/source/
 Manifest.toml
+
+src/call_notes.md
