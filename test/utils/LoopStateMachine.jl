@@ -1,4 +1,5 @@
 using Test
+import GeometryOps.LoopStateMachine
 using GeometryOps.LoopStateMachine: @controlflow, Action
 
 @testset "Continue action" begin
@@ -73,3 +74,17 @@ end
     @test sprint(print, Action(:x)) == "Action(:x)"
 end
 
+@testset "Unknown action" begin
+    f(i) = Action(:unknown_action, i)
+    @test_throws LoopStateMachine.UnrecognizedActionException begin
+        for i in 1:3
+            @controlflow f(i)
+        end
+    end
+
+    @test_throws ":continue" begin
+        for i in 1:3
+            @controlflow f(i)
+        end
+    end
+end
