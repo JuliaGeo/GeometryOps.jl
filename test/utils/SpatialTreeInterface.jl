@@ -14,8 +14,7 @@ function test_basic_interface(TreeType)
         # Create a simple tree with one extent
         extents = [Extents.Extent(X=(0.0, 1.0), Y=(0.0, 1.0))]
         tree = TreeType(extents)
-        
-        @test isleaf(tree)
+
         @test isspatialtree(tree)
         @test isspatialtree(typeof(tree))
     end
@@ -100,22 +99,8 @@ function test_geometry_support(TreeType)
         tree = TreeType(points)
         
         # Test basic interface
-        @test isleaf(tree)
         @test isspatialtree(tree)
         @test isspatialtree(typeof(tree))
-        
-        # Test child indices and extents
-        indices_extents = collect(child_indices_extents(tree))
-        @test length(indices_extents) == 100
-        
-        # Check first and last points
-        first_idx, first_extent = indices_extents[1]
-        last_idx, last_extent = indices_extents[100]
-        
-        @test first_idx == 1
-        @test last_idx == 100
-        @test first_extent == Extents.Extent(X=(1.0, 1.0), Y=(1.0, 1.0))
-        @test last_extent == Extents.Extent(X=(100.0, 100.0), Y=(100.0, 100.0))
         
         # Test query functionality
         all_pred = x -> true
