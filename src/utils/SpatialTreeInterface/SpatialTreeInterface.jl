@@ -8,6 +8,7 @@ import AbstractTrees
 
 # public isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 export query, do_query
+export FlatNoTree
 
 # ## Interface
 # Interface definition for spatial tree types.
