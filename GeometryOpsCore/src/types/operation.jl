@@ -37,6 +37,14 @@ Here intersection_alg can be Foster, which we already have in GeometryOps, or GE
 but if we ever implement e.g. RelateNG in GeometryOps, we can add that in.
 =#
 
+"""
+    abstract type Operation{Alg <: Algorithm} end
+
+Operations are callable structs, that contain the entire specification for what the algorithm will do.
+
+Sometimes they may be underspecified and only materialized fully when you see the geometry, so you can extract
+the best manifold for those geometries.
+"""
 abstract type Operation{Alg <: Algorithm} end
 
 #= 

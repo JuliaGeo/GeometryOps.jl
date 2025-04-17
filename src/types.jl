@@ -158,7 +158,7 @@ to use the appropriate PROJ function via `Proj.jl` for the operation.
 ## Extended help
 
 This is the default algorithm for [`reproject`](@ref), and will also be the default algorithm for 
-operations on geodesics like [`area`](@ref) and [`arclength`](@ref).
+operations on geodesics like [`area`](@ref) and `arclength`.
 """
 struct PROJ{M <: Manifold} <: Algorithm{M}
     manifold::M
@@ -183,3 +183,5 @@ function enforce(alg::PROJ, kw::Symbol, f)
         error("$(f) requires a `$(kw)` keyword argument to the `GEOS` algorithm, which was not provided.")
     end
 end
+
+

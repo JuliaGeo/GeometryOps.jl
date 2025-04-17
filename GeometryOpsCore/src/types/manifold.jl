@@ -16,7 +16,7 @@ In GeometryOps (and geodesy more generally), there are three manifolds we care a
 - [`AutoManifold`](@ref): a special manifold that automatically selects the best manifold for the operation when it's executed.  Resolves to [`Planar`](@ref), [`Spherical`](@ref), or [`Geodesic`](@ref) depending on the input geometry.
 
 Generally, we aim to have `Linear` and `Spherical` be operable everywhere, whereas `Geodesic` will only apply in specific circumstances.
-Currently, those circumstances are [`area`](@ref), [`arclength`](@ref), and [`segmentize`](@ref), but this could be extended with time and https://github.com/JuliaGeo/SphericalGeodesics.jl.
+Currently, those circumstances are [`area`](@ref), `arclength`, and [`segmentize`](@ref), but this could be extended with time and https://github.com/JuliaGeo/SphericalGeodesics.jl.
 =#
 
 export Manifold, AutoManifold, Planar, Spherical, Geodesic
