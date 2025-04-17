@@ -36,6 +36,7 @@ const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
 include("types.jl")
 include("primitives.jl")
+include("lazy_wrappers.jl")
 include("utils.jl")
 include("not_implemented_yet.jl")
 
