@@ -32,7 +32,7 @@ Return a sorted list of indices of the tree that satisfy the predicate.
 """
 function query(tree, predicate)
     a = Int[]
-    do_query(Base.Fix1(push!, a), sanitize_predicate(predicate), tree)
+    depth_first_search(Base.Fix1(push!, a), sanitize_predicate(predicate), tree)
     return sort!(a)
 end
 
