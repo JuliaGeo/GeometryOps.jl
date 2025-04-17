@@ -6,7 +6,7 @@ import Extents
 import GeoInterface as GI
 import AbstractTrees
 
-# public isspatialtree, getchild, nchild, child_indices_extents, node_extent
+# public isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 export query, do_query
 
 # ## Interface
@@ -225,6 +225,7 @@ struct FlatNoTree{T}
     geometries::T
 end
 
+isspatialtree(::Type{<: FlatNoTree}) = true
 isleaf(tree::FlatNoTree) = true
 
 # NOTE: use pairs instead of enumerate here, so that we can support 
