@@ -65,6 +65,21 @@ function Base.show(io::IO, action::Action{T}) where T
     end
 end
 
+struct UnrecognizedActionException <: Base.Exception
+    name::Symbol
+end
+
+function Base.showerror(io::IO, e::UnrecognizedActionException)
+    print(io, "Unrecognized action: ")
+    printstyled(io, e.name; color = :red, bold = true)
+    println(io, ".")
+    println(io, "Valid actions are:")
+    println(io, ALL_ACTION_DESCRIPTIONS)
+end
+
+# We exclude the macro definition from code coverage computations,
+# because I know it's tested but Codecov doesn't seem to think so.
+# COV_EXCL_START
 """
     @controlflow f(...)
 
@@ -94,13 +109,14 @@ macro controlflow(expr)
             elseif $varname.name == :full_return
                 return $varname
             else
-                throw(ArgumentError("Unknown action: $($varname.name)"))
+                throw(UnrecognizedActionException($varname.name))
             end
         else
             $varname
         end
     end
 end
+# COV_EXCL_STOP
 
 # You can define more actions as you desire.
 
