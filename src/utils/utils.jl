@@ -145,25 +145,20 @@ Returns some iterator, which yields tuples of points.  Each tuple is an edge.
 It goes `(p1, p2), (p2, p3), (p3, p4), ...` etc.
 """
 eachedge(geom) = eachedge(GI.trait(geom), geom, Float64)
-
 function eachedge(geom, ::Type{T}) where T
     eachedge(GI.trait(geom), geom, T)
 end
-
 # implementation for LineString and LinearRing
 function eachedge(trait::GI.AbstractCurveTrait, geom, ::Type{T}) where T
     return (_tuple_point.((GI.getpoint(geom, i), GI.getpoint(geom, i+1)), T) for i in 1:GI.npoint(geom)-1)
 end
-
 # implementation for Polygon, MultiPolygon, MultiLineString, GeometryCollection
 function eachedge(trait::GI.AbstractGeometryTrait, geom, ::Type{T}) where T
     return Iterators.flatten((eachedge(r, T) for r in flatten(GI.AbstractCurveTrait, geom)))
 end
-
 function eachedge(trait::GI.PointTrait, geom, ::Type{T}) where T
     return ArgumentError("Can't get edges from points, $geom was a PointTrait.")
 end
-
 function eachedge(trait::GI.MultiPointTrait, geom, ::Type{T}) where T
     return ArgumentError("Can't get edges from MultiPoint, $geom was a MultiPointTrait.")
 end

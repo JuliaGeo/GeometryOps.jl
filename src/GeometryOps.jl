@@ -39,12 +39,10 @@ include("primitives.jl")
 include("not_implemented_yet.jl")
 
 include("utils/utils.jl")
-
 include("utils/LoopStateMachine/LoopStateMachine.jl")
-using .LoopStateMachine
-
 include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
-using .SpatialTreeInterface
+
+using .LoopStateMachine, .SpatialTreeInterface
 
 
 include("methods/angles.jl")
