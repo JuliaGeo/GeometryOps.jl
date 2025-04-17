@@ -1,4 +1,5 @@
-using GeometryOps
+import GeometryOps, GeometryOpsCore
+using GeometryOps, GeometryOpsCore
 using Documenter, DocumenterVitepress
 using Literate
 using Makie, CairoMakie
@@ -90,7 +91,7 @@ download("https://hackmd.io/kpIqAR8YRJOZQDJjUKVAUQ/download", joinpath(@__DIR__,
 
 # Finally, make the docs!
 makedocs(;
-    modules=[GeometryOps, GeometryOps.GeometryOpsCore],
+    modules=[GeometryOps, GeometryOpsCore],
     authors="Anshul Singhvi <anshulsinghvi@gmail.com> and contributors",
     repo="https://github.com/JuliaGeo/GeometryOps.jl/blob/{commit}{path}#{line}",
     sitename="GeometryOps.jl",
