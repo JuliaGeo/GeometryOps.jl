@@ -52,15 +52,16 @@ struct Action{T}
 end
 
 Action() = Action{Nothing}(:unnamed, nothing)
-Action(x::T) where T = Action{:unnamed, T}(:unnamed, x)
+Action(x::T) where T = Action{T}(:unnamed, x)
 Action(x::Symbol) = Action(x, nothing)
 
 function Base.show(io::IO, action::Action{T}) where T
-    print(io, "Action ", action.name)
+    print(io, "Action")
+    print(io, "(:$(action.name)")
     if isnothing(action.x)
-        print(io, "()")
+        print(io, ")")
     else
-        print(io, "(", action.x, ")")
+        print(io, ", ",action.x, ")")
     end
 end
 

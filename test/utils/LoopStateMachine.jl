@@ -59,3 +59,17 @@ end
     end
     @test results == [2, 4, 6]
 end
+
+@testset "Show" begin
+    @test sprint(print, Action(:continue)) == "Action(:continue)"
+    @test sprint(print, Action(:break)) == "Action(:break)"
+    @test sprint(print, Action(:return, 1)) == "Action(:return, 1)"
+    @test sprint(print, Action(:full_return, 1)) == "Action(:full_return, 1)"
+end
+
+@testset "Unnamed action" begin
+    @test sprint(print, Action()) == "Action(:unnamed)"
+    @test sprint(print, Action(1)) == "Action(:unnamed, 1)"
+    @test sprint(print, Action(:x)) == "Action(:x)"
+end
+
