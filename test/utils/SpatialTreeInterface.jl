@@ -2,7 +2,7 @@ using Test
 
 using GeometryOps.SpatialTreeInterface
 using GeometryOps.SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
-using GeometryOps.SpatialTreeInterface: query, do_query, do_dual_query
+using GeometryOps.SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
 using GeometryOps.SpatialTreeInterface: FlatNoTree
 using Extents
 using GeoInterface: GeoInterface as GI
@@ -81,13 +81,13 @@ function test_dual_query_functionality(TreeType)
         # Test dual query with a predicate that matches all
         all_pred = (x, y) -> true
         results = Tuple{Int, Int}[]
-        do_dual_query((i, j) -> push!(results, (i, j)), all_pred, tree1, tree2)
+        dual_depth_first_search((i, j) -> push!(results, (i, j)), all_pred, tree1, tree2)
         @test length(results) == 4  # 2 points in tree1 * 2 points in tree2
 
         # Test dual query with a specific predicate
         intersects_pred = (x, y) -> Extents.intersects(x, y)
         results = Tuple{Int, Int}[]
-        do_dual_query((i, j) -> push!(results, (i, j)), intersects_pred, tree1, tree2)
+        dual_depth_first_search((i, j) -> push!(results, (i, j)), intersects_pred, tree1, tree2)
         @test sort(results) == [(1,1), (2,1), (2,2)]
     end
 end
