@@ -200,18 +200,20 @@ end
 
 using SortTileRecursiveTree: STRtree, STRNode, STRLeafNode
 
+isspatialtree(::Type{<: STRtree}) = true
 nchild(tree::STRtree) = nchild(tree.rootnode)
 getchild(tree::STRtree) = getchild(tree.rootnode)
 getchild(tree::STRtree, i) = getchild(tree.rootnode, i)
 isleaf(tree::STRtree) = isleaf(tree.rootnode)
 child_indices_extents(tree::STRtree) = child_indices_extents(tree.rootnode)
 
-
+isspatialtree(::Type{<: STRNode}) = true
 nchild(node::STRNode) = length(node.children)
 getchild(node::STRNode) = node.children
 getchild(node::STRNode, i) = node.children[i]
 isleaf(node::STRNode) = false # STRNodes are not leaves by definition
 
+isspatialtree(::Type{<: STRLeafNode}) = true
 isleaf(node::STRLeafNode) = true
 child_indices_extents(node::STRLeafNode) = zip(node.indices, node.extents)
 
