@@ -55,13 +55,6 @@ barycentric_coordinates!
 barycentric_interpolate
 ```
 
-## LoopStateMachine
-
-```@docs
-GeometryOps.LoopStateMachine.@controlflow
-GeometryOps.LoopStateMachine.Action
-```
-
 ## Other methods
 
 ```@autodocs
