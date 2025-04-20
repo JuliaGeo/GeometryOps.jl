@@ -36,8 +36,14 @@ const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
 include("types.jl")
 include("primitives.jl")
-include("utils.jl")
 include("not_implemented_yet.jl")
+
+include("utils/utils.jl")
+include("utils/LoopStateMachine/LoopStateMachine.jl")
+include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
+
+using .LoopStateMachine, .SpatialTreeInterface
+
 
 include("methods/angles.jl")
 include("methods/area.jl")

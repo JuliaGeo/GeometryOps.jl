@@ -126,3 +126,110 @@ function _point_in_extent(p, extent::Extents.Extent)
     (x1, x2), (y1, y2) = extent.X, extent.Y
     return x1 ≤ GI.x(p) ≤ x2 && y1 ≤ GI.y(p) ≤ y2
 end
+
+#=
+# `eachedge`, `to_edgelist`
+
+These functions are used to decompose geometries into lists of edges.
+Currently they only work on linear rings.
+=#
+
+"""
+    eachedge(geom, [::Type{T}])
+
+Decompose a geometry into a list of edges.
+Currently only works for LineString and LinearRing.
+
+Returns some iterator, which yields tuples of points.  Each tuple is an edge.
+
+It goes `(p1, p2), (p2, p3), (p3, p4), ...` etc.
+"""
+eachedge(geom) = eachedge(GI.trait(geom), geom, Float64)
+function eachedge(geom, ::Type{T}) where T
+    eachedge(GI.trait(geom), geom, T)
+end
+# implementation for LineString and LinearRing
+function eachedge(trait::GI.AbstractCurveTrait, geom, ::Type{T}) where T
+    return (_tuple_point.((GI.getpoint(geom, i), GI.getpoint(geom, i+1)), T) for i in 1:GI.npoint(geom)-1)
+end
+# implementation for Polygon, MultiPolygon, MultiLineString, GeometryCollection
+function eachedge(trait::GI.AbstractGeometryTrait, geom, ::Type{T}) where T
+    return Iterators.flatten((eachedge(r, T) for r in flatten(GI.AbstractCurveTrait, geom)))
+end
+function eachedge(trait::GI.PointTrait, geom, ::Type{T}) where T
+    throw(ArgumentError("Can't get edges from points, $geom was a PointTrait."))
+end
+function eachedge(trait::GI.MultiPointTrait, geom, ::Type{T}) where T
+    throw(ArgumentError("Can't get edges from MultiPoint, $geom was a MultiPointTrait."))
+end
+
+"""
+    to_edgelist(geom, [::Type{T}])
+
+Convert a geometry into a vector of `GI.Line` objects with attached extents.
+"""
+to_edgelist(geom, ::Type{T} = Float64) where T = 
+    [_lineedge(ps, T) for ps in eachedge(geom, T)]
+
+"""
+    to_edgelist(ext::E, geom, [::Type{T}])::(::Vector{GI.Line}, ::Vector{Int})
+
+Filter the edges of `geom` for those that intersect 
+`ext`, and return:
+- a vector of `GI.Line` objects with attached extents, 
+- a vector of indices into the original geometry.
+"""
+function to_edgelist(ext::E, geom, ::Type{T} = Float64) where {E<:Extents.Extent,T}
+    edges_in = eachedge(geom, T)
+    l1 = _lineedge(first(edges_in), T)
+    edges_out = typeof(l1)[]
+    indices = Int[]
+    for (i, ps) in enumerate(edges_in) 
+        l = _lineedge(ps, T)
+        if Extents.intersects(ext, GI.extent(l))
+            push!(edges_out, l)
+            push!(indices, i)
+        end
+    end 
+    return edges_out, indices
+end
+
+function _lineedge(ps::Tuple, ::Type{T}) where T
+    l = GI.Line(StaticArrays.SVector{2,NTuple{2, T}}(ps))  # TODO: make this flexible in dimension
+    e = GI.extent(l)
+    return GI.Line(l.geom; extent=e)
+end
+
+"""
+    lazy_edgelist(geom, [::Type{T}])
+
+Return an iterator over `GI.Line` objects with attached extents.
+"""
+function lazy_edgelist(geom, ::Type{T} = Float64) where T
+    (_lineedge(ps, T) for ps in eachedge(geom, T))
+end
+
+"""
+    edge_extents(geom, [::Type{T}])
+
+Return a vector of the extents of the edges (line segments) of `geom`.
+"""
+function edge_extents(geom, ::Type{T} = Float64) where T
+    return [begin
+        Extents.Extent(X=extrema(GI.x, edge), Y=extrema(GI.y, edge)) 
+    end
+    for edge in eachedge(geom, T)]
+end
+
+"""
+    lazy_edge_extents(geom)
+
+Return an iterator over the extents of the edges (line segments) of `geom`.  
+This is lazy but nonallocating.
+"""
+function lazy_edge_extents(geom)
+    return (begin
+        Extents.Extent(X=extrema(GI.x, edge), Y=extrema(GI.y, edge)) 
+    end
+    for edge in eachedge(geom, Float64))
+end
