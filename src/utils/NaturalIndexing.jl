@@ -152,6 +152,9 @@ Extents.extent(node::NaturalTreeNode) = node.extent
 # - `isleaf(node)` returns a boolean indicating whether the node is a leaf
 # - `child_indices_extents(node)` returns an iterator over the indices and extents of the children of the node
 
+SpatialTreeInterface.isspatialtree(::Type{<: NaturalIndexing}) = true
+SpatialTreeInterface.isspatialtree(::Type{<: NaturalTreeNode}) = true
+
 function SpatialTreeInterface.nchild(node::NaturalTreeNode)
     start_idx = (node.index - 1) * node.parent_index.nodecapacity + 1
     stop_idx = min(start_idx + node.parent_index.nodecapacity - 1, length(node.parent_index.levels[node.level+1].extents))
