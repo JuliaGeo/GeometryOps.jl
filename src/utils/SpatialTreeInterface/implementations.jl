@@ -39,6 +39,7 @@ end
 
 isspatialtree(::Type{<: FlatNoTree}) = true
 isleaf(tree::FlatNoTree) = true
+node_extent(tree::FlatNoTree) = mapreduce(GI.extent, Extents.union, tree.geometries)
 
 # NOTE: use pairs instead of enumerate here, so that we can support 
 # iterators or collections that define custom `pairs` methods.
@@ -48,8 +49,8 @@ function child_indices_extents(tree::FlatNoTree{T}) where T
     # This test only applies at compile time and should be optimized away in any case.
     # And we can use multiple dispatch to override anyway, but it should be cost free I think.
     if applicable(Base.keys, T) 
-        return ((i, GI.extent(obj)) for (i, obj) in pairs(tree.geometries))
+        return ((i, node_extent(obj)) for (i, obj) in pairs(tree.geometries))
     else
-        return ((i, GI.extent(obj)) for (i, obj) in enumerate(tree.geometries))
+        return ((i, node_extent(obj)) for (i, obj) in enumerate(tree.geometries))
     end
 end
