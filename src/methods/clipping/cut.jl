@@ -60,7 +60,6 @@ GI.coordinates.(cut_polys)
 """
 cut(geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} = cut(FosterHormannClipping(), geom, line, T)
 cut(m::Manifold, geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} = cut(FosterHormannClipping(m), geom, line, T)
-
 cut(alg::FosterHormannClipping{M, A}, geom, line, ::Type{T} = Float64) where {T <: AbstractFloat, M, A} =
     _cut(alg, T, GI.trait(geom), geom, GI.trait(line), line; exact = True())
 

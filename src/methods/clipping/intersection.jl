@@ -47,7 +47,6 @@ function intersection(
         exact = True(), kwargs...,
     )
 end
-
 # fallback definitions
 # if no manifold - assume planar (until we have best_manifold)
 function intersection(
@@ -55,7 +54,6 @@ function intersection(
 ) where {T<:AbstractFloat}
     return intersection(FosterHormannClipping(Planar()), geom_a, geom_b; target, kwargs...)
 end
-
 # if manifold but no algorithm - assume FosterHormannClipping with provided manifold.
 function intersection(m::Manifold, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...) where {T<:AbstractFloat}
     return intersection(FosterHormannClipping(m), geom_a, geom_b; target, kwargs...)
@@ -103,7 +101,6 @@ function _intersection(
     _remove_collinear_points!(alg, polys, remove_idx, poly_a, poly_b)
     return polys
 end
-
 # # Helper functions for Intersections with Greiner and Hormann Polygon Clipping
 
 #= When marking the crossing status of a delayed crossing, the chain start point is bouncing
@@ -172,7 +169,6 @@ function _intersection(
     end
     return polys
 end
-
 # catch-all method for multipolygontraits
 function _intersection(
     alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},

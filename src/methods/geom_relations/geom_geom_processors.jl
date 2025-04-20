@@ -525,7 +525,6 @@ function _point_filled_curve_orientation(
     end
     return iseven(k) ? out : in
 end
-
 _point_filled_curve_orientation(
     point, curve;
     in::T = point_in, on::T = point_on, out::T = point_out, exact,

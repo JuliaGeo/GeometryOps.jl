@@ -40,7 +40,6 @@ function difference(
         exact = True(), kwargs...,
     )
 end
-
 # fallback definitions
 difference(geom_a, geom_b, ::Type{T} = Float64; target=nothing, kwargs...) where T = difference(FosterHormannClipping(Planar()), geom_a, geom_b, T; target, kwargs...)
 # if manifold but no algorithm - assume FosterHormannClipping with provided manifold.
@@ -180,7 +179,6 @@ function _difference(
     end
     return polys
 end
-
 function _difference(
     alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     trait_a::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_a,
@@ -194,7 +192,6 @@ function _difference(
         return fix_multipoly(GI.MultiPolygon(polys))
     end
 end
-
 # Many type and target combos aren't implemented
 function _difference(
     alg::GeometryOpsCore.Algorithm, target::TraitTarget{Target}, ::Type{T},

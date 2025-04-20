@@ -33,7 +33,7 @@ struct AutoAccelerator <: IntersectionAccelerator end
 """
     FosterHormannClipping{M <: Manifold, A <: Union{Nothing, Accelerator}} <: GeometryOpsCore.Algorithm{M} 
 
-A type that represents the Foster-Hormann clipping algorithm.
+Applies the Foster-Hormann clipping algorithm.
 
 # Arguments
 - `manifold::M`: The manifold on which the algorithm operates.
@@ -45,8 +45,6 @@ struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: Geo
     # TODO: add exact flag
     # TODO: should exact flag be in the type domain?
 end
-
-
 FosterHormannClipping(; manifold::Manifold = Planar(), accelerator = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? AutoAccelerator() : accelerator)
 FosterHormannClipping(manifold::Manifold, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? AutoAccelerator() : accelerator)
 FosterHormannClipping(accelerator::Union{Nothing, IntersectionAccelerator}) = FosterHormannClipping(Planar(), isnothing(accelerator) ? AutoAccelerator() : accelerator)

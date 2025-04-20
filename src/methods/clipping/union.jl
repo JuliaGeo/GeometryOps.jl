@@ -280,7 +280,6 @@ function _union(
     end
     return polys
 end
-
 function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
@@ -289,7 +288,6 @@ function _union(
 ) where T
     return UnionIntersectingPolygons(#=TODO: alg.manifold=#)(GI.MultiPolygon([poly_a, poly_b]))
 end
-
 function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
@@ -304,7 +302,6 @@ function _union(
         return GI.MultiPolygon(res)
     end
 end
-
 # this is the opposite of the above
 function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
@@ -315,7 +312,6 @@ function _union(
 ) where T 
     union(alg, poly_b, multipoly_a; target, fix_multipoly, kwargs...)
 end
-
 function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     trait_a::GI.MultiPolygonTrait, multipoly_a,
@@ -324,7 +320,6 @@ function _union(
 ) where T
     return GI.MultiPolygon(_union(alg, TraitTarget{GI.PolygonTrait}(), T, trait_a, multipoly_a, trait_b, multipoly_b; fix_multipoly, kwargs...))
 end
-
 # Many type and target combos aren't implemented
 function _union(
     alg::GeometryOpsCore.Algorithm, target::TraitTarget{Target}, ::Type{T},
