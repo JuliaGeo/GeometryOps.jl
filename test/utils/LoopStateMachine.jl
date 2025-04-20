@@ -48,9 +48,34 @@ end
     @test f(1) == Action(:full_return, 1)
     @test f(2) == Action(:full_return, 2)
     @test f(3) == Action(:full_return, 3)
+
+    function descend(i)
+        if i == 1
+            k = 0
+            for j in 1:4
+                k = @controlflow h(i, j)
+            end
+            return k
+        else
+            descend(i-1)
+        end
+    end
+    
+    function h(i, j)
+        for _i in i:-1:1
+            for _j in 1:j
+                @controlflow l(j, i)
+            end
+        end
+    end
+
+    l(j, i) = i == 1 ? Action(:full_return, j) : i
+
+    @test descend(4) == Action(:full_return, 1)
+
 end
 
-@testset "Return value" begin
+@testset "Return value without Action" begin
     results = Int[]
     for i in 1:3
         val = @controlflow begin
