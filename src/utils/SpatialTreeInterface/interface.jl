@@ -65,7 +65,12 @@ Each value of the iterator should take the form `(i, extent)`.
 This can only be invoked on leaf nodes!
 """
 function child_indices_extents(node)
-    return zip(1:nchild(node), getchild(node))
+    children = getchild(node)
+    if applicable(Base.keys, typeof(children)) 
+        return ((i, node_extent(obj)) for (i, obj) in pairs(children))
+    else
+        return ((i, node_extent(obj)) for (i, obj) in enumerate(children))
+    end
 end
 
 """
