@@ -242,7 +242,7 @@ function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.Abstr
 
     function f_on_each_maybe_intersect((a_edge, a_idx), (b_edge, b_idx))
         line_orient, intr1, intr2 = _intersection_point(manifold, T, a_edge, b_edge; exact)
-        line_orient == line_out && return LoopStateMachine.Continue() # use LoopStateMachine.Continue() to skip this edge - in this case it doesn't matter but you could use it to e.g. break once you found the first intersecting point.
+        line_orient == line_out && return LoopStateMachine.Action(:continue) # use LoopStateMachine.Continue() to skip this edge - in this case it doesn't matter but you could use it to e.g. break once you found the first intersecting point.
         pt1, _ = intr1
         push!(result, pt1)  # if not line_out, there is at least one intersection point
         if line_orient == line_over # if line_over, there are two intersection points

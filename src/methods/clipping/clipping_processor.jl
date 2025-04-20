@@ -305,10 +305,10 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
             # as the nested loop above, and iterating through poly_b in order.
             if Extents.intersects(ext_l, ext_b)
                 # Loop over the edges in b that might intersect the edges in a
-                SpatialTreeInterface.do_query(Base.Fix1(Extents.intersects, ext_l), b_tree) do j
+                SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, ext_l), b_tree) do j
                     b1t, b2t = edges_b[j].geom
                     b1t == b2t && return LoopStateMachine.Continue()
-                    # LoopStateMachine control is managed outside the loop, by the do_query function.
+                    # LoopStateMachine control is managed outside the loop, by the depth_first_search function.
                     return f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
                 end
             end
@@ -323,7 +323,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
 
         last_a_idx = 0
 
-        SpatialTreeInterface.do_dual_query(Extents.intersects, tree_a, tree_b) do a_edge_idx, b_edge_idx
+        SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_edge_idx, b_edge_idx
             a1t, a2t = edges_a[a_edge_idx].geom
             b1t, b2t = edges_b[b_edge_idx].geom
 
@@ -381,7 +381,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
 
         last_a_idx = 1
 
-        SpatialTreeInterface.do_dual_query(Extents.intersects, tree_a, tree_b) do a_thinned_idx, b_thinned_idx
+        SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_thinned_idx, b_thinned_idx
             a_edge_idx = indices_a[a_thinned_idx]
             b_edge_idx = indices_b[b_thinned_idx]
 
