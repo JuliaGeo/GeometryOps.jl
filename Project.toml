@@ -1,7 +1,7 @@
 name = "GeometryOps"
 uuid = "3251bfac-6a57-4b6d-aa61-ac1fef2975ab"
 authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "Rafael Schouten <rafaelschouten@gmail.com>", "Skylar Gering <skygering@gmail.com>", "and contributors"]
-version = "0.1.18"
+version = "0.1.19"
 
 [deps]
 AdaptivePredicates = "35492f91-a3bd-45ad-95db-fcad7dcfedb7"
