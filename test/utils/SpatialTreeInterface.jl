@@ -92,6 +92,103 @@ function test_dual_query_functionality(TreeType)
         dual_depth_first_search((i, j) -> push!(results, (i, j)), intersects_pred, tree1, tree2)
         @test sort(results) == [(1,1), (2,1), (2,2)]
     end
+    @testset "Dual tree query with many boundingboxes" begin
+        xs = 1:100
+        ys = 1:100
+        extent_grid = [Extents.Extent(X=(x, x+1), Y=(y, y+1)) for x in xs, y in ys] |> vec
+        point_grid = [(x + 0.5, y + 0.5) for x in xs, y in ys] |> vec
+
+        extent_tree = TreeType(extent_grid)
+        point_tree = TreeType(point_grid)
+
+        found_everything = falses(length(extent_grid))
+        dual_depth_first_search(Extents.intersects, extent_tree, point_tree) do i, j
+            if i == j
+                found_everything[i] = true
+            end
+        end
+        @test all(found_everything)
+    end
+end
+
+function test_geometry_support(TreeType)
+    @testset "Geometry support" begin
+        # Create a tree with 100 points
+        points = tuple.(1:100, 1:100)
+        tree = TreeType(points)
+        
+        # Test basic interface
+        @test isspatialtree(tree)
+        @test isspatialtree(typeof(tree))
+        
+        # Test query functionality
+        all_pred = x -> true
+        results = query(tree, all_pred)
+        @test sort(results) == collect(1:100)
+
+        none_pred = x -> false
+        results = query(tree, none_pred)
+        @test isempty(results)
+
+        search_extent = Extents.Extent(X=(45.0, 55.0), Y=(45.0, 55.0))
+        results = query(tree, Base.Fix1(Extents.intersects, search_extent))
+        @test sort(results) == collect(45:55)
+    end
+end
+
+function test_find_point_in_all_countries(TreeType)
+    all_countries = NaturalEarth.naturalearth("admin_0_countries", 10)
+    tree = TreeType(all_countries.geometry)
+
+    ber = (13.4050, 52.5200)   # Berlin
+    nyc = (-74.0060, 40.7128)  # New York City
+    sin = (103.8198, 1.3521)   # Singapore
+
+    @testset "locate points using query" begin
+        @testset let point = ber, name = "Berlin"
+            # Test Berlin (should be in Germany)
+            results = query(tree, point)
+            @test any(i -> all_countries.ADM0_A3[i] == "DEU", results)
+        end
+        @testset let point = nyc, name = "New York City"
+            # Test NYC (should be in USA)
+            results = query(tree, point)
+            @test any(i -> all_countries.ADM0_A3[i] == "USA", results)
+        end
+        @testset let point = sin, name = "Singapore"
+            # Test Singapore
+            results = query(tree, point)
+            @test any(i -> all_countries.ADM0_A3[i] == "SGP", results)
+        end
+    end
+end
+
+# Test FlatNoTree implementation
+@testset "FlatNoTree" begin
+    test_basic_interface(FlatNoTree)
+    test_child_indices_extents(FlatNoTree)
+    test_query_functionality(FlatNoTree)
+    test_dual_query_functionality(FlatNoTree)
+    test_geometry_support(FlatNoTree)
+    test_find_point_in_all_countries(FlatNoTree)
+end
+
+# Test STRtree implementation
+@testset "STRtree" begin
+    test_basic_interface(STRtree)
+    test_child_indices_extents(STRtree)
+    test_query_functionality(STRtree)
+    test_dual_query_functionality(STRtree)
+    test_geometry_support(STRtree)
+    test_find_point_in_all_countries(STRtree)
+end
+
+
+
+# This testset is not used because Polylabel.jl has some issues.
+
+#=
+
 
     @testset "Dual query functionality - every country's polylabel against every country" begin
 
@@ -124,83 +221,4 @@ function test_dual_query_functionality(TreeType)
 
         @test all(found_countries)
     end
-end
-
-function test_find_point_in_all_countries(TreeType)
-    all_countries = NaturalEarth.naturalearth("admin_0_countries", 10)
-    tree = TreeType(all_countries.geometry)
-
-    ber = (13.4050, 52.5200)   # Berlin
-    nyc = (-74.0060, 40.7128)  # New York City
-    sin = (103.8198, 1.3521)   # Singapore
-
-    @testset "locate points using query" begin
-        @testset let point = ber, name = "Berlin"
-            # Test Berlin (should be in Germany)
-            results = query(tree, point)
-            @test any(i -> all_countries.ADM0_A3[i] == "DEU", results)
-        end
-        @testset let point = nyc, name = "New York City"
-            # Test NYC (should be in USA)
-            results = query(tree, point)
-            @test any(i -> all_countries.ADM0_A3[i] == "USA", results)
-        end
-        @testset let point = sin, name = "Singapore"
-            # Test Singapore
-            results = query(tree, point)
-            @test any(i -> all_countries.ADM0_A3[i] == "SGP", results)
-        end
-    end
-end
-
-function test_geometry_support(TreeType)
-    @testset "Geometry support" begin
-        # Create a tree with 100 points
-        points = tuple.(1:100, 1:100)
-        tree = TreeType(points)
-        
-        # Test basic interface
-        @test isspatialtree(tree)
-        @test isspatialtree(typeof(tree))
-        
-        # Test query functionality
-        all_pred = x -> true
-        results = query(tree, all_pred)
-        @test sort(results) == collect(1:100)
-
-        none_pred = x -> false
-        results = query(tree, none_pred)
-        @test isempty(results)
-
-        search_extent = Extents.Extent(X=(45.0, 55.0), Y=(45.0, 55.0))
-        results = query(tree, Base.Fix1(Extents.intersects, search_extent))
-        @test sort(results) == collect(45:55)
-    end
-end
-
-# Test FlatNoTree implementation
-@testset "FlatNoTree" begin
-    @testset let TreeType = FlatNoTree
-        test_basic_interface(TreeType)
-        test_child_indices_extents(TreeType)
-        test_query_functionality(TreeType)
-        test_dual_query_functionality(TreeType)
-        test_geometry_support(TreeType)
-        test_find_point_in_all_countries(TreeType)
-    end
-end
-
-# Test STRtree implementation
-@testset "STRtree" begin
-    @testset let TreeType = STRtree
-        test_basic_interface(TreeType)
-        test_child_indices_extents(TreeType)
-        test_query_functionality(TreeType)
-        test_dual_query_functionality(TreeType)
-        test_geometry_support(TreeType)
-        test_find_point_in_all_countries(TreeType)
-    end
-end
-
-
-
+=#
