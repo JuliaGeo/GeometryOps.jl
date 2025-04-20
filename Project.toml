@@ -67,6 +67,7 @@ JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
 NaturalEarth = "436b0209-26ab-4e65-94a9-6526d86fea76"
 OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
+Polylabel = "49a44318-e865-4b63-9842-695152d634c1"
 Proj = "c94c279d-25a6-4763-9509-64d165bea63e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Rasters = "a3a2b9e3-a471-40c9-b274-f788e487c689"
@@ -76,4 +77,4 @@ TGGeometry = "d7e755d2-3c95-4bcf-9b3c-79ab1a78647b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "Downloads", "FlexiJoins", "GeoJSON", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "NaturalEarth", "OffsetArrays", "SafeTestsets", "Shapefile", "TGGeometry", "Test"]
+test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "Downloads", "FlexiJoins", "GeoJSON", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "NaturalEarth", "OffsetArrays", "Polylabel", "SafeTestsets", "Shapefile", "TGGeometry", "Test"]

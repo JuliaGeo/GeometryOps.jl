@@ -7,6 +7,8 @@ using GeometryOps.SpatialTreeInterface: FlatNoTree
 using Extents
 using GeoInterface: GeoInterface as GI
 using SortTileRecursiveTree: STRtree
+using NaturalEarth
+using Polylabel
 
 # Generic test functions for spatial trees
 function test_basic_interface(TreeType)
@@ -67,7 +69,7 @@ function test_query_functionality(TreeType)
 end
 
 function test_dual_query_functionality(TreeType)
-    @testset "Dual query functionality" begin
+    @testset "Dual query functionality - simple" begin
         # Create two trees with overlapping extents
         tree1 = TreeType([
             Extents.Extent(X=(0.0, 1.0), Y=(0.0, 1.0)),
@@ -89,6 +91,65 @@ function test_dual_query_functionality(TreeType)
         results = Tuple{Int, Int}[]
         dual_depth_first_search((i, j) -> push!(results, (i, j)), intersects_pred, tree1, tree2)
         @test sort(results) == [(1,1), (2,1), (2,2)]
+    end
+
+    @testset "Dual query functionality - every country's polylabel against every country" begin
+
+        # Note that this is a perfectly balanced tree query - we don't yet have a test for unbalanced
+        # trees (but could easily add one, e.g. by getting polylabels of admin-1 or admin-2 regions)
+        # from Natural Earth, or by using GADM across many countries.
+
+        all_countries = NaturalEarth.naturalearth("admin_0_countries", 10)
+        all_adm0_a3 = all_countries.ADM0_A3
+        all_geoms = all_countries.geometry
+        # US minor outlying islands - bug in Polylabel.jl
+        # A lot of small geoms have this issue, that there will be an error from the queue
+        # because the cell exists in the queue already.
+        # Not sure what to do about it, I don't want to check containment every time...
+        deleteat!(all_adm0_a3, 205)
+        deleteat!(all_geoms, 205)
+
+        geom_tree = TreeType(all_geoms)
+
+        polylabels = [Polylabel.polylabel(geom; rtol = 0.019) for geom in all_geoms]
+        polylabel_tree = TreeType(polylabels)
+
+        found_countries = falses(length(polylabels))
+
+        dual_depth_first_search(Extents.intersects, geom_tree, polylabel_tree) do i, j
+            if i == j
+                found_countries[i] = true
+            end
+        end
+
+        @test all(found_countries)
+    end
+end
+
+function test_find_point_in_all_countries(TreeType)
+    all_countries = NaturalEarth.naturalearth("admin_0_countries", 10)
+    tree = TreeType(all_countries.geometry)
+
+    ber = (13.4050, 52.5200)   # Berlin
+    nyc = (-74.0060, 40.7128)  # New York City
+    sin = (103.8198, 1.3521)   # Singapore
+
+    @testset "locate points using query" begin
+        @testset let point = ber, name = "Berlin"
+            # Test Berlin (should be in Germany)
+            results = query(tree, point)
+            @test any(i -> all_countries.ADM0_A3[i] == "DEU", results)
+        end
+        @testset let point = nyc, name = "New York City"
+            # Test NYC (should be in USA)
+            results = query(tree, point)
+            @test any(i -> all_countries.ADM0_A3[i] == "USA", results)
+        end
+        @testset let point = sin, name = "Singapore"
+            # Test Singapore
+            results = query(tree, point)
+            @test any(i -> all_countries.ADM0_A3[i] == "SGP", results)
+        end
     end
 end
 
@@ -119,20 +180,26 @@ end
 
 # Test FlatNoTree implementation
 @testset "FlatNoTree" begin
-    test_basic_interface(FlatNoTree)
-    test_child_indices_extents(FlatNoTree)
-    test_query_functionality(FlatNoTree)
-    test_dual_query_functionality(FlatNoTree)
-    test_geometry_support(FlatNoTree)
+    @testset let TreeType = FlatNoTree
+        test_basic_interface(TreeType)
+        test_child_indices_extents(TreeType)
+        test_query_functionality(TreeType)
+        test_dual_query_functionality(TreeType)
+        test_geometry_support(TreeType)
+        test_find_point_in_all_countries(TreeType)
+    end
 end
 
 # Test STRtree implementation
 @testset "STRtree" begin
-    test_basic_interface(STRtree)
-    test_child_indices_extents(STRtree)
-    test_query_functionality(STRtree)
-    test_dual_query_functionality(STRtree)
-    test_geometry_support(STRtree)
+    @testset let TreeType = STRtree
+        test_basic_interface(TreeType)
+        test_child_indices_extents(TreeType)
+        test_query_functionality(TreeType)
+        test_dual_query_functionality(TreeType)
+        test_geometry_support(TreeType)
+        test_find_point_in_all_countries(TreeType)
+    end
 end
 
 
