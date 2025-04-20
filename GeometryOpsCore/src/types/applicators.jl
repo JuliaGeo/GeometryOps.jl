@@ -58,10 +58,11 @@ const WithXYZM = ApplyToPoint{true,true}
 (t::WithXYM)(p) = t.f(GI.x(p), GI.y(p), GI.z(p), GI.m(p))
 
 # ***
+abstract type ApplyToCollectionLike{F, T} <: Applicator{F,T} end
 
 for T in (:ApplyToGeom, :ApplyToArray, :ApplyToFeatures, :ApplyPointsToPolygon)
     @eval begin
-        struct $T{F,T,O,K} <: Applicator{F,T}
+        struct $T{F,T,O,K} <: ApplyToCollectionLike{F,T}
             f::F
             target::T
             obj::O
@@ -106,3 +107,16 @@ Create an [`Applicator`](@ref) that applies a function to all sub-geometries of 
 
 Create an [`Applicator`](@ref) that applies a function to all features of `fc`.
 """ ApplyToFeatures
+
+
+struct ApplyKnowingTrait{F, T, O, K} <: Applicator{F, T}
+    f::F
+    target::T
+    obj::O
+    kw::K
+end
+ApplyKnowingTrait(f, target, obj; kw...) = ApplyKnowingTrait(f, target, obj, kw)
+# rebuild lets us swap out the function, such as with TaskFunctors
+rebuild(a::ApplyKnowingTrait, f) = ApplyKnowingTrait(f, a.target, a.obj, a.kw) 
+
+(a::ApplyKnowingTrait)(trait, geom) = f(trait, geom)

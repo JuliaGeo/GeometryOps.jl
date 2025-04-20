@@ -32,6 +32,7 @@ struct AutoAccelerator <: IntersectionAccelerator end
 
 """
     FosterHormannClipping{M <: Manifold, A <: Union{Nothing, Accelerator}} <: GeometryOpsCore.Algorithm{M} 
+    FosterHormannClipping(manifold, accelerator::IntersectionAccelerator)
 
 Applies the Foster-Hormann clipping algorithm.
 
@@ -51,6 +52,9 @@ FosterHormannClipping(accelerator::Union{Nothing, IntersectionAccelerator}) = Fo
 # special case for spherical / geodesic manifolds
 # since they can't use STRtrees (because those don't work on the sphere)
 FosterHormannClipping(manifold::Union{Spherical, Geodesic}, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : (accelerator isa AutoAccelerator ? NestedLoop() : accelerator))
+
+manifold(f::FosterHormannClipping) = f.manifold
+best_manifold(f::FosterHormannClipping, input) = Planar()
 
 # This enum defines which side of an edge a point is on
 @enum PointEdgeSide left=1 right=2 unknown=3

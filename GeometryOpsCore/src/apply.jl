@@ -306,6 +306,9 @@ end
 # So the `Target` is found. We apply `f` to geom and return it to previous
 # _apply calls to be wrapped with the outer geometries/feature/featurecollection/array.
 _apply(f::F, ::TraitTarget{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} = f(geom)
+# We special case `ApplyKnowingTrait`, since it ought to know the trait of the geometry.
+# This way, the trait is not lost and is passed down through the apply chain at compile time.
+_apply(f::ApplyKnowingTrait, ::TraitTarget{Target}, trait::Trait, geom; crs=GI.crs(geom), kw...) where {Target,Trait<:Target} = f(trait, geom)
 # Define some specific cases of this match to avoid method ambiguity
 for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString,

@@ -167,13 +167,11 @@ const ϵ = 1e-10
 # Compare clipping results from GeometryOps and LibGEOS
 function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
     GO_result_list = GO_f(p1, p2; target = GI.PolygonTrait())
+    GO_multipolygon_result = GO_f(p1, p2; target = GI.MultiPolygonTrait())
     LG_result_geom = LG_f(p1, p2)
     if LG_result_geom isa LG.GeometryCollection
-        poly_list = LG.Polygon[]
-        for g in GI.getgeom(LG_result_geom)
-            g isa LG.Polygon && push!(poly_list, g)
-        end
-        LG_result_geom = LG.MultiPolygon(poly_list)
+        # TODO: handle multipolygons in the geometry collection also
+        LG_result_geom = LG.MultiPolygon(filter(g -> GI.geomtrait(g) isa GI.PolygonTrait, GI.getgeom(LG_result_geom)))
     end
     # Check if nothing is returned
     if isempty(GO_result_list) && (LG.isEmpty(LG_result_geom) || LG.area(LG_result_geom) == 0)
@@ -183,12 +181,24 @@ function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
     if sum(GI.npoint, GO_result_list; init = 0.0) > GI.npoint(LG_result_geom)
         return false
     end
+    if sum(GI.npoint, GO_multipolygon_result_list; init = 0.0) > GI.npoint(LG_result_geom)
+        return false
+    end
     # Make sure last point is repeated
     for poly in GO_result_list
         for ring in GI.getring(poly)
             GI.getpoint(ring, 1) != GI.getpoint(ring, GI.npoint(ring)) && return false
         end
     end
+
+    all_multipolys_closed = apply(GI.PolygonTrait(), GO_multipolygon_result) do poly
+        for ring in GI.getring(poly)
+            GI.getpoint(ring, 1) != GI.getpoint(ring, GI.npoint(ring)) && return false
+        end
+        return true
+    end
+
+    all_multipolys_closed || return false
 
     # Check if polygons cover the same area
     local GO_result_geom
