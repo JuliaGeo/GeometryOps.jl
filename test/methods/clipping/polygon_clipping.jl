@@ -223,7 +223,12 @@ end
 
     poly_a_large, poly_b_large = GO.segmentize.((poly_a_small, poly_b_small), max_distance = 0.001)
 
+    # Test that the message is contained in the exception
     @test_throws "Test tracing error" throw(GO.TracingError(message, poly_a_small, poly_b_small, GO.PolyNode{Float64}[], GO.PolyNode{Float64}[], Int[]))
+    # Test that the coordinates of the polygons are contained in the exception,
+    # if the polygon is small enough
     @test_throws "$(GI.coordinates(poly_a_small))" throw(GO.TracingError(message, poly_a_small, poly_b_small, GO.PolyNode{Float64}[], GO.PolyNode{Float64}[], Int[]))
+    # Test that the coordinates of the polygons are not contained in the exception,
+    # if the polygon is large enoughs
     @test_throws "The polygons are contained in the exception object" throw(GO.TracingError(message, poly_a_large, poly_b_large, GO.PolyNode{Float64}[], GO.PolyNode{Float64}[], Int[]))
 end
