@@ -22,9 +22,8 @@ The `depth_first_search` function is generic to anything that implements the Spa
 
 Here's an animated example of what `depth_first_search` is doing:
 
-![depth_first_search](./depth_first_search.mp4)
 
-```@example dfs
+```julia
 using Makie, GeoInterfaceMakie
 using Extents, GeometryOps.SpatialTreeInterface, SortTileRecursiveTree
 import GeoInterface as GI
