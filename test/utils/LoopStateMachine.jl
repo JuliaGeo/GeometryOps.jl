@@ -75,7 +75,7 @@ end
 
 end
 
-@testset "Return value" begin
+@testset "Return value without Action" begin
     results = Int[]
     for i in 1:3
         val = @controlflow begin
