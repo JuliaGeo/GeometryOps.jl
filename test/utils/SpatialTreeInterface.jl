@@ -1,11 +1,10 @@
 using Test
-
+import GeometryOps as GO, GeoInterface as GI
 using GeometryOps.SpatialTreeInterface
 using GeometryOps.SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 using GeometryOps.SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
 using GeometryOps.SpatialTreeInterface: FlatNoTree
 using Extents
-using GeoInterface: GeoInterface as GI
 using SortTileRecursiveTree: STRtree
 using NaturalEarth
 using Polylabel
@@ -104,6 +103,42 @@ function test_dual_query_functionality(TreeType)
         found_everything = falses(length(extent_grid))
         dual_depth_first_search(Extents.intersects, extent_tree, point_tree) do i, j
             if i == j
+                found_everything[i] = true
+            end
+        end
+        @test all(found_everything)
+    end
+
+    @testset "Imbalanced dual query - tree 1 deeper than tree 2" begin
+        xs = 0:0.01:10
+        ys = 0:0.01:10
+        extent_grid = [Extents.Extent(X=(x, x+0.1), Y=(y, y+0.1)) for x in xs, y in ys] |> vec
+        point_grid = [(x + 0.5, y + 0.5) for x in 0:9, y in 0:9] |> vec
+
+        extent_tree = TreeType(extent_grid)
+        point_tree = TreeType(point_grid)
+
+        found_everything = falses(length(point_grid))
+        dual_depth_first_search(Extents.intersects, extent_tree, point_tree) do i, j
+            if Extents.intersects(extent_grid[i], GI.extent(point_grid[j]))
+                found_everything[j] = true
+            end
+        end
+        @test all(found_everything)
+    end
+
+    @testset "Imbalanced dual query - tree 2 deeper than tree 1" begin
+        xs = 0:0.01:10
+        ys = 0:0.01:10
+        extent_grid = [Extents.Extent(X=(x, x+0.1), Y=(y, y+0.1)) for x in xs, y in ys] |> vec
+        point_grid = [(x + 0.5, y + 0.5) for x in 0:9, y in 0:9] |> vec
+
+        extent_tree = TreeType(extent_grid)
+        point_tree = TreeType(point_grid)
+
+        found_everything = falses(length(point_grid))
+        dual_depth_first_search(Extents.intersects, point_tree, extent_tree) do i, j
+            if Extents.intersects(GI.extent(point_grid[i]), extent_grid[j])
                 found_everything[i] = true
             end
         end
