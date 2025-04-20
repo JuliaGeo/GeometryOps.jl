@@ -157,10 +157,10 @@ function eachedge(trait::GI.AbstractGeometryTrait, geom, ::Type{T}) where T
     return Iterators.flatten((eachedge(r, T) for r in flatten(GI.AbstractCurveTrait, geom)))
 end
 function eachedge(trait::GI.PointTrait, geom, ::Type{T}) where T
-    return ArgumentError("Can't get edges from points, $geom was a PointTrait.")
+    throw(ArgumentError("Can't get edges from points, $geom was a PointTrait."))
 end
 function eachedge(trait::GI.MultiPointTrait, geom, ::Type{T}) where T
-    return ArgumentError("Can't get edges from MultiPoint, $geom was a MultiPointTrait.")
+    throw(ArgumentError("Can't get edges from MultiPoint, $geom was a MultiPointTrait."))
 end
 
 """
