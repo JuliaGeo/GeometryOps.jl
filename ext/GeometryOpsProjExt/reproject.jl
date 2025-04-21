@@ -70,7 +70,12 @@ function reproject(geom, transform::Proj.Transformation;
             functors = TaskFunctors(WithXY.(proj_transforms))
             apply(functors, GI.PointTrait(), geom; kw1...)
         end
-        # Destroy the temporary threading contexts that we created
+        # First, destroy the temporary transforms we created,
+        # so that the contexts are not destroyed while the transforms still exist
+        # if the GC was slow.
+        foreach(finalize, proj_transforms)
+        # Destroy the temporary threading contexts that we created,
+        # now that it is safe to do so.
         foreach(Proj.proj_context_destroy, contexts)
         # Return the results
         return results
