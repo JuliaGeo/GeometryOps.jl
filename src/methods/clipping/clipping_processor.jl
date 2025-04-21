@@ -12,14 +12,15 @@ The abstract supertype for all intersection accelerator types.
 The idea is that these speed up the edge-edge intersection checking process,
 perhaps at the cost of memory.
 
-The naive case is [`NestedLoop`](@ref), which is just a nested loop, running in O(n*m) time.
+The naive case is `NestedLoop`, which is just a nested loop, running in O(n*m) time.
 
-Then we have [`SingleSTRtree`](@ref), which is a single STRtree, running in O(n*log(m)) time.
+Then we have `SingleSTRtree`, which is a single STRtree, running in O(n*log(m)) time.
 
-Then we have [`DoubleSTRtree`](@ref), which is am simultaneous double-tree traversal of two STRtrees.
+Then we have `DoubleSTRtree`, which is a simultaneous double-tree traversal of two STRtrees.
 
-Finally, we have [`AutoAccelerator`](@ref), which is an automatic accelerator that chooses the best
-accelerator based on the size of the input polygons.  This gets materialized in build_a_list for now.
+Finally, we have `AutoAccelerator`, which chooses the best
+accelerator based on the size of the input polygons.  This gets materialized in `build_a_list` for now.
+`AutoAccelerator` should also try to respect existing spatial indices, if they exist.
 """
 abstract type IntersectionAccelerator end
 struct NestedLoop <: IntersectionAccelerator end
