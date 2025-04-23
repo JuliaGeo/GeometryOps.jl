@@ -52,7 +52,12 @@ function _test_implementations_inner(modules::Union{Expr,Vector}, code::Expr)
     for mod in modules1
         expr = Expr(:block)
         for (var, genkey) in pairs(vars)
-            push!(expr.args, :($genkey = $GeoInterface.convert($mod, $var)))
+            push!(expr.args, :($genkey = if $var isa $(GeoInterface.Extents.Extent)
+                    $var
+                else
+                    $GeoInterface.convert($mod, $var)
+                end
+            ))
         end
         push!(expr.args, :(@test $code1))
         push!(tests.args, expr)
