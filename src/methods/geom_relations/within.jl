@@ -278,3 +278,19 @@ function _within(
     end
     return true
 end
+
+
+# Extent forwarding
+
+
+function _within(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _within(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _within(t1, e1::Extents.Extent, t2, g2)
+    return _within(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _within(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.within(e1, e2)
+end
+
+

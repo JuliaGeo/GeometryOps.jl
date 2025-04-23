@@ -294,3 +294,18 @@ function _touches(
     end
     return has_touched
 end
+
+# Extent forwarding
+
+
+function touches(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return touches(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function touches(t1, e1::Extents.Extent, t2, g2)
+    return touches(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function touches(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.touches(e1, e2)
+end
+
+
