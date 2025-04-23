@@ -1,5 +1,7 @@
 module TestHelpers
 
+import GeometryOps as GO
+
 using Test, GeoInterface, ArchGDAL, GeometryBasics, LibGEOS
 
 export @test_implementations, @testset_implementations
@@ -53,7 +55,11 @@ function _test_implementations_inner(modules::Union{Expr,Vector}, code::Expr)
         expr = Expr(:block)
         for (var, genkey) in pairs(vars)
             push!(expr.args, :($genkey = if $var isa $(GeoInterface.Extents.Extent)
-                    $var
+                    if $mod in ($GeoInterface, $LibGEOS)
+                        $var
+                    else
+                        $GeoInterface.convert($mod, $(GO.extent_to_polygon)($var))
+                    end
                 else
                     $GeoInterface.convert($mod, $var)
                 end
