@@ -240,14 +240,17 @@ end
 function extent_to_polygon(ext::Extents.Extent{(:X, :Y)})
     x1, x2 = ext.X
     y1, y2 = ext.Y
-    return GI.Polygon(StaticArrays.@SVector[(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)])
+    return GI.Polygon(StaticArrays.@SVector[StaticArrays.@SVector[(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)]])
 end
+
 
 function extent_to_polygon(ext::Extents.Extent{(:Y, :X)})
     x1, x2 = ext.X
     y1, y2 = ext.Y
-    return GI.Polygon(StaticArrays.@SVector[(y1, x1), (y2, x1), (y2, x2), (y1, x2), (y1, x1)])
+    return GI.Polygon(StaticArrays.@SVector[StaticArrays.@SVector[(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)]])
 end
+
+
 
 
 
