@@ -76,11 +76,18 @@ poly = GI.Polygon([lr1, lr2])
                 @testset "Multiple geometry columns in metadata" begin
                     # set up a dataframe with multiple geometry columns
                     countries_df2 = deepcopy(countries_df)
-                    countries_df2.centroid = centroid_df.geometry
-                    GO.DataAPI.metadata!(countries_df2, "GEOINTERFACE:geometrycolumns", (:geometry, :centroid); style = :note)
-                    transformed = GO.apply(x -> GO.transform(p -> p .+ 3, x), GI.AbstractGeometryTrait, countries_df2)
-                    @test DataAPI.metadata(transformed, "GEOINTERFACE:geometrycolumns") == (:geometry, :centroid)
-                    @test DataAPI.metadata(transformed, "GEOINTERFACE:crs") == GFT.EPSG(3031)
+                    countries_df2.centroid = GO.centroid.(countries_df2.geometry)
+                    GI.DataAPI.metadata!(countries_df2, "GEOINTERFACE:geometrycolumns", (:geometry, :centroid); style = :note)
+                    transformed = GO.transform(p -> p .+ 3, countries_df2)
+                    @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:geometrycolumns") == (:geometry, :centroid)
+                    @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:crs") == GFT.EPSG(4326)
+                    # Test that the transformation was actually applied to both geometry columns.
+                    @test all(map(zip(countries_df2.geometry, transformed.geometry)) do (o, n)
+                        GO.equals(GO.transform(p -> p .+ 3, o), n)
+                    end)
+                    @test all(map(zip(countries_df2.centroid, transformed.centroid)) do (o, n)
+                        any(isnan, o) || GO.equals(GO.transform(p -> p .+ 3, o), n)
+                    end)
                 end
             end
         end
