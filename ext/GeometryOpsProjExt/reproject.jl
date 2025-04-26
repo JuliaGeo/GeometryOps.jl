@@ -12,10 +12,19 @@ function reproject(geom;
 )
     if isnothing(transform)
         if isnothing(source_crs) 
-            source_crs = if GI.trait(geom) isa Nothing && geom isa AbstractArray
-                GeoInterface.crs(first(geom))
+            source_crs = if GI.trait(geom) isa Nothing
+                newcrs = nothing
+                if GI.DataAPI.metadatasupport(typeof(geom)).read
+                    newcrs = GI.crs(geom) # fall back to the GeoInterface table finding crs via DataAPI
+                end
+                if isnothing(newcrs)
+                    if geom isa AbstractArray
+                        newcrs = GI.crs(first(geom))
+                    end
+                end
+                newcrs
             else
-                GeoInterface.crs(geom)
+                GI.crs(geom)
             end
         end
 
