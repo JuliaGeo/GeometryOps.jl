@@ -187,6 +187,16 @@ function _apply_table(f::F, target, iterable::IterableType; geometrycolumn = not
     else
         throw(ArgumentError("geometrycolumn must be a Symbol or a tuple of Symbols, got a $(typeof(geometrycolumn))"))
     end
+    if !all(Base.Fix2(in, Tables.columnnames(iterable)), geometry_columns)
+        throw(ArgumentError(
+            """
+            `apply`: the `geometrycolumn` kwarg must be a subset of the column names of the table, 
+            got $(geometry_columns)
+            but the table has columns 
+            $(Tables.columnnames(iterable))
+            """
+            ))
+    end
     new_geometry_vecs = map(geometry_columns) do colname
         _apply(f, target, Tables.getcolumn(iterable, colname); threaded, kw...)
     end
