@@ -221,7 +221,9 @@ function _apply_table(f::F, target, iterable::IterableType; geometrycolumn = not
         if DataAPI.metadatasupport(IterableType).read
             for (key, (value, style)) in DataAPI.metadata(iterable; style = true)
                 # Default styles are not preserved on data transformation, so we must skip them!
-                preserve_default_metadata && style == :default && continue
+                if !preserve_default_metadata 
+                    style == :default && continue
+                end
                 # We assume that any other style is preserved.
                 DataAPI.metadata!(result, key, value; style)
             end
