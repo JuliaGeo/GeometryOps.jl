@@ -214,7 +214,7 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
         # so we don't need to set them.
         if !("GEOINTERFACE:geometrycolumns" in mdk)
             # If the geometry columns are not already set, we need to set them.
-            DataAPI.metadata!(result, "GEOINTERFACE:geometrycolumns", (geometry_column,); style = :default)
+            DataAPI.metadata!(result, "GEOINTERFACE:geometrycolumns", (geometry_column,); style = :note)
         end
         # Force reset CRS always, since you can pass `crs` to `apply`.
         new_crs = if haskey(kw, :crs)
@@ -223,7 +223,7 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
             GI.crs(iterable) # this will automatically check `GEOINTERFACE:crs` unless the type has a specialized implementation.
         end
 
-        DataAPI.metadata!(result, "GEOINTERFACE:crs", new_crs; style = :default)
+        DataAPI.metadata!(result, "GEOINTERFACE:crs", new_crs; style = :note)
     end
 
     return result
