@@ -30,18 +30,11 @@ Functions like [`flip`](@ref), [`reproject`](@ref), [`transform`](@ref), even [`
 using the `apply` framework.  Similarly, [`centroid`](@ref), [`area`](@ref) and [`distance`](@ref) have been implemented using the 
 [`applyreduce`](@ref) framework.
 
-## Docstrings
-
-### Functions
-
 ```@docs; collapse=true, canonical=false
 apply
-applyreduce
 ```
 
-=#
 
-#=
 ## What is `apply`?
 
 `apply` applies some function to every geometry matching the `Target`
@@ -69,7 +62,7 @@ Be careful making a union across "levels" of nesting, e.g.
 `Union{FeatureTrait,PolygonTrait}`, as `_apply` will just never reach
 `PolygonTrait` when all the polygons are wrapped in a `FeatureTrait` object.
 
-## Embedding:
+### Embedding
 
 `extent` and `crs` can be embedded in all geometries, features, and
 feature collections as part of `apply`. Geometries deeper than `Target`
@@ -78,7 +71,7 @@ will of course not have new `extent` or `crs` embedded.
 - `calc_extent` signals to recalculate an `Extent` and embed it.
 - `crs` will be embedded as-is
 
-## Threading
+### Threading
 
 Threading is used at the outermost level possible - over
 an array, feature collection, or e.g. a MultiPolygonTrait where
@@ -86,6 +79,22 @@ each `PolygonTrait` sub-geometry may be calculated on a different thread.
 
 Currently, threading defaults to `false` for all objects, but can be turned on
 by passing the keyword argument `threaded=true` to `apply`.
+
+Threading uses [StableTasks.jl](https://github.com/JuliaFolds2/StableTasks.jl) to provide
+type-stable tasks (base Julia `Threads.@spawn` is not type stable).  This is completely cost-free
+and saves some allocations when running multithreaded. 
+
+The current strategy is to launch 2 tasks for each CPU thread, to provide load balancing.  We
+assume Julia will manage these tasks efficiently, and we don't want to run too many tasks
+since each task does have some overhead when it's created.  This may need revisiting in the future,
+but it's a pretty easy heuristic to use.
+
+## Implementation
+
+Literate.jl source code is below.
+
+***
+
 =#
 
 """
@@ -136,11 +145,8 @@ end
     _apply(f, target, GI.trait(geom), geom; kw...)
 # There is no trait and this is an AbstractArray - so just iterate over it calling _apply on the contents
 @inline function _apply(f::F, target, ::Nothing, A::AbstractArray; threaded, kw...) where F
-    # For an Array there is nothing else to do but map `_apply` over all values
-    # _maptasks may run this level threaded if `threaded==true`,
-    # but deeper `_apply` called in the closure will not be threaded
-    apply_to_array(i) = _apply(f, target, A[i]; threaded=False(), kw...)
-    _maptasks(apply_to_array, eachindex(A), threaded)
+    applicator = ApplyToArray(f, target, A; kw...)
+    _maptasks(applicator, eachindex(A), threaded)
 end
 # There is no trait and this is not an AbstractArray.
 # Try to call _apply over it. We can't use threading
@@ -148,7 +154,7 @@ end
 @inline function _apply(f::F, target, ::Nothing, iterable::IterableType; threaded, kw...) where {F, IterableType}
     # Try the Tables.jl interface first
     if Tables.istable(iterable)
-    _apply_table(f, target, iterable; threaded, kw...)
+        _apply_table(f, target, iterable; threaded, kw...)
     else # this is probably some form of iterable...
         if threaded isa True
             # `collect` first so we can use threads
@@ -230,9 +236,8 @@ end
 ) where F
 
     # Run _apply on all `features` in the feature collection, possibly threaded
-    apply_to_feature(i) =
-        _apply(f, target, GI.getfeature(fc, i); crs, calc_extent, threaded=False())::GI.Feature
-    features = _maptasks(apply_to_feature, 1:GI.nfeature(fc), threaded)
+    applicator = ApplyToFeatures(f, target, fc; crs, calc_extent)
+    features = _maptasks(applicator, 1:GI.nfeature(fc), threaded)
     if calc_extent isa True
         # Calculate the extent of the features
         extent = mapreduce(GI.extent, Extents.union, features)
@@ -269,21 +274,16 @@ end
     # Map `_apply` over all sub geometries of `geom`
     # to create a new vector of geometries
     # TODO handle zero length
-    apply_to_geom(i) = _apply(f, target, GI.getgeom(geom, i); crs, calc_extent, threaded=False())
-    geoms = _maptasks(apply_to_geom, 1:GI.ngeom(geom), threaded)
+    applicator = ApplyToGeom(f, target, geom; crs, calc_extent)
+    geoms = _maptasks(applicator, 1:GI.ngeom(geom), threaded)
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
 @inline function _apply(f::F, target::TraitTarget{<:PointTrait}, trait::GI.PolygonTrait, geom;
     crs=GI.crs(geom), calc_extent=False(), threaded
 )::(GI.geointerface_geomtype(trait)) where F
     # We need to force rebuilding a LinearRing not a LineString
-    geoms = _maptasks(1:GI.ngeom(geom), threaded) do i
-        lr = GI.getgeom(geom, i)
-        points = map(GI.getgeom(lr)) do p
-            _apply(f, target, p; crs, calc_extent, threaded=False())
-        end
-        _linearring(_apply_inner(lr, points, crs, calc_extent))
-    end
+    applicator = ApplyPointsToPolygon(f, target, geom; crs, calc_extent)
+    geoms = _maptasks(applicator, 1:GI.ngeom(geom), threaded)
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
 function _apply_inner(geom, geoms, crs, calc_extent::True)
@@ -319,6 +319,18 @@ end
 
 using Base.Threads: nthreads, @threads, @spawn
 
+#=
+Here we used to use the compiler directive `@assume_effects :foldable` to force the compiler
+to lookup through the closure. This alone makes e.g. `flip` 2.5x faster!
+
+But it caused inference to fail, so we've removed it.  No effect on runtime so far as we can tell, 
+at least in Julia 1.11.
+=#
+@inline function _maptasks(f::F, taskrange, threaded::False)::Vector where F
+    map(f, taskrange)
+end
+
+
 # Threading utility, modified Mason Protters threading PSA
 # run `f` over ntasks, where f receives an AbstractArray/range
 # of linear indices
@@ -333,7 +345,7 @@ using Base.Threads: nthreads, @threads, @spawn
     # Map over the chunks
     tasks = map(task_chunks) do chunk
         # Spawn a task to process this chunk
-        @spawn begin
+        StableTasks.@spawn begin
             # Where we map `f` over the chunk indices
             map(f, chunk)
         end
@@ -342,13 +354,21 @@ using Base.Threads: nthreads, @threads, @spawn
     # Finally we join the results into a new vector
     return mapreduce(fetch, vcat, tasks)
 end
-#=
-Here we used to use the compiler directive `@assume_effects :foldable` to force the compiler
-to lookup through the closure. This alone makes e.g. `flip` 2.5x faster!
+@inline function _maptasks(a::Applicator{<:TaskFunctors}, taskrange, threaded::True)::Vector
+    ntasks = length(taskrange)
+    chunk_size = max(1, cld(ntasks, (length(a.f.functors))))
+    # partition the range into chunks
+    task_chunks = Iterators.partition(taskrange, chunk_size)
+    # Map over the chunks
+    tasks = map(task_chunks, view(a.f.functors, 1:length(task_chunks))) do chunk, ft
+        f = rebuild(a, ft)
+        # Spawn a task to process this chunk
+        StableTasks.@spawn begin
+            # Where we map `f` over the chunk indices
+            map(f, chunk)
+        end
+    end
 
-But it caused inference to fail, so we've removed it.  No effect on runtime so far as we can tell, 
-at least in Julia 1.11.
-=#
-@inline function _maptasks(f::F, taskrange, threaded::False)::Vector where F
-    map(f, taskrange)
+    # Finally we join the results into a new vector
+    return mapreduce(fetch, vcat, tasks)
 end

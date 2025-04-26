@@ -13,11 +13,7 @@ export forcexy, forcexyz
 
 Force the geometry to be 2D.  Works on any geometry, vector of geometries, feature collection, or table!
 """
-function forcexy(geom)
-    return apply(GI.PointTrait(), geom) do point
-        (GI.x(point), GI.y(point))
-    end
-end
+forcexy(geom) = apply(WithXY(), GI.PointTrait(), geom)
 
 """
     forcexyz(geom, z = 0)

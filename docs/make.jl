@@ -1,8 +1,11 @@
-using GeometryOps
+using GeometryOps, GeometryOpsCore
 using Documenter, DocumenterVitepress
 using Literate
 using Makie, CairoMakie
 CairoMakie.activate!(px_per_unit = 2, type = "svg", inline = true) # TODO: make this svg
+
+# import packages that activate extensions
+import FlexiJoins, LibGEOS, Proj, TGGeometry
 
 DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps; using GeometryOps.GeometryBasics); recursive=true)
 
@@ -41,8 +44,28 @@ function _add_meta_edit_link_generator(path)
     end
 end
 
+function _add_meta_current_module(current_module::String)
+    return function (input)
+        return """
+        ```@meta
+        CurrentModule = $(current_module)
+        ```
+        """ * input
+    end
+end
+
 # First letter of `str` is made uppercase and returned
 ucfirst(str::String) = string(uppercase(str[1]), str[2:end])
+
+function current_module_from_paths(source_path, relative_path)
+    if contains(source_path, "GeometryOpsCore")
+        return "GeometryOpsCore"
+    elseif endswith(source_path, "src")
+        return "GeometryOps"
+    elseif endswith(source_path, "ext")
+        return "Base.get_extension(GeometryOps, :$(splitpath(relative_path)[1]))"
+    end
+end
 
 function process_literate_recursive!(pages::Vector{Any}, path::String)
     global source_path
@@ -55,10 +78,11 @@ function process_literate_recursive!(pages::Vector{Any}, path::String)
         if endswith(path, ".jl")
             relative_path = relpath(path, source_path)
             output_dir = joinpath(output_path, splitdir(relative_path)[1])
+            
             Literate.markdown(
                 path, output_dir; 
                 flavor = Literate.CommonMarkFlavor(), 
-                postprocess = _add_meta_edit_link_generator(joinpath(relpath(source_path, output_dir), relative_path))
+                postprocess = _add_meta_edit_link_generator(joinpath(relpath(source_path, output_dir), relative_path)) ∘ _add_meta_current_module(current_module_from_paths(source_path, relative_path))
             )
             push!(pages, joinpath("source", splitext(relative_path)[1] * ".md"))
         end
@@ -67,6 +91,7 @@ end
 
 withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape to the terminal!
     global literate_pages
+    empty!(literate_pages)
     vec = []
     process_literate_recursive!(vec, source_path)
     literate_pages = vec[1][2] # this is a hack to get the pages in the correct order, without an initial "src" folder.  
@@ -90,16 +115,10 @@ download("https://hackmd.io/kpIqAR8YRJOZQDJjUKVAUQ/download", joinpath(@__DIR__,
 
 # Finally, make the docs!
 makedocs(;
-    modules=[GeometryOps, GeometryOps.GeometryOpsCore],
+    modules=[GeometryOps, GeometryOpsCore],
     authors="Anshul Singhvi <anshulsinghvi@gmail.com> and contributors",
     repo="https://github.com/JuliaGeo/GeometryOps.jl/blob/{commit}{path}#{line}",
     sitename="GeometryOps.jl",
-    # format=Documenter.HTML(;
-    #     prettyurls=get(ENV, "CI", "false") == "true",
-    #     canonical="https://JuliaGeo.github.io/GeometryOps.jl",
-    #     edit_link="main",
-    #     assets=String[],
-    # ),
     format = DocumenterVitepress.MarkdownVitepress(
         repo = "github.com/JuliaGeo/GeometryOps.jl",
     ),

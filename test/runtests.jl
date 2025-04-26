@@ -4,7 +4,19 @@ using SafeTestsets
 
 include("helpers.jl")
 
+@testset "Core" begin
+    @safetestset "Algorithm" begin include("core/algorithm.jl") end
+    @safetestset "Manifold" begin include("core/manifold.jl") end
+end
+
+@safetestset "Types" begin include("types.jl") end
 @safetestset "Primitives" begin include("primitives.jl") end
+
+# Utils
+@safetestset "Utils" begin include("utils/utils.jl") end
+@safetestset "LoopStateMachine" begin include("utils/LoopStateMachine.jl") end
+@safetestset "SpatialTreeInterface" begin include("utils/SpatialTreeInterface.jl") end
+
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
 @safetestset "Area" begin include("methods/area.jl") end
@@ -34,3 +46,4 @@ include("helpers.jl")
 # Extensions
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end
+@safetestset "TGGeometry" begin include("extensions/tggeometry.jl") end

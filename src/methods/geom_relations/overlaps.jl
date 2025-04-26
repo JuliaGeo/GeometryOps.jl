@@ -227,6 +227,18 @@ function _overlaps(
     return seg_val == line_over && (!a_fully_within && !b_fully_within)
 end
 
+# Extent forwarding
+
+function _overlaps(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _overlaps(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _overlaps(t1, e1::Extents.Extent, t2, g2)
+    return _overlaps(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _overlaps(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.overlaps(e1, e2)
+end
+
 #= TODO: Once overlaps is swapped over to use the geom relations workflow, can
 delete these helpers. =#
 

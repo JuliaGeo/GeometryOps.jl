@@ -5,8 +5,12 @@ module GeometryOps
 import GeometryOpsCore
 import GeometryOpsCore: 
                 TraitTarget,
-                Manifold, Planar, Spherical, Geodesic,
-                BoolsAsTypes, True, False, booltype,
+                Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
+                manifold, best_manifold,
+                Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
+                BoolsAsTypes, True, False, booltype, istrue,
+                TaskFunctors, 
+                WithXY, WithXYZ, WithXYM, WithXYZM,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
@@ -32,8 +36,14 @@ const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
 include("types.jl")
 include("primitives.jl")
-include("utils.jl")
 include("not_implemented_yet.jl")
+
+include("utils/utils.jl")
+include("utils/LoopStateMachine/LoopStateMachine.jl")
+include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
+
+using .LoopStateMachine, .SpatialTreeInterface
+
 
 include("methods/angles.jl")
 include("methods/area.jl")

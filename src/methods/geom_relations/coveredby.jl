@@ -271,3 +271,16 @@ function _coveredby(
     end
     return true
 end
+
+# Extent forwarding
+function _coveredby(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _coveredby(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _coveredby(t1, e1::Extents.Extent, t2, g2)
+    return _coveredby(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _coveredby(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.coveredby(e1, e2)
+end
+
+

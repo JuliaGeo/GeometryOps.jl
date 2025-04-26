@@ -18,6 +18,36 @@ and perform some operation on it.
 
 [`centroid`](@ref), [`area`](@ref) and [`distance`](@ref) have been implemented using the 
 [`applyreduce`](@ref) framework.
+
+```@docs
+applyreduce
+```
+
+
+### Threading
+
+Threading is used at the outermost level possible - over
+an array, feature collection, or e.g. a MultiPolygonTrait where
+each `PolygonTrait` sub-geometry may be calculated on a different thread.
+
+Currently, threading defaults to `false` for all objects, but can be turned on
+by passing the keyword argument `threaded=true` to `apply`.
+
+Threading uses [StableTasks.jl](https://github.com/JuliaFolds2/StableTasks.jl) to provide
+type-stable tasks (base Julia `Threads.@spawn` is not type stable).  This is completely cost-free
+and saves some allocations when running multithreaded. 
+
+The current strategy is to launch 2 tasks for each CPU thread, to provide load balancing.  We
+assume Julia will manage these tasks efficiently, and we don't want to run too many tasks
+since each task does have some overhead when it's created.  This may need revisiting in the future,
+but it's a pretty easy heuristic to use.
+
+## Implementation
+
+Literate.jl source code is below.
+
+***
+
 =#
 
 """
@@ -135,7 +165,7 @@ import Base.Threads: nthreads, @threads, @spawn
     # Map over the chunks
     tasks = map(task_chunks) do chunk
         # Spawn a task to process this chunk
-        @spawn begin
+        StableTasks.@spawn begin
             # Where we map `f` over the chunk indices
             mapreduce(f, op, chunk; init)
         end
@@ -144,6 +174,7 @@ import Base.Threads: nthreads, @threads, @spawn
     # Finally we join the results into a new vector
     return mapreduce(fetch, op, tasks; init)
 end
-Base.@assume_effects :foldable function _mapreducetasks(f::F, op, taskrange, threaded::False; init) where F
+
+function _mapreducetasks(f::F, op, taskrange, threaded::False; init) where F
     mapreduce(f, op, taskrange; init)
 end
