@@ -1,5 +1,7 @@
 module TestHelpers
 
+import GeometryOps as GO
+
 using Test, GeoInterface, ArchGDAL, GeometryBasics, LibGEOS
 
 export @test_implementations, @testset_implementations
@@ -31,6 +33,45 @@ const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS]
     function GeoInterface.convert(::Type{Vector{_ALL_GB_GEOM_TYPES}}, ::GeoInterface.GeometryCollectionTrait, geoms)
         return _ALL_GB_GEOM_TYPES[GeoInterface.convert(GeometryBasics, g) for g in GeoInterface.getgeom(geoms)]
     end
+
+    function GeoInterface.convert(
+        ::Type{GeometryBasics.LineString}, 
+        type::GeoInterface.LineStringTrait, 
+        geom::GeoInterface.Wrappers.LinearRing{false, false, StaticArraysCore.SVector{N, Tuple{Float64, Float64}}, Nothing, Nothing} where N
+        )
+        return GeoInterface.convert(LineString, GeoInterface.LineStringTrait(), collect(geom.geom))
+    end
+
+    function GeoInterface.convert(
+        ::Type{GeometryBasics.LineString}, 
+        type::GeoInterface.LineStringTrait, 
+        geom::GeoInterface.Wrappers.LinearRing{false, false, StaticArraysCore.SVector{N, Tuple{Float64, Float64}}, Nothing, Nothing} where N
+        )
+        return LineString(Point2{Float64}.(collect(geom.geom)))
+    end
+end
+
+
+@eval ArchGDAL begin
+    function GeoInterface.convert(
+        ::Type{T},
+        type::GeoInterface.PolygonTrait,
+        geom,
+    ) where {T<:IGeometry}
+        f = get(lookup_method, typeof(type), nothing)
+        isnothing(f) && error(
+            "Cannot convert an object of $(typeof(geom)) with the $(typeof(type)) trait (yet). Please report an issue.",
+        )
+        poly = createpolygon()
+        foreach(GeoInterface.getring(geom)) do ring
+            xs = GeoInterface.x.(GeoInterface.getpoint(ring)) |> collect
+            ys = GeoInterface.y.(GeoInterface.getpoint(ring)) |> collect
+            subgeom = unsafe_createlinearring(xs, ys)
+            result = GDAL.ogr_g_addgeometrydirectly(poly, subgeom)
+            @ogrerr result "Failed to add linearring."
+        end
+        return poly
+    end
 end
 
 
@@ -52,7 +93,16 @@ function _test_implementations_inner(modules::Union{Expr,Vector}, code::Expr)
     for mod in modules1
         expr = Expr(:block)
         for (var, genkey) in pairs(vars)
-            push!(expr.args, :($genkey = $GeoInterface.convert($mod, $var)))
+            push!(expr.args, :($genkey = if $var isa $(GeoInterface.Extents.Extent)
+                    if $mod in ($GeoInterface, $LibGEOS)
+                        $var
+                    else
+                        $GeoInterface.convert($mod, $(GO.extent_to_polygon)($var))
+                    end
+                else
+                    $GeoInterface.convert($mod, $var)
+                end
+            ))
         end
         push!(expr.args, :(@test $code1))
         push!(tests.args, expr)

@@ -65,6 +65,8 @@ function _point_polygon_process(
     point, polygon;
     in_allow, on_allow, out_allow, exact,
 )
+    skip, returnval = _maybe_skip_disjoint_extents(point, polygon; in_allow, on_allow, out_allow, on_require = false, out_require = false, in_require = false)
+    skip && return returnval
     # Check interaction of geom with polygon's exterior boundary
     ext_val = _point_filled_curve_orientation(point, GI.getexterior(polygon); exact)
     # If a point is outside, it isn't interacting with any holes

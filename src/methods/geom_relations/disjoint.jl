@@ -255,3 +255,17 @@ function _disjoint(
     end
     return true
 end
+
+
+# Extent forwarding
+function _disjoint(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _disjoint(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _disjoint(t1, e1::Extents.Extent, t2, g2)
+    return _disjoint(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _disjoint(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.disjoint(e1, e2)
+end
+
+

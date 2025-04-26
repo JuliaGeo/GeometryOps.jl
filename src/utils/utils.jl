@@ -254,3 +254,40 @@ function lazy_edge_extents(geom)
     end
     for edge in eachedge(geom, Float64))
 end
+
+
+# Extent to polygon
+
+"""
+    extent_to_polygon(ext::Extents.Extent)
+
+Convert an extent to a polygon.
+
+# Examples
+
+```jldoctest
+import GeometryOps as GO, Extents
+    
+ext = Extents.Extent(X=(1.0, 2.0), Y=(1.0, 2.0))
+GO.extent_to_polygon(ext)
+# output
+GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(1.0, 1.0), … (3) … , (1.0, 1.0)])])
+```
+"""
+function extent_to_polygon(ext::Extents.Extent{(:X, :Y)})
+    x1, x2 = ext.X
+    y1, y2 = ext.Y
+    return GI.Polygon(StaticArrays.@SVector[GI.LinearRing(StaticArrays.@SVector[(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)])])
+end
+
+
+function extent_to_polygon(ext::Extents.Extent{(:Y, :X)})
+    x1, x2 = ext.X
+    y1, y2 = ext.Y
+    return GI.Polygon(StaticArrays.@SVector[GI.LinearRing(StaticArrays.@SVector[(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)])])
+end
+
+
+
+
+
