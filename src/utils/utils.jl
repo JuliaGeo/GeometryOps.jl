@@ -1,10 +1,31 @@
 # # Utility functions
 
-_is3d(geom)::Bool = _is3d(GI.trait(geom), geom)
-_is3d(::GI.AbstractGeometryTrait, geom)::Bool = GI.is3d(geom)
-_is3d(::GI.FeatureTrait, feature)::Bool = _is3d(GI.geometry(feature))
-_is3d(::GI.FeatureCollectionTrait, fc)::Bool = _is3d(GI.getfeature(fc, 1))
-_is3d(::Nothing, geom)::Bool = _is3d(first(geom)) # Otherwise step into an itererable
+_is3d(geom; geometrycolumn = nothing)::Bool = _is3d(GI.trait(geom), geom; geometrycolumn)
+_is3d(::GI.AbstractGeometryTrait, geom; geometrycolumn = nothing)::Bool = GI.is3d(geom)
+_is3d(::GI.FeatureTrait, feature; geometrycolumn = nothing)::Bool = _is3d(GI.geometry(feature))
+_is3d(::GI.FeatureCollectionTrait, fc; geometrycolumn = nothing)::Bool = _is3d(GI.getfeature(fc, 1))
+function _is3d(::Nothing, geom; geometrycolumn = nothing)::Bool
+    if Tables.istable(geom)
+        geometrycolumn = isnothing(geometrycolumn) ? GI.geometrycolumns(geom) : geometrycolumn isa Symbol ? (geometrycolumn,) : geometrycolumn
+        # take the first geometry column
+        # TODO: this is a bad guess - this should really be on the vector level somehow.  
+        # Maybe a configurable applicator again....
+        first_geom = if Tables.rowaccess(geom)
+            first(Tables.getcolumn(first(Tables.rows(geom)), first(geometrycolumn)))
+        else # column access assumed
+            first(Tables.getcolumn(geom, first(geometrycolumn)))
+        end
+        return _is3d(first_geom)
+    else # assume iterable
+        first_geom = first(geom)
+        if GI.trait(first_geom) isa GI.AbstractTrait
+            return _is3d(first_geom)
+        else
+            return false # couldn't figure it out!
+        end
+    end
+
+end
 
 _npoint(x) = _npoint(trait(x), x)
 _npoint(::Nothing, xs::AbstractArray) = sum(_npoint, xs)
