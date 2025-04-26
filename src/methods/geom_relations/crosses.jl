@@ -26,6 +26,25 @@ crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_line(
 crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
 crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
 
+
+
+function crosses(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return crosses(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function crosses(t1, e1::Extents.Extent, t2, g2)
+    return crosses(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function crosses(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return false # two extents can never cross!
+    # TODO that's not quite true, if one extent is a line...
+end
+
+
+
+
+
+
+
 function multipoint_crosses_line(geom1, geom2)
     int_point = false
     ext_point = false
@@ -76,7 +95,7 @@ function multipoint_crosses_poly(mp, poly)
     for p in GI.getpoint(mp)
         if _point_polygon_process(
             p, poly;
-            in_allow = true, on_allow = true, out_allow = false, exact = _False()
+            in_allow = true, on_allow = true, out_allow = false, exact = False()
         )
             int_point = true
         else
@@ -128,3 +147,5 @@ function _point_on_segment(point, (start, stop); exclude_boundary::Symbol=:none)
     end
     return false
 end
+
+

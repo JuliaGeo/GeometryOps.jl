@@ -56,7 +56,7 @@ const WITHIN_POINT_ALLOWS = (in_allow = true, on_allow = false, out_allow = fals
 const WITHIN_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = false)
 const WITHIN_POLYGON_ALLOWS = (in_allow = true, on_allow = true, out_allow = false)
 const WITHIN_REQUIRES = (in_require = true, on_require = false, out_require = false)
-const WITHIN_EXACT = (exact = _False(),)
+const WITHIN_EXACT = (exact = False(),)
 
 """
     within(geom1, geom2)::Bool
@@ -278,3 +278,19 @@ function _within(
     end
     return true
 end
+
+
+# Extent forwarding
+
+
+function _within(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _within(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _within(t1, e1::Extents.Extent, t2, g2)
+    return _within(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _within(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.within(e1, e2)
+end
+
+

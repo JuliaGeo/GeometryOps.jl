@@ -18,13 +18,20 @@ jobs:
       fail-fast: false
       matrix:
         version:
-          - '1.9'
+          - '1.10'
           - '1'
-          # - 'nightly'
+          - 'nightly'
         os:
           - ubuntu-latest
         arch:
           - x64
+        include:
+          - os: windows-latest
+            version: '1'
+            arch: x64
+          - os: macos-latest
+            version: '1'
+            arch: arm64
     steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/cache@v1
@@ -33,6 +40,8 @@ jobs:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v1
+      - name: Dev GeometryOpsCore and add other packages
+        run: julia --project=. -e 'using Pkg; Pkg.develop(; path = joinpath(".", "GeometryOpsCore"));'
       - uses: julia-actions/julia-buildpkg@v1
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
@@ -58,13 +67,28 @@ jobs:
         with:
           version: '1'
       - name: Build and add versions
-        run: julia --project=docs -e 'using Pkg; Pkg.add([PackageSpec(path = "."), PackageSpec(name = "GeoMakie", rev = "master")])'
+        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(name = "GeoMakie"), PackageSpec(name = "GeometryOpsCore", path = "./GeometryOpsCore"), PackageSpec(name = "GeometryOps", path = ".")])'
       - uses: julia-actions/julia-docdeploy@v1
         with:
           install-package: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+  doctests:
+    name: Doctests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      statuses: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v2
+      - uses: julia-actions/cache@v1
+      - uses: julia-actions/setup-julia@v1
+        with:
+          version: '1'
+      - name: Build and add versions
+        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(name = "GeoMakie"), PackageSpec(name = "GeometryOpsCore", path = "./GeometryOpsCore"), PackageSpec(name = "GeometryOps", path = ".")])'
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest

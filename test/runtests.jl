@@ -4,7 +4,19 @@ using SafeTestsets
 
 include("helpers.jl")
 
+@testset "Core" begin
+    @safetestset "Algorithm" begin include("core/algorithm.jl") end
+    @safetestset "Manifold" begin include("core/manifold.jl") end
+end
+
+@safetestset "Types" begin include("types.jl") end
 @safetestset "Primitives" begin include("primitives.jl") end
+
+# Utils
+@safetestset "Utils" begin include("utils/utils.jl") end
+@safetestset "LoopStateMachine" begin include("utils/LoopStateMachine.jl") end
+@safetestset "SpatialTreeInterface" begin include("utils/SpatialTreeInterface.jl") end
+
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
 @safetestset "Area" begin include("methods/area.jl") end
@@ -27,9 +39,11 @@ include("helpers.jl")
 @safetestset "Simplify" begin include("transformations/simplify.jl") end
 @safetestset "Segmentize" begin include("transformations/segmentize.jl") end
 @safetestset "Transform" begin include("transformations/transform.jl") end
+@safetestset "Force Dimensions" begin include("transformations/forcedims.jl") end
 @safetestset "Geometry Correction" begin include("transformations/correction/geometry_correction.jl") end
 @safetestset "Closed Rings" begin include("transformations/correction/closed_ring.jl")  end
 @safetestset "Intersecting Polygons" begin include("transformations/correction/intersecting_polygons.jl") end
 # Extensions
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end
+@safetestset "TGGeometry" begin include("extensions/tggeometry.jl") end

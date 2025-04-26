@@ -59,7 +59,7 @@ GI.coordinates.(cut_polys)
 ```
 """
 cut(geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} =
-    _cut(T, GI.trait(geom), geom, GI.trait(line), line; exact = _True())
+    _cut(T, GI.trait(geom), geom, GI.trait(line), line; exact = True())
 
 #= Cut a given polygon by given line. Add polygon holes back into resulting pieces if there
 are any holes. =#

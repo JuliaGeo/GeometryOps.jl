@@ -146,7 +146,7 @@ end
 # Add an error hint for GeodesicSegments if Proj is not loaded!
 function _geodesic_segments_error_hinter(io, exc, argtypes, kwargs)
     if isnothing(Base.get_extension(GeometryOps, :GeometryOpsProjExt)) && exc.f == GeodesicSegments
-        print(io, "\n\nThe `GeodesicSegments` method requires the Proj.jl package to be explicitly loaded.\n")
+        print(io, "\n\nThe `Geodesic` method requires the Proj.jl package to be explicitly loaded.\n")
         print(io, "You can do this by simply typing ")
         printstyled(io, "using Proj"; color = :cyan, bold = true)
         println(io, " in your REPL, \nor otherwise loading Proj.jl via using or import.")
@@ -156,25 +156,39 @@ end
 # ## Implementation
 
 """
-    segmentize([method = LinearSegments()], geom; max_distance::Real, threaded)
+    segmentize([method = Planar()], geom; max_distance::Real, threaded)
 
 Segmentize a geometry by adding extra vertices to the geometry so that no segment is longer than a given distance.  
 This is useful for plotting geometries with a limited number of vertices, or for ensuring that a geometry is not too "coarse" for a given application.
 
 ## Arguments
-- `method::SegmentizeMethod = LinearSegments()`: The method to use for segmentizing the geometry.  At the moment, only [`LinearSegments`](@ref) and [`GeodesicSegments`](@ref) are available.
-- `geom`: The geometry to segmentize.  Must be a `LineString`, `LinearRing`, or greater in complexity.
-- `max_distance::Real`: The maximum distance, **in the input space**, between vertices in the geometry.  Only used if you don't explicitly pass a `method`.
+- `method::Manifold = Planar()`: The method to use for segmentizing the geometry.  At the moment, only [`Planar`](@ref) (assumes a flat plane) and [`Geodesic`](@ref) (assumes geometry on the ellipsoidal Earth and uses Vincenty's formulae) are available.
+- `geom`: The geometry to segmentize.  Must be a `LineString`, `LinearRing`, `Polygon`, `MultiPolygon`, or `GeometryCollection`, or some vector or table of those.
+- `max_distance::Real`: The maximum distance between vertices in the geometry.  **Beware: for `Planar`, this is in the units of the geometry, but for `Geodesic` and `Spherical` it's in units of the radius of the sphere.**
 
 Returns a geometry of similar type to the input geometry, but resampled.
 """
-function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = _False())
-    return segmentize(LinearSegments(; max_distance), geom; threaded = _booltype(threaded))
+function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
+    return segmentize(Planar(), geom; max_distance, threaded = booltype(threaded))
 end
-function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = _False())
-    @assert method.max_distance > 0 "`max_distance` should be positive and nonzero!  Found $(method.max_distance)."
-    segmentize_function = Base.Fix1(_segmentize, method)
-    return apply(segmentize_function, TraitTarget(GI.LinearRingTrait(), GI.LineStringTrait()), geom; threaded)
+
+# allow three-arg method as well, just in case
+segmentize(geom, max_distance::Real; threaded = False()) = segmentize(Planar(), geom, max_distance; threaded)
+segmentize(method::Manifold, geom, max_distance::Real; threaded = False()) = segmentize(Planar(), geom; max_distance, threaded)
+
+# generic implementation
+function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
+    if max_distance <= 0 
+        throw(ArgumentError("`max_distance` should be positive and nonzero!  Found $(max_distance)."))
+    end
+    _segmentize_function(geom) = _segmentize(method, geom, GI.trait(geom); max_distance)
+    return apply(_segmentize_function, TraitTarget(GI.LinearRingTrait(), GI.LineStringTrait()), geom; threaded)
+end
+
+function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = False())
+    @warn "`segmentize(method::$(typeof(method)), geom) is deprecated; use `segmentize($(method isa LinearSegments ? "Planar()" : "Geodesic()"), geom; max_distance, threaded) instead!"  maxlog=3
+    new_method = method isa LinearSegments ? Planar() : Geodesic()
+    segmentize(new_method, geom; max_distance = method.max_distance, threaded)
 end
 
 _segmentize(method, geom) = _segmentize(method, geom, GI.trait(geom))
@@ -182,7 +196,7 @@ _segmentize(method, geom) = _segmentize(method, geom, GI.trait(geom))
 This is a method which performs the common functionality for both linear and geodesic algorithms, 
 and calls out to the "kernel" function which we've defined per linesegment.
 =#
-function _segmentize(method::Union{LinearSegments, GeodesicSegments}, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+function _segmentize(method::Union{Planar, Spherical}, geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait}; max_distance)
     first_coord = GI.getpoint(geom, 1)
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
     new_coords = NTuple{2, Float64}[]
@@ -190,17 +204,17 @@ function _segmentize(method::Union{LinearSegments, GeodesicSegments}, geom, T::U
     push!(new_coords, (x1, y1))
     for coord in Iterators.drop(GI.getpoint(geom), 1)
         x2, y2 = GI.x(coord), GI.y(coord)
-        _fill_linear_kernel!(method, new_coords, x1, y1, x2, y2)
+        _fill_linear_kernel!(method, new_coords, x1, y1, x2, y2; max_distance)
         x1, y1 = x2, y2
     end 
     return rebuild(geom, new_coords)
 end
 
-function _fill_linear_kernel!(method::LinearSegments, new_coords::Vector, x1, y1, x2, y2)
+function _fill_linear_kernel!(::Planar, new_coords::Vector, x1, y1, x2, y2; max_distance)
     dx, dy = x2 - x1, y2 - y1
     distance = hypot(dx, dy) # this is a more stable way to compute the Euclidean distance
-    if distance > method.max_distance
-        n_segments = ceil(Int, distance / method.max_distance)
+    if distance > max_distance
+        n_segments = ceil(Int, distance / max_distance)
         for i in 1:(n_segments - 1)
             t = i / n_segments
             push!(new_coords, (x1 + t * dx, y1 + t * dy))

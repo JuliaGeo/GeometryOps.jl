@@ -34,44 +34,48 @@ poly = GI.Polygon([lr1, lr2])
         # file setup
         mktempdir() do dir
         cd(dir) do
-
+            try
             download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/v5.1.2/110m_cultural/ne_110m_admin_0_countries.shp", "countries.shp")
             download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/v5.1.2/110m_cultural/ne_110m_admin_0_countries.shx", "countries.shx")
             download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/v5.1.2/110m_cultural/ne_110m_admin_0_countries.dbf", "countries.dbf")
             download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/v5.1.2/110m_cultural/ne_110m_admin_0_countries.prj", "countries.prj")
-            countries_table = Shapefile.Table("countries.shp")
+            catch e
+                @warn "Failed to download shapefiles" exception=(e, catch_backtrace())
+            else
+                countries_table = Shapefile.Table("countries.shp")
 
-            @testset "Shapefile" begin
-                centroid_table = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_table);
-                centroid_geometry = centroid_table.geometry
-                # Test that the centroids are correct
-                @test all(centroid_geometry .== GO.centroid.(countries_table.geometry))
-                @testset "Columns are preserved" begin  
-                    for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_table))
-                        @test all(missing_or_equal.(GO.Tables.getcolumn(centroid_table, column), GO.Tables.getcolumn(countries_table, column)))
+                @testset "Shapefile" begin
+                    centroid_table = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_table);
+                    centroid_geometry = centroid_table.geometry
+                    # Test that the centroids are correct
+                    @test all(centroid_geometry .== GO.centroid.(countries_table.geometry))
+                    @testset "Columns are preserved" begin  
+                        for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_table))
+                            @test all(missing_or_equal.(GO.Tables.getcolumn(centroid_table, column), GO.Tables.getcolumn(countries_table, column)))
+                        end
                     end
                 end
-            end
 
-            @testset "DataFrames" begin
-                countries_df = DataFrames.DataFrame(countries_table)
-                GO.DataAPI.metadata!(countries_df, "note metadata", "note metadata value"; style = :note)
-                GO.DataAPI.metadata!(countries_df, "default metadata", "default metadata value"; style = :default)
-                centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df; crs = GFT.EPSG(3031));
-                @test centroid_df isa DataFrames.DataFrame
-                centroid_geometry = centroid_df.geometry
-                # Test that the centroids are correct
-                @test all(centroid_geometry .== GO.centroid.(countries_df.geometry))
-                @testset "Columns are preserved" begin  
-                    for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_df))
-                        @test all(missing_or_equal.(centroid_df[!, column], countries_df[!, column]))
+                @testset "DataFrames" begin
+                    countries_df = DataFrames.DataFrame(countries_table)
+                    GO.DataAPI.metadata!(countries_df, "note metadata", "note metadata value"; style = :note)
+                    GO.DataAPI.metadata!(countries_df, "default metadata", "default metadata value"; style = :default)
+                    centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df; crs = GFT.EPSG(3031));
+                    @test centroid_df isa DataFrames.DataFrame
+                    centroid_geometry = centroid_df.geometry
+                    # Test that the centroids are correct
+                    @test all(centroid_geometry .== GO.centroid.(countries_df.geometry))
+                    @testset "Columns are preserved" begin  
+                        for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_df))
+                            @test all(missing_or_equal.(centroid_df[!, column], countries_df[!, column]))
+                        end
                     end
-                end
-                @testset "Metadata preservation (or not)" begin
-                    @test DataAPI.metadata(centroid_df, "note metadata") == "note metadata value"
-                    @test !("default metadata" in DataAPI.metadatakeys(centroid_df))
-                    @test DataAPI.metadata(centroid_df, "GEOINTERFACE:geometrycolumns") == (:geometry,)
-                    @test DataAPI.metadata(centroid_df, "GEOINTERFACE:crs") == GFT.EPSG(3031)
+                    @testset "Metadata preservation (or not)" begin
+                        @test DataAPI.metadata(centroid_df, "note metadata") == "note metadata value"
+                        @test !("default metadata" in DataAPI.metadatakeys(centroid_df))
+                        @test DataAPI.metadata(centroid_df, "GEOINTERFACE:geometrycolumns") == (:geometry,)
+                        @test DataAPI.metadata(centroid_df, "GEOINTERFACE:crs") == GFT.EPSG(3031)
+                    end
                 end
             end
         end

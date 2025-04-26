@@ -2,16 +2,20 @@
 
 module GeometryOps
 
-include("../GeometryOpsCore/src/GeometryOpsCore.jl") # TODO: replace this with `using GeometryOpsCore`
-import .GeometryOpsCore
-for name in setdiff(names(GeometryOpsCore, all = true), (:eval, :var"#eval", :include, :var"#include"))
-    # Import all symbols from GeometryOpsCore
-    @eval import .GeometryOpsCore: $name
-    # Re-export all exported symbols
-    if Base.isexported(GeometryOpsCore, name)
-        @eval export $name
-    end
-end
+import GeometryOpsCore
+import GeometryOpsCore: 
+                TraitTarget,
+                Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
+                manifold, best_manifold,
+                Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
+                BoolsAsTypes, True, False, booltype, istrue,
+                TaskFunctors, 
+                WithXY, WithXYZ, WithXYM, WithXYZM,
+                apply, applyreduce, 
+                flatten, reconstruct, rebuild, unwrap, _linearring,
+                APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
+
+export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
 
 using GeoInterface
 using GeometryBasics
@@ -32,8 +36,14 @@ const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
 include("types.jl")
 include("primitives.jl")
-include("utils.jl")
 include("not_implemented_yet.jl")
+
+include("utils/utils.jl")
+include("utils/LoopStateMachine/LoopStateMachine.jl")
+include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
+
+using .LoopStateMachine, .SpatialTreeInterface
+
 
 include("methods/angles.jl")
 include("methods/area.jl")
@@ -70,6 +80,7 @@ include("transformations/segmentize.jl")
 include("transformations/simplify.jl")
 include("transformations/tuples.jl")
 include("transformations/transform.jl")
+include("transformations/forcedims.jl")
 include("transformations/correction/geometry_correction.jl")
 include("transformations/correction/closed_ring.jl")
 include("transformations/correction/intersecting_polygons.jl")

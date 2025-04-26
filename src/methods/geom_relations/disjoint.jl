@@ -51,7 +51,7 @@ The code for the specific implementations is in the geom_geom_processors file.
 const DISJOINT_ALLOWS = (in_allow = false, on_allow = false, out_allow = true)
 const DISJOINT_CURVE_ALLOWS = (over_allow = false, cross_allow = false, on_allow = false, out_allow = true)
 const DISJOINT_REQUIRES = (in_require = false, on_require = false, out_require = false)
-const DISJOINT_EXACT = (exact = _False(),)
+const DISJOINT_EXACT = (exact = False(),)
 
 """
     disjoint(geom1, geom2)::Bool
@@ -255,3 +255,17 @@ function _disjoint(
     end
     return true
 end
+
+
+# Extent forwarding
+function _disjoint(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _disjoint(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _disjoint(t1, e1::Extents.Extent, t2, g2)
+    return _disjoint(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _disjoint(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.disjoint(e1, e2)
+end
+
+
