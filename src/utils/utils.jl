@@ -250,7 +250,7 @@ import GeometryOps as GO, Extents
 ext = Extents.Extent(X=(1.0, 2.0), Y=(1.0, 2.0))
 GO.extent_to_polygon(ext)
 # output
-GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)])])
+GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(1.0, 1.0), … (3) … , (1.0, 1.0)])])
 ```
 """
 function extent_to_polygon(ext::Extents.Extent{(:X, :Y)})
