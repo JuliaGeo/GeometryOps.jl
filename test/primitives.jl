@@ -58,12 +58,12 @@ poly = GI.Polygon([lr1, lr2])
                 GO.DataAPI.metadata!(countries_df, "note metadata", "note metadata value"; style = :note)
                 GO.DataAPI.metadata!(countries_df, "default metadata", "default metadata value"; style = :default)
                 centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df; crs = GFT.EPSG(3031));
+                # Test that the Tables.jl materializer is used
                 @test centroid_df isa DataFrames.DataFrame
-                centroid_geometry = centroid_df.geometry
                 # Test that the centroids are correct
-                @test all(centroid_geometry .== GO.centroid.(countries_df.geometry))
+                @test all(centroid_df.geometry .== GO.centroid.(countries_df.geometry))
                 @testset "Columns are preserved" begin  
-                    for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_df))
+                    for column in filter(!=(:geometry), GO.Tables.columnnames(countries_df))
                         @test all(missing_or_equal.(centroid_df[!, column], countries_df[!, column]))
                     end
                 end
