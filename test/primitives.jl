@@ -92,6 +92,11 @@ poly = GI.Polygon([lr1, lr2])
             end
         end
         end
+        @testset "Wrong geometry column kwarg" begin
+            tab = Tables.dictcolumntable((; geometry = [(1, 2), (3, 4), (5, 6)], other = [1, 2, 3]))
+            @test_throws "got a Float64" GO.transform(identity, tab; geometrycolumn = 1000.0)
+            @test_throws "but the table has columns" GO.transform(identity, tab; geometrycolumn = :somethingelse)
+        end
     end
 end
 
