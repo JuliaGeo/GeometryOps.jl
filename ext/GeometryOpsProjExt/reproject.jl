@@ -47,6 +47,23 @@ function reproject(
     transform = Proj.Transformation(source_crs, target_crs; always_xy)
     return reproject(geom, transform; target_crs, kw...)
 end
+function reproject(
+    geom, target_crs::CRSType; kw...
+) where CRSType <: Union{GeoFormatTypes.GeoFormat, Proj.CRS, String}
+    source_crs = GI.crs(geom)
+    if isnothing(source_crs) 
+        if GI.DataAPI.metadatasupport(typeof(geom)).read
+            source_crs = GI.crs(geom)
+        end
+        if isnothing(source_crs)
+            if geom isa AbstractArray
+                source_crs = GI.crs(first(geom))
+            end
+        end
+    end
+    isnothing(source_crs) && throw(ArgumentError("geom has no crs attached. Pass a `source_crs` before the current target crs you have passed."))
+    return reproject(geom; source_crs, target_crs, kw...)
+end
 function reproject(geom, transform::Proj.Transformation; 
     context=C_NULL, 
     target_crs=nothing, 
