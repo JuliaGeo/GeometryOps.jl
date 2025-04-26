@@ -11,7 +11,7 @@ function _is3d(::Nothing, geom; geometrycolumn = nothing)::Bool
         # TODO: this is a bad guess - this should really be on the vector level somehow.  
         # Maybe a configurable applicator again....
         first_geom = if Tables.rowaccess(geom)
-            first(Tables.getcolumn(first(Tables.rows(geom)), first(geometrycolumn)))
+            Tables.getcolumn(first(Tables.rows(geom)), first(geometrycolumn))
         else # column access assumed
             first(Tables.getcolumn(geom, first(geometrycolumn)))
         end
