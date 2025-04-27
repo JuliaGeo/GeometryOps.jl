@@ -331,3 +331,15 @@ end
         @test GO.crosses(GI.LineString([(-2.0, 2.0), (-4.0, 2.0)]), $poly7) == false
     end
 end
+
+@testset "Single-argument methods" begin
+    @test GO.contains(1) == Base.Fix2(GO.contains, 1)
+    @test GO.coveredby(1) == Base.Fix2(GO.coveredby, 1)
+    @test GO.covers(1) == Base.Fix2(GO.covers, 1)
+    @test GO.crosses(1) == Base.Fix2(GO.crosses, 1)
+    @test GO.disjoint(1) == Base.Fix2(GO.disjoint, 1)
+    @test GO.intersects(1) == Base.Fix2(GO.intersects, 1)
+    @test GO.overlaps(1) == Base.Fix2(GO.overlaps, 1)
+    @test GO.touches(1) == Base.Fix2(GO.touches, 1)
+    @test GO.within(1) == Base.Fix2(GO.within, 1)
+end

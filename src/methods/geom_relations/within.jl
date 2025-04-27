@@ -82,6 +82,14 @@ true
 """
 within(g1, g2) = _within(trait(g1), g1, trait(g2), g2)
 
+"""
+    within(g1)
+
+Return a function that checks if a geometry is within `g1`.
+This is equivalent to `x -> within(g1, x)`.
+"""
+within(g1) = Base.Fix2(within, g1)
+
 # # Convert features to geometries
 _within(::GI.FeatureTrait, g1, ::Any, g2) = within(GI.geometry(g1), g2)
 _within(::Any, g1, t2::GI.FeatureTrait, g2) = within(g1, GI.geometry(g2))

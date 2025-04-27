@@ -77,6 +77,14 @@ overlaps(geom1, geom2)::Bool = overlaps(
 )
 
 """
+    overlaps(geom1)
+
+Return a function that checks if a geometry overlaps `geom1`.
+This is equivalent to `x -> overlaps(geom1, x)`.
+"""
+overlaps(geom1) = Base.Fix2(overlaps, geom1)
+
+"""
     overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2)::Bool
 
 For any non-specified pair, all have non-matching dimensions, return false.

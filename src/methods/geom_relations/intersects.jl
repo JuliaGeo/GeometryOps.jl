@@ -56,3 +56,11 @@ true
 ```
 """
 intersects(geom1, geom2) = !disjoint(geom1, geom2)
+
+"""
+    intersects(geom1)
+
+Return a function that checks if a geometry intersects `geom1`.
+This is equivalent to `x -> intersects(geom1, x)`.
+"""
+intersects(geom1) = Base.Fix2(intersects, geom1)

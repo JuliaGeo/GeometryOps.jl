@@ -26,7 +26,13 @@ crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_line(
 crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
 crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
 
+"""
+    crosses(g1)
 
+Return a function that checks if a geometry crosses `g1`.
+This is equivalent to `x -> crosses(g1, x)`.
+"""
+crosses(g1) = Base.Fix2(crosses, g1)
 
 function crosses(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
     return crosses(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))

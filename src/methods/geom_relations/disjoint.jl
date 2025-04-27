@@ -75,6 +75,14 @@ true
 """
 disjoint(g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)
 
+"""
+    disjoint(g1)
+
+Return a function that checks if a geometry is disjoint from `g1`.
+This is equivalent to `x -> disjoint(g1, x)`.
+"""
+disjoint(g1) = Base.Fix2(disjoint, g1)
+
 # # Convert features to geometries
 _disjoint(::FeatureTrait, g1, ::Any, g2) = disjoint(GI.geometry(g1), g2)
 _disjoint(::Any, g1, ::FeatureTrait, g2) = disjoint(g1, geometry(g2))
