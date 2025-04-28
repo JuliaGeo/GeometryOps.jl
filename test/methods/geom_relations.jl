@@ -333,13 +333,13 @@ end
 end
 
 @testset "Single-argument methods" begin
-    @test GO.contains(1) == Base.Fix2(GO.contains, 1)
-    @test GO.coveredby(1) == Base.Fix2(GO.coveredby, 1)
-    @test GO.covers(1) == Base.Fix2(GO.covers, 1)
-    @test GO.crosses(1) == Base.Fix2(GO.crosses, 1)
-    @test GO.disjoint(1) == Base.Fix2(GO.disjoint, 1)
-    @test GO.intersects(1) == Base.Fix2(GO.intersects, 1)
-    @test GO.overlaps(1) == Base.Fix2(GO.overlaps, 1)
-    @test GO.touches(1) == Base.Fix2(GO.touches, 1)
-    @test GO.within(1) == Base.Fix2(GO.within, 1)
+    @test GO.contains(p2)(p1) == GO.contains(p1, p2)
+    @test GO.coveredby(p2)(p1) == GO.coveredby(p1, p2)
+    @test GO.covers(p2)(p1) == GO.covers(p1, p2)
+    @test GO.crosses(p2)(p1) == GO.crosses(p1, p2)
+    @test GO.disjoint(p2)(p1) == GO.disjoint(p1, p2)
+    @test GO.intersects(p2)(p1) == GO.intersects(p1, p2)
+    @test GO.overlaps(p2)(p1) == GO.overlaps(p1, p2)
+    @test GO.touches(p2)(p1) == GO.touches(p1, p2)
+    @test GO.within(p2)(p1) == GO.within(p1, p2)
 end
