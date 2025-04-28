@@ -86,6 +86,7 @@ poly = GI.Polygon([lr1, lr2])
                         any(isnan, o) || GO.equals(GO.transform(p -> p .+ 3, o), n)
                     end)
                 end
+                end
             end
         end
         end
