@@ -175,20 +175,40 @@ with the same schema, but with the new geometry column.
 This new table may be of the same type as the old one iff `Tables.materializer` is defined for 
 that table.  If not, then a `NamedTuple` is returned.
 =#
-function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) where {F, IterableType}
+function _apply_table(f::F, target, iterable::IterableType; geometrycolumn = nothing, preserve_default_metadata = false, threaded, kw...) where {F, IterableType}
     _get_col_pair(colname) = colname => Tables.getcolumn(iterable, colname)
     # We extract the geometry column and run `apply` on it.
-    geometry_column = first(GI.geometrycolumns(iterable))
-    new_geometry = _apply(f, target, Tables.getcolumn(iterable, geometry_column); threaded, kw...)
+    geometry_columns = if isnothing(geometrycolumn)
+        GI.geometrycolumns(iterable)
+    elseif geometrycolumn isa NTuple{N, <: Symbol} where N
+        geometrycolumn
+    elseif geometrycolumn isa Symbol
+        (geometrycolumn,)
+    else
+        throw(ArgumentError("geometrycolumn must be a Symbol or a tuple of Symbols, got a $(typeof(geometrycolumn))"))
+    end
+    if !all(Base.Fix2(in, Tables.columnnames(iterable)), geometry_columns)
+        throw(ArgumentError(
+            """
+            `apply`: the `geometrycolumn` kwarg must be a subset of the column names of the table, 
+            got $(geometry_columns)
+            but the table has columns 
+            $(Tables.columnnames(iterable))
+            """
+            ))
+    end
+    new_geometry_vecs = map(geometry_columns) do colname
+        _apply(f, target, Tables.getcolumn(iterable, colname); threaded, kw...)
+    end
     # Then, we obtain the schema of the table,
     old_schema = Tables.schema(iterable)
     # filter the geometry column out,
-    new_names = filter(Base.Fix1(!==, geometry_column), old_schema.names)
+    new_names = filter(x -> !(x in geometry_columns), old_schema.names)
     # and try to rebuild the same table as the best type - either the original type of `iterable`,
     # or a named tuple which is the default fallback.
     result = Tables.materializer(iterable)(
         merge(
-            NamedTuple{(geometry_column,), Base.Tuple{typeof(new_geometry)}}((new_geometry,)),
+            NamedTuple{geometry_columns, Base.Tuple{typeof.(new_geometry_vecs)...}}(new_geometry_vecs),
             NamedTuple(Iterators.map(_get_col_pair, new_names))
         )
     )
@@ -201,7 +221,9 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
         if DataAPI.metadatasupport(IterableType).read
             for (key, (value, style)) in DataAPI.metadata(iterable; style = true)
                 # Default styles are not preserved on data transformation, so we must skip them!
-                style == :default && continue
+                if !preserve_default_metadata 
+                    style == :default && continue
+                end
                 # We assume that any other style is preserved.
                 DataAPI.metadata!(result, key, value; style)
             end
@@ -214,16 +236,11 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
         # so we don't need to set them.
         if !("GEOINTERFACE:geometrycolumns" in mdk)
             # If the geometry columns are not already set, we need to set them.
-            DataAPI.metadata!(result, "GEOINTERFACE:geometrycolumns", (geometry_column,); style = :default)
+            DataAPI.metadata!(result, "GEOINTERFACE:geometrycolumns", geometry_columns; style = :note)
         end
         # Force reset CRS always, since you can pass `crs` to `apply`.
-        new_crs = if haskey(kw, :crs)
-            kw[:crs]
-        else
-            GI.crs(iterable) # this will automatically check `GEOINTERFACE:crs` unless the type has a specialized implementation.
-        end
-
-        DataAPI.metadata!(result, "GEOINTERFACE:crs", new_crs; style = :default)
+        new_crs = get(kw, :crs, GI.crs(iterable)) 
+        DataAPI.metadata!(result, "GEOINTERFACE:crs", new_crs; style = :note)
     end
 
     return result
