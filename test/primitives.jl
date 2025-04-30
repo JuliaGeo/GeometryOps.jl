@@ -56,29 +56,44 @@ poly = GI.Polygon([lr1, lr2])
                     end
                 end
 
-                @testset "DataFrames" begin
-                    countries_df = DataFrames.DataFrame(countries_table)
-                    GO.DataAPI.metadata!(countries_df, "note metadata", "note metadata value"; style = :note)
-                    GO.DataAPI.metadata!(countries_df, "default metadata", "default metadata value"; style = :default)
-                    centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df; crs = GFT.EPSG(3031));
-                    @test centroid_df isa DataFrames.DataFrame
-                    centroid_geometry = centroid_df.geometry
-                    # Test that the centroids are correct
-                    @test all(centroid_geometry .== GO.centroid.(countries_df.geometry))
-                    @testset "Columns are preserved" begin  
-                        for column in Iterators.filter(!=(:geometry), GO.Tables.columnnames(countries_df))
-                            @test all(missing_or_equal.(centroid_df[!, column], countries_df[!, column]))
-                        end
+            @testset "DataFrames" begin
+                countries_df = DataFrames.DataFrame(countries_table)
+                GO.DataAPI.metadata!(countries_df, "note metadata", "note metadata value"; style = :note)
+                GO.DataAPI.metadata!(countries_df, "default metadata", "default metadata value"; style = :default)
+                centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df; crs = GFT.EPSG(3031));
+                # Test that the Tables.jl materializer is used
+                @test centroid_df isa DataFrames.DataFrame
+                # Test that the centroids are correct
+                @test all(centroid_df.geometry .== GO.centroid.(countries_df.geometry))
+                @testset "Columns are preserved" begin  
+                    for column in filter(!=(:geometry), GO.Tables.columnnames(countries_df))
+                        @test all(missing_or_equal.(centroid_df[!, column], countries_df[!, column]))
                     end
-                    @testset "Metadata preservation (or not)" begin
-                        @test DataAPI.metadata(centroid_df, "note metadata") == "note metadata value"
-                        @test !("default metadata" in DataAPI.metadatakeys(centroid_df))
-                        @test DataAPI.metadata(centroid_df, "GEOINTERFACE:geometrycolumns") == (:geometry,)
-                        @test DataAPI.metadata(centroid_df, "GEOINTERFACE:crs") == GFT.EPSG(3031)
-                    end
+                end
+                @testset "Multiple geometry columns in metadata" begin
+                    # set up a dataframe with multiple geometry columns
+                    countries_df2 = deepcopy(countries_df)
+                    countries_df2.centroid = GO.centroid.(countries_df2.geometry)
+                    GI.DataAPI.metadata!(countries_df2, "GEOINTERFACE:geometrycolumns", (:geometry, :centroid); style = :note)
+                    transformed = GO.transform(p -> p .+ 3, countries_df2)
+                    @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:geometrycolumns") == (:geometry, :centroid)
+                    @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:crs") == GI.crs(countries_df2)
+                    # Test that the transformation was actually applied to both geometry columns.
+                    @test all(map(zip(countries_df2.geometry, transformed.geometry)) do (o, n)
+                        GO.equals(GO.transform(p -> p .+ 3, o), n)
+                    end)
+                    @test all(map(zip(countries_df2.centroid, transformed.centroid)) do (o, n)
+                        any(isnan, o) || GO.equals(GO.transform(p -> p .+ 3, o), n)
+                    end)
+                end
                 end
             end
         end
+        end
+        @testset "Wrong geometry column kwarg" begin
+            tab = Tables.dictcolumntable((; geometry = [(1, 2), (3, 4), (5, 6)], other = [1, 2, 3]))
+            @test_throws "got a Float64" GO.transform(identity, tab; geometrycolumn = 1000.0)
+            @test_throws "but the table has columns" GO.transform(identity, tab; geometrycolumn = :somethingelse)
         end
     end
 end

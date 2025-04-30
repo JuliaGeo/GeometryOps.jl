@@ -12,15 +12,20 @@ function reproject(geom;
 )
     if isnothing(transform)
         if isnothing(source_crs) 
-            source_crs = if GI.trait(geom) isa Nothing && geom isa AbstractArray
-                GeoInterface.crs(first(geom))
-            else
-                GeoInterface.crs(geom)
+            # this will check DataAPI.jl metadata as well
+            source_crs = GI.crs(geom)
+            # if GeoInterface somehow missed the CRS, we assume it can only
+            # be an iterable, because GeoInterface queries DataAPI.jl metadata
+            # from tables and such things.
+            if isnothing(source_crs) && isnothing(GI.trait(geom))
+                if Base.isiterable(typeof(geom))
+                    source_crs = GI.crs(first(geom))
+                end
             end
         end
 
         # If its still nothing, error
-        isnothing(source_crs) && throw(ArgumentError("geom has no crs attached. Pass a `source_crs` keyword"))
+        isnothing(source_crs) && throw(ArgumentError("geom has no crs attached. Pass a `source_crs` keyword argument."))
 
         # Otherwise reproject
         reproject(geom, source_crs, target_crs; kw...)
@@ -34,9 +39,26 @@ function reproject(geom, source_crs, target_crs; always_xy=true, kw...)
 end
 function reproject(
     geom, source_crs::CRSType, target_crs::CRSType; always_xy=true, kw...
-) where CRSType <: Union{GeoFormatTypes.GeoFormat, Proj.CRS}
+) where CRSType <: Union{GeoFormatTypes.GeoFormat, Proj.CRS, String}
     transform = Proj.Transformation(source_crs, target_crs; always_xy)
     return reproject(geom, transform; target_crs, kw...)
+end
+function reproject(
+    geom, target_crs::CRSType; kw...
+) where CRSType <: Union{GeoFormatTypes.GeoFormat, Proj.CRS, String}
+    source_crs = GI.crs(geom)
+    if isnothing(source_crs) 
+        if GI.DataAPI.metadatasupport(typeof(geom)).read
+            source_crs = GI.crs(geom)
+        end
+        if isnothing(source_crs)
+            if geom isa AbstractArray
+                source_crs = GI.crs(first(geom))
+            end
+        end
+    end
+    isnothing(source_crs) && throw(ArgumentError("geom has no crs attached. Pass a `source_crs` before the current target crs you have passed."))
+    return reproject(geom; source_crs, target_crs, kw...)
 end
 function reproject(geom, transform::Proj.Transformation; 
     context=C_NULL, 
