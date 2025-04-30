@@ -77,7 +77,7 @@ poly = GI.Polygon([lr1, lr2])
                     GI.DataAPI.metadata!(countries_df2, "GEOINTERFACE:geometrycolumns", (:geometry, :centroid); style = :note)
                     transformed = GO.transform(p -> p .+ 3, countries_df2)
                     @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:geometrycolumns") == (:geometry, :centroid)
-                    @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:crs") == GI.crs(countries_table)
+                    @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:crs") == GI.crs(countries_df2)
                     # Test that the transformation was actually applied to both geometry columns.
                     @test all(map(zip(countries_df2.geometry, transformed.geometry)) do (o, n)
                         GO.equals(GO.transform(p -> p .+ 3, o), n)
