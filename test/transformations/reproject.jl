@@ -79,3 +79,16 @@ _xy(p) = GI.x(p), GI.y(p)
 
     GO.reproject(multipolygon4326; target_crs=ProjString("+proj=moll +type=crs"))
 end
+
+
+@testset "Reproject with only target crs" begin
+    multipolygon4326 = GO.tuples(multipolygon; crs = EPSG(4326))
+    multipolygon3857 = GO.reproject(multipolygon, EPSG(4326), EPSG(3857))
+    @test GI.crs(GO.reproject(multipolygon3857; target_crs=EPSG(4326))) == EPSG(4326)
+    @test GI.crs(GO.reproject(multipolygon3857, EPSG(4326))) == EPSG(4326)
+
+    v = [multipolygon3857]
+    @test GI.crs(only(GO.reproject(v, EPSG(4326)))) == EPSG(4326)
+end
+
+
