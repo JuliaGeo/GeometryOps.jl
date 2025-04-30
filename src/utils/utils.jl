@@ -1,6 +1,6 @@
 # # Utility functions
 
-_is3d(geom; geometrycolumn = nothing)::Bool = _is3d(GI.trait(geom), geom; geometrycolumn)
+_is3d(geom; kw...)::Bool = _is3d(GI.trait(geom), geom; kw...)
 _is3d(::GI.AbstractGeometryTrait, geom; geometrycolumn = nothing)::Bool = GI.is3d(geom)
 _is3d(::GI.FeatureTrait, feature; geometrycolumn = nothing)::Bool = _is3d(GI.geometry(feature))
 _is3d(::GI.FeatureCollectionTrait, fc; geometrycolumn = nothing)::Bool = _is3d(GI.getfeature(fc, 1))
