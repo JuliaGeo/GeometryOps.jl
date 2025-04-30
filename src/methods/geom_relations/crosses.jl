@@ -29,8 +29,8 @@ crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2,
 """
     crosses(g1)
 
-Return a function that checks if a geometry crosses `g1`.
-This is equivalent to `x -> crosses(g1, x)`.
+Return a function that checks if its input crosses `g1`.
+This is equivalent to `x -> crosses(x, g1)`.
 """
 crosses(g1) = Base.Fix2(crosses, g1)
 

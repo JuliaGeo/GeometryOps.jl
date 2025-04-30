@@ -66,7 +66,7 @@ covers(g1, g2)::Bool = GeometryOps.coveredby(g2, g1)
 """
     covers(g1)
 
-Return a function that checks if a geometry is covered by `g1`.
-This is equivalent to `x -> covers(g1, x)`.
+Return a function that checks if its input covers `g1`.
+This is equivalent to `x -> covers(x, g1)`.
 """
 covers(g1) = Base.Fix2(covers, g1)

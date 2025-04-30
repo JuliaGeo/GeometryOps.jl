@@ -85,8 +85,8 @@ within(g1, g2) = _within(trait(g1), g1, trait(g2), g2)
 """
     within(g1)
 
-Return a function that checks if a geometry is within `g1`.
-This is equivalent to `x -> within(g1, x)`.
+Return a function that checks if its input is within `g1`.
+This is equivalent to `x -> within(x, g1)`.
 """
 within(g1) = Base.Fix2(within, g1)
 

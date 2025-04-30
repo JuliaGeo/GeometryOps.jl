@@ -81,8 +81,8 @@ touches(g1, g2)::Bool = _touches(trait(g1), g1, trait(g2), g2)
 """
     touches(g1)
 
-Return a function that checks if a geometry touches `g1`.
-This is equivalent to `x -> touches(g1, x)`.
+Return a function that checks if its input touches `g1`.
+This is equivalent to `x -> touches(x, g1)`.
 """
 touches(g1) = Base.Fix2(touches, g1)
 

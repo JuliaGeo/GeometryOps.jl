@@ -78,8 +78,8 @@ disjoint(g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)
 """
     disjoint(g1)
 
-Return a function that checks if a geometry is disjoint from `g1`.
-This is equivalent to `x -> disjoint(g1, x)`.
+Return a function that checks if its input is disjoint from `g1`.
+This is equivalent to `x -> disjoint(x, g1)`.
 """
 disjoint(g1) = Base.Fix2(disjoint, g1)
 
