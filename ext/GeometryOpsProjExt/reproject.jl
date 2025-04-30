@@ -18,7 +18,7 @@ function reproject(geom;
             # be an iterable, because GeoInterface queries DataAPI.jl metadata
             # from tables and such things.
             if isnothing(source_crs) && isnothing(GI.trait(geom))
-                if Base.isiterable(geom)
+                if Base.isiterable(typeof(geom))
                     source_crs = GI.crs(first(geom))
                 end
             end
