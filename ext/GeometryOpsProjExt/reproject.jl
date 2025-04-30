@@ -12,24 +12,20 @@ function reproject(geom;
 )
     if isnothing(transform)
         if isnothing(source_crs) 
-            source_crs = if GI.trait(geom) isa Nothing
-                newcrs = nothing
-                if GI.DataAPI.metadatasupport(typeof(geom)).read
-                    newcrs = GI.crs(geom) # fall back to the GeoInterface table finding crs via DataAPI
+            # this will check DataAPI.jl metadata as well
+            source_crs = GI.crs(geom)
+            # if GeoInterface somehow missed the CRS, we assume it can only
+            # be an iterable, because GeoInterface queries DataAPI.jl metadata
+            # from tables and such things.
+            if isnothing(source_crs) && isnothing(GI.trait(geom))
+                if Base.isiterable(geom)
+                    source_crs = GI.crs(first(geom))
                 end
-                if isnothing(newcrs)
-                    if geom isa AbstractArray
-                        newcrs = GI.crs(first(geom))
-                    end
-                end
-                newcrs
-            else
-                GI.crs(geom)
             end
         end
 
         # If its still nothing, error
-        isnothing(source_crs) && throw(ArgumentError("geom has no crs attached. Pass a `source_crs` keyword"))
+        isnothing(source_crs) && throw(ArgumentError("geom has no crs attached. Pass a `source_crs` keyword argument."))
 
         # Otherwise reproject
         reproject(geom, source_crs, target_crs; kw...)
