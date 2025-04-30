@@ -58,21 +58,23 @@ GI.coordinates.(cut_polys)
  [[[5.0, 0.0], [10.0, 0.0], [10.0, 10.0], [5.0, 10.0], [5.0, 0.0]]]
 ```
 """
-cut(geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} =
-    _cut(T, GI.trait(geom), geom, GI.trait(line), line; exact = True())
+cut(geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} = cut(FosterHormannClipping(), geom, line, T)
+cut(m::Manifold, geom, line, ::Type{T} = Float64) where {T <: AbstractFloat} = cut(FosterHormannClipping(m), geom, line, T)
+cut(alg::FosterHormannClipping{M, A}, geom, line, ::Type{T} = Float64) where {T <: AbstractFloat, M, A} =
+    _cut(alg, T, GI.trait(geom), geom, GI.trait(line), line; exact = True())
 
 #= Cut a given polygon by given line. Add polygon holes back into resulting pieces if there
 are any holes. =#
-function _cut(::Type{T}, ::GI.PolygonTrait, poly, ::GI.LineTrait, line; exact) where T
+function _cut(alg::FosterHormannClipping{M, A}, ::Type{T}, ::GI.PolygonTrait, poly, ::GI.LineTrait, line; exact) where {T, M, A}
     ext_poly = GI.getexterior(poly)
-    poly_list, intr_list = _build_a_list(T, ext_poly, line; exact)
+    poly_list, intr_list = _build_a_list(alg, T, ext_poly, line; exact)
     n_intr_pts = length(intr_list)
     # If an impossible number of intersection points, return original polygon
     if n_intr_pts < 2 || isodd(n_intr_pts)
         return [tuples(poly)]
     end
     # Cut polygon by line
-    cut_coords = _cut(T, ext_poly, line, poly_list, intr_list, n_intr_pts; exact)
+    cut_coords = _cut(alg, T, ext_poly, line, poly_list, intr_list, n_intr_pts; exact)
     # Close coords and create polygons
     for c in cut_coords
         push!(c, c[1])
@@ -80,7 +82,7 @@ function _cut(::Type{T}, ::GI.PolygonTrait, poly, ::GI.LineTrait, line; exact) w
     cut_polys = [GI.Polygon([c]) for c in cut_coords]
     # Add original polygon holes back in
     remove_idx = falses(length(cut_polys))
-    _add_holes_to_polys!(T, cut_polys, GI.gethole(poly), remove_idx; exact)
+    _add_holes_to_polys!(alg, T, cut_polys, GI.gethole(poly), remove_idx; exact)
     return cut_polys
 end
 
@@ -97,10 +99,10 @@ end
 of cut geometry in Vector{Vector{Tuple}} format. 
 
 Note: degenerate cases where intersection points are vertices do not work right now. =#
-function _cut(::Type{T}, geom, line, geom_list, intr_list, n_intr_pts; exact) where T
+function _cut(alg::FosterHormannClipping{M, A}, ::Type{T}, geom, line, geom_list, intr_list, n_intr_pts; exact) where {T, M, A}
     # Sort and categorize the intersection points
     sort!(intr_list, by = x -> geom_list[x].fracs[2])
-    _flag_ent_exit!(GI.LineTrait(), line, geom_list; exact)
+    _flag_ent_exit!(alg, GI.LineTrait(), line, geom_list; exact)
     # Add first point to output list
     return_coords = [[geom_list[1].point]]
     cross_backs = [(T(Inf),T(Inf))]

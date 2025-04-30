@@ -493,7 +493,7 @@ of the curve if it didn't return 'on'.
 See paper for more information on cases denoted in comments.
 =#
 function _point_filled_curve_orientation(
-    point, curve;
+    ::Planar, point, curve;
     in::T = point_in, on::T = point_on, out::T = point_out, exact,
 ) where {T}
     x, y = GI.x(point), GI.y(point)
@@ -527,6 +527,10 @@ function _point_filled_curve_orientation(
     end
     return iseven(k) ? out : in
 end
+_point_filled_curve_orientation(
+    point, curve;
+    in::T = point_in, on::T = point_on, out::T = point_out, exact,
+) where {T} = _point_filled_curve_orientation(Planar(), point, curve; in, on, out, exact)
 
 #=
 Determines the types of interactions of a line with a filled-in curve. By
