@@ -67,9 +67,7 @@ Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
 function area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat
-    applyreduce(+, _AREA_TARGETS, geom; threaded, init=zero(T)) do g
-        _area(T, GI.trait(g), g)
-    end
+    applyreduce(WithTrait((trait, g) -> _area(T, trait, g)), +, _AREA_TARGETS, geom; threaded, init=zero(T))
 end
 
 """
