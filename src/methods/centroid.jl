@@ -109,9 +109,7 @@ Returns the centroid and area of a given geometry.
 function centroid_and_area(geom, ::Type{T}=Float64; threaded=false) where T
     target = TraitTarget{Union{GI.PolygonTrait,GI.LineStringTrait,GI.LinearRingTrait}}()
     init = (zero(T), zero(T)), zero(T)
-    applyreduce(_combine_centroid_and_area, target, geom; threaded, init) do g
-        _centroid_and_area(GI.trait(g), g, T)
-    end
+    applyreduce(ApplyWithTrait((trait, g) -> _centroid_and_area(trait, g, T)), _combine_centroid_and_area, target, geom; threaded, init)
 end
 
 function _centroid_and_area(
