@@ -62,87 +62,6 @@ end
 plot_trials(circle_area_suite)
 
 
-# ## Vancouver watershed benchmarks
-#=
-
-Vancouver Island has ~1,300 watersheds.  LibGEOS uses this exact data
-in their tests, so we'll use it in ours as well!
-
-We'll start by loading the data, and then we'll use it to benchmark various operations.
-
-=#
-
-# The CRS for this file is EPSG:3005, or as a PROJ string,
-# `"+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"`
-# TODO: this doesn't work with WellKnownGeometry.  Why?
-wkt_geoms = LG.readgeom.(eachline("/Users/anshul/Downloads/watersheds.wkt"), (LG.WKTReader(LG.get_global_context()),))
-vancouver_polygons = GI.getgeom.(wkt_geoms, 1); #.|> GO.tuples;
-
-import SortTileRecursiveTree as STR
-tree = STR.STRtree(vancouver_polygons)
-query_result = STR.query(tree, GI.extent(vancouver_polygons[1]))
-
-GO.intersects.((vancouver_polygons[1],), vancouver_polygons[query_result])
-
-go_vp = GO.tuples.(vancouver_polygons[1:2])
-@be GO.union($(go_vp[1]), $(go_vp[2]); target = $GI.PolygonTrait())
-@be LG.union($(vancouver_polygons[1]), $(vancouver_polygons[2]))
-
-all_intersected = falses(length(vancouver_polygons))
-accumulator = deepcopy(vancouver_polygons[1])
-all_intersected[1] = true
-i = 1
-# query_result = STR.query(tree, GI.extent(accumulator))
-# for idx in query_result
-#     println("Assessing $idx")
-#     if !all_intersected[idx] && LG.intersects(vancouver_polygons[idx], accumulator)
-#         println("Assimilating $idx")
-#         result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
-#         # @show length(result)
-#         accumulator = result#[1]
-#         all_intersected[idx] = true
-#     end
-# end
-display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
-display(poly(accumulator))
-@time while !(all(all_intersected)) && i < length(vancouver_polygons)
-    println("Began iteration $i")
-    query_result = STR.query(tree, GI.extent(accumulator))
-    for idx in query_result
-        if !(all_intersected[idx] || !(LG.intersects(vancouver_polygons[idx], accumulator)))
-            println("Assimilating $idx")
-            result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
-            # @show length(result)
-            accumulator = result#[1]
-            all_intersected[idx] = true
-        end
-    end
-    display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
-    println("Finished iteration $i")
-    # wait_for_key("Press any key to continue to the next iteration.")
-    i += 1
-end 
-
-fig = Figure()
-ax = Axis(fig[1, 1]; title = "STRTree query for polygons", aspect = DataAspect())
-for (i, result_index) in enumerate(query_result)
-    poly!(ax, vancouver_polygons[result_index]; color = Makie.wong_colors()[i], label = "$result_index")
-end
-Legend(fig[1, 2], ax)
-fig
-
-
-
-# TODO: 
-# - Vancouver watersheds:
-#    - Intersection on pre-buffered geometry
-#    - Polygon union by reduction (perhaps pre-sort by border order, so we don't end up with useless polygons)
-#    - Queries using STRTree.jl
-#    - Potentially using a prepared geometry based approach to multithreaded reductive joining
-#    - Implement multipolygon joining.  How?  Query intersection or touching for each individual geometry,
-#      and implement a 
-
-
 ## Segmentization
 
 
@@ -180,9 +99,9 @@ n_points_values = round.(Int, exp10.(LinRange(0.7, 6, 15)))
     circle_union_suite["LibGEOS"][n_points]     = @be LG.union($lg_circle_left, $lg_circle_right)
 end
 
-plot_trials(circle_difference_suite)
-plot_trials(circle_intersection_suite)
-plot_trials(circle_union_suite)
+plot_trials(circle_difference_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
+plot_trials(circle_intersection_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
+plot_trials(circle_union_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
 
 usa_poly_suite = BenchmarkGroup()
 usa_difference_suite = usa_poly_suite["difference"] = BenchmarkGroup(["title:USA difference", "subtitle:Tested on CONUS"])
