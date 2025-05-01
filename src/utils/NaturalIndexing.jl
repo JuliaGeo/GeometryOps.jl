@@ -7,7 +7,7 @@ using ..SpatialTreeInterface
 
 import ..GeometryOps as GO # TODO: only needed for NaturallyIndexedRing, remove when that is removed.
 
-export NaturalTree, NaturallyIndexedRing, prepare_naturally
+export NaturalIndex, NaturallyIndexedRing, prepare_naturally
 
 """
     NaturalLevel{E <: Extents.Extent}
@@ -124,7 +124,7 @@ end
 
 # This is like a pointer to a node in the tree.
 """
-    NaturalTreeNode{E <: Extents.Extent}
+    NaturalIndexNode{E <: Extents.Extent}
 
 A reference to a node in the natural tree.  Kind of like a tree cursor.
 
@@ -133,14 +133,14 @@ A reference to a node in the natural tree.  Kind of like a tree cursor.
 - `index` is the index of the node in the level
 - `extent` is the extent of the node
 """
-struct NaturalTreeNode{E <: Extents.Extent}
+struct NaturalIndexNode{E <: Extents.Extent}
     parent_index::NaturalIndex{E}
     level::Int
     index::Int
     extent::E
 end
 
-Extents.extent(node::NaturalTreeNode) = node.extent
+Extents.extent(node::NaturalIndexNode) = node.extent
 
 # What does SpatialTreeInterface require of trees?
 # - Parents completely cover their children
@@ -152,18 +152,18 @@ Extents.extent(node::NaturalTreeNode) = node.extent
 # - `isleaf(node)` returns a boolean indicating whether the node is a leaf
 # - `child_indices_extents(node)` returns an iterator over the indices and extents of the children of the node
 
-SpatialTreeInterface.isspatialtree(::Type{<: NaturalIndexing}) = true
-SpatialTreeInterface.isspatialtree(::Type{<: NaturalTreeNode}) = true
+SpatialTreeInterface.isspatialtree(::Type{<: NaturalIndex}) = true
+SpatialTreeInterface.isspatialtree(::Type{<: NaturalIndexNode}) = true
 
-function SpatialTreeInterface.nchild(node::NaturalTreeNode)
+function SpatialTreeInterface.nchild(node::NaturalIndexNode)
     start_idx = (node.index - 1) * node.parent_index.nodecapacity + 1
     stop_idx = min(start_idx + node.parent_index.nodecapacity - 1, length(node.parent_index.levels[node.level+1].extents))
     return stop_idx - start_idx + 1
 end
 
-function SpatialTreeInterface.getchild(node::NaturalTreeNode, i::Int)
+function SpatialTreeInterface.getchild(node::NaturalIndexNode, i::Int)
     child_index = (node.index - 1) * node.parent_index.nodecapacity + i
-    return NaturalTreeNode(
+    return NaturalIndexNode(
         node.parent_index, 
         node.level + 1, # increment level by 1
         child_index, # index of this particular child
@@ -172,13 +172,13 @@ function SpatialTreeInterface.getchild(node::NaturalTreeNode, i::Int)
 end
 
 # Get all children of a node
-function SpatialTreeInterface.getchild(node::NaturalTreeNode)
+function SpatialTreeInterface.getchild(node::NaturalIndexNode)
     return (SpatialTreeInterface.getchild(node, i) for i in 1:SpatialTreeInterface.nchild(node))
 end
 
-SpatialTreeInterface.isleaf(node::NaturalTreeNode) = node.level == length(node.parent_index.levels) - 1
+SpatialTreeInterface.isleaf(node::NaturalIndexNode) = node.level == length(node.parent_index.levels) - 1
 
-function SpatialTreeInterface.child_indices_extents(node::NaturalTreeNode)
+function SpatialTreeInterface.child_indices_extents(node::NaturalIndexNode)
     start_idx = (node.index - 1) * node.parent_index.nodecapacity + 1
     stop_idx = min(start_idx + node.parent_index.nodecapacity - 1, length(node.parent_index.levels[node.level+1].extents))
     return ((i, node.parent_index.levels[node.level+1].extents[i]) for i in start_idx:stop_idx)
@@ -190,8 +190,8 @@ SpatialTreeInterface.isleaf(node::NaturalIndex) = length(node.levels) == 1
 
 SpatialTreeInterface.nchild(node::NaturalIndex) = length(node.levels[1].extents)
 
-SpatialTreeInterface.getchild(node::NaturalIndex) = SpatialTreeInterface.getchild(NaturalTreeNode(node, 0, 1, node.extent))
-SpatialTreeInterface.getchild(node::NaturalIndex, i) = SpatialTreeInterface.getchild(NaturalTreeNode(node, 0, 1, node.extent), i)
+SpatialTreeInterface.getchild(node::NaturalIndex) = SpatialTreeInterface.getchild(NaturalIndexNode(node, 0, 1, node.extent))
+SpatialTreeInterface.getchild(node::NaturalIndex, i) = SpatialTreeInterface.getchild(NaturalIndexNode(node, 0, 1, node.extent), i)
 
 SpatialTreeInterface.child_indices_extents(node::NaturalIndex) = (i_ext for i_ext in enumerate(node.levels[1].extents))
 
