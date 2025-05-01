@@ -52,7 +52,7 @@ function fix(geometry; corrections = GeometryCorrection[ClosedRing(),], kwargs..
         isempty(available_corrections) && continue
         @debug "Correcting for $(Trait)"
         net_function = reduce(∘, corrections[available_corrections])
-        final_geometry = apply(net_function, Trait, final_geometry; kwargs...)
+        final_geometry = apply(ApplyWithTrait(net_function), TraitTarget(Trait), final_geometry; kwargs...)
     end
     return final_geometry
 end
