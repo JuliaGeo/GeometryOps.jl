@@ -78,6 +78,14 @@ true
 """
 touches(g1, g2)::Bool = _touches(trait(g1), g1, trait(g2), g2)
 
+"""
+    touches(g1)
+
+Return a function that checks if its input touches `g1`.
+This is equivalent to `x -> touches(x, g1)`.
+"""
+touches(g1) = Base.Fix2(touches, g1)
+
 # # Convert features to geometries
 _touches(::GI.FeatureTrait, g1, ::Any, g2) = touches(GI.geometry(g1), g2)
 _touches(::Any, g1, t2::GI.FeatureTrait, g2) = touches(g1, GI.geometry(g2))
