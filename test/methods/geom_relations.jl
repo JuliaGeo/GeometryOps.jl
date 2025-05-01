@@ -336,7 +336,7 @@ end
     @test GO.contains(p2)(p1) == GO.contains(p1, p2)
     @test GO.coveredby(p2)(p1) == GO.coveredby(p1, p2)
     @test GO.covers(p2)(p1) == GO.covers(p1, p2)
-    @test GO.crosses(p2)(p1) == GO.crosses(p1, p2)
+    @test GO.crosses(l2)(l1) == GO.crosses(l1, l2)
     @test GO.disjoint(p2)(p1) == GO.disjoint(p1, p2)
     @test GO.intersects(p2)(p1) == GO.intersects(p1, p2)
     @test GO.overlaps(p2)(p1) == GO.overlaps(p1, p2)
