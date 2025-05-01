@@ -144,14 +144,15 @@ function _centroid_and_area(
 end
 function _centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}) where T
     # Exterior ring's centroid and area
-    (xcentroid, ycentroid), area = _centroid_and_area(GI.LinearRingTrait(), GI.getexterior(geom), T)
+    exterior = GI.getexterior(geom)
+    (xcentroid, ycentroid), area = _centroid_and_area(GI.geomtrait(exterior), exterior, T)
     # Weight exterior centroid by area
     xcentroid *= area
     ycentroid *= area
     # Loop over any holes within the polygon
     for hole in GI.gethole(geom)
         # Hole polygon's centroid and area
-        (xinterior, yinterior), interior_area = _centroid_and_area(GI.LinearRingTrait(), hole, T)
+        (xinterior, yinterior), interior_area = _centroid_and_area(GI.geomtrait(hole), hole, T)
         # Accumulate the area component into `area`
         area -= interior_area
         # Weighted average of centroid components
