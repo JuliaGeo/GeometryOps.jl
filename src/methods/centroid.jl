@@ -62,7 +62,7 @@ function centroid(
     centroid_and_length(trait, geom, T)[1]
 end
 centroid(trait, geom, ::Type{T}; threaded=false) where T = 
-    centroid_and_area(geom, T; threaded)[1]
+    centroid_and_area(trait, geom, T; threaded)[1]
 
 """
     centroid_and_length(geom, [T=Float64])::(::Tuple{T, T}, ::Real)
@@ -107,12 +107,17 @@ end
 Returns the centroid and area of a given geometry.
 """
 function centroid_and_area(geom, ::Type{T}=Float64; threaded=false) where T
-    target = TraitTarget{Union{GI.PolygonTrait,GI.LineStringTrait,GI.LinearRingTrait}}()
-    init = (zero(T), zero(T)), zero(T)
-    applyreduce(ApplyWithTrait((trait, g) -> _centroid_and_area(trait, g, T)), _combine_centroid_and_area, target, geom; threaded, init)
+    trait = GI.trait(geom)
+    centroid_and_area(trait, geom, T; threaded)
 end
 
-function _centroid_and_area(
+function centroid_and_area(trait, geom, ::Type{T}; threaded=false) where T
+    target = TraitTarget{Union{GI.PolygonTrait,GI.LineStringTrait,GI.LinearRingTrait}}()
+    init = (zero(T), zero(T)), zero(T)
+    applyreduce(ApplyWithTrait((trait, g) -> centroid_and_area(trait, g, T)), _combine_centroid_and_area, target, geom; threaded, init)
+end
+
+function centroid_and_area(
     ::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T}
 ) where T
     # Check that the geometry is closed
@@ -142,17 +147,17 @@ function _centroid_and_area(
     ycentroid /= 6area
     return (xcentroid, ycentroid), abs(area)
 end
-function _centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}) where T
+function centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}) where T
     # Exterior ring's centroid and area
     exterior = GI.getexterior(geom)
-    (xcentroid, ycentroid), area = _centroid_and_area(GI.geomtrait(exterior), exterior, T)
+    (xcentroid, ycentroid), area = centroid_and_area(GI.geomtrait(exterior), exterior, T)
     # Weight exterior centroid by area
     xcentroid *= area
     ycentroid *= area
     # Loop over any holes within the polygon
     for hole in GI.gethole(geom)
         # Hole polygon's centroid and area
-        (xinterior, yinterior), interior_area = _centroid_and_area(GI.geomtrait(hole), hole, T)
+        (xinterior, yinterior), interior_area = centroid_and_area(GI.geomtrait(hole), hole, T)
         # Accumulate the area component into `area`
         area -= interior_area
         # Weighted average of centroid components
