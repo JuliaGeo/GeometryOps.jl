@@ -54,8 +54,8 @@ const WithXYZM = ApplyToPoint{true,true}
 
 (t::WithXY)(p) = t.f(GI.x(p), GI.y(p))
 (t::WithXYZ)(p) = t.f(GI.x(p), GI.y(p), GI.z(p))
-(t::WithXYZM)(p) = t.f(GI.x(p), GI.y(p), GI.m(p))
-(t::WithXYM)(p) = t.f(GI.x(p), GI.y(p), GI.z(p), GI.m(p))
+(t::WithXYZM)(p) = t.f(GI.x(p), GI.y(p), GI.z(p), GI.m(p))
+(t::WithXYM)(p) = t.f(GI.x(p), GI.y(p), GI.m(p))
 
 """
     ApplyWithTrait(f)
