@@ -1,6 +1,7 @@
 import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG
+using Extents
 using ..TestHelpers
 
 # Tests of DE-9IM Methods
@@ -65,6 +66,12 @@ mp1 = LG.MultiPolygon([p1])
 mp2 = LG.MultiPolygon([p6, p7])
 gc1 = LG.GeometryCollection([pt1, l5, p6])
 
+ext1 = Extents.Extent(X=(0.0, 1.0), Y=(0.0, 1.0))
+ext2 = Extents.Extent(X=(0.5, 1.5), Y=(0.5, 1.5))
+ext3 = Extents.Extent(X=(2.0, 3.0), Y=(2.0, 3.0))
+ext4 = Extents.Extent(X=(1.0, 2.0), Y=(1.0, 2.0))  # Touches ext1
+
+
 test_pairs = [
     # Points and geometries
     (pt1, pt1, "pt1", "pt1", "Same point"),
@@ -86,7 +93,7 @@ test_pairs = [
     (pt6, p1, "pt6", "p1", "Point on hole edge"),
     (pt7, p1, "pt7", "p1", "Point inside of polygon hole"),
     (p1, pt5, "p1", "pt5", "Point inside of polygon (order swapped)"),
-    # # Lines and geometries
+    # Lines and geometries
     (l1, l1, "l1", "l1", "Same line"),
     (l2, l1, "l2", "l1", "L2 is one segment of l1"),
     (l3, l1, "l3", "l1", "L3 shares one segment with l1 and has one segment outside"),
@@ -155,7 +162,17 @@ test_pairs = [
     (mpt1, mpt3, "mpt1", "mpt3", "No shared points"),
     (ml1, ml2, "ml1", "ml2", "Lines in ml1 cross and touch ml2"),
     (mp1, mp2, "mp1", "mp2", "Polygons in mp1 are inside hole and overlap"),
-    # (gc1, ml1, "gc1", "ml1", "Make sure collection works with multi-geom"),
+    # Extent tests
+    (ext1, ext1, "ext1", "ext1", "Same extent"),
+    (ext1, ext2, "ext1", "ext2", "Overlapping extents"),
+    (ext1, ext3, "ext1", "ext3", "Disjoint extents"),
+    (ext1, ext4, "ext1", "ext4", "Touching extents"),
+    (ext1, pt1, "ext1", "pt1", "Point inside extent"),
+    (ext1, pt2, "ext1", "pt2", "Point outside extent"),
+    (ext1, l1, "ext1", "l1", "Line inside extent"),
+    (ext1, l2, "ext1", "l2", "Line crossing extent"),
+    (ext1, p1, "ext1", "p1", "Polygon same as extent"),
+    (ext1, p2, "ext1", "p2", "Polygon overlapping extent"),
 ]
 
 function test_geom_relation(GO_f, LG_f, f_name; swap_points=false)
@@ -170,13 +187,26 @@ function test_geom_relation(GO_f, LG_f, f_name; swap_points=false)
     end
 end
 
-@testset "Contains" begin test_geom_relation(GO.contains, LG.contains, "contains"; swap_points = true) end
-@testset "Covered By" begin test_geom_relation(GO.coveredby, LG.coveredby, "coveredby") end
-@testset "Covers" begin test_geom_relation(GO.covers, LG.covers, "covers"; swap_points = true) end
-@testset "Disjoint" begin test_geom_relation(GO.disjoint, LG.disjoint, "disjoint")end
-@testset "Intersect" begin test_geom_relation(GO.intersects, LG.intersects, "intersects") end
-@testset "Touches" begin test_geom_relation(GO.touches, LG.touches, "touches") end
-@testset "Within" begin test_geom_relation(GO.within, LG.within, "within") end
+
+function test_geom_relation(GO_f, alg::GO.Algorithm, f_name; swap_points=false)
+    for (g1, g2, sg1, sg2, sdesc) in test_pairs
+        @testset "$sg1 $sg2 $sdesc" begin
+            if swap_points
+                @test_implementations (GO_f($g2, $g1) == GO_f(alg, $g2, $g1))
+            else
+                @test_implementations GO_f($g1, $g2) == GO_f(alg, $g1, $g2)
+            end
+        end
+    end
+end
+
+@testset "Contains" begin test_geom_relation(GO.contains, GO.GEOS(), "contains"; swap_points = true) end
+@testset "Covered By" begin test_geom_relation(GO.coveredby, GO.GEOS(), "coveredby") end
+@testset "Covers" begin test_geom_relation(GO.covers, GO.GEOS(), "covers"; swap_points = true) end
+@testset "Disjoint" begin test_geom_relation(GO.disjoint, GO.GEOS(), "disjoint")end
+@testset "Intersect" begin test_geom_relation(GO.intersects, GO.GEOS(), "intersects") end
+@testset "Touches" begin test_geom_relation(GO.touches, GO.GEOS(), "touches") end
+@testset "Within" begin test_geom_relation(GO.within, GO.GEOS(), "within") end
 
 
 @testset "Overlaps" begin
@@ -300,4 +330,16 @@ end
         @test GO.crosses(GI.MultiPoint([(1.0, 0.0), (12.0, 12.0)]), $line8) == false
         @test GO.crosses(GI.LineString([(-2.0, 2.0), (-4.0, 2.0)]), $poly7) == false
     end
+end
+
+@testset "Single-argument methods" begin
+    @test GO.contains(p2)(p1) == GO.contains(p1, p2)
+    @test GO.coveredby(p2)(p1) == GO.coveredby(p1, p2)
+    @test GO.covers(p2)(p1) == GO.covers(p1, p2)
+    @test GO.crosses(l2)(l1) == GO.crosses(l1, l2)
+    @test GO.disjoint(p2)(p1) == GO.disjoint(p1, p2)
+    @test GO.intersects(p2)(p1) == GO.intersects(p1, p2)
+    @test GO.overlaps(p2)(p1) == GO.overlaps(p1, p2)
+    @test GO.touches(p2)(p1) == GO.touches(p1, p2)
+    @test GO.within(p2)(p1) == GO.within(p1, p2)
 end

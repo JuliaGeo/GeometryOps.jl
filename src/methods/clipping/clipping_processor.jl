@@ -1,6 +1,58 @@
 # # Polygon clipping helpers
 # This file contains the shared helper functions for the polygon clipping functionalities.
 
+# This file specifically defines helpers for the Foster-Hormann clipping algorithm.
+
+
+"""
+    abstract type IntersectionAccelerator
+
+The abstract supertype for all intersection accelerator types.
+
+The idea is that these speed up the edge-edge intersection checking process,
+perhaps at the cost of memory.
+
+The naive case is `NestedLoop`, which is just a nested loop, running in O(n*m) time.
+
+Then we have `SingleSTRtree`, which is a single STRtree, running in O(n*log(m)) time.
+
+Then we have `DoubleSTRtree`, which is a simultaneous double-tree traversal of two STRtrees.
+
+Finally, we have `AutoAccelerator`, which chooses the best
+accelerator based on the size of the input polygons.  This gets materialized in `build_a_list` for now.
+`AutoAccelerator` should also try to respect existing spatial indices, if they exist.
+"""
+abstract type IntersectionAccelerator end
+struct NestedLoop <: IntersectionAccelerator end
+struct SingleSTRtree <: IntersectionAccelerator end
+struct DoubleSTRtree <: IntersectionAccelerator end
+struct SingleNaturalTree <: IntersectionAccelerator end
+struct DoubleNaturalTree <: IntersectionAccelerator end
+struct ThinnedDoubleNaturalTree <: IntersectionAccelerator end
+struct AutoAccelerator <: IntersectionAccelerator end
+
+"""
+    FosterHormannClipping{M <: Manifold, A <: Union{Nothing, Accelerator}} <: GeometryOpsCore.Algorithm{M} 
+
+Applies the Foster-Hormann clipping algorithm.
+
+# Arguments
+- `manifold::M`: The manifold on which the algorithm operates.
+- `accelerator::A`: The accelerator to use for the algorithm.  Can be `nothing` for automatic choice, or a custom accelerator.
+"""
+struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: GeometryOpsCore.Algorithm{M} 
+    manifold::M
+    accelerator::A
+    # TODO: add exact flag
+    # TODO: should exact flag be in the type domain?
+end
+FosterHormannClipping(; manifold::Manifold = Planar(), accelerator = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? AutoAccelerator() : accelerator)
+FosterHormannClipping(manifold::Manifold, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? AutoAccelerator() : accelerator)
+FosterHormannClipping(accelerator::Union{Nothing, IntersectionAccelerator}) = FosterHormannClipping(Planar(), isnothing(accelerator) ? AutoAccelerator() : accelerator)
+# special case for spherical / geodesic manifolds
+# since they can't use STRtrees (because those don't work on the sphere)
+FosterHormannClipping(manifold::Union{Spherical, Geodesic}, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : (accelerator isa AutoAccelerator ? NestedLoop() : accelerator))
+
 # This enum defines which side of an edge a point is on
 @enum PointEdgeSide left=1 right=2 unknown=3
 
@@ -37,6 +89,45 @@ PolyNode(node::PolyNode{T};
 
 # Checks equality of two PolyNodes by backing point value, fractional value, and intersection status
 equals(pn1::PolyNode, pn2::PolyNode) = pn1.point == pn2.point && pn1.inter == pn2.inter && pn1.fracs == pn2.fracs
+Base.:(==)(pn1::PolyNode, pn2::PolyNode) = equals(pn1, pn2)
+
+# Finally, we define a nice error type for when the clipping tracing algorithm hits every point in a polygon.
+# This stores the polygons, the a_list, and the b_list, and the a_idx_list.
+# allowing the user to understand what happened and why.
+"""
+    TracingError{T1, T2} <: Exception
+
+An error that is thrown when the clipping tracing algorithm fails somehow.
+This is a bug in the algorithm, and should be reported.
+
+The polygons are contained in the exception object, accessible by try-catch or as `err` in the REPL.
+"""
+struct TracingError{T1, T2, T} <: Exception
+    message::String
+    poly_a::T1
+    poly_b::T2
+    a_list::Vector{PolyNode{T}}
+    b_list::Vector{PolyNode{T}}
+    a_idx_list::Vector{Int}
+end
+
+function Base.showerror(io::IO, e::TracingError{T1, T2}) where {T1, T2}
+    print(io, "TracingError: ")
+    println(io, e.message)
+    println(io, "Please open an issue with the polygons contained in this error object.")
+    println(io)
+    if max(GI.npoint(e.poly_a), GI.npoint(e.poly_b)) < 10
+        println(io, "Polygon A:")
+        println(io, GI.coordinates(e.poly_a))
+        println(io)
+        println(io, "Polygon B:")
+        println(io, GI.coordinates(e.poly_b))
+    else
+        println(io, "The polygons are contained in the exception object, accessible by try-catch or as `err` in the REPL.")
+    end
+end
+
+
 
 #=
     _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f, delay_bounce_f; exact) ->
@@ -48,20 +139,20 @@ returns are the fully updated vectors of PolyNodes that represent the rings 'pol
 'poly_b', respectively. This function also returns 'a_idx_list', which at its "ith" index
 stores the index in 'a_list' at which the "ith" intersection point lies.
 =#
-function _build_ab_list(::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_bounce_f::F2; exact) where {T, F1, F2}
+function _build_ab_list(alg::FosterHormannClipping, ::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_bounce_f::F2; exact) where {T, F1, F2}
     # Make a list for nodes of each polygon
-    a_list, a_idx_list, n_b_intrs = _build_a_list(T, poly_a, poly_b; exact)
-    b_list = _build_b_list(T, a_idx_list, a_list, n_b_intrs, poly_b)
+    a_list, a_idx_list, n_b_intrs = _build_a_list(alg, T, poly_a, poly_b; exact)
+    b_list = _build_b_list(alg, T, a_idx_list, a_list, n_b_intrs, poly_b)
 
     # Flag crossings
-    _classify_crossing!(T, a_list, b_list; exact)
+    _classify_crossing!(alg, T, a_list, b_list; exact)
 
     # Flag the entry and exits
-    _flag_ent_exit!(T, GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, Base.Fix2(delay_bounce_f, true); exact)
-    _flag_ent_exit!(T, GI.LinearRingTrait(), poly_a, b_list, delay_cross_f, Base.Fix2(delay_bounce_f, false); exact)
+    _flag_ent_exit!(alg, T, GI.LinearRingTrait(), poly_b, a_list, delay_cross_f, Base.Fix2(delay_bounce_f, true); exact)
+    _flag_ent_exit!(alg, T, GI.LinearRingTrait(), poly_a, b_list, delay_cross_f, Base.Fix2(delay_bounce_f, false); exact)
 
     # Set node indices and filter a_idx_list to just crossing points
-    _index_crossing_intrs!(a_list, b_list, a_idx_list)
+    _index_crossing_intrs!(alg, a_list, b_list, a_idx_list)
 
     return a_list, b_list, a_idx_list
 end
@@ -80,7 +171,7 @@ not update the entry and exit flags for a_list.
 The a_idx_list is a list of the indices of intersection points in a_list. The value at
 index i of a_idx_list is the location in a_list where the ith intersection point lies.
 =#
-function _build_a_list(::Type{T}, poly_a, poly_b; exact) where T
+function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly_b; exact) where {T, M, A}
     n_a_edges = _nedge(poly_a)
     a_list = PolyNode{T}[]  # list of points in poly_a
     sizehint!(a_list, n_a_edges)
@@ -181,7 +272,7 @@ is needed for clipping using the Greiner-Hormann clipping algorithm.
 Note: after calling this function, b_list is not fully updated. The entry/exit flags still
 need to be updated. However, the neighbor value in a_list is now updated.
 =#
-function _build_b_list(::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where T
+function _build_b_list(alg::FosterHormannClipping{M, A}, ::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where {T, M, A} 
     # Sort intersection points by insertion order in b_list
     sort!(a_idx_list, by = x-> a_list[x].neighbor + a_list[x].fracs[2])
     # Initialize needed values and lists
@@ -241,7 +332,7 @@ chain is crossing and delayed otherwise and all middle points are marked as boun
 Additionally, the start and end points of the chain are marked as endpoints using the
 endpoints field. 
 =#
-function _classify_crossing!(::Type{T}, a_list, b_list; exact) where T
+function _classify_crossing!(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b_list; exact) where {T, M, A}
     napts = length(a_list)
     nbpts = length(b_list)
     # start centered on last point
@@ -265,7 +356,7 @@ function _classify_crossing!(::Type{T}, a_list, b_list; exact) where T
             a_next_is_b_prev = a_next.inter && equals(a_next, b_prev)
             a_next_is_b_next = a_next.inter && equals(a_next, b_next)
             # determine which side of a segments the p points are on
-            b_prev_side, b_next_side = _get_sides(b_prev, b_next, a_prev, curr_pt, a_next,
+            b_prev_side, b_next_side = _get_sides(#=TODO: alg.manifold, =#b_prev, b_next, a_prev, curr_pt, a_next,
                 i, j, a_list, b_list; exact)
             # no sides overlap
             if !a_prev_is_b_prev && !a_prev_is_b_next && !a_next_is_b_prev && !a_next_is_b_next
@@ -407,7 +498,7 @@ all points are intersection points, find the first element that either is the en
 or a crossing point that isn't in a chain. Then take the midpoint of this point and the next
 point in the list and perform the in/out check. If none of these points exist, return
 a `next_idx` of `nothing`. =#
-function _pt_off_edge_status(::Type{T}, pt_list, poly, npts; exact) where T
+function _pt_off_edge_status(alg::FosterHormannClipping{M, A}, ::Type{T}, pt_list, poly, npts; exact) where {T, M, A}
     start_idx, is_non_intr_pt = findfirst(_is_not_intr, pt_list), true
     if isnothing(start_idx)
         start_idx, is_non_intr_pt = findfirst(_next_edge_off, pt_list), false
@@ -419,7 +510,7 @@ function _pt_off_edge_status(::Type{T}, pt_list, poly, npts; exact) where T
     else
         (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
     end
-    start_status = !_point_filled_curve_orientation(start_pt, poly; in = true, on = false, out = false, exact)
+    start_status = !_point_filled_curve_orientation(alg.manifold, start_pt, poly; in = true, on = false, out = false, exact)
     return next_idx, start_status
 end
 # Check if a PolyNode is an intersection point
@@ -445,10 +536,10 @@ bounce will be the same.
 
 Used for clipping polygons by other polygons.
 =#
-function _flag_ent_exit!(::Type{T}, ::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f; exact) where T
+function _flag_ent_exit!(alg::FosterHormannClipping{M, A}, ::Type{T}, ::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f; exact) where {T, M, A}
     npts = length(pt_list)
     # Find starting index if there is one
-    next_idx, status = _pt_off_edge_status(T, pt_list, poly, npts; exact)
+    next_idx, status = _pt_off_edge_status(alg, T, pt_list, poly, npts; exact)
     isnothing(next_idx) && return
     start_idx = next_idx - 1 
     # Loop over points and mark entry and exit status
@@ -468,7 +559,7 @@ function _flag_ent_exit!(::Type{T}, ::GI.LinearRingTrait, poly, pt_list, delay_c
                 else  # delayed bouncing
                     next_idx = ii < npts ? (ii + 1) : 1
                     next_val = (curr_pt.point .+ pt_list[next_idx].point) ./ 2
-                    pt_in_poly = _point_filled_curve_orientation(next_val, poly; in = true, on = false, out = false, exact)
+                    pt_in_poly = _point_filled_curve_orientation(alg.manifold, next_val, poly; in = true, on = false, out = false, exact)
                     #= start and end crossing status are the same and depend on if adjacent
                     edges of pt_list are within poly =#
                     start_crossing = delay_bounce_f(pt_in_poly)
@@ -496,8 +587,8 @@ returns false. Used for cutting polygons by lines.
 
 Assumes that the first point is outside of the polygon and not on an edge.
 =#
-function _flag_ent_exit!(::GI.LineTrait, poly, pt_list; exact)
-    status = !_point_filled_curve_orientation(pt_list[1].point, poly; in = true, on = false, out = false, exact)
+function _flag_ent_exit!(alg::FosterHormannClipping{M, A}, ::GI.LineTrait, poly, pt_list; exact) where {M, A}
+    status = !_point_filled_curve_orientation(#=TODO: alg.manifold=#pt_list[1].point, poly; in = true, on = false, out = false, exact)
     # Loop over points and mark entry and exit status
     for (ii, curr_pt) in enumerate(pt_list)
         if curr_pt.crossing
@@ -510,7 +601,7 @@ end
 
 #= Filters a_idx_list to just include crossing points and sets the index of all crossing
 points (which element they correspond to within a_idx_list). =#
-function _index_crossing_intrs!(a_list, b_list, a_idx_list)
+function _index_crossing_intrs!(alg::FosterHormannClipping{M, A}, a_list, b_list, a_idx_list) where {M, A}
     filter!(x -> a_list[x].crossing, a_idx_list)
     for (i, a_idx) in enumerate(a_idx_list)
         curr_node = a_list[a_idx]
@@ -539,7 +630,7 @@ A list of GeoInterface polygons is returned from this function.
 Note: `poly_a` and `poly_b` are temporary inputs used for debugging and can be removed
 eventually.
 =#
-function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where T
+function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T, M, A}
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
@@ -569,7 +660,9 @@ function _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a,
             # changed curr_not_intr to curr_not_same_ent_flag
             same_status, prev_status = true, curr.ent_exit
             while same_status
-                @assert visited_pts < total_pts "Clipping tracing hit every point - clipping error. Please open an issue with polygons: $(GI.coordinates(poly_a)) and $(GI.coordinates(poly_b))."
+                if visited_pts >= total_pts
+                    throw(TracingError("Clipping tracing hit every point - clipping error.", poly_a, poly_b, a_list, b_list, a_idx_list))
+                end
                 # Traverse polygon either forwards or backwards
                 idx += step
                 idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
@@ -615,7 +708,7 @@ or they are separate polygons with no intersection (other than an edge or point)
 Return two booleans that represent if a is inside b (potentially with shared edges / points)
 and visa versa if b is inside of a.
 =#
-function _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)
+function _find_non_cross_orientation(m::M, a_list, b_list, a_poly, b_poly; exact) where {M <: Manifold}
     non_intr_a_idx = findfirst(x -> !x.inter, a_list)
     non_intr_b_idx = findfirst(x -> !x.inter, b_list)
     #= Determine if non-intersection point is in or outside of polygon - if there isn't A
@@ -629,6 +722,9 @@ function _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)
     return a_in_b, b_in_a
 end
 
+_find_non_cross_orientation(alg::FosterHormannClipping{M}, a_list, b_list, a_poly, b_poly; exact) where {M <: Manifold} =
+    _find_non_cross_orientation(alg.manifold, a_list, b_list, a_poly, b_poly; exact)
+
 #=
     _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_poly_idx; exact)
 
@@ -636,7 +732,7 @@ The holes specified by the hole iterator are added to the polygons in the return
 If this creates more polygons, they are added to the end of the list. If this removes
 polygons, they are removed from the list
 =#
-function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_poly_idx; exact) where T
+function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, return_polys, hole_iterator, remove_poly_idx; exact) where {T, M, A}
     n_polys = length(return_polys)
     remove_hole_idx = Int[]
     # Remove set of holes from all polygons
@@ -649,9 +745,9 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
                 curr_poly = return_polys[j]
                 remove_poly_idx[j] && continue
                 curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
-                in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; exact, closed_line = true)
+                in_ext, on_ext, out_ext = _line_polygon_interactions(#=TODO: alg.manifold=#curr_hole, curr_poly_ext; exact, closed_line = true)
                 if in_ext  # hole is at least partially within the polygon's exterior
-                    new_hole, new_hole_poly, n_new_pieces = _combine_holes!(T, curr_hole, curr_poly, return_polys, remove_hole_idx)
+                    new_hole, new_hole_poly, n_new_pieces = _combine_holes!(alg, T, curr_hole, curr_poly, return_polys, remove_hole_idx)
                     if n_new_pieces > 0
                         append!(remove_poly_idx, falses(n_new_pieces))
                         n_new_per_poly += n_new_pieces
@@ -659,7 +755,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
                     if !on_ext && !out_ext  # hole is completely within exterior
                         push!(curr_poly.geom, new_hole)
                     else  # hole is partially within and outside of polygon's exterior
-                        new_polys = difference(curr_poly_ext, new_hole_poly, T; target=GI.PolygonTrait())
+                        new_polys = difference(alg, curr_poly_ext, new_hole_poly, T; target=GI.PolygonTrait())
                         n_new_polys = length(new_polys) - 1
                         # replace original
                         curr_poly.geom[1] = GI.getexterior(new_polys[1])
@@ -671,7 +767,7 @@ function _add_holes_to_polys!(::Type{T}, return_polys, hole_iterator, remove_pol
                         end
                     end
                 # polygon is completely within hole
-                elseif coveredby(curr_poly_ext, GI.Polygon(StaticArrays.SVector(curr_hole)))
+                elseif coveredby(#=TODO: alg.manifold=#curr_poly_ext, GI.Polygon(StaticArrays.SVector(curr_hole)))
                     remove_poly_idx[j] = true
                 end
             end
@@ -696,16 +792,16 @@ are in the "main" polygon or in one of these new pieces and moved accordingly.
 If the holes don't touch or curr_poly has no holes, then new_hole is returned without any
 changes.
 =#
-function _combine_holes!(::Type{T}, new_hole, curr_poly, return_polys, remove_hole_idx) where T
+function _combine_holes!(alg::FosterHormannClipping{M, A}, ::Type{T}, new_hole, curr_poly, return_polys, remove_hole_idx) where {T, M, A}
     n_new_polys = 0
     empty!(remove_hole_idx)
     new_hole_poly = GI.Polygon(StaticArrays.SVector(new_hole))
     # Combine any existing holes in curr_poly with new hole
     for (k, old_hole) in enumerate(GI.gethole(curr_poly))
         old_hole_poly = GI.Polygon(StaticArrays.SVector(old_hole))
-        if intersects(new_hole_poly, old_hole_poly)
+        if intersects(#=TODO: alg.manifold=#new_hole_poly, old_hole_poly)
             # If the holes intersect, combine them into a bigger hole
-            hole_union = union(new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait())[1]
+            hole_union = union(alg, new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait())[1]
             push!(remove_hole_idx, k + 1)
             new_hole = GI.getexterior(hole_union)
             new_hole_poly = GI.Polygon(StaticArrays.SVector(new_hole))
@@ -734,7 +830,7 @@ end
 
 #= Remove collinear edge points, other than the first and last edge vertex, to simplify
 polygon - including both the exterior ring and any holes=#
-function _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
+function _remove_collinear_points!(alg::FosterHormannClipping{M, A}, polys, remove_idx, poly_a, poly_b) where {M, A}
     for (i, poly) in Iterators.reverse(enumerate(polys))
         for (j, ring) in Iterators.reverse(enumerate(GI.getring(poly)))
             n = length(ring.geom)
@@ -752,6 +848,7 @@ function _remove_collinear_points!(polys, remove_idx, poly_a, poly_b)
                 else
                     p3 = p
                     # check if p2 is approximately on the edge formed by p1 and p3 - remove if so
+                    # TODO: make this manifold aware
                     if Predicates.orient(p1, p2, p3; exact = False()) == 0
                         remove_idx[i - 1] = true
                     end

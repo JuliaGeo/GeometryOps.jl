@@ -65,6 +65,8 @@ function _point_polygon_process(
     point, polygon;
     in_allow, on_allow, out_allow, exact,
 )
+    skip, returnval = _maybe_skip_disjoint_extents(point, polygon; in_allow, on_allow, out_allow, on_require = false, out_require = false, in_require = false)
+    skip && return returnval
     # Check interaction of geom with polygon's exterior boundary
     ext_val = _point_filled_curve_orientation(point, GI.getexterior(polygon); exact)
     # If a point is outside, it isn't interacting with any holes
@@ -491,7 +493,7 @@ of the curve if it didn't return 'on'.
 See paper for more information on cases denoted in comments.
 =#
 function _point_filled_curve_orientation(
-    point, curve;
+    ::Planar, point, curve;
     in::T = point_in, on::T = point_on, out::T = point_out, exact,
 ) where {T}
     x, y = GI.x(point), GI.y(point)
@@ -505,7 +507,7 @@ function _point_filled_curve_orientation(
         v2 = GI.y(p_end) - y
         if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
             u1, u2 = GI.x(p_start) - x, GI.x(p_end) - x
-            f = Predicates.cross((u1, u2), (v1, v2); exact)
+            f = Predicates.orient(p_start, p_end, (x, y); exact)
             if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
                 f == 0 && return on         # Case 16 or 21
                 f > 0 && (k += 1)              # Case 3 or 9
@@ -525,6 +527,10 @@ function _point_filled_curve_orientation(
     end
     return iseven(k) ? out : in
 end
+_point_filled_curve_orientation(
+    point, curve;
+    in::T = point_in, on::T = point_on, out::T = point_out, exact,
+) where {T} = _point_filled_curve_orientation(Planar(), point, curve; in, on, out, exact)
 
 #=
 Determines the types of interactions of a line with a filled-in curve. By

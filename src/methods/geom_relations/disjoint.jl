@@ -75,6 +75,14 @@ true
 """
 disjoint(g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)
 
+"""
+    disjoint(g1)
+
+Return a function that checks if its input is disjoint from `g1`.
+This is equivalent to `x -> disjoint(x, g1)`.
+"""
+disjoint(g1) = Base.Fix2(disjoint, g1)
+
 # # Convert features to geometries
 _disjoint(::FeatureTrait, g1, ::Any, g2) = disjoint(GI.geometry(g1), g2)
 _disjoint(::Any, g1, ::FeatureTrait, g2) = disjoint(g1, geometry(g2))
@@ -255,3 +263,17 @@ function _disjoint(
     end
     return true
 end
+
+
+# Extent forwarding
+function _disjoint(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _disjoint(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _disjoint(t1, e1::Extents.Extent, t2, g2)
+    return _disjoint(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _disjoint(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.disjoint(e1, e2)
+end
+
+
