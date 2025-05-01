@@ -46,7 +46,7 @@ poly = GI.Polygon([lr1, lr2])
 
                 @testset "Shapefile" begin
                     centroid_table = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_table);
-                    centroid_geometry = GI.geometry.(GI.getfeature(centroid_table))
+                    centroid_geometry = getproperty(centroid_table, :geometry)
                     # Test that the centroids are correct
                     @test all(centroid_geometry .== GO.centroid.(countries_table.geometry))
                     @testset "Columns are preserved" begin  
