@@ -1,12 +1,12 @@
 using Test
 import GeometryOps as GO, GeometryOpsCore as GOCore, GeoInterface as GI
 
-@testset "ApplyWithTrait" begin
+@testset "WithTrait" begin
     # Basic functionality test
     @testset "Basic functionality" begin
         # Create a simple function that uses the trait
         f = (trait, obj) -> (trait, obj)
-        awt = GOCore.ApplyWithTrait(f)
+        awt = GOCore.WithTrait(f)
         
         # Test with a point trait
         point = (1.0, 2.0)
@@ -24,7 +24,7 @@ import GeometryOps as GO, GeometryOpsCore as GOCore, GeoInterface as GI
         f1 = (trait, obj) -> (trait, obj)
         f2 = (trait, obj) -> (trait, obj, "extra")
         
-        awt = GOCore.ApplyWithTrait(f1)
+        awt = GOCore.WithTrait(f1)
         new_awt = GOCore.rebuild(awt, f2)
         
         point = (1.0, 2.0)
@@ -45,7 +45,7 @@ import GeometryOps as GO, GeometryOpsCore as GOCore, GeoInterface as GI
             end
         end
         
-        awt = GOCore.ApplyWithTrait(f)
+        awt = GOCore.WithTrait(f)
         
         # Test with a point
         point = (1.0, 2.0)
@@ -71,7 +71,7 @@ import GeometryOps as GO, GeometryOpsCore as GOCore, GeoInterface as GI
             end
         end
         
-        awt = GOCore.ApplyWithTrait(f)
+        awt = GOCore.WithTrait(f)
         
         # Test with a point
         point = (1.0, 2.0)
@@ -87,7 +87,7 @@ import GeometryOps as GO, GeometryOpsCore as GOCore, GeoInterface as GI
     # Test with keyword arguments
     @testset "Keyword arguments" begin
         f = (trait, obj; kw...) -> (trait, obj, kw)
-        awt = GOCore.ApplyWithTrait(f)
+        awt = GOCore.WithTrait(f)
         
         point = (1.0, 2.0)
         trait = GI.PointTrait()

@@ -323,7 +323,7 @@ end
 # So the `Target` is found. We apply `f` to geom and return it to previous
 # _apply calls to be wrapped with the outer geometries/feature/featurecollection/array.
 _apply(f::F, ::TraitTarget{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} = f(geom)
-function _apply(a::ApplyWithTrait{F}, ::TraitTarget{Target}, trait::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} 
+function _apply(a::WithTrait{F}, ::TraitTarget{Target}, trait::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} 
     a(trait, geom; Base.structdiff(values(kw), NamedTuple{(:threaded, :calc_extent)})...)
 end
 # Define some specific cases of this match to avoid method ambiguity
@@ -333,7 +333,7 @@ for T in (
 )
     @eval begin 
         _apply(f::F, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F = f(x)
-        function _apply(a::ApplyWithTrait{F}, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F
+        function _apply(a::WithTrait{F}, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F
             a(trait, x; Base.structdiff(values(kw), NamedTuple{(:threaded, :calc_extent)})...)
         end
     end

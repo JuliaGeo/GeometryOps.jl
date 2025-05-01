@@ -58,9 +58,9 @@ const WithXYZM = ApplyToPoint{true,true}
 (t::WithXYM)(p) = t.f(GI.x(p), GI.y(p), GI.m(p))
 
 """
-    ApplyWithTrait(f)
+    WithTrait(f)
 
-ApplyWithTrait is a functor that applies a function to a trait and an object.
+WithTrait is a functor that applies a function to a trait and an object.
 
 Specifically, the calling convention is for `f` is changed
 from `f(geom)` to `f(trait, geom; kw...)`.
@@ -68,12 +68,12 @@ from `f(geom)` to `f(trait, geom; kw...)`.
 This is useful to keep the trait materialized through the call stack,
 which can improve inferrability and performance.
 """
-struct ApplyWithTrait{F} <: Applicator{F, Nothing}
+struct WithTrait{F} <: Applicator{F, Nothing}
     f::F
 end
 
-(a::ApplyWithTrait)(trait::GI.AbstractTrait, obj; kw...) = a.f(trait, obj; kw...)
-rebuild(::ApplyWithTrait, f::F) where {F} = ApplyWithTrait{F}(f)
+(a::WithTrait)(trait::GI.AbstractTrait, obj; kw...) = a.f(trait, obj; kw...)
+rebuild(::WithTrait, f::F) where {F} = WithTrait{F}(f)
 
 # ***
 

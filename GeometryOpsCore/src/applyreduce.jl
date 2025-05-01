@@ -129,7 +129,7 @@ end
 @inline function _applyreduce(f::F, op::O, ::TraitTarget{Target}, ::Trait, x; kw...) where {F,O,Target,Trait<:Target} 
     f(x)
 end
-@inline function _applyreduce(a::ApplyWithTrait{F}, op::O, ::TraitTarget{Target}, trait::Trait, x; kw...) where {F,O,Target,Trait<:Target} 
+@inline function _applyreduce(a::WithTrait{F}, op::O, ::TraitTarget{Target}, trait::Trait, x; kw...) where {F,O,Target,Trait<:Target} 
     a(trait, x; Base.structdiff(values(kw), NamedTuple{(:threaded, :init)})...)
 end
 # Fail if we hit PointTrait
@@ -142,7 +142,7 @@ for T in (
 )
     @eval begin
         _applyreduce(f::F, op::O, ::TraitTarget{<:$T}, trait::$T, x; kw...) where {F, O} = f(x)
-        function _applyreduce(a::ApplyWithTrait{F}, op::O, ::TraitTarget{<:$T}, trait::$T, x; kw...) where {F, O}
+        function _applyreduce(a::WithTrait{F}, op::O, ::TraitTarget{<:$T}, trait::$T, x; kw...) where {F, O}
             a(trait, x; Base.structdiff(values(kw), NamedTuple{(:threaded, :init)})...)
         end
     end

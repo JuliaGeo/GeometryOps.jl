@@ -114,7 +114,7 @@ end
 function centroid_and_area(trait, geom, ::Type{T}; threaded=false) where T
     target = TraitTarget{Union{GI.PolygonTrait,GI.LineStringTrait,GI.LinearRingTrait}}()
     init = (zero(T), zero(T)), zero(T)
-    applyreduce(ApplyWithTrait((trait, g) -> centroid_and_area(trait, g, T)), _combine_centroid_and_area, target, geom; threaded, init)
+    applyreduce(WithTrait((trait, g) -> centroid_and_area(trait, g, T)), _combine_centroid_and_area, target, geom; threaded, init)
 end
 
 function centroid_and_area(
