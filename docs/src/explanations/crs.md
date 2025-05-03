@@ -6,7 +6,7 @@ In a mathematical sense, coordinate reference systems can be thought of defining
 
 ## Geographic CRS
 
-If a CRS is _geographic_, that means that it refers to coordinates on a sphere.  Such coordinates should ideally be handled using a spherical geometry library like Google's s2.  GeometryOps does not currently handle spherical geometry computations except in special cases ([`perimeter`](@ref), [`GeodesicSegments`](@ref) in `segmentize`, [`GeodesicDistance`](@ref)).
+If a CRS is _geographic_, that means that it refers to coordinates on a sphere.  Such coordinates should ideally be handled using a spherical geometry library like Google's s2.  GeometryOps does not currently handle spherical geometry computations except in special cases (e.g., [`segmentize`](@ref) with the [`Geodesic`](@ref) manifold).
 
 A non-geographic CRS is assumed to be in Cartesian space.
 

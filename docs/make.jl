@@ -64,6 +64,14 @@ function current_module_from_paths(source_path, relative_path)
         return "GeometryOps"
     elseif endswith(source_path, "ext")
         return "Base.get_extension(GeometryOps, :$(splitpath(relative_path)[1]))"
+    elseif contains(source_path, "SpatialTreeInterface")
+        return "GeometryOps.SpatialTreeInterface"
+    elseif contains(source_path, "LoopStateMachine")
+        return "GeometryOps.LoopStateMachine"
+    elseif contains(source_path, "NaturalIndexing")
+        return "GeometryOps.NaturalIndexing"
+    else
+        return "GeometryOps" # default to GO as a last resort
     end
 end
 
