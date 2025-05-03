@@ -111,7 +111,8 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
 end
 
 # Now that the Literate stuff is done, we also download the call notes from HackMD:
-download("https://hackmd.io/kpIqAR8YRJOZQDJjUKVAUQ/download", joinpath(@__DIR__, "src", "call_notes.md"))
+# download("https://hackmd.io/kpIqAR8YRJOZQDJjUKVAUQ/download", joinpath(@__DIR__, "src", "call_notes.md"))
+# This is a bit unreliable especially at high volumes of traffic, so we don't call this for now.
 
 # Finally, make the docs!
 makedocs(;
@@ -139,6 +140,7 @@ makedocs(;
                 # "Geometry types and lack of support" => "explanations/well_known_geometry.md", # TODO write this
                 # "When you should use LibGEOS or ArchGDAL" => "explanations/notgeometryops.md", # TODO write this
             ],
+            "Developer docs" => "explanations/devdocs.md",
         ],
         "Source code" => literate_pages,
     ],
