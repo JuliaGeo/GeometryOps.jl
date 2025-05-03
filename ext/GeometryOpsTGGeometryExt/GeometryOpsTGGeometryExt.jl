@@ -18,7 +18,7 @@ using Markdown
 import TGGeometry as TGG
 
 Markdown.parse(
-    join(["`" * f * "`" for f in TGG.TG_PREDICATES], ", ")
+    join(["`$(f)`" for f in TGG.TG_PREDICATES], ", ")
 )
 ```
 =#

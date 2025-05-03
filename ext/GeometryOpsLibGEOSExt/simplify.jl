@@ -17,7 +17,7 @@ using CairoMakie # to plot
 
 france = GI.geometry(GI.getfeature(GADM.get("FRA"), 1))
 
-simplified = GO.simplify(GEOS(; tol = 1), france)
+simplified = GO.simplify(GO.GEOS(; tol = 1), france)
 
 f, a, p = lines(france; label = "Original")
 lines!(a, simplified; label = "Simplified")
@@ -28,10 +28,10 @@ f
 You can also choose the TopologyPreserve method:
 
 ```@example geos-simplify
-simplified = GO.simplify(GEOS(; tol = 1, method = :TopologyPreserve), france)
+simplified = GO.simplify(GO.GEOS(; tol = 1, method = :TopologyPreserve), france)
 
 f, a, p = lines(france; label = "Original")
-lines!(a, simplified; label = "Simplified")
+lines!(a, simplified; label = "Topology preserving simplify")
 axislegend(a)
 f
 ```

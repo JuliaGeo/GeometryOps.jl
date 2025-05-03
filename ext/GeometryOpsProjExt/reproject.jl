@@ -19,7 +19,8 @@ web map using Web Mercator (EPSG:3857):
 
 ```@repl
 import GeometryOps as GO, GeoInterface as GI
-point = GI.Point(0, 0)  # Prime meridian, equator
+using GeoFormatTypes # for CRS types like EPSG
+point = (0, 0)  # Prime meridian, equator
 GO.reproject(point; source_crs=EPSG(4326), target_crs=EPSG(3857))
 GO.reproject(point, EPSG(4326), EPSG(3857)) # geom, source_crs, target_crs
 GO.reproject(GI.Point(point; crs = EPSG(4326)), EPSG(3857)) # if your geom has a crs, then you only need to pass target.

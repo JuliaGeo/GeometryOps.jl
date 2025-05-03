@@ -17,7 +17,7 @@ using CairoMakie
 
 # Create a point and buffer it
 point = GI.Point(0, 0)
-buffered = GO.buffer(GEOS(), point, 1.0)  # 1 unit buffer
+buffered = GO.buffer(GO.GEOS(), point, 1.0)  # 1 unit buffer
 ```
 
 ## Implementation
