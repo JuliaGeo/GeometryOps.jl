@@ -10,17 +10,22 @@
 import GeometryOps as GO, 
     GeoInterface as GI, 
     GeometryBasics as GB, 
-    LibGEOS as LG
-import GeoJSON
+    LibGEOS as LG,
+    GeoFormatTypes as GFT
+import GeoJSON, NaturalEarth, WellKnownGeometry
+using CoordinateTransformations: Translation, LinearMap
 # In order to benchmark, we'll actually use the new [Chairmarks.jl](https://github.com/lilithhafner/Chairmarks.jl), 
 # since it's significantly faster than BenchmarkTools.  To keep benchmarks organized, though, we'll still use BenchmarkTools' 
 # `BenchmarkGroup` structure.
 using Chairmarks
 import BenchmarkTools: BenchmarkGroup
+using ProgressMeter
 # We use CairoMakie to visualize our results!
 using CairoMakie, MakieThemes, GeoInterfaceMakie
 # Finally, we import some general utility packages:
 using Statistics, CoordinateTransformations
+
+include("benchmark_plots.jl")
 
 # We also set up some utility functions for later on.
 """
@@ -57,87 +62,6 @@ end
 plot_trials(circle_area_suite)
 
 
-# ## Vancouver watershed benchmarks
-#=
-
-Vancouver Island has ~1,300 watersheds.  LibGEOS uses this exact data
-in their tests, so we'll use it in ours as well!
-
-We'll start by loading the data, and then we'll use it to benchmark various operations.
-
-=#
-
-# The CRS for this file is EPSG:3005, or as a PROJ string,
-# `"+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"`
-# TODO: this doesn't work with WellKnownGeometry.  Why?
-wkt_geoms = LG.readgeom.(eachline("/Users/anshul/Downloads/watersheds.wkt"), (LG.WKTReader(LG.get_global_context()),))
-vancouver_polygons = GI.getgeom.(wkt_geoms, 1); #.|> GO.tuples;
-
-import SortTileRecursiveTree as STR
-tree = STR.STRtree(vancouver_polygons)
-query_result = STR.query(tree, GI.extent(vancouver_polygons[1]))
-
-GO.intersects.((vancouver_polygons[1],), vancouver_polygons[query_result])
-
-go_vp = GO.tuples.(vancouver_polygons[1:2])
-@be GO.union($(go_vp[1]), $(go_vp[2]); target = $GI.PolygonTrait())
-@be LG.union($(vancouver_polygons[1]), $(vancouver_polygons[2]))
-
-all_intersected = falses(length(vancouver_polygons))
-accumulator = deepcopy(vancouver_polygons[1])
-all_intersected[1] = true
-i = 1
-# query_result = STR.query(tree, GI.extent(accumulator))
-# for idx in query_result
-#     println("Assessing $idx")
-#     if !all_intersected[idx] && LG.intersects(vancouver_polygons[idx], accumulator)
-#         println("Assimilating $idx")
-#         result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
-#         # @show length(result)
-#         accumulator = result#[1]
-#         all_intersected[idx] = true
-#     end
-# end
-display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
-display(poly(accumulator))
-@time while !(all(all_intersected)) && i < length(vancouver_polygons)
-    println("Began iteration $i")
-    query_result = STR.query(tree, GI.extent(accumulator))
-    for idx in query_result
-        if !(all_intersected[idx] || !(LG.intersects(vancouver_polygons[idx], accumulator)))
-            println("Assimilating $idx")
-            result = LG.union(vancouver_polygons[idx], accumulator#=; target = GI.PolygonTrait()=#)
-            # @show length(result)
-            accumulator = result#[1]
-            all_intersected[idx] = true
-        end
-    end
-    display(poly(vancouver_polygons[all_intersected]; color = rand(RGBf, sum(all_intersected))))
-    println("Finished iteration $i")
-    # wait_for_key("Press any key to continue to the next iteration.")
-    i += 1
-end 
-
-fig = Figure()
-ax = Axis(fig[1, 1]; title = "STRTree query for polygons", aspect = DataAspect())
-for (i, result_index) in enumerate(query_result)
-    poly!(ax, vancouver_polygons[result_index]; color = Makie.wong_colors()[i], label = "$result_index")
-end
-Legend(fig[1, 2], ax)
-fig
-
-
-
-# TODO: 
-# - Vancouver watersheds:
-#    - Intersection on pre-buffered geometry
-#    - Polygon union by reduction (perhaps pre-sort by border order, so we don't end up with useless polygons)
-#    - Queries using STRTree.jl
-#    - Potentially using a prepared geometry based approach to multithreaded reductive joining
-#    - Implement multipolygon joining.  How?  Query intersection or touching for each individual geometry,
-#      and implement a 
-
-
 ## Segmentization
 
 
@@ -155,7 +79,7 @@ circle_difference_suite = circle_suite["difference"] = BenchmarkGroup(["title:Ci
 circle_intersection_suite = circle_suite["intersection"] = BenchmarkGroup(["title:Circle intersection", "subtitle:Tested on a regular circle"])
 circle_union_suite = circle_suite["union"] = BenchmarkGroup(["title:Circle union", "subtitle:Tested on a regular circle"])
 
-n_points_values = round.(Int, exp10.(LinRange(1, 4, 10)))
+n_points_values = round.(Int, exp10.(LinRange(0.7, 6, 15)))
 @time for n_points in n_points_values
     circle = GI.Wrappers.Polygon([tuple.((cos(θ) for θ in LinRange(0, 2π, n_points)), (sin(θ) for θ in LinRange(0, 2π, n_points)))])
     closed_circle = GO.ClosedRing()(circle)
@@ -175,16 +99,16 @@ n_points_values = round.(Int, exp10.(LinRange(1, 4, 10)))
     circle_union_suite["LibGEOS"][n_points]     = @be LG.union($lg_circle_left, $lg_circle_right)
 end
 
-plot_trials(circle_difference_suite)
-plot_trials(circle_intersection_suite)
-plot_trials(circle_union_suite)
+plot_trials(circle_difference_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
+plot_trials(circle_intersection_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
+plot_trials(circle_union_suite; legend_position = (2, 1), legend_kws = (; orientation = :horizontal, nbanks = 2))
 
 usa_poly_suite = BenchmarkGroup()
 usa_difference_suite = usa_poly_suite["difference"] = BenchmarkGroup(["title:USA difference", "subtitle:Tested on CONUS"])
 usa_intersection_suite = usa_poly_suite["intersection"] = BenchmarkGroup(["title:USA intersection", "subtitle:Tested on CONUS"])
 usa_union_suite = usa_poly_suite["union"] = BenchmarkGroup(["title:USA union", "subtitle:Tested on CONUS"])
 
-fc = GeoJSON.read(read(download("https://rawcdn.githack.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_admin_0_countries.geojson")))
+fc = NaturalEarth.naturalearth("admin_0_countries", 10)
 usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)] |> x -> GI.convert(LG, x) |> LG.makeValid |> GO.tuples
 
 usa_poly = GI.getgeom(usa_multipoly, findmax(GO.area.(GI.getgeom(usa_multipoly)))[2]) # isolate the poly with the most area
@@ -194,32 +118,120 @@ f, a, p = plot(usa_poly; label = "Original", axis = (; aspect = DataAspect())); 
 axislegend(a)
 f
 
-# Now, we  get to benchmarking:
+# Now, we get to benchmarking:
 
 
-usa_o_lg, usa_o_go = lg_and_go(usa_poly)
-usa_r_lg, usa_r_go = lg_and_go(usa_reflected)
+usa_o_lg, usa_o_go = lg_and_go(usa_poly);
+usa_r_lg, usa_r_go = lg_and_go(usa_reflected);
 
 # First, we'll test union:
-printstyled("LibGEOS"; color = :red, bold = true)
-println()
-@be LG.union($usa_o_lg, $usa_r_lg) seconds=5
-printstyled("GeometryOps"; color = :blue, bold = true)
-println()
-@be GO.union($usa_o_go, $usa_r_go; target = GI.PolygonTrait) seconds=5
+begin
+    printstyled("Union"; color = :green, bold = true)
+    println()
+    printstyled("LibGEOS"; color = :red, bold = true)
+    println()
+    display(@be LG.union($usa_o_lg, $usa_r_lg) seconds=5)
+    printstyled("GeometryOps"; color = :blue, bold = true)
+    println()
+    display(@be GO.union($usa_o_go, $usa_r_go; target = GI.PolygonTrait) seconds=5)
+    println()
+    # Next, intersection:
+    printstyled("Intersection"; color = :green, bold = true)
+    println()
+    printstyled("LibGEOS"; color = :red, bold = true)
+    println()
+    display(@be LG.intersection($usa_o_lg, $usa_r_lg) seconds=5)
+    printstyled("GeometryOps"; color = :blue, bold = true)
+    println()
+    display(@be GO.intersection($usa_o_go, $usa_r_go; target = GI.PolygonTrait) seconds=5)
+    # and finally the difference:
+    printstyled("Difference"; color = :green, bold = true)
+    println()
+    printstyled("LibGEOS"; color = :red, bold = true)
+    println()
+    display(@be LG.difference(usa_o_lg, usa_r_lg) seconds=5)
+    printstyled("GeometryOps"; color = :blue, bold = true)
+    println()
+    display(@be GO.difference(usa_o_go, usa_r_go; target = GI.PolygonTrait) seconds=5)
+end
 
-# Next, intersection:
-printstyled("LibGEOS"; color = :red, bold = true)
-println()
-@be LG.intersection($usa_o_lg, $usa_r_lg) seconds=5
-printstyled("GeometryOps"; color = :blue, bold = true)
-println()
-@be GO.intersection($usa_o_go, $usa_r_go; target = GI.PolygonTrait) seconds=5
 
-# and finally the difference:
-printstyled("LibGEOS"; color = :red, bold = true)
-println()
-@be LG.difference(usa_o_lg, usa_r_lg) seconds=5
-printstyled("GeometryOps"; color = :blue, bold = true)
-println()
-@be go_diff = GO.difference(usa_o_go, usa_r_go; target = GI.PolygonTrait) seconds=5
+
+
+# ## Vancouver watershed benchmarks
+#=
+
+Vancouver Island has ~1,300 watersheds.  LibGEOS uses this exact data
+in their tests, so we'll use it in ours as well!
+
+We'll start by loading the data, and then we'll use it to benchmark various operations.
+
+=#
+
+# The CRS for this file is EPSG:3005, or as a PROJ string,
+# `"+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"`
+# TODO: this doesn't work with WellKnownGeometry.  Why?
+
+watersheds = mktempdir() do dir
+    cd(dir) do
+        wkt_gz = download("https://github.com/pramsey/geos-performance/raw/refs/heads/master/data/watersheds.wkt.gz", "watersheds.wkt.gz")
+        run(`gunzip watersheds.wkt.gz`)
+        return [
+            GO.tuples(GFT.WellKnownText(GFT.Geom(), line))
+            for line in eachline("watersheds.wkt")
+        ]
+    end
+end
+ 
+watershed_polygons = only.(GI.getgeom.(watersheds))
+
+import SortTileRecursiveTree as STR
+tree = STR.STRtree(watershed_polygons)
+query_result = STR.query(tree, GI.extent(watershed_polygons[1]))
+
+GO.intersects.((watershed_polygons[1],), watershed_polygons[query_result])
+
+@be GO.union($(watershed_polygons[1]), $(watershed_polygons[2]); target = $GI.PolygonTrait())
+@be LG.union($(watershed_polygons[1] |> GI.convert(LG)), $(watershed_polygons[2] |> GI.convert(LG)))
+
+function union_coverage(intersection_f::IF, union_f::UF, polygons::Vector{T}; showplot = true, showprogress = true) where {T, IF, UF}
+    tree = STR.STRtree(polygons)
+    all_intersected = falses(length(polygons))
+    accumulator = polygons[1]
+    all_intersected[1] = true
+    i = 1
+
+    (showprogress && (prog = Progress(length(all_intersected))))
+
+    for i in 1:length(polygons)
+        query_result = STR.query(tree, GI.extent(accumulator))
+        for idx in query_result
+            if !(all_intersected[idx] || !(intersection_f(polygons[idx], accumulator)))
+                result = union_f(polygons[idx], accumulator)
+                accumulator = result
+                all_intersected[idx] = true
+                (showprogress && next!(prog))
+            end
+        end
+        showplot && display(poly(view(polygons, all_intersected); color = rand(RGBf, sum(all_intersected))), axis = (; title = "$(GI.trait(accumulator) isa GI.PolygonTrait ? "Polygon" : "MultiPolygon with $(GI.ngeom(accumulator)) individual polys")"))
+        all(all_intersected) && break # if done then finish
+    end
+
+    return accumulator
+end
+
+@time union_coverage(LG.intersects, LG.union, watershed_polygons .|> GI.convert(LG); showplot = false, showprogress = true)
+
+@time union_coverage(GO.intersects, (x, y) -> (GO.union(x, y; target = GI.MultiPolygonTrait())), watershed_polygons; showplot = false, showprogress = true)
+
+
+using GADM
+
+# austria is landlocked and will form a coverage
+# something like India will not -- because it has islands
+ind_fc = GADM.get("AUT"; depth = 1)
+ind_polys = GI.geometry.(GI.getfeature(ind_fc)) |> x -> GO.tuples(x; calc_extent = true)
+
+
+
+@time union_coverage(GO.intersects, (x, y) -> (GO.union(x, y; target = GI.MultiPolygonTrait())), ind_polys; showplot = true, showprogress = true)

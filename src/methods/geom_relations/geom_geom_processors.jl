@@ -65,6 +65,8 @@ function _point_polygon_process(
     point, polygon;
     in_allow, on_allow, out_allow, exact,
 )
+    skip, returnval = _maybe_skip_disjoint_extents(point, polygon; in_allow, on_allow, out_allow, on_require = false, out_require = false, in_require = false)
+    skip && return returnval
     # Check interaction of geom with polygon's exterior boundary
     ext_val = _point_filled_curve_orientation(point, GI.getexterior(polygon); exact)
     # If a point is outside, it isn't interacting with any holes
@@ -96,12 +98,12 @@ If cross_allow is true, segments of the line and curve can be disjoint.
 
 If in_require is true, the interiors of the line and curve must meet in at least
     one point.
-If on_require is true, the bounday of one of the two geometries can meet the
+If on_require is true, the boundary of one of the two geometries can meet the
     interior or boundary of the other geometry in at least one point.
 If out_require is true, there must be at least one point of the given line that
     is exterior of the curve.
 
-If the point is in an "allowed" location and meets all requirments, return true.
+If the point is in an "allowed" location and meets all requirements, return true.
 Else, return false.
 
 If closed_line is true, line is treated as a closed line where the first and
@@ -125,7 +127,7 @@ function _inner_line_curve_process(
     closed_line = false, closed_curve = false,
     exact,
 )
-    # Set up requirments
+    # Set up requirements
     in_req_met = !in_require
     on_req_met = !on_require
     out_req_met = !out_require
@@ -152,7 +154,7 @@ function _inner_line_curve_process(
             # If segments are co-linear
             if seg_val == line_over
                 !over_allow && return false
-                # at least one point in, meets requirments
+                # at least one point in, meets requirements
                 in_req_met = true
                 point_val = _point_segment_orientation(l_start, c_start, c_end)
                 # If entire segment isn't covered, consider remaining section
@@ -208,7 +210,7 @@ function _inner_line_curve_process(
 end
 
 #= If entire segment (le to ls) isn't covered by segment (cs to ce), find remaining section
-part of section outside of cs to ce. If completly covered, increase segment index i. =#
+part of section outside of cs to ce. If completely covered, increase segment index i. =#
 function _find_new_seg(i, ls, le, cs, ce)
     break_off = true
     if _point_segment_orientation(le, cs, ce) != point_out
@@ -251,7 +253,7 @@ If on_require is true, the line must have at least one point on the polygon'same
 If out_require is true, the line must have at least one point outside of the
     polygon.
 
-If the point is in an "allowed" location and meets all requirments, return true.
+If the point is in an "allowed" location and meets all requirements, return true.
 Else, return false.
 
 If closed_line is true, line is treated as a closed line where the first and
@@ -298,7 +300,7 @@ function _inner_line_polygon_process(
             !out_allow && return false
             out_req_met = true
         end
-        if on_hole  # hole bounday is polygon boundary
+        if on_hole  # hole boundary is polygon boundary
             !on_allow && return false
             on_req_met = true
         end
@@ -329,7 +331,7 @@ If on_require is true, one of the polygon's must have at least one boundary
 If out_require is true, the first polygon must have at least one interior point
     outside of the second polygon.
 
-If the point is in an "allowed" location and meets all requirments, return true.
+If the point is in an "allowed" location and meets all requirements, return true.
 Else, return false.
 =#
 @inline function _polygon_polygon_process(poly1, poly2; kw...)
@@ -482,7 +484,7 @@ for each scenario.
 
 Note that this uses the Algorithm by Hao and Sun (2018):
 https://doi.org/10.3390/sym10100477
-Paper seperates orientation of point and edge into 26 cases. For each case, it
+Paper separates orientation of point and edge into 26 cases. For each case, it
 is either a case where the point is on the edge (returns on), where a ray from
 the point (x, y) to infinity along the line y = y cut through the edge (k += 1),
 or the ray does not pass through the edge (do nothing and continue). If the ray
@@ -491,7 +493,7 @@ of the curve if it didn't return 'on'.
 See paper for more information on cases denoted in comments.
 =#
 function _point_filled_curve_orientation(
-    point, curve;
+    ::Planar, point, curve;
     in::T = point_in, on::T = point_on, out::T = point_out, exact,
 ) where {T}
     x, y = GI.x(point), GI.y(point)
@@ -505,7 +507,7 @@ function _point_filled_curve_orientation(
         v2 = GI.y(p_end) - y
         if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
             u1, u2 = GI.x(p_start) - x, GI.x(p_end) - x
-            f = Predicates.cross((u1, u2), (v1, v2); exact)
+            f = Predicates.orient(p_start, p_end, (x, y); exact)
             if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
                 f == 0 && return on         # Case 16 or 21
                 f > 0 && (k += 1)              # Case 3 or 9
@@ -525,6 +527,10 @@ function _point_filled_curve_orientation(
     end
     return iseven(k) ? out : in
 end
+_point_filled_curve_orientation(
+    point, curve;
+    in::T = point_in, on::T = point_on, out::T = point_out, exact,
+) where {T} = _point_filled_curve_orientation(Planar(), point, curve; in, on, out, exact)
 
 #=
 Determines the types of interactions of a line with a filled-in curve. By
@@ -643,7 +649,7 @@ Returns a tuple of booleans: (in_poly, on_poly, out_poly).
 If in_poly is true, some of the lines interior points interact with the polygon
     interior points.
 If in_poly is true, endpoints of either the line intersect with the polygon or
-    the line interacts with the polygon boundary, including hole bounaries.
+    the line interacts with the polygon boundary, including hole boundaries.
 If out_curve is true, at least one segments of the line is outside the polygon,
     including inside of holes.
 

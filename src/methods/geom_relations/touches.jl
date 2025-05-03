@@ -8,7 +8,7 @@ export touches
 The touches function checks if one geometry touches another geometry. In other
 words, the interiors of the two geometries don't interact, but one of the
 geometries must have a boundary point that interacts with either the other
-geometies interior or boundary.
+geometry's interior or boundary.
 
 
 To provide an example, consider these two lines:
@@ -54,14 +54,14 @@ const TOUCHES_POINT_ALLOWED = (in_allow = false, on_allow = true, out_allow = fa
 const TOUCHES_CURVE_ALLOWED = (over_allow = false, cross_allow = false, on_allow = true, out_allow = true)
 const TOUCHES_POLYGON_ALLOWS = (in_allow = false, on_allow = true, out_allow = true)
 const TOUCHES_REQUIRES = (in_require = false, on_require = true, out_require = false)
-const TOUCHES_EXACT = (exact = _False(),)
+const TOUCHES_EXACT = (exact = False(),)
 
 """
     touches(geom1, geom2)::Bool
 
 Return `true` if the first geometry touches the second geometry. In other words,
 the two interiors cannot interact, but one of the geometries must have a
-boundary point that interacts with either the other geometies interior or
+boundary point that interacts with either the other geometry's interior or
 boundary.
 
 ## Examples
@@ -77,6 +77,14 @@ true
 ```
 """
 touches(g1, g2)::Bool = _touches(trait(g1), g1, trait(g2), g2)
+
+"""
+    touches(g1)
+
+Return a function that checks if its input touches `g1`.
+This is equivalent to `x -> touches(x, g1)`.
+"""
+touches(g1) = Base.Fix2(touches, g1)
 
 # # Convert features to geometries
 _touches(::GI.FeatureTrait, g1, ::Any, g2) = touches(GI.geometry(g1), g2)
@@ -128,8 +136,8 @@ _touches(
 
 # # Lines touching geometries
 
-#= Linestring touches another line if at least one bounday point interacts with
-the bounday of interior of the other line, but the interiors don't interact. =#
+#= Linestring touches another line if at least one boundary point interacts with
+the boundary of interior of the other line, but the interiors don't interact. =#
 _touches(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
@@ -181,14 +189,14 @@ _touches(
 ) = _touches(trait2, g2, trait1, g1)
 
 #= Linearring cannot touch another linear ring since they are both exclusively
-made up of interior points and no bounday points =#
+made up of interior points and no boundary points =#
 _touches(
     ::GI.LinearRingTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = false
 
 #= Linearring touches a polygon if at least one of the points of the ring
-interact with the polygon bounday and non are in the polygon interior. =#
+interact with the polygon boundary and non are in the polygon interior. =#
 _touches(
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,
@@ -203,8 +211,8 @@ _touches(
 
 # # Polygons touch geometries
 
-#= Polygon touches a curve if at least one of the curve bounday points interacts
-with the polygon's bounday and no curve points interact with the interior.=#
+#= Polygon touches a curve if at least one of the curve boundary points interacts
+with the polygon's boundary and no curve points interact with the interior.=#
 _touches(
     trait1::GI.PolygonTrait, g1,
     trait2::GI.AbstractCurveTrait, g2
@@ -225,8 +233,29 @@ _touches(
 
 # # Geometries touch multi-geometry/geometry collections
 
-#= Geometry touch a multi-geometry or a collection if the geometry touches at
-least one of the elements of the collection. =#
+#= 
+
+A geometry touches a multi-geometry or a collection if the geometry touches at
+least one of the elements of the collection.
+
+This is a bit tricky to implement - we have to actually check every geometry, 
+and make sure that each geom is either disjoint or touching.
+
+Problem here is that we would end up doing double the work.
+
+Either you check disjointness first, and then check touches - in which case
+you have already done the work for the touches check, but can't take advantage of it.
+
+Or you check touches first, and if that is false, you check disjointness.  But if touches failed,
+and you don't know _why_ it was false (disjoint or contained / intersecting), you have to iterate
+over every point twice -- again!
+
+
+At this point we actually need a fast return function...or some more detail returned from the process functions.
+
+That's a project for later though.  Right now we need to get this correct, so I'm going to do the dumb thing.
+
+=#
 function _touches(
     ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::Union{
@@ -234,10 +263,19 @@ function _touches(
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
     }, g2,
 )
+    has_touched = false
     for sub_g2 in GI.getgeom(g2)
-        !touches(g1, sub_g2) && return false
+        if touches(g1, sub_g2)
+            has_touched = true
+        else 
+            # if not touching, they are either intersecting or disjoint
+            # if disjoint, then we can continue
+            # else, we can short circuit, since the geoms are not touching and not disjoint
+            # i.e. they are intersecting
+            disjoint(g1, sub_g2) || return false
+        end
     end
-    return true
+    return has_touched
 end
 
 # # Multi-geometry/geometry collections cross geometries
@@ -251,8 +289,31 @@ function _touches(
     }, g1,
     ::GI.AbstractGeometryTrait, g2,
 )
+    has_touched = false
     for sub_g1 in GI.getgeom(g1)
-        !touches(sub_g1, g2) && return false
+        if touches(sub_g1, g2)
+            has_touched = true
+        else 
+            # if not touching, they are either intersecting or disjoint
+            # if disjoint, then we can continue
+            # else, we can short circuit, since the geoms are not touching and not disjoint
+            disjoint(sub_g1, g2) || return false
+        end
     end
-    return true
+    return has_touched
 end
+
+# Extent forwarding
+
+
+function _touches(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _touches(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _touches(t1, e1::Extents.Extent, t2::GI.AbstractGeometryTrait, g2)
+    return _touches(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _touches(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.touches(e1, e2)
+end
+
+

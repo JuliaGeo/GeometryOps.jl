@@ -2,15 +2,32 @@
 
 module GeometryOps
 
+import GeometryOpsCore
+import GeometryOpsCore: 
+                TraitTarget,
+                Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
+                manifold, best_manifold,
+                Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
+                BoolsAsTypes, True, False, booltype, istrue,
+                TaskFunctors, 
+                WithTrait,
+                WithXY, WithXYZ, WithXYM, WithXYZM,
+                apply, applyreduce, 
+                flatten, reconstruct, rebuild, unwrap, _linearring,
+                APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
+
+export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
+
 using GeoInterface
 using GeometryBasics
-import Tables
 using LinearAlgebra, Statistics
+
+import Tables, DataAPI
 import GeometryBasics.StaticArrays
+import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
-
-using GeoInterface.Extents: Extents
+import GeoInterface.Extents: Extents
 
 const GI = GeoInterface
 const GB = GeometryBasics
@@ -20,14 +37,21 @@ const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
 include("types.jl")
 include("primitives.jl")
-include("utils.jl")
 include("not_implemented_yet.jl")
+
+include("utils/utils.jl")
+include("utils/LoopStateMachine/LoopStateMachine.jl")
+include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
+
+using .LoopStateMachine, .SpatialTreeInterface
+
 
 include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
 include("methods/buffer.jl")
 include("methods/centroid.jl")
+include("methods/convex_hull.jl")
 include("methods/distance.jl")
 include("methods/equals.jl")
 include("methods/clipping/predicates.jl")
@@ -57,6 +81,7 @@ include("transformations/segmentize.jl")
 include("transformations/simplify.jl")
 include("transformations/tuples.jl")
 include("transformations/transform.jl")
+include("transformations/forcedims.jl")
 include("transformations/correction/geometry_correction.jl")
 include("transformations/correction/closed_ring.jl")
 include("transformations/correction/intersecting_polygons.jl")

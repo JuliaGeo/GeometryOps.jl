@@ -53,7 +53,7 @@ const COVEREDBY_ALLOWS = (in_allow = true, on_allow = true, out_allow = false)
 const COVEREDBY_CURVE_ALLOWS = (over_allow = true, cross_allow = true, on_allow = true, out_allow = false)
 const COVEREDBY_CURVE_REQUIRES = (in_require = false, on_require = false, out_require = false)
 const COVEREDBY_POLYGON_REQUIRES = (in_require = true, on_require = false, out_require = false,)
-const COVEREDBY_EXACT = (exact = _False(),)
+const COVEREDBY_EXACT = (exact = False(),)
 
 """
     coveredby(g1, g2)::Bool
@@ -78,6 +78,14 @@ true
 ```
 """
 coveredby(g1, g2) = _coveredby(trait(g1), g1, trait(g2), g2)
+
+"""
+    coveredby(g1)
+
+Return a function that checks if its input is covered by `g1`.
+This is equivalent to `x -> coveredby(x, g1)`.
+"""
+coveredby(g1) = Base.Fix2(coveredby, g1)
 
 # # Convert features to geometries
 _coveredby(::GI.FeatureTrait, g1, ::Any, g2) = coveredby(GI.geometry(g1), g2)
@@ -160,7 +168,7 @@ _coveredby(
 )
 
 #= Linestring is coveredby a polygon if all interior and boundary points of the
-line are in the polygon interior or on its edges, inlcuding hole edges. =#
+line are in the polygon interior or on its edges, including hole edges. =#
 _coveredby(
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.PolygonTrait, g2,
@@ -203,7 +211,7 @@ _coveredby(
 )
 
 #= Linearring is coveredby a polygon if all vertices and edges of the ring are
-in the polygon interior or on the polygon edges, inlcuding hole edges. =# 
+in the polygon interior or on the polygon edges, including hole edges. =# 
 _coveredby(
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,
@@ -271,3 +279,16 @@ function _coveredby(
     end
     return true
 end
+
+# Extent forwarding
+function _coveredby(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _coveredby(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _coveredby(t1, e1::Extents.Extent, t2, g2)
+    return _coveredby(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _coveredby(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.coveredby(e1, e2)
+end
+
+

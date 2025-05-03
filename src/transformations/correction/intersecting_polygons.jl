@@ -5,7 +5,7 @@ export UnionIntersectingPolygons
 #=
 If the sub-polygons of a multipolygon are intersecting, this makes them invalid according to
 specification. Each sub-polygon of a multipolygon being disjoint (other than by a single
-point) is a requirment for a valid multipolygon. However, different libraries may achieve
+point) is a requirement for a valid multipolygon. However, different libraries may achieve
 this in different ways. 
 
 For example, taking the union of all sub-polygons of a multipolygon will create a new

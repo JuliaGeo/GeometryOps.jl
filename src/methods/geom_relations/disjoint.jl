@@ -51,7 +51,7 @@ The code for the specific implementations is in the geom_geom_processors file.
 const DISJOINT_ALLOWS = (in_allow = false, on_allow = false, out_allow = true)
 const DISJOINT_CURVE_ALLOWS = (over_allow = false, cross_allow = false, on_allow = false, out_allow = true)
 const DISJOINT_REQUIRES = (in_require = false, on_require = false, out_require = false)
-const DISJOINT_EXACT = (exact = _False(),)
+const DISJOINT_EXACT = (exact = False(),)
 
 """
     disjoint(geom1, geom2)::Bool
@@ -74,6 +74,14 @@ true
 ```
 """
 disjoint(g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)
+
+"""
+    disjoint(g1)
+
+Return a function that checks if its input is disjoint from `g1`.
+This is equivalent to `x -> disjoint(x, g1)`.
+"""
+disjoint(g1) = Base.Fix2(disjoint, g1)
 
 # # Convert features to geometries
 _disjoint(::FeatureTrait, g1, ::Any, g2) = disjoint(GI.geometry(g1), g2)
@@ -171,7 +179,7 @@ _disjoint(
 )
 
 #= Geometry is disjoint from a linestring if the line's interior and boundary
-points don't intersect with the geometrie's interior and boundary points. =#
+points don't intersect with the geometry's interior and boundary points. =#
 _disjoint(
     trait1::Union{GI.LinearRingTrait, GI.PolygonTrait}, g1,
     trait2::Union{GI.LineTrait, GI.LineStringTrait}, g2,
@@ -255,3 +263,17 @@ function _disjoint(
     end
     return true
 end
+
+
+# Extent forwarding
+function _disjoint(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
+    return _disjoint(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
+end
+function _disjoint(t1, e1::Extents.Extent, t2, g2)
+    return _disjoint(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
+end
+function _disjoint(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
+    return Extents.disjoint(e1, e2)
+end
+
+

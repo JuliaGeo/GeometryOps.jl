@@ -1,5 +1,8 @@
 /Manifest.toml
+/GeometryOpsCore/Manifest.toml
 /docs/build/
 /docs/src/source/
 .vscode/
 .DS_Store
+
+benchmarks/Manifest.toml

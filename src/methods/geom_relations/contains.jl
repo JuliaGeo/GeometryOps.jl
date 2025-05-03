@@ -1,12 +1,12 @@
 # # Contains
 
-export contains
+# do not export to avoid conflict with Base.contains
 
 #=
 ## What is contains?
 
-The contains function checks if a given geometry completly contains another
-geometry, or in other words, that the second geometry is completly within the
+The contains function checks if a given geometry completely contains another
+geometry, or in other words, that the second geometry is completely within the
 first. This requires that the two interiors intersect and that the interior and
 boundary of the second geometry is not in the exterior of the first geometry.
 
@@ -63,3 +63,11 @@ true
 ```
 """
 contains(g1, g2) = GeometryOps.within(g2, g1)
+
+"""
+    contains(g1)
+
+Return a function that checks if its input contains `g1`.
+This is equivalent to `x -> contains(x, g1)`.
+"""
+contains(g1) = Base.Fix2(contains, g1)

@@ -5,7 +5,7 @@ export covers
 #=
 ## What is covers?
 
-The covers function checks if a given geometry completly covers another
+The covers function checks if a given geometry completely covers another
 geometry. For this to be true, the "contained" geometry's interior and
 boundaries must be covered by the "covering" geometry's interior and boundaries.
 The interiors do not need to overlap.
@@ -62,3 +62,11 @@ true
 ```
 """
 covers(g1, g2)::Bool = GeometryOps.coveredby(g2, g1)
+
+"""
+    covers(g1)
+
+Return a function that checks if its input covers `g1`.
+This is equivalent to `x -> covers(x, g1)`.
+"""
+covers(g1) = Base.Fix2(covers, g1)

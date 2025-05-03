@@ -45,7 +45,7 @@ LineString or LinearRing when they are closed, for example as the interior hole
 of a polygon.
 
 The helper functions centroid_and_length and centroid_and_area are made
-availible just in case the user also needs the area or length to decrease
+available just in case the user also needs the area or length to decrease
 repeat computation.
 =#
 """
@@ -62,7 +62,7 @@ function centroid(
     centroid_and_length(trait, geom, T)[1]
 end
 centroid(trait, geom, ::Type{T}; threaded=false) where T = 
-    centroid_and_area(geom, T; threaded)[1]
+    centroid_and_area(trait, geom, T; threaded)[1]
 
 """
     centroid_and_length(geom, [T=Float64])::(::Tuple{T, T}, ::Real)
@@ -76,9 +76,9 @@ function centroid_and_length(
     ::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T},
 ) where T
     # Initialize starting values
-    xcentroid = T(0)
-    ycentroid = T(0)
-    length = T(0)
+    xcentroid = zero(T)
+    ycentroid = zero(T)
+    length = zero(T)
     point₁ = GI.getpoint(geom, 1)
     # Loop over line segments of line string
     for point₂ in GI.getpoint(geom)
@@ -107,14 +107,17 @@ end
 Returns the centroid and area of a given geometry.
 """
 function centroid_and_area(geom, ::Type{T}=Float64; threaded=false) where T
-    target = TraitTarget{Union{GI.PolygonTrait,GI.LineStringTrait,GI.LinearRingTrait}}()
-    init = (zero(T), zero(T)), zero(T)
-    applyreduce(_combine_centroid_and_area, target, geom; threaded, init) do g
-        _centroid_and_area(GI.trait(g), g, T)
-    end
+    trait = GI.trait(geom)
+    centroid_and_area(trait, geom, T; threaded)
 end
 
-function _centroid_and_area(
+function centroid_and_area(trait, geom, ::Type{T}; threaded=false) where T
+    target = TraitTarget{Union{GI.PolygonTrait,GI.LineStringTrait,GI.LinearRingTrait}}()
+    init = (zero(T), zero(T)), zero(T)
+    applyreduce(WithTrait((trait, g) -> centroid_and_area(trait, g, T)), _combine_centroid_and_area, target, geom; threaded, init)
+end
+
+function centroid_and_area(
     ::Union{GI.LineStringTrait, GI.LinearRingTrait}, geom, ::Type{T}
 ) where T
     # Check that the geometry is closed
@@ -123,9 +126,9 @@ function _centroid_and_area(
         "centroid_and_area should only be used with closed geometries"
     )
     # Initialize starting values
-    xcentroid = T(0)
-    ycentroid = T(0)
-    area = T(0)
+    xcentroid = zero(T)
+    ycentroid = zero(T)
+    area = zero(T)
     point₁ = GI.getpoint(geom, 1)
     # Loop over line segments of linear ring
     for point₂ in GI.getpoint(geom)
@@ -144,16 +147,17 @@ function _centroid_and_area(
     ycentroid /= 6area
     return (xcentroid, ycentroid), abs(area)
 end
-function _centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}) where T
+function centroid_and_area(::GI.PolygonTrait, geom, ::Type{T}) where T
     # Exterior ring's centroid and area
-    (xcentroid, ycentroid), area = centroid_and_area(GI.getexterior(geom), T)
+    exterior = GI.getexterior(geom)
+    (xcentroid, ycentroid), area = centroid_and_area(GI.geomtrait(exterior), exterior, T)
     # Weight exterior centroid by area
     xcentroid *= area
     ycentroid *= area
     # Loop over any holes within the polygon
     for hole in GI.gethole(geom)
         # Hole polygon's centroid and area
-        (xinterior, yinterior), interior_area = centroid_and_area(hole, T)
+        (xinterior, yinterior), interior_area = centroid_and_area(GI.geomtrait(hole), hole, T)
         # Accumulate the area component into `area`
         area -= interior_area
         # Weighted average of centroid components

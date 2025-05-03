@@ -23,7 +23,7 @@ lines!(GI.getpoint(l2), color = :orange)
 scatter!(GI.getpoint(l2), color = :orange)
 f
 ```
-We can see that the two lines do not share a commen set of points and edges in
+We can see that the two lines do not share a common set of points and edges in
 the plot, so they are not equal:
 ```@example equals
 GO.equals(l1, l2)  # returns false
@@ -44,7 +44,7 @@ same order. The winding order also doesn't have to be the same to represent the
 same geometry. This requires checking every point against every other point in
 the two geometries we are comparing. Also, some geometries must be "closed" like
 polygons and linear rings. These will be assumed to be closed, even if they
-don't have a repeated last point explicity written in the coordinates.
+don't have a repeated last point explicitly written in the coordinates.
 Additionally, geometries and multi-geometries can be equal if the multi-geometry
 only includes that single geometry.
 =#
@@ -210,7 +210,7 @@ end
     )::Bool
 
 Two lines/linestrings are equal if they share the same set of points going
-along the curve. Note that lines/linestrings aren't closed by defintion.
+along the curve. Note that lines/linestrings aren't closed by definition.
 """
 equals(
     ::Union{GI.LineTrait, GI.LineStringTrait}, l1,
@@ -224,7 +224,7 @@ equals(
     )::Bool
 
 A line/linestring and a linear ring are equal if they share the same set of
-points going along the curve. Note that lines aren't closed by defintion, but
+points going along the curve. Note that lines aren't closed by definition, but
 rings are, so the line must have a repeated last point to be equal
 """
 equals(
@@ -239,7 +239,7 @@ equals(
     )::Bool
 
 A linear ring and a line/linestring are equal if they share the same set of
-points going along the curve. Note that lines aren't closed by defintion, but
+points going along the curve. Note that lines aren't closed by definition, but
 rings are, so the line must have a repeated last point to be equal
 """
 equals(

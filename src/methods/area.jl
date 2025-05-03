@@ -29,7 +29,7 @@ lines!(
 f
 ```
 The points are ordered in a counterclockwise fashion, which means that the signed area
-is negative.  If we reverse the order of the points, we get a postive area.
+is negative.  If we reverse the order of the points, we get a positive area.
 ```@example rect
 GO.signed_area(rect)  # -1.0
 ```
@@ -67,16 +67,14 @@ Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
 function area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat
-    applyreduce(+, _AREA_TARGETS, geom; threaded, init=zero(T)) do g
-        _area(T, GI.trait(g), g)
-    end
+    applyreduce(WithTrait((trait, g) -> _area(T, trait, g)), +, _AREA_TARGETS, geom; threaded, init=zero(T))
 end
 
 """
     signed_area(geom, [T = Float64])::T
 
 Returns the signed area of a single geometry, based on winding order. 
-This is computed slighly differently for different geometries:
+This is computed slightly differently for different geometries:
 
     - The signed area of a point is always zero.
     - The signed area of a curve is always zero.

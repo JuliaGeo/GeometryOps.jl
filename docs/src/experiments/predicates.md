@@ -7,7 +7,7 @@ Exact vs fast predicates
 ```@example orient
 using CairoMakie
 import GeometryOps as GO, GeoInterface as GI, LibGEOS as LG
-import ExactPredicates
+import ExactPredicates, AdaptivePredicates
 using MultiFloats
 using Chairmarks: @be
 using BenchmarkTools: prettytime
@@ -25,7 +25,7 @@ function orient_adaptive(p, q, r)
 end
 # Create an interactive Makie dashboard which can show what is done here
 labels = ["Float64", "Adaptive", "Exact"]
-funcs = [orient_f64, orient_adaptive, ExactPredicates.orient]
+funcs = [orient_f64, AdaptivePredicates.orient2, ExactPredicates.orient]
 fig = Figure()
 axs = [Axis(fig[1, i]; aspect = DataAspect(), xticklabelrotation = pi/4, title) for (i, title) in enumerate(labels)]
 w, r, q, p = 42.0, 0.95, 18.0, 16.8
@@ -54,7 +54,7 @@ fig
 ```julia
 using WGLMakie
 import GeometryOps as GO, GeoInterface as GI, LibGEOS as LG
-import ExactPredicates
+import ExactPredicates, AdaptivePredicates
 using MultiFloats
 
 function orient_f64(p, q, r)

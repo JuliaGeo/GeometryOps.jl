@@ -41,7 +41,7 @@ features:
 
 <div class="vp-doc" style="width:80%; margin:auto">
 
-<h1> What is GeometryOps.jl? </h1>
+# What is GeometryOps.jl?
 
 GeometryOps.jl is a package for geometric calculations on (primarily 2D) geometries.
 
@@ -50,6 +50,16 @@ The driving idea behind this package is to unify all the disparate packages for 
 Most of the usecases are driven by GIS and similar Earth data workflows, so this might be a bit specialized towards that, but methods should always be general to any coordinate space.
 
 We welcome contributions, either as pull requests or discussion on issues!
+
+# How to navigate the docs
+
+GeometryOps' [docs](https://juliageo.org/GeometryOps.jl/stable) are divided into three main sections: tutorials, explanations and source code.  
+Documentation and examples for many functions can be found in the source code section, since we use literate programming in GeometryOps.
+
+- Tutorials are meant to teach the fundamental concepts behind GeometryOps, and how to perform certain operations.
+- Explanations usually contain little code, and explain in more detail how GeometryOps works.
+- Source code usually contains explanations and examples at the top of the page, followed by annotated source code from that file.
+
 
 
 </div>
