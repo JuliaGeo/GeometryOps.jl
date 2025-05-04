@@ -7,7 +7,7 @@ CairoMakie.activate!(px_per_unit = 2, type = "svg", inline = true) # TODO: make 
 # import packages that activate extensions
 import FlexiJoins, LibGEOS, Proj, TGGeometry
 
-DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps; using GeometryOps.GeometryBasics); recursive=true)
+DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps; using GeometryOps.GeometryBasics; using GeometryOps.GeometryOpsCore); recursive=true)
 
 using GeoInterfaceMakie
 
