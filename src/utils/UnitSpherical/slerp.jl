@@ -26,6 +26,8 @@ between 0 and 1 along the path from `a` to `b`.
 ## Examples
 
 ```jldoctest
+julia> using GeometryOps.UnitSpherical
+
 julia> slerp(UnitSphericalPoint(1, 0, 0), UnitSphericalPoint(0, 1, 0), 0.5)
 3-element UnitSphericalPoint{Float64} with indices SOneTo(3):
  0.7071067811865475

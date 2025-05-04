@@ -17,6 +17,7 @@ end
 @safetestset "Utils" begin include("utils/utils.jl") end
 @safetestset "LoopStateMachine" begin include("utils/LoopStateMachine.jl") end
 @safetestset "SpatialTreeInterface" begin include("utils/SpatialTreeInterface.jl") end
+@safetestset "UnitSpherical" begin include("utils/unitspherical.jl") end
 
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end

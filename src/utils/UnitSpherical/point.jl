@@ -28,8 +28,13 @@ and back again.
 ## Examples
 
 ```jldoctest
+julia> using GeometryOps.UnitSpherical
+
 julia> UnitSphericalPoint(1, 0, 0)
-UnitSphericalPoint(1.0, 0.0, 0.0)
+3-element UnitSphericalPoint{Int64} with indices SOneTo(3):
+ 1
+ 0
+ 0
 ```
 
 """
@@ -111,11 +116,15 @@ Returns a `Number`, usually Float64 but that depends on the input type.
 ## Doctests
 
 ```jldoctest
+julia> using GeometryOps.UnitSpherical
+
 julia> spherical_distance(UnitSphericalPoint(1, 0, 0), UnitSphericalPoint(0, 1, 0))
 1.5707963267948966
 ```
 
 ```jldoctest
+julia> using GeometryOps.UnitSpherical
+
 julia> spherical_distance(UnitSphericalPoint(1, 0, 0), UnitSphericalPoint(1, 0, 0))
 0.0
 ```
