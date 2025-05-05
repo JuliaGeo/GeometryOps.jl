@@ -1,4 +1,5 @@
-# # Segmentize
+# # GEOS segmentize
+# This file implements [`segmentize`](@ref) using the [`GEOS`](@ref) algorithm.
 import GeometryOps: segmentize, apply
 
 #=

@@ -1,4 +1,4 @@
-# # Polygonizing raster data
+# # Polygonize
 
 export polygonize
 
