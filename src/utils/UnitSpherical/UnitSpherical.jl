@@ -14,7 +14,6 @@ include("slerp.jl")
 include("cap.jl")
 
 export UnitSphericalPoint, UnitSphereFromGeographic, GeographicFromUnitSphere, 
-       slerp, SphericalCap
-export spherical_distance
+       slerp, SphericalCap, spherical_distance
 
 end

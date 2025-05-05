@@ -17,10 +17,24 @@ SphericalCap(geom) = SphericalCap(GI.trait(geom), geom)
 SphericalCap(t::GI.PointTrait, geom) = SphericalCap(t, geom, 0)
 # TODO: add implementations for line string and polygon traits
 # TODO: add implementations to merge two spherical caps
+function _merge(x::SphericalCap, y::SphericalCap)
+    d = spherical_distance(x.point, y.point)
+    newradius = (x.radius + y.radius + d) / 2
+    if newradius < x.radius
+        #x contains y
+        x
+    elseif newradius < y.radius
+        #y contains x
+        y
+    else
+        excenter = 0.5 * (1 + (y.radius - x.radius) / d)
+        newcenter = x.point + slerp(x.point, y.point, excenter)
+        SphericalCap(newcenter, d)
+    end
+end
 # TODO: add implementations for multitraits based on this
 
 # TODO: this returns an approximately antipodal point...
-
 
 # TODO: exact-predicate intersection
 # This is all inexact and thus subject to floating point error
@@ -35,6 +49,10 @@ function _contains(big::SphericalCap, small::SphericalCap)
     # small circle fits in big circle
     return dist + small.radius < big.radius 
 end
+function _contains(cap::SphericalCap, point::UnitSphericalPoint)
+    spherical_distance(cap.point, point) <= cap.radius
+end
+
 
 function circumcenter_on_unit_sphere(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
     LinearAlgebra.normalize(a × b + b × c + c × a)
