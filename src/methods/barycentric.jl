@@ -235,7 +235,7 @@ function barycentric_coordinates(alg::AbstractBarycentricCoordinateMethod, geom,
 end
 
 function barycentric_coordinates(alg::AbstractBarycentricCoordinateMethod, t1::GI.AbstractCurveTrait, geom, t2::GI.PointTrait, in_point; normalize = true)
-    λs = Vector{Float64}(undef, GI.npoint(geom) - (GI.isclosed(geom) ? 1 : 0))
+    λs = Vector{float(typeof(GI.x(in_point)))}(undef, GI.npoint(geom) - (GI.isclosed(geom) ? 1 : 0))
     barycentric_coordinates!(λs, alg, t1, geom, t2, in_point; normalize)
     return λs
 end
