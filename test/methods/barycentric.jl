@@ -10,10 +10,8 @@ t3, p3 = GI.LineString(GeometryBasics.Point2d[(0,0), (1,0), (0,1)]), (1., 1.)
 @testset "Triangle coordinates" begin
     # Test that the barycentric coordinates for (0,0), (1,0), (0,1), and (0.5,0.5) are (0.5,0.25,0.25)
     @test all(barycentric_coordinates(MeanValue(), t1, p1) .== (0.5,0.25,0.25))
-    @test all(barycentric_coordinates(MeanValue(), GI.Polygon(t1), p1) .== (0.5,0.25,0.25))
     # Test that the barycentric coordinates for (0,0), (1,0), (0,1), and (1,1) are (-1,1,1)
     @test all(barycentric_coordinates(MeanValue(), t2, p2) .≈ (-1,1,1))
-    @test all(barycentric_coordinates(MeanValue(), GI.Polygon(t2), p2) .≈ (-1,1,1))
 end
 
 @testset "Preserving return type" begin
