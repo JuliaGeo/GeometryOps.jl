@@ -1,4 +1,4 @@
-# # Distance and signed distance
+# # Distance
 
 export distance, signed_distance
 

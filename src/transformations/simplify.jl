@@ -1,18 +1,39 @@
-# # Geometry simplification
+# # Simplify
 
 #=
-This file holds implementations for the RadialDistance, Douglas-Peucker, and
-Visvalingam-Whyatt algorithms for simplifying geometries (specifically for
-polygons and lines).
+```@meta
+CollapsedDocStrings = true
+```
 
-The GEOS extension also allows for GEOS's topology preserving simplification 
+```@docs; canonical=false
+simplify
+VisvalingamWhyatt
+DouglasPeucker
+RadialDistance
+```
+
+## What is Geometry Simplification?
+
+Geometry simplification reduces the number of points in a geometry while preserving its essential shape. 
+This is usually done by specifying some tolerance.  
+
+GeometryOps provides three simplification algorithms: [`VisvalingamWhyatt`](@ref), [`DouglasPeucker`](@ref), 
+and [`RadialDistance`](@ref), listed in order of decreasing quality but increasing performance. 
+
+The default algorithm is [`DouglasPeucker`](@ref), which is also available through the GEOS extension.
+
+In GeometryOps' algorithms, you can specify
+`tol`, `number` of points, or `ratio` of points after simplification to points in the input geometry.
+
+The GEOS extension (activated by loading [LibGEOS.jl](https://github.com/JuliaGeo/LibGEOS.jl)) also allows for GEOS's topology preserving simplification 
 as well as Douglas-Peucker simplification implemented in GEOS.  Call this by
-passing `GEOS(; method = :TopologyPreserve)` or `GEOS(; method = :DouglasPeucker)`
+passing [`GEOS(; method = :TopologyPreserve)`](@ref GEOS) or [`GEOS(; method = :DouglasPeucker)`](@ref GEOS)
 to the algorithm.
+
 
 ## Examples
 
-A quick and dirty example is:
+Here is the simplest example:
 
 ```@example polygon_simplification
 using Makie, GeoInterfaceMakie
@@ -29,69 +50,18 @@ axislegend(a)
 f
 ```
 
-## Benchmark
+You can also choose the algorithm to use.  The algorithm we run here is the same as
+what we used above:
 
-We benchmark these methods against LibGEOS's `simplify` implementation, which uses the Douglas-Peucker algorithm.
-
-```@example benchmark
-using BenchmarkTools, Chairmarks, GeoJSON, CairoMakie
-import GeometryOps as GO, LibGEOS as LG, GeoInterface as GI
-using CoordinateTransformations
-using NaturalEarth
-import Main: plot_trials # hide
-lg_and_go(geometry) = (GI.convert(LG, geometry), GO.tuples(geometry))
-# Load in the Natural Earth admin GeoJSON, then extract the USA's geometry
-fc = NaturalEarth.naturalearth("admin_0_countries", 10)
-usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)] |> x -> GI.convert(LG, x) |> LG.makeValid |> GO.tuples
-include(joinpath(dirname(dirname(pathof(GO))), "test", "data", "polygon_generation.jl"))
-
-usa_poly = GI.getgeom(usa_multipoly, findmax(GO.area.(GI.getgeom(usa_multipoly)))[2]) # isolate the poly with the most area
-usa_centroid = GO.centroid(usa_poly)
-usa_reflected = GO.transform(Translation(usa_centroid...) ∘ LinearMap(Makie.rotmatrix2d(π)) ∘ Translation((-).(usa_centroid)...), usa_poly)
-f, a, p = plot(usa_poly; label = "Original", axis = (; aspect = DataAspect()))#; plot!(usa_reflected; label = "Reflected")
-```
-This is the complex polygon we'll be benchmarking.
-```@example benchmark
-simplify_suite = BenchmarkGroup(["Simplify"])
-singlepoly_suite = BenchmarkGroup(["Polygon", "title:Polygon simplify", "subtitle:Random blob"])
-
-include(joinpath(dirname(dirname(pathof(GO))), "test", "data", "polygon_generation.jl"))
-
-for n_verts in round.(Int, exp10.(LinRange(log10(10), log10(10_000), 10)))
-    geom = GI.Wrappers.Polygon(generate_random_poly(0, 0, n_verts, 2, 0.2, 0.3))
-    geom_lg, geom_go = lg_and_go(LG.makeValid(GI.convert(LG, geom)))
-    singlepoly_suite["GO-DP"][GI.npoint(geom)] = @be GO.simplify($geom_go; tol = 0.1) seconds=1
-    singlepoly_suite["GO-VW"][GI.npoint(geom)] = @be GO.simplify($(GO.VisvalingamWhyatt(; tol = 0.1)), $geom_go) seconds=1
-    singlepoly_suite["GO-RD"][GI.npoint(geom)] = @be GO.simplify($(GO.RadialDistance(; tol = 0.1)), $geom_go) seconds=1
-    singlepoly_suite["LibGEOS"][GI.npoint(geom)] = @be LG.simplify($geom_lg, 0.1) seconds=1
-end
-
-plot_trials(singlepoly_suite; legend_position=(1, 1, TopRight()), legend_valign = -2, legend_halign = 1.2, legend_orientation = :horizontal)
+```@example polygon_simplification
+GO.simplify(GO.DouglasPeucker(number = 6), original)
 ```
 
-```@example benchmark
-multipoly_suite = BenchmarkGroup(["MultiPolygon", "title:Multipolygon simplify", "subtitle:USA multipolygon"])
+## Benchmarks
 
-for frac in exp10.(LinRange(log10(0.3), log10(1), 6)) # TODO: this example isn't the best.  How can we get this better?
-    geom = GO.simplify(usa_multipoly; ratio = frac)
-    geom_lg, geom_go = lg_and_go(geom)
-    _tol = 0.001
-    multipoly_suite["GO-DP"][GI.npoint(geom)] = @be GO.simplify($geom_go; tol = $_tol) seconds=1
-    # multipoly_suite["GO-VW"][GI.npoint(geom)] = @be GO.simplify($(GO.VisvalingamWhyatt(; tol = $_tol)), $geom_go) seconds=1
-    multipoly_suite["GO-RD"][GI.npoint(geom)] = @be GO.simplify($(GO.RadialDistance(; tol = _tol)), $geom_go) seconds=1
-    multipoly_suite["LibGEOS"][GI.npoint(geom)] = @be LG.simplify($geom_lg, $_tol) seconds=1
-    println("""
-    For $(GI.npoint(geom)) points, the algorithms generated polygons with the following number of vertices:
-    GO-DP : $(GI.npoint( GO.simplify(geom_go; tol = _tol)))
-    GO-RD : $(GI.npoint( GO.simplify((GO.RadialDistance(; tol = _tol)), geom_go)))
-    LGeos : $(GI.npoint( LG.simplify(geom_lg, _tol)))
-    """)
-    # GO-VW : $(GI.npoint( GO.simplify((GO.VisvalingamWhyatt(; tol = _tol)), geom_go)))
-    println()
-end
-plot_trials(multipoly_suite)
-```
+Let's benchmark the performance of the algorithms to get a clearer idea of what's going on.
 
+TODO: I had benchmarks but they were not particularly useful.  We need to make them better.
 =#
 
 export simplify, VisvalingamWhyatt, DouglasPeucker, RadialDistance
