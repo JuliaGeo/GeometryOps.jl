@@ -10,8 +10,10 @@ t3, p3 = GI.LineString(GeometryBasics.Point2d[(0,0), (1,0), (0,1)]), (1., 1.)
 @testset "Triangle coordinates" begin
     # Test that the barycentric coordinates for (0,0), (1,0), (0,1), and (0.5,0.5) are (0.5,0.25,0.25)
     @test all(barycentric_coordinates(MeanValue(), t1, p1) .== (0.5,0.25,0.25))
+    @test all(barycentric_coordinates(MeanValue(), GI.Polygon(t1), p1) .== (0.5,0.25,0.25))
     # Test that the barycentric coordinates for (0,0), (1,0), (0,1), and (1,1) are (-1,1,1)
     @test all(barycentric_coordinates(MeanValue(), t2, p2) .≈ (-1,1,1))
+    @test all(barycentric_coordinates(MeanValue(), GI.Polygon(t2), p2) .≈ (-1,1,1))
 end
 
 @testset "Preserving return type" begin
@@ -19,6 +21,11 @@ end
     @test_broken eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{BigFloat}[(0,0), (1,0), (0,1)]), Point2f(1,1))) <: BigFloat # keep the most precise type
     @test eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{Float64}[(0,0), (1,0), (0,1)]), Point2{Float64}(1,1))) <: Float64
     @test eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{Float32}[(0,0), (1,0), (0,1)]), Point2{Float32}(1,1))) <: Float32
+end
+
+@testset "Interpolation" begin
+    @test barycentric_interpolate(MeanValue(), t1, [1, 1, 1], p1) == 1
+    @test barycentric_interpolate(MeanValue(), t1, [1, 2, 3], p1) ≈ 1/2 + 2/4 + 3/4
 end
 
 @testset "Tests for helper methods" begin

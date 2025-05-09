@@ -315,12 +315,16 @@ end
 # end
 # ```
 
+function barycentric_interpolate(alg::AbstractBarycentricCoordinateMethod, geom, values::AbstractVector, point)
+    barycentric_interpolate(alg, GI.geomtrait(geom), geom, values, GI.geomtrait(point), point)
+end
+
 # This performs an inplace accumulation, using less memory and is faster.
 # That's particularly good if you are using a polygon with a large number of points...
 function barycentric_interpolate(::MeanValue, ::GI.AbstractCurveTrait, ring, values::AbstractVector{V}, ::GI.PointTrait, point; normalize = true) where V
     @boundscheck @assert length(values) == GI.npoint(ring)
     @boundscheck @assert GI.npoint(ring) >= 3
-    T = float(typeof(GI.x(in_point)))
+    T = float(typeof(GI.x(point)))
     point = _tuple_point(point, T)
     n_points = GI.npoint(ring) - (GI.isclosed(ring) ? 1 : 0) # do not iterate over the "closing" / last point, which is duplicated.
     ## Initialize counters and register variables
