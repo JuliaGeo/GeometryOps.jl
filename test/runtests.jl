@@ -48,3 +48,4 @@ end
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end
 @safetestset "TGGeometry" begin include("extensions/tggeometry.jl") end
+@safetestset "DataFrames" begin include("extensions/dataframes.jl") end
