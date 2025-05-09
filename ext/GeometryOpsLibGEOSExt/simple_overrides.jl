@@ -1,8 +1,10 @@
 #=
 # Simple overrides
 This file contains simple overrides for GEOS, essentially only those
-functions which have direct counterparts in LG and only
+functions which have direct counterparts in LibGEOS and only
 require conversion before calling.
+
+They can all be invoked by calling `GO.$fname(GO.GEOS(), geom1, ...)`.
 =#
 # ## Polygon set operations
 # ### Difference

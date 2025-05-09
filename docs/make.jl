@@ -64,6 +64,14 @@ function current_module_from_paths(source_path, relative_path)
         return "GeometryOps"
     elseif endswith(source_path, "ext")
         return "Base.get_extension(GeometryOps, :$(splitpath(relative_path)[1]))"
+    elseif contains(relative_path, "SpatialTreeInterface")
+        return "GeometryOps.SpatialTreeInterface"
+    elseif contains(relative_path, "LoopStateMachine")
+        return "GeometryOps.LoopStateMachine"
+    elseif contains(relative_path, "NaturalIndexing")
+        return "GeometryOps.NaturalIndexing"
+    else
+        return "GeometryOps" # default to GO as a last resort
     end
 end
 
@@ -111,7 +119,8 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
 end
 
 # Now that the Literate stuff is done, we also download the call notes from HackMD:
-download("https://hackmd.io/kpIqAR8YRJOZQDJjUKVAUQ/download", joinpath(@__DIR__, "src", "call_notes.md"))
+# download("https://hackmd.io/kpIqAR8YRJOZQDJjUKVAUQ/download", joinpath(@__DIR__, "src", "call_notes.md"))
+# This is a bit unreliable especially at high volumes of traffic, so we don't call this for now.
 
 # Finally, make the docs!
 makedocs(;
@@ -131,9 +140,16 @@ makedocs(;
         ],
         "Explanations" => [
             "Paradigms" => "explanations/paradigms.md",
-            "Peculiarities" => "explanations/peculiarities.md",
             "Manifolds" => "explanations/manifolds.md",
             "Performance" => "explanations/performance.md",
+            "Peculiarities" => "explanations/peculiarities.md",
+            "GIS terminology" => [
+                "CRS" => "explanations/crs.md",
+                "Winding order" => "explanations/winding_order.md",
+                # "Geometry types and lack of support" => "explanations/well_known_geometry.md", # TODO write this
+                # "When you should use LibGEOS or ArchGDAL" => "explanations/notgeometryops.md", # TODO write this
+            ],
+            "Developer docs" => "explanations/devdocs.md",
         ],
         "Source code" => literate_pages,
     ],
