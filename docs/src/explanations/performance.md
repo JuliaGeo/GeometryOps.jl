@@ -10,7 +10,7 @@ Otherwise - propagate that trait down the stack!
 If you don't, then the compiler loses track of it, and when it finds it again, it has to allocate to perform a dynamic dispatch.  
 This is pretty slow and can cause a 3x (or much much larger) slowdown in your code.
 
-Things like the [`Applicator`](@ref)s and especially the [`ApplyWithTrait`](@ref) applicator can help here.
+Things like the [`Applicator`](@ref GeometryOpsCore.Applicator)s and especially the [`ApplyWithTrait`](@ref GeometryOpsCore.ApplyWithTrait) applicator can help here.
 
 Similarly, you'll notice a pattern where we pass a floating point type down the chain.  This is done for type stability as well.
 If GeoInterface gets a `coordtype` in future then it'll default to `float(coordtype(geom))`, but for now we fix it at f64 and let
