@@ -141,6 +141,7 @@ makedocs(;
         "Explanations" => [
             "Paradigms" => "explanations/paradigms.md",
             "Manifolds" => "explanations/manifolds.md",
+            "Performance" => "explanations/performance.md",
             "Peculiarities" => "explanations/peculiarities.md",
             "GIS terminology" => [
                 "CRS" => "explanations/crs.md",
