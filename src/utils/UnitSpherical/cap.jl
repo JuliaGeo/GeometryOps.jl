@@ -1,6 +1,58 @@
+# # Spherical Caps
+
 #=
-# Spherical caps
+```@meta
+CollapsedDocStrings = true
+```
+
+```@docs; canonical=false
+SphericalCap
+circumcenter_on_unit_sphere
+```
+
+## What is SphericalCap?
+
+A spherical cap represents a portion of a unit sphere bounded by a small circle. It is defined by a center point on the unit sphere and a radius (in radians).
+
+Spherical caps are used in:
+- Representing circular regions on a spherical surface
+- Approximating and bounding spherical geometries
+- Spatial indexing and filtering on the unit sphere
+- Implementing containment, intersection, and disjoint predicates
+
+The `SphericalCap` type offers multiple constructors to create caps from:
+- UnitSphericalPoint and radius
+- Geographic coordinates and radius
+- Three points on the unit sphere (circumcircle)
+
+## Examples
+
+```@example sphericalcap
+using GeometryOps
+using GeoInterface
+
+# Create a spherical cap from a point and radius
+point = UnitSphericalPoint(1.0, 0.0, 0.0)  # Point on the unit sphere
+cap = SphericalCap(point, 0.5)  # Cap with radius 0.5 radians
+```
+
+```@example sphericalcap
+# Create a spherical cap from geographic coordinates
+lat, lon = 40.0, -74.0  # New York City (approximate)
+point = GeoInterface.Point(lon, lat)
+cap = SphericalCap(point, 0.1)  # Cap with radius ~0.1 radians
+```
+
+```@example sphericalcap
+# Create a spherical cap from three points (circumcircle)
+p1 = UnitSphericalPoint(1.0, 0.0, 0.0)
+p2 = UnitSphericalPoint(0.0, 1.0, 0.0)
+p3 = UnitSphericalPoint(0.0, 0.0, 1.0)
+cap = SphericalCap(p1, p2, p3)
+```
+
 =#
+
 # Spherical cap implementation
 struct SphericalCap{T}
     point::UnitSphericalPoint{T}
