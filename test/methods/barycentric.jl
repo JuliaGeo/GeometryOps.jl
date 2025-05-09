@@ -15,10 +15,10 @@ t3, p3 = GI.LineString(GeometryBasics.Point2d[(0,0), (1,0), (0,1)]), (1., 1.)
 end
 
 @testset "Preserving return type" begin
-    @test_broken eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{BigFloat}[(0,0), (1,0), (0,1)]), Point2{BigFloat}(1,1))) <: BigFloat
+    @test eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{BigFloat}[(0,0), (1,0), (0,1)]), Point2{BigFloat}(1,1))) <: BigFloat
     @test_broken eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{BigFloat}[(0,0), (1,0), (0,1)]), Point2f(1,1))) <: BigFloat # keep the most precise type
-    @test_broken eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{Float64}[(0,0), (1,0), (0,1)]), Point2{Float64}(1,1))) <: Float64
-    @test_broken eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{Float32}[(0,0), (1,0), (0,1)]), Point2{Float32}(1,1))) <: Float32
+    @test eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{Float64}[(0,0), (1,0), (0,1)]), Point2{Float64}(1,1))) <: Float64
+    @test eltype(barycentric_coordinates(MeanValue(), GI.LinearRing(Point2{Float32}[(0,0), (1,0), (0,1)]), Point2{Float32}(1,1))) <: Float32
 end
 
 @testset "Tests for helper methods" begin

@@ -248,15 +248,15 @@ end
 function barycentric_coordinates!(λs::Vector{<: Real}, ::MeanValue, ::GI.AbstractCurveTrait, ring, ::GI.PointTrait, in_point; normalize = true)
     @boundscheck @assert length(λs) == GI.npoint(ring)
     @boundscheck @assert GI.npoint(ring) >= 3
-    
-    point = _tuple_point(in_point)
+    T = float(typeof(GI.x(in_point)))
+    point = _tuple_point(in_point, T)
     n_points = GI.npoint(ring)
     ## Initialize counters and register variables
     ## Points - these are actually vectors from point to vertices
     ##  polypoints[i-1], polypoints[i], polypoints[i+1]
-    sᵢ₋₁ = _tuple_point(GI.getpoint(ring, n_points)) .- point
-    sᵢ   = _tuple_point(GI.getpoint(ring, 1)) .- point
-    sᵢ₊₁ = _tuple_point(GI.getpoint(ring, 2)) .- point
+    sᵢ₋₁ = _tuple_point(GI.getpoint(ring, n_points), T) .- point
+    sᵢ   = _tuple_point(GI.getpoint(ring, 1), T) .- point
+    sᵢ₊₁ = _tuple_point(GI.getpoint(ring, 2), T) .- point
     ## radius / Euclidean distance between points.
     rᵢ₋₁ = norm(sᵢ₋₁) 
     rᵢ   = norm(sᵢ  )
@@ -269,7 +269,7 @@ function barycentric_coordinates!(λs::Vector{<: Real}, ::MeanValue, ::GI.Abstra
         ## Increment counters + set variables
         sᵢ₋₁ = sᵢ
         sᵢ   = sᵢ₊₁
-        sᵢ₊₁ = _tuple_point(GI.getpoint(ring, mod1(i+1, n_points))) .- point
+        sᵢ₊₁ = _tuple_point(GI.getpoint(ring, mod1(i+1, n_points)), T) .- point
         rᵢ₋₁ = rᵢ
         rᵢ   = rᵢ₊₁
         rᵢ₊₁ = norm(sᵢ₊₁) # radius / Euclidean distance between points.
@@ -320,15 +320,15 @@ end
 function barycentric_interpolate(::MeanValue, ::GI.AbstractCurveTrait, ring, values::AbstractVector{V}, ::GI.PointTrait, point; normalize = true) where V
     @boundscheck @assert length(values) == GI.npoint(ring)
     @boundscheck @assert GI.npoint(ring) >= 3
-
-    point = _tuple_point(point)
+    T = float(typeof(GI.x(in_point)))
+    point = _tuple_point(point, T)
     n_points = GI.npoint(ring) - (GI.isclosed(ring) ? 1 : 0) # do not iterate over the "closing" / last point, which is duplicated.
     ## Initialize counters and register variables
     ## Points - these are actually vectors from point to vertices
     ##  polypoints[i-1], polypoints[i], polypoints[i+1]
-    sᵢ₋₁ = _tuple_point(GI.getpoint(ring, n_points)) .- point
-    sᵢ   = _tuple_point(GI.getpoint(ring, 1)) .- point
-    sᵢ₊₁ = _tuple_point(GI.getpoint(ring, 2)) .- point
+    sᵢ₋₁ = _tuple_point(GI.getpoint(ring, n_points), T) .- point
+    sᵢ   = _tuple_point(GI.getpoint(ring, 1), T) .- point
+    sᵢ₊₁ = _tuple_point(GI.getpoint(ring, 2), T) .- point
     ## radius / Euclidean distance between points.
     rᵢ₋₁ = norm(sᵢ₋₁) 
     rᵢ   = norm(sᵢ  )
@@ -342,7 +342,7 @@ function barycentric_interpolate(::MeanValue, ::GI.AbstractCurveTrait, ring, val
         ## Increment counters + set variables
         sᵢ₋₁ = sᵢ
         sᵢ   = sᵢ₊₁
-        sᵢ₊₁ = _tuple_point(GI.getpoint(ring, mod1(i+1, n_points))) .- point
+        sᵢ₊₁ = _tuple_point(GI.getpoint(ring, mod1(i+1, n_points)), T) .- point
         rᵢ₋₁ = rᵢ
         rᵢ   = rᵢ₊₁
         rᵢ₊₁ = norm(sᵢ₊₁) 
