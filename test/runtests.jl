@@ -7,6 +7,7 @@ include("helpers.jl")
 @testset "Core" begin
     @safetestset "Algorithm" begin include("core/algorithm.jl") end
     @safetestset "Manifold" begin include("core/manifold.jl") end
+    @safetestset "Applicators" begin include("core/applicators.jl") end
 end
 
 @safetestset "Types" begin include("types.jl") end
@@ -47,3 +48,4 @@ end
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end
 @safetestset "TGGeometry" begin include("extensions/tggeometry.jl") end
+@safetestset "DataFrames" begin include("extensions/dataframes.jl") end

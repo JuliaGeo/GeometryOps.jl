@@ -1,3 +1,12 @@
+# # FlexiJoins extension
+#=
+This is an extension on FlexiJoins.jl that provides spatial tree acceleration to join 
+arbitrary tables, using GeometryOps predicates.
+
+The implementation is specialized on GO predicates.
+
+See the [Spatial Joins tutorial](@ref tutorial-spatial-joins) for more information and for how to use this.
+=#
 module GeometryOpsFlexiJoinsExt
 
 using GeometryOps

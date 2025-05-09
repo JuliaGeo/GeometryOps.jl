@@ -57,7 +57,9 @@ fig
 x = [-5, -5, 5, 5];
 y = [-5, 5, 5, -5];
 multipoint = GI.MultiPoint(GI.Point.(zip(x, y)));
-plot!(ax, multipoint; marker = '☁', markersize = 30)
+# TODO: GeoInterfaceMakie.jl can't plot multipoints due to breaking changes
+# in Makie.jl.  We should fix that.
+plot!(ax, multipoint.geom; marker = '☁', markersize = 30)
 fig
 ````
 
