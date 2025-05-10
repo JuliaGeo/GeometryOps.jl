@@ -19,18 +19,16 @@ import GeometryOpsCore:
 export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
 
 using GeoInterface
-using GeometryBasics
 using LinearAlgebra, Statistics
 
 import Tables, DataAPI
-import GeometryBasics.StaticArrays
+import StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
 import GeoInterface.Extents: Extents
 
 const GI = GeoInterface
-const GB = GeometryBasics
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T

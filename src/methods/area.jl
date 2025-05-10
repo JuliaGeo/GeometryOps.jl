@@ -1,4 +1,4 @@
-# # Area and signed area
+# # Area
 
 export area, signed_area
 

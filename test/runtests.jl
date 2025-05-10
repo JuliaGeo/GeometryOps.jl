@@ -22,7 +22,7 @@ end
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
 @safetestset "Area" begin include("methods/area.jl") end
-# @safetestset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
+@safetestset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
 @safetestset "Orientation" begin include("methods/orientation.jl") end
 @safetestset "Centroid" begin include("methods/centroid.jl") end
 @safetestset "Convex Hull" begin include("methods/convex_hull.jl") end
@@ -49,3 +49,4 @@ end
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end
 @safetestset "TGGeometry" begin include("extensions/tggeometry.jl") end
+@safetestset "DataFrames" begin include("extensions/dataframes.jl") end

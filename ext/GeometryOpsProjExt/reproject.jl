@@ -1,3 +1,50 @@
+# # Reproject
+
+
+#=
+```@meta
+CollapsedDocStrings = true
+```
+
+```@docs; canonical=false
+GeometryOps.reproject
+```
+
+The reproject function transforms geometries from one coordinate reference system (CRS)
+to another using PROJ. This is essential for working with geospatial data from different
+sources that use different coordinate systems.
+
+For example, you might have data in WGS84 (EPSG:4326) that you want to display on a
+web map using Web Mercator (EPSG:3857):
+
+```@repl
+import GeometryOps as GO, GeoInterface as GI
+using GeoFormatTypes # for CRS types like EPSG
+point = (0, 0)  # Prime meridian, equator
+GO.reproject(point; source_crs=EPSG(4326), target_crs=EPSG(3857))
+GO.reproject(point, EPSG(4326), EPSG(3857)) # geom, source_crs, target_crs
+GO.reproject(GI.Point(point; crs = EPSG(4326)), EPSG(3857)) # if your geom has a crs, then you only need to pass target.
+```
+
+## Implementation
+
+The implementation uses PROJ's transformation capabilities through the [Proj.jl](https://github.com/JuliaGeo/Proj.jl) package.
+It supports:
+- 2D and 3D coordinates
+- Threaded operations for better performance
+- Automatic CRS detection from geometry metadata
+- Custom transformation contexts
+
+The function handles various input types for CRS specification:
+- GeoFormatTypes.GeoFormat
+- Proj.CRS
+- String representations
+- Nothing (automatic detection)
+
+For threaded operations, it creates separate PROJ contexts and transformations
+for each thread to ensure thread safety.
+=#
+
 import GeometryOps: GI, GeoInterface, reproject, apply, transform, _is3d, istrue,
     True, False, TaskFunctors, WithXY, WithXYZ
 import GeoFormatTypes
