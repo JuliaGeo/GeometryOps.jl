@@ -337,7 +337,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         tree_a = NaturalIndexing.NaturalIndex(edges_a)
         tree_b = NaturalIndexing.NaturalIndex(edges_b)
 
-        last_a_idx::Int = 0
+        last_a_idx = 0
 
         SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_edge_idx, b_edge_idx
             a1t, a2t = edges_a[a_edge_idx].geom
