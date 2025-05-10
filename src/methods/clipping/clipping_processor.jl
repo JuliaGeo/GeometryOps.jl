@@ -224,6 +224,9 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     else
         accelerator
     end
+    
+    # Declare this now because it's used in multiple branches
+    last_a_idx::Int = 0
 
     if accelerator isa NestedLoop
         # if we don't have enough vertices in either of the polygons to merit a tree,
@@ -382,7 +385,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         tree_a = NaturalIndexing.NaturalIndex(edges_a)
         tree_b = NaturalIndexing.NaturalIndex(edges_b)
 
-        last_a_idx = 1
+        last_a_idx = 0
 
         SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_thinned_idx, b_thinned_idx
             a_edge_idx = indices_a[a_thinned_idx]
