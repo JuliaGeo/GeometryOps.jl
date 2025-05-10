@@ -12,7 +12,7 @@ module Predicates
     Return 0 if c is on (a, b) or if a == b. =#
     orient(a, b, c; exact) = _orient(booltype(exact), _tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
     
-    # If `exact` is `true`, use `ExactPredicates` to calculate the orientation.
+    # If `exact` is `true`, use `AdaptivePredicates` to calculate the orientation.
     _orient(::True, a, b, c) = AdaptivePredicates.orient2p(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
     # _orient(::True, a, b, c) = ExactPredicates.orient(_tuple_point(a, Float64), _tuple_point(b, Float64), _tuple_point(c, Float64))
     # If `exact` is `false`, calculate the orientation without using `ExactPredicates`.

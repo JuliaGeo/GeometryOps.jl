@@ -12,7 +12,8 @@ circumcenter_on_unit_sphere
 
 ## What is SphericalCap?
 
-A spherical cap represents a portion of a unit sphere bounded by a small circle. It is defined by a center point on the unit sphere and a radius (in radians).
+A spherical cap represents a section of a unit sphere about some point, bounded by a radius. 
+It is defined by a center point on the unit sphere and a radius (in radians).
 
 Spherical caps are used in:
 - Representing circular regions on a spherical surface
