@@ -376,8 +376,7 @@ function barycentric_interpolate(alg::AbstractBarycentricCoordinateMethod, ::GI.
     ## @boundscheck @assert length(exterior) >= 3
 
     @boundscheck @assert length(values) == GI.npoint(polygon)
-    @boundscheck @assert GI.npoint(polygon) >= 3
-    @boundscheck @assert all(>(3), (GI.npoint(ring) for ring in GI.getring(polygon)))
+    @boundscheck @assert all(>=(3), (GI.npoint(ring) for ring in GI.getring(polygon)))
 
     if GI.nring(polygon) == 1
         return barycentric_interpolate(alg, GI.LinearRingTrait(), GI.getexterior(polygon), values, GI.PointTrait(), point; normalize)
