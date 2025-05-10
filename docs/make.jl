@@ -152,6 +152,7 @@ makedocs(;
             "Developer docs" => "explanations/devdocs.md",
         ],
         "Source code" => literate_pages,
+        "Paper" => "paper.md",
     ],
     warnonly = true,
 )
