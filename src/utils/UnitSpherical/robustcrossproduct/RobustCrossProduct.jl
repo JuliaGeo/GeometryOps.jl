@@ -331,11 +331,6 @@ function symbolic_cross_product_sorted(a::AbstractVector{T}, b::AbstractVector{T
     return UnitSphericalPoint{T}(1, 0, 0)
 end
 
-# Use the Base.< function for UnitSphericalPoint to delegate to our isless_vector function
-function Base.:<(a::UnitSphericalPoint, b::UnitSphericalPoint)
-    return isless_vector(a, b)
-end
-
 end
 
 #=
