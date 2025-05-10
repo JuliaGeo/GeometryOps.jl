@@ -21,7 +21,7 @@ export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, f
 using GeoInterface
 using LinearAlgebra, Statistics
 
-using GeometryBasics.StaticArrays
+using StaticArrays
 
 import Tables, DataAPI
 import StaticArrays
