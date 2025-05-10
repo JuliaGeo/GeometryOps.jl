@@ -7,7 +7,7 @@ import GeoInterface as GI
 import AbstractTrees
 
 # public isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
-export query, do_query
+export query
 export FlatNoTree
 
 # The spatial tree interface and its implementations are defined here.

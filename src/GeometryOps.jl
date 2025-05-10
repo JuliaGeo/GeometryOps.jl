@@ -22,12 +22,15 @@ using GeoInterface
 using GeometryBasics
 using LinearAlgebra, Statistics
 
+using GeometryBasics.StaticArrays
+
 import Tables, DataAPI
-import GeometryBasics.StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
 import GeoInterface.Extents: Extents
+import SortTileRecursiveTree
+import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
 const GB = GeometryBasics
@@ -45,6 +48,12 @@ include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
 
 using .LoopStateMachine, .SpatialTreeInterface
 
+include("utils/NaturalIndexing.jl")
+using .NaturalIndexing
+
+
+# Load utility modules in
+using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
 
 include("methods/angles.jl")
 include("methods/area.jl")
