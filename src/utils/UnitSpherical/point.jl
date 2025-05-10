@@ -51,6 +51,7 @@ UnitSphericalPoint{T}(v::NTuple{3, T}) where T = UnitSphericalPoint{T}(v...)
 UnitSphericalPoint(v::SVector{3, T}) where T = UnitSphericalPoint{T}(v...)
 ## handle the 2-tuple case specifically
 UnitSphericalPoint(v::NTuple{2, T}) where T = UnitSphereFromGeographic()(v)
+UnitSphericalPoint(p::UnitSphericalPoint) = p
 ## handle the GeoInterface case, this is the catch-all method
 UnitSphericalPoint(v) = UnitSphericalPoint(GI.trait(v), v)
 UnitSphericalPoint(::GI.PointTrait, v) = UnitSphereFromGeographic()(v) # since it works on any GI compatible point
@@ -80,6 +81,10 @@ Base.show(io::IO, p::UnitSphericalPoint) = print(io, "UnitSphericalPoint($(p.x),
 # StaticArraysCore.jl interface implementation
 Base.setindex(p::UnitSphericalPoint, args...) = throw(ArgumentError("`setindex!` on a UnitSphericalPoint is not permitted as it is static."))
 StaticArrays.similar_type(::Type{<: UnitSphericalPoint}, ::Type{Eltype}, ::Size{(3,)}) where Eltype = UnitSphericalPoint{Eltype}
+# To promote UnitSphericalPoint{T} and UnitSphericalPoint{S} to UnitSphericalPoint{promote_type(T, S)}
+function Base.promote_rule(::Type{UnitSphericalPoint{T}}, ::Type{UnitSphericalPoint{S}}) where {T <: Number, S <: Number}
+    return UnitSphericalPoint{promote_type(T, S)}
+end
 # Base math implementation (really just forcing re-wrapping)
 # Base.:(*)(a::UnitSphericalPoint, b::UnitSphericalPoint) = a .* b
 function Base.broadcasted(f, a::AbstractArray{T}, b::UnitSphericalPoint) where {T <: UnitSphericalPoint}
