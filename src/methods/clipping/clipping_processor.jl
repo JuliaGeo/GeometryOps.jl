@@ -29,6 +29,14 @@ struct DoubleSTRtree <: IntersectionAccelerator end
 struct SingleNaturalTree <: IntersectionAccelerator end
 struct DoubleNaturalTree <: IntersectionAccelerator end
 struct ThinnedDoubleNaturalTree <: IntersectionAccelerator end
+
+"""
+    AutoAccelerator()
+
+Let the algorithm choose the best accelerator based on the size of the input polygons.
+
+Once we have prepared geometry, this will also consider the existing preparations on the geoms.
+"""
 struct AutoAccelerator <: IntersectionAccelerator end
 
 """
@@ -282,8 +290,8 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
             # as the nested loop above, and iterating through poly_b in order.
             if Extents.intersects(ext_l, ext_b)
                 empty!(query_result)
-                SortTileRecursiveTree.query!(query_result, tree_b.rootnode, ext_l) # this is already sorted and uniqueified in STRtree.'
-                sort!(query_result)
+                SortTileRecursiveTree.query!(query_result, tree_b.rootnode, ext_l)
+                sort!(query_result) # STRTree.jl's query! does not sort!, even though query does...
                 # Loop over the edges in b that might intersect the edges in a
                 for j in query_result
                     b1t, b2t = edges_b[j].geom
@@ -329,7 +337,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         tree_a = NaturalIndexing.NaturalIndex(edges_a)
         tree_b = NaturalIndexing.NaturalIndex(edges_b)
 
-        last_a_idx = 0
+        last_a_idx::Int = 0
 
         SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_edge_idx, b_edge_idx
             a1t, a2t = edges_a[a_edge_idx].geom
@@ -385,7 +393,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         tree_a = NaturalIndexing.NaturalIndex(edges_a)
         tree_b = NaturalIndexing.NaturalIndex(edges_b)
 
-        last_a_idx = 0
+        last_a_idx::Int = 1
 
         SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_thinned_idx, b_thinned_idx
             a_edge_idx = indices_a[a_thinned_idx]
