@@ -157,6 +157,7 @@ function _build_ab_list(alg::FosterHormannClipping, ::Type{T}, poly_a, poly_b, d
     return a_list, b_list, a_idx_list
 end
 
+
 "The number of vertices past which we should use a STRtree for edge intersection checking."
 const GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS = 32
 # Fallback convenience method so we can just pass the algorithm in
@@ -215,8 +216,10 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     accelerator = if accelerator isa AutoAccelerator
         if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
             NestedLoop()
+        elseif na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS || nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+            SingleNaturalTree()
         else
-            SingleSTRtree()
+            DoubleNaturalTree()
         end
     else
         accelerator
@@ -276,7 +279,8 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
             # as the nested loop above, and iterating through poly_b in order.
             if Extents.intersects(ext_l, ext_b)
                 empty!(query_result)
-                SortTileRecursiveTree.query!(query_result, tree_b.rootnode, ext_l) # this is already sorted and uniqueified in STRtree.
+                SortTileRecursiveTree.query!(query_result, tree_b.rootnode, ext_l) # this is already sorted and uniqueified in STRtree.'
+                sort!(query_result)
                 # Loop over the edges in b that might intersect the edges in a
                 for j in query_result
                     b1t, b2t = edges_b[j].geom
@@ -312,6 +316,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
                     return f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
                 end
             end
+            isnothing(f_after_each_a) || f_after_each_a(a1t, i)
         end
 
     elseif accelerator isa DoubleNaturalTree
@@ -346,8 +351,6 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
                 last_a_idx = a_edge_idx
             end
         end
-
-        @show last_a_idx
 
         if last_a_idx == 0 # the query did not find any intersections
             if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
