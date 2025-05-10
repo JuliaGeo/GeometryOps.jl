@@ -200,9 +200,16 @@ function compare_GO_LG_clipping(GO_f, LG_f, p1, p2)
         else
             GO_result_geom = GI.MultiPolygon(GO_result_list)
         end
-        diff_1_area = LG.area(LG.difference(GO_result_geom, LG_result_geom))
-        diff_2_area = LG.area(LG.difference(LG_result_geom, GO_result_geom))
-        @test diff_1_area ≤ ϵ && diff_2_area ≤ ϵ
+        
+        diff_1_poly = @test_nowarn LG.difference(GO_result_geom, LG_result_geom)
+        diff_2_poly = @test_nowarn LG.difference(LG_result_geom, GO_result_geom)
+        if GI.isempty(diff_1_poly) || GI.isempty(diff_2_poly)
+            @test true # if both differences are empty, then the areas are the same by default.
+        else
+            diff_1_area = LG.area(diff_1_poly)
+            diff_2_area = LG.area(diff_2_poly)
+            @test diff_1_area ≤ ϵ && diff_2_area ≤ ϵ
+        end
     end # testset
     end # loop
 end
