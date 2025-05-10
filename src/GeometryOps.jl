@@ -10,6 +10,7 @@ import GeometryOpsCore:
                 Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype, istrue,
                 TaskFunctors, 
+                WithTrait,
                 WithXY, WithXYZ, WithXYM, WithXYZM,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
@@ -18,12 +19,12 @@ import GeometryOpsCore:
 export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
 
 using GeoInterface
-using GeometryBasics
 using LinearAlgebra, Statistics
 
 using GeometryBasics.StaticArrays
 
 import Tables, DataAPI
+import StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
@@ -32,7 +33,6 @@ import SortTileRecursiveTree
 import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
-const GB = GeometryBasics
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T

@@ -1,3 +1,33 @@
+#=
+
+Geodesic segmentization via PROJ.
+
+```@meta
+CollapsedDocStrings = true
+```
+
+```@docs; canonical=false
+GeometryOps.segmentize
+```
+
+Implementation
+
+The implementation uses PROJ's geodesic calculations to:
+1. Compute the geodesic distance between points
+2. Calculate intermediate points along the great circle path
+3. Add points at regular intervals based on the maximum distance parameter
+
+Key features:
+- Uses PROJ's geod_geodesic for accurate ellipsoidal calculations
+- Configurable equatorial radius and flattening
+- Thread-safe implementation
+- Supports both LineString and LinearRing geometries
+
+The function creates a geodesic line between each pair of points and
+interpolates positions along that line at the specified maximum distance
+intervals.
+=#
+
 # This holds the `segmentize` geodesic functionality.
 
 import GeometryOps: GeodesicSegments, _segmentize, _fill_linear_kernel!
