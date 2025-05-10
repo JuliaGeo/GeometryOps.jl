@@ -24,6 +24,9 @@ end
 @testset "Interpolation" begin
     @test barycentric_interpolate(MeanValue(), t1, [1, 1, 1], p1) == 1
     @test barycentric_interpolate(MeanValue(), t1, [1, 2, 3], p1) ≈ 1/2 + 2/4 + 3/4
+
+    @test barycentric_interpolate(MeanValue(), GI.Polygon([t1]), [1, 1, 1], p1) == 1
+    @test barycentric_interpolate(MeanValue(), GI.Polygon([t1]), [1, 2, 3], p1) ≈ 1/2 + 2/4 + 3/4
 end
 
 @testset "Tests for helper methods" begin
