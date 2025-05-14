@@ -156,7 +156,7 @@ makedocs(;
     warnonly = true,
 )
 
-deploydocs(;
+DocumenterVitepress.deploydocs(;
     repo="github.com/JuliaGeo/GeometryOps.jl",
     devbranch="main",
     push_preview = true,
