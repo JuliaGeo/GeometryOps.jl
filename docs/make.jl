@@ -154,6 +154,7 @@ makedocs(;
         "Source code" => literate_pages,
     ],
     warnonly = true,
+    draft = true,
 )
 
 DocumenterVitepress.deploydocs(;
