@@ -65,7 +65,7 @@ An error type which is thrown when a keyword argument is missing from an algorit
 The `alg` argument is the algorithm struct, and the `keyword` argument is the keyword
 that was missing.
 
-This error message is used in the [`enforce`](@ref) method.
+This error message is used in the [`enforce`](@ref GeometryOps.enforce) method.
 
 ## Usage
 
