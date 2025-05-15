@@ -34,12 +34,11 @@ jobs:
             arch: arm64
     steps:
       - uses: actions/checkout@v2
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: julia-actions/cache@v1
       - name: Dev GeometryOpsCore and add other packages
         run: julia --project=. -e 'using Pkg; Pkg.develop(; path = joinpath(".", "GeometryOpsCore"));'
       - uses: julia-actions/julia-buildpkg@v1
@@ -62,8 +61,8 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@v2
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/setup-julia@v1
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
       - name: Build and add versions
@@ -82,9 +81,9 @@ jobs:
       statuses: write
       actions: write
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v4
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
       - name: Build and add versions
