@@ -59,7 +59,7 @@ most algorithms are robust to that, and you can always [`fix`](@ref) it...
 import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
 using CairoMakie # to plot
 
-points = rand(Point2{Float64}, 100)
+points = tuple.(rand(100), rand(100))
 go_hull = GO.convex_hull(GO.MonotoneChainMethod(), points)
 lg_hull = GO.convex_hull(GO.GEOS(), points)
 
