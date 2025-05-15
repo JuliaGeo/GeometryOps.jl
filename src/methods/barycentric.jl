@@ -26,8 +26,8 @@ export MeanValue
 # This example was taken from [this page of CGAL's documentation](https://doc.cgal.org/latest/Barycentric_coordinates_2/index.html).
 #=
 ```@example barycentric
-import GeometryOps as GO
-using Makie, CairoMakie, GeoInterfaceMakie
+import GeometryOps as GO, GeoInterface as GI
+using CairoMakie, GeoInterfaceMakie # plotting
 # Define a polygon
 polygon_points = Point3f[
 (0.03, 0.05, 0.00), (0.07, 0.04, 0.02), (0.10, 0.04, 0.04),
@@ -84,10 +84,10 @@ cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
 xrange = LinRange(ext.X..., 400)
 yrange = LinRange(ext.Y..., 400)
 @time mean_values = GO.barycentric_interpolate.(
-    (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
-    (Point2f.(polygon_points),), # The polygon points as `Point2f`
+    (GO.MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
+    ((polygon_points),), # The polygon points as `Point2f`
     (last.(polygon_points,),),   # The values per polygon point - can be anything which supports addition and division
-    Point2f.(xrange, yrange')    # The points at which to interpolate
+    tuple.(xrange, yrange')    # The points at which to interpolate
 )
 # and render!
 hm = heatmap!(a2, xrange, yrange, mean_values; colormap = p1.colormap, colorrange = p1.plots[1].colorrange[], xautolimits = false, yautolimits = false)
