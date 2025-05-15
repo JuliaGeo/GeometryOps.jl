@@ -26,8 +26,8 @@ export MeanValue
 # This example was taken from [this page of CGAL's documentation](https://doc.cgal.org/latest/Barycentric_coordinates_2/index.html).
 #=
 ```@example barycentric
-import GeometryOps as GO
-using Makie, CairoMakie, GeoInterfaceMakie
+import GeometryOps as GO, GeoInterface as GI
+using CairoMakie, GeoInterfaceMakie # plotting
 # Define a polygon
 polygon_points = Point3f[
 (0.03, 0.05, 0.00), (0.07, 0.04, 0.02), (0.10, 0.04, 0.04),
