@@ -173,8 +173,8 @@ simplify(
 #= For each algorithm, apply simplification to all curves, multipoints, and
 points, reconstructing everything else around them. =#
 function _simplify(alg::Union{SimplifyAlg, GEOS}, data; prefilter_alg=nothing, kw...)
-    simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg)
-    return apply(simplifier, _SIMPLIFY_TARGET, data; kw...)
+    simplifier(trait, geom) = _simplify(trait, alg, geom; prefilter_alg)
+    return apply(WithTrait(simplifier), _SIMPLIFY_TARGET, data; kw...)
 end
 
 
