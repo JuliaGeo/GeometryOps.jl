@@ -43,9 +43,9 @@ function GO.simplify(alg::GO.GEOS, data; kwargs...)
     tol = enforce(alg, :tol, GO.simplify)
 
     functor = if method == :TopologyPreserve
-        (trait, geom) -> LG.topologyPreserveSimplify(GI.convert(LG, trait, geom), tol)
+        (trait, geom) -> LG.topologyPreserveSimplify(GI.convert(LG.geointerface_geomtype(trait), trait, geom), tol)
     elseif method == :DouglasPeucker
-        (trait, geom) -> LG.simplify(GI.convert(LG, trait, geom), tol)
+        (trait, geom) -> LG.simplify(GI.convert(LG.geointerface_geomtype(trait), trait, geom), tol)
     else
         error("Invalid method passed to `GO.simplify(GEOS(...), ...)`: $method. \nPlease use :TopologyPreserve or :DouglasPeucker")
     end
