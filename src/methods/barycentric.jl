@@ -84,10 +84,10 @@ cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
 xrange = LinRange(ext.X..., 400)
 yrange = LinRange(ext.Y..., 400)
 @time mean_values = GO.barycentric_interpolate.(
-    (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
-    (Point2f.(polygon_points),), # The polygon points as `Point2f`
+    (GO.MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
+    ((polygon_points),), # The polygon points as `Point2f`
     (last.(polygon_points,),),   # The values per polygon point - can be anything which supports addition and division
-    Point2f.(xrange, yrange')    # The points at which to interpolate
+    tuple.(xrange, yrange')    # The points at which to interpolate
 )
 # and render!
 hm = heatmap!(a2, xrange, yrange, mean_values; colormap = p1.colormap, colorrange = p1.plots[1].colorrange[], xautolimits = false, yautolimits = false)

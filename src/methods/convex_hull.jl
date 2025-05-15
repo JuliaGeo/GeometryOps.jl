@@ -19,7 +19,7 @@ Future work could include other algorithms, such as [Quickhull.jl](https://githu
 import GeometryOps as GO, GeoInterface as GI
 using CairoMakie # to plot
 
-points = randn(GO.Point2f, 100)
+points = tuple.(randn(100), randn(100))
 f, a, p = plot(points; label = "Points")
 hull_poly = GO.convex_hull(points)
 lines!(a, hull_poly; label = "Convex hull", color = Makie.wong_colors()[2])
