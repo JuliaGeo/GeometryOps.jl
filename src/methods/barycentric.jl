@@ -50,7 +50,7 @@ polygon_points = [
 # Plot it!
 # First, we'll plot the polygon using Makie's rendering:
 f, a1, p1 = poly(
-    Point2.(polygon_points); 
+    Point2.(GO.forcexy(polygon_points)); 
     color = last.(polygon_points), 
     colormap = cgrad(:jet, 18; categorical = true), 
     axis = (; 
@@ -75,7 +75,7 @@ p2box = poly!( # Now, we plot a cropping rectangle around the axis so we only sh
     GI.Polygon( # This is a rectangle with an internal hole shaped like the polygon.
         [
             Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], # exterior 
-            reverse(Point2f.(polygon_points)) # hole
+            reverse(Point2f.(GO.forcexy(polygon_points))) # hole
         ]
     ); color = :white, xautolimits = false, yautolimits = false
 )
@@ -85,7 +85,7 @@ xrange = LinRange(ext.X..., 400)
 yrange = LinRange(ext.Y..., 400)
 @time mean_values = GO.barycentric_interpolate.(
     (GO.MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
-    ((polygon_points),), # The polygon points as `Point2f`
+    (GI.Polygon(GI.LinearRing.([polygon_points])),), # The polygon
     (last.(polygon_points,),),   # The values per polygon point - can be anything which supports addition and division
     tuple.(xrange, yrange')    # The points at which to interpolate
 )
