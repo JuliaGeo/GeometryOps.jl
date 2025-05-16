@@ -35,7 +35,7 @@ end
 # TODO: add implementations for multitraits based on this
 
 # TODO: this returns an approximately antipodal point...
-
+captocircle(c) = GeographicFromUnitSphere()(c.point), c.radius
 # TODO: exact-predicate intersection
 # This is all inexact and thus subject to floating point error
 function _intersects(x::SphericalCap, y::SphericalCap)
