@@ -161,7 +161,6 @@ GI.npoint(simple)
 ```
 """
 simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
-simplify(alg::GEOS, data; kw...) = _simplify(alg, data; kw...)
 
 # Default algorithm is DouglasPeucker
 simplify(
