@@ -14,18 +14,18 @@ RadialDistance
 
 ## What is Geometry Simplification?
 
-Geometry simplification reduces the number of points in a geometry while preserving its essential shape. 
-This is usually done by specifying some tolerance.  
+Geometry simplification reduces the number of points in a geometry while preserving its essential shape.
+This is usually done by specifying some tolerance.
 
-GeometryOps provides three simplification algorithms: [`VisvalingamWhyatt`](@ref), [`DouglasPeucker`](@ref), 
-and [`RadialDistance`](@ref), listed in order of decreasing quality but increasing performance. 
+GeometryOps provides three simplification algorithms: [`VisvalingamWhyatt`](@ref), [`DouglasPeucker`](@ref),
+and [`RadialDistance`](@ref), listed in order of decreasing quality but increasing performance.
 
 The default algorithm is [`DouglasPeucker`](@ref), which is also available through the GEOS extension.
 
 In GeometryOps' algorithms, you can specify
 `tol`, `number` of points, or `ratio` of points after simplification to points in the input geometry.
 
-The GEOS extension (activated by loading [LibGEOS.jl](https://github.com/JuliaGeo/LibGEOS.jl)) also allows for GEOS's topology preserving simplification 
+The GEOS extension (activated by loading [LibGEOS.jl](https://github.com/JuliaGeo/LibGEOS.jl)) also allows for GEOS's topology preserving simplification
 as well as Douglas-Peucker simplification implemented in GEOS.  Call this by
 passing [`GEOS(; method = :TopologyPreserve)`](@ref GEOS) or [`GEOS(; method = :DouglasPeucker)`](@ref GEOS)
 to the algorithm.
@@ -71,7 +71,7 @@ const MIN_POINTS = 3
 const SIMPLIFY_ALG_KEYWORDS = """
 ## Keywords
 
-- `ratio`: the fraction of points that should remain after `simplify`. 
+- `ratio`: the fraction of points that should remain after `simplify`.
     Useful as it will generalise for large collections of objects.
 - `number`: the number of points that should remain after `simplify`.
     Less useful for large collections of mixed size objects.
@@ -89,9 +89,9 @@ Abstract type for simplification algorithms.
 
 ## API
 
-For now, the algorithm must hold the `number`, `ratio` and `tol` properties.  
+For now, the algorithm must hold the `number`, `ratio` and `tol` properties.
 
-Simplification algorithm types can hook into the interface by implementing 
+Simplification algorithm types can hook into the interface by implementing
 the `_simplify(trait, alg, geom)` methods for whichever traits are necessary.
 """
 abstract type SimplifyAlg end
@@ -100,11 +100,11 @@ abstract type SimplifyAlg end
     simplify(obj; kw...)
     simplify(::SimplifyAlg, obj; kw...)
 
-Simplify a geometry, feature, feature collection, 
+Simplify a geometry, feature, feature collection,
 or nested vectors or a table of these.
 
-[`RadialDistance`](@ref), [`DouglasPeucker`](@ref), or 
-[`VisvalingamWhyatt`](@ref) algorithms are available, 
+[`RadialDistance`](@ref), [`DouglasPeucker`](@ref), or
+[`VisvalingamWhyatt`](@ref) algorithms are available,
 listed in order of increasing quality but decreasing performance.
 
 `PoinTrait` and `MultiPointTrait` are returned unchanged.
@@ -218,7 +218,7 @@ $SIMPLIFY_ALG_KEYWORDS
 
 Note: user input `tol` is squared to avoid unnecessary computation in algorithm.
 """
-@kwdef struct RadialDistance <: SimplifyAlg 
+@kwdef struct RadialDistance <: SimplifyAlg
     number::Union{Int64,Nothing} = nothing
     ratio::Union{Float64,Nothing} = nothing
     tol::Union{Float64,Nothing} = nothing
@@ -395,7 +395,7 @@ $SIMPLIFY_ALG_KEYWORDS
     its neighboring points.
 Note: user input `tol` is doubled to avoid unnecessary computation in algorithm.
 """
-@kwdef struct VisvalingamWhyatt <: SimplifyAlg 
+@kwdef struct VisvalingamWhyatt <: SimplifyAlg
     number::Union{Int,Nothing} = nothing
     ratio::Union{Float64,Nothing} = nothing
     tol::Union{Float64,Nothing} = nothing
@@ -488,9 +488,9 @@ function _get_points(alg, points, tolerances)
     tol = alg.tol
     number = alg.number
     ratio = alg.ratio
-    bit_indices = if !isnothing(tol) 
+    bit_indices = if !isnothing(tol)
         _tol_indices(alg.tol::Float64, points, tolerances)
-    elseif !isnothing(number) 
+    elseif !isnothing(number)
         _number_indices(alg.number::Int64, points, tolerances)
     else
         _ratio_indices(alg.ratio::Float64, points, tolerances)
@@ -506,7 +506,7 @@ function _number_indices(n, points, tolerances)
     tol = partialsort(tolerances, length(points) - n + 1)
     bit_indices = _tol_indices(tol, points, tolerances)
     nselected = sum(bit_indices)
-    ## If there are multiple values exactly at `tol` we will get 
+    ## If there are multiple values exactly at `tol` we will get
     ## the wrong output length. So we need to remove some.
     while nselected > n
         min_tol = Inf
@@ -521,7 +521,7 @@ function _number_indices(n, points, tolerances)
         nselected -= 1
         bit_indices[min_i] = false
     end
-    return bit_indices 
+    return bit_indices
 end
 
 function _ratio_indices(r, points, tolerances)
@@ -539,7 +539,7 @@ function _flat_tolerances(f, points)::Vector{Float64}
     return result
 end
 
-function _remove!(s, i) 
+function _remove!(s, i)
     for j in i:lastindex(s)-1
         s[j] = s[j+1]
     end
