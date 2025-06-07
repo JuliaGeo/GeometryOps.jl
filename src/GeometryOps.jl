@@ -44,6 +44,11 @@ include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
 using .LoopStateMachine, .SpatialTreeInterface
 
 
+include("preparations/prepared_geometries.jl")
+include("preparations/monotone_chain.jl")
+include("preparations/sorted_edge_list.jl")
+include("preparations/rtree.jl")
+
 include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
