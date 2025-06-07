@@ -4,6 +4,7 @@ using GeometryOps.SpatialTreeInterface
 using GeometryOps.SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 using GeometryOps.SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
 using GeometryOps.SpatialTreeInterface: FlatNoTree
+using GeometryOps.NaturalIndexing: NaturalIndex
 using Extents
 using SortTileRecursiveTree: STRtree
 using NaturalEarth
@@ -218,7 +219,15 @@ end
     test_find_point_in_all_countries(STRtree)
 end
 
-
+# Test NaturalIndex implementation
+@testset "STRtree" begin
+    test_basic_interface(NaturalIndex)
+    test_child_indices_extents(NaturalIndex)
+    test_query_functionality(NaturalIndex)
+    test_dual_query_functionality(NaturalIndex)
+    test_geometry_support(NaturalIndex)
+    test_find_point_in_all_countries(NaturalIndex)
+end
 
 # This testset is not used because Polylabel.jl has some issues.
 
