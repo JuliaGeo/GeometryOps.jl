@@ -234,7 +234,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     end
     
     # Declare this now because it's used in multiple branches
-    last_a_idx::Int = 0
+    last_a_idx = 0
 
     if accelerator isa NestedLoop
         # if we don't have enough vertices in either of the polygons to merit a tree,
