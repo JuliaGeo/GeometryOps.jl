@@ -16,9 +16,8 @@ function conversion_expr(mod, var, genkey)
             else
                 $GeoInterface.convert($mod, $(GO.extent_to_polygon)($var))
             end
-        # GeometryBasics does not have a Line geometry type.
-        # elseif $mod in ($GeometryBasics,) && $GeoInterface.trait($var) isa $GeoInterface.LineTrait
-        #     $var
+        # These modules do not support empty geometries.
+        # GDAL does but AG does not
         elseif $mod in ($GeoInterface, $ArchGDAL, $GeometryBasics) && $GeoInterface.isempty($var)
             $var
         else
@@ -30,7 +29,7 @@ end
 # TODO: push this up to GB!
 
     # TODO: remove when GB GI pr lands
-    @static if hasmethod(GeometryBasics.convert, (Type{GeometryBasics.LineString}, GeoInterface.LinearRingTrait, Any))
+    # @static if hasmethod(GeometryBasics.convert, (Type{GeometryBasics.LineString}, GeoInterface.LinearRingTrait, Any))
         function GeoInterface.convert(
             ::Type{GeometryBasics.LineString}, 
             ::GeoInterface.LinearRingTrait, 
@@ -39,7 +38,22 @@ end
             return GeoInterface.convert(GeometryBasics.LineString, GeoInterface.LineStringTrait(), geom)
         end
         GeometryBasics.geointerface_geomtype(::GeoInterface.LinearRingTrait) = GeometryBasics.LineString
-    end
+    # end
+
+    # @static if hasmethod(GeometryBasics.convert, (Type{GeometryBasics.Line}, GeoInterface.LineTrait, Any))
+        function GeoInterface.convert(::Type{GeometryBasics.Line}, type::GeoInterface.LineTrait, geom)
+            g1, g2 = GeoInterface.getgeom(geom)
+            x, y = GeoInterface.x(g1), GeoInterface.y(g1)
+            if GeoInterface.is3d(geom)
+                z = GeoInterface.z(g1)
+                T = promote_type(typeof(x), typeof(y), typeof(z))
+                return GeometryBasics.Line{3,T}(GeometryBasics.Point{3,T}(x, y, z), GeometryBasics.Point{3,T}(GeoInterface.x(g2), GeoInterface.y(g2), GeoInterface.z(g2)))
+            else
+                T = promote_type(typeof(x), typeof(y))
+                return GeometryBasics.Line{2,T}(GeometryBasics.Point{2,T}(x, y), GeometryBasics.Point{2,T}(GeoInterface.x(g2), GeoInterface.y(g2)))
+            end
+        end
+    # end
     # end todo
     # GeometryCollection interface - currently just a large Union
     const _ALL_GB_GEOM_TYPES = Union{GeometryBasics.Point, GeometryBasics.LineString, GeometryBasics.Polygon, GeometryBasics.MultiPolygon, GeometryBasics.MultiLineString, GeometryBasics.MultiPoint}
