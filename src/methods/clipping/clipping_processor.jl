@@ -212,221 +212,243 @@ checks in the inner loop.
 
 """
 function foreach_pair_of_maybe_intersecting_edges_in_order(
-    manifold::M, accelerator::A, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+    manifold::M, accelerator::AutoAccelerator, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold, A <: IntersectionAccelerator}
-    # TODO: dispatch on manifold
     # this is suitable for planar
     # but spherical / geodesic will need s2 support at some point,
     # or -- even now -- just buffering
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
 
-    accelerator = if accelerator isa AutoAccelerator
-        if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
-            NestedLoop()
-        elseif na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS || nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
-            SingleNaturalTree()
-        else
-            DoubleNaturalTree()
-        end
+    if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, NestedLoop(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
+    elseif na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS || nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, SingleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     else
-        accelerator
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, DoubleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     end
+end
+
+function foreach_pair_of_maybe_intersecting_edges_in_order(
+    manifold::M, accelerator::NestedLoop, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+) where {FA, FAAfter, FI, T, M <: Manifold}
+    # this is suitable for planar
+    # but spherical / geodesic will need s2 support at some point,
+    # or -- even now -- just buffering
+    na = GI.npoint(poly_a)
+    nb = GI.npoint(poly_b)
+    # if we don't have enough vertices in either of the polygons to merit a tree,
+    # then we can just do a simple nested loop
+    # this becomes extremely useful in e.g. regridding, 
+    # where we know the polygon will only ever have a few vertices.
+    # This is also applicable to any manifold, since the checking is done within
+    # the loop.
+    # First, loop over "each edge" in poly_a
+    for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
+        a1t == a2t && continue
+        isnothing(f_on_each_a) ||f_on_each_a(a1t, i)
+        for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
+            b1t == b2t && continue
+            LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # this should be aware of manifold by construction.
+        end
+        isnothing(f_after_each_a) || f_after_each_a(a1t, i)
+    end
+    # And we're done!  This is the super simple implementation.
+    return nothing
+end
+
+function foreach_pair_of_maybe_intersecting_edges_in_order(
+    manifold::M, accelerator::SingleSTRtree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+) where {FA, FAAfter, FI, T, M <: Manifold}
+    na = GI.npoint(poly_a)
+    nb = GI.npoint(poly_b)
+    # This is the "middle ground" case - run only a strtree 
+    # on poly_b without doing so on poly_a.
+    # This is less complex than running a dual tree traversal,
+    # and reduces the overhead of constructing an edge list and tree on poly_a.
+    ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
+    edges_b, indices_b = to_edgelist(ext_a, poly_b, T)
+    if isempty(edges_b) && !isnothing(f_on_each_a) && !isnothing(f_after_each_a)
+        # shortcut - nothing can possibly intersect
+        # so we just call f_on_each_a for each edge in poly_a
+        for i in 1:GI.npoint(poly_a)-1
+            pt = _tuple_point(GI.getpoint(poly_a, i), T)
+            f_on_each_a(pt, i)
+            f_after_each_a(pt, i)
+        end
+        return nothing
+    end
+
+    # This is the STRtree generated from the edges of poly_b
+    tree_b = STRtree(edges_b)
+
+    # this is a pre-allocation that will store the resuits of the query into tree_b
+    query_result = Int[] 
     
-    # Declare this now because it's used in multiple branches
+    # Loop over each vertex in poly_a
+    for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
+        a1t == a2t && continue
+        l1 = GI.Line(SVector{2}(a1t, a2t))
+        ext_l = GI.extent(l1)
+        # l = GI.Line(SVector{2}(a1t, a2t); extent=ext_l) # this seems to be unused - TODO remove
+        isnothing(f_on_each_a) || f_on_each_a(a1t, i)
+        # Query the STRtree for any edges in b that may intersect this edge
+        # This is sorted because we want to pretend we're doing the same thing
+        # as the nested loop above, and iterating through poly_b in order.
+        if Extents.intersects(ext_l, ext_b)
+            empty!(query_result)
+            SortTileRecursiveTree.query!(query_result, tree_b.rootnode, ext_l)
+            sort!(query_result) # STRTree.jl's query! does not sort!, even though query does...
+            # Loop over the edges in b that might intersect the edges in a
+            for j in query_result
+                b1t, b2t = edges_b[j].geom
+                b1t == b2t && continue
+                # Manage control flow if the function returns a LoopStateMachine.Action
+                # like Break(), Continue(), or Return()
+                # This allows the function to break out of the loop early if it wants
+                # without being syntactically inside the loop.
+                LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), indices_b[j])) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
+            end
+        end
+        isnothing(f_after_each_a) || f_after_each_a(a1t, i)
+    end
+    return nothing
+end
+
+function foreach_pair_of_maybe_intersecting_edges_in_order(
+    manifold::M, accelerator::SingleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+) where {FA, FAAfter, FI, T, M <: Manifold}
+    na = GI.npoint(poly_a)
+    nb = GI.npoint(poly_b)
+    ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
+    edges_b = to_edgelist(poly_b, T)
+
+    b_tree = NaturalIndexing.NaturalIndex(edges_b)
+
+    for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
+        a1t == a2t && continue
+        ext_l = Extents.Extent(X = minmax(a1t[1], a2t[1]), Y = minmax(a1t[2], a2t[2]))
+        isnothing(f_on_each_a) || f_on_each_a(a1t, i)
+        # Query the STRtree for any edges in b that may intersect this edge
+        # This is sorted because we want to pretend we're doing the same thing
+        # as the nested loop above, and iterating through poly_b in order.
+        if Extents.intersects(ext_l, ext_b)
+            # Loop over the edges in b that might intersect the edges in a
+            SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, ext_l), b_tree) do j
+                b1t, b2t = edges_b[j].geom
+                b1t == b2t && return LoopStateMachine.Continue()
+                # LoopStateMachine control is managed outside the loop, by the depth_first_search function.
+                return f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
+            end
+        end
+        isnothing(f_after_each_a) || f_after_each_a(a1t, i)
+    end
+    return nothing
+end
+
+function foreach_pair_of_maybe_intersecting_edges_in_order(
+    manifold::M, accelerator::DoubleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+) where {FA, FAAfter, FI, T, M <: Manifold}
+    na = GI.npoint(poly_a)
+    nb = GI.npoint(poly_b)
+    edges_a = to_edgelist(poly_a, T)
+    edges_b = to_edgelist(poly_b, T)
+
+    tree_a = NaturalIndexing.NaturalIndex(edges_a)
+    tree_b = NaturalIndexing.NaturalIndex(edges_b)
+
     last_a_idx = 0
 
-    if accelerator isa NestedLoop
-        # if we don't have enough vertices in either of the polygons to merit a tree,
-        # then we can just do a simple nested loop
-        # this becomes extremely useful in e.g. regridding, 
-        # where we know the polygon will only ever have a few vertices.
-        # This is also applicable to any manifold, since the checking is done within
-        # the loop.
-        # First, loop over "each edge" in poly_a
-        for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
-            a1t == a2t && continue
-            isnothing(f_on_each_a) ||f_on_each_a(a1t, i)
-            for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
-                b1t == b2t && continue
-                LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # this should be aware of manifold by construction.
+    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_edge_idx, b_edge_idx
+        a1t, a2t = edges_a[a_edge_idx].geom
+        b1t, b2t = edges_b[b_edge_idx].geom
+
+        if last_a_idx < a_edge_idx
+            if !isnothing(f_on_each_a)
+                for i in (last_a_idx+1):(a_edge_idx-1)
+                    f_on_each_a((edges_a[i].geom[1]), i)
+                    !isnothing(f_after_each_a) && f_after_each_a((edges_a[i].geom[1]), i)
+                end
             end
-            isnothing(f_after_each_a) || f_after_each_a(a1t, i)
-        end
-        # And we're done!
-    elseif accelerator isa SingleSTRtree
-        # This is the "middle ground" case - run only a strtree 
-        # on poly_b without doing so on poly_a.
-        # This is less complex than running a dual tree traversal,
-        # and reduces the overhead of constructing an edge list and tree on poly_a.
-        ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
-        edges_b, indices_b = to_edgelist(ext_a, poly_b, T)
-        if isempty(edges_b) && !isnothing(f_on_each_a) && !isnothing(f_after_each_a)
-            # shortcut - nothing can possibly intersect
-            # so we just call f_on_each_a for each edge in poly_a
-            for i in 1:GI.npoint(poly_a)-1
-                pt = _tuple_point(GI.getpoint(poly_a, i), T)
-                f_on_each_a(pt, i)
-                f_after_each_a(pt, i)
-            end
-            return nothing
+            !isnothing(f_on_each_a) && f_on_each_a(a1t, a_edge_idx)
         end
 
-        # This is the STRtree generated from the edges of poly_b
-        tree_b = STRtree(edges_b)
+        f_on_each_maybe_intersect(((a1t, a2t), a_edge_idx), ((b1t, b2t), b_edge_idx))
 
-        # this is a pre-allocation that will store the resuits of the query into tree_b
-        query_result = Int[] 
-        
-        # Loop over each vertex in poly_a
-        for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
-            a1t == a2t && continue
-            l1 = GI.Line(SVector{2}(a1t, a2t))
-            ext_l = GI.extent(l1)
-            # l = GI.Line(SVector{2}(a1t, a2t); extent=ext_l) # this seems to be unused - TODO remove
-            isnothing(f_on_each_a) || f_on_each_a(a1t, i)
-            # Query the STRtree for any edges in b that may intersect this edge
-            # This is sorted because we want to pretend we're doing the same thing
-            # as the nested loop above, and iterating through poly_b in order.
-            if Extents.intersects(ext_l, ext_b)
-                empty!(query_result)
-                SortTileRecursiveTree.query!(query_result, tree_b.rootnode, ext_l)
-                sort!(query_result) # STRTree.jl's query! does not sort!, even though query does...
-                # Loop over the edges in b that might intersect the edges in a
-                for j in query_result
-                    b1t, b2t = edges_b[j].geom
-                    b1t == b2t && continue
-                    # Manage control flow if the function returns a LoopStateMachine.Action
-                    # like Break(), Continue(), or Return()
-                    # This allows the function to break out of the loop early if it wants
-                    # without being syntactically inside the loop.
-                    LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), indices_b[j])) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
-                end
+        if last_a_idx < a_edge_idx
+            if !isnothing(f_after_each_a)
+                f_after_each_a(a1t, a_edge_idx)
             end
-            isnothing(f_after_each_a) || f_after_each_a(a1t, i)
+            last_a_idx = a_edge_idx
         end
-    elseif accelerator isa SingleNaturalTree
-        ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
-        edges_b = to_edgelist(poly_b, T)
-
-        b_tree = NaturalIndexing.NaturalIndex(edges_b)
-
-        for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
-            a1t == a2t && continue
-            ext_l = Extents.Extent(X = minmax(a1t[1], a2t[1]), Y = minmax(a1t[2], a2t[2]))
-            isnothing(f_on_each_a) || f_on_each_a(a1t, i)
-            # Query the STRtree for any edges in b that may intersect this edge
-            # This is sorted because we want to pretend we're doing the same thing
-            # as the nested loop above, and iterating through poly_b in order.
-            if Extents.intersects(ext_l, ext_b)
-                # Loop over the edges in b that might intersect the edges in a
-                SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, ext_l), b_tree) do j
-                    b1t, b2t = edges_b[j].geom
-                    b1t == b2t && return LoopStateMachine.Continue()
-                    # LoopStateMachine control is managed outside the loop, by the depth_first_search function.
-                    return f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
-                end
-            end
-            isnothing(f_after_each_a) || f_after_each_a(a1t, i)
-        end
-
-    elseif accelerator isa DoubleNaturalTree
-        edges_a = to_edgelist(poly_a, T)
-        edges_b = to_edgelist(poly_b, T)
-
-        tree_a = NaturalIndexing.NaturalIndex(edges_a)
-        tree_b = NaturalIndexing.NaturalIndex(edges_b)
-
-        last_a_idx = 0
-
-        SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_edge_idx, b_edge_idx
-            a1t, a2t = edges_a[a_edge_idx].geom
-            b1t, b2t = edges_b[b_edge_idx].geom
-
-            if last_a_idx < a_edge_idx
-                if !isnothing(f_on_each_a)
-                    for i in (last_a_idx+1):(a_edge_idx-1)
-                        f_on_each_a((edges_a[i].geom[1]), i)
-                        !isnothing(f_after_each_a) && f_after_each_a((edges_a[i].geom[1]), i)
-                    end
-                end
-                !isnothing(f_on_each_a) && f_on_each_a(a1t, a_edge_idx)
-            end
-
-            f_on_each_maybe_intersect(((a1t, a2t), a_edge_idx), ((b1t, b2t), b_edge_idx))
-
-            if last_a_idx < a_edge_idx
-                if !isnothing(f_after_each_a)
-                    f_after_each_a(a1t, a_edge_idx)
-                end
-                last_a_idx = a_edge_idx
-            end
-        end
-
-        if last_a_idx == 0 # the query did not find any intersections
-            if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
-                return
-            else
-                for (i, edge) in enumerate(edges_a)
-                    !isnothing(f_on_each_a) && f_on_each_a(edge.geom[1], i)
-                    !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
-                end
-            end
-        elseif last_a_idx < length(edges_a)
-            # the query terminated early - this will almost always be the case.
-            if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
-                return
-            else
-                for (i, edge) in zip(last_a_idx+1:length(edges_a), view(edges_a, last_a_idx+1:length(edges_a)))
-                    !isnothing(f_on_each_a) && f_on_each_a(edge.geom[1], i)
-                    !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
-                end
-            end
-        end
-    elseif accelerator isa ThinnedDoubleNaturalTree
-        ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
-        mutual_extent = Extents.intersection(ext_a, ext_b)
-
-        edges_a, indices_a = to_edgelist(mutual_extent, poly_a, T)
-        edges_b, indices_b = to_edgelist(mutual_extent, poly_b, T)
-
-        tree_a = NaturalIndexing.NaturalIndex(edges_a)
-        tree_b = NaturalIndexing.NaturalIndex(edges_b)
-
-        last_a_idx::Int = 1
-
-        SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_thinned_idx, b_thinned_idx
-            a_edge_idx = indices_a[a_thinned_idx]
-            b_edge_idx = indices_b[b_thinned_idx]
-
-            a1t, a2t = edges_a[a_thinned_idx].geom
-            b1t, b2t = edges_b[b_thinned_idx].geom
-
-            if last_a_idx < a_edge_idx
-                if !isnothing(f_on_each_a)
-                    for i in last_a_idx:(a_edge_idx-1)
-                        f_on_each_a(a1t, a_edge_idx)
-                        !isnothing(f_after_each_a) && f_after_each_a(a1t, a_edge_idx)
-                    end
-                end
-                !isnothing(f_on_each_a) && f_on_each_a(a1t, a_edge_idx)
-            end
-
-            f_on_each_maybe_intersect(((a1t, a2t), a_edge_idx), ((b1t, b2t), b_edge_idx))
-
-            if last_a_idx < a_edge_idx
-                if !isnothing(f_after_each_a)
-                    f_after_each_a(a1t, a_edge_idx)
-                end
-                last_a_idx = a_edge_idx
-            end
-        end
-    else
-        error("Unsupported accelerator type: $accelerator.  FosterHormannClipping only supports NestedLoop() or SingleSTRtree().")
     end
 
+    if last_a_idx == 0 # the query did not find any intersections
+        if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
+            return
+        else
+            for (i, edge) in enumerate(edges_a)
+                !isnothing(f_on_each_a) && f_on_each_a(edge.geom[1], i)
+                !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
+            end
+        end
+    elseif last_a_idx < length(edges_a)
+        # the query terminated early - this will almost always be the case.
+        if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
+            return
+        else
+            for (i, edge) in zip(last_a_idx+1:length(edges_a), view(edges_a, last_a_idx+1:length(edges_a)))
+                !isnothing(f_on_each_a) && f_on_each_a(edge.geom[1], i)
+                !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
+            end
+        end
+    end
     return nothing
+end
+    
+function foreach_pair_of_maybe_intersecting_edges_in_order(
+    manifold::M, accelerator::ThinnedDoubleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+) where {FA, FAAfter, FI, T, M <: Manifold}
+    na = GI.npoint(poly_a)
+    nb = GI.npoint(poly_b)
+    ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
+    mutual_extent = Extents.intersection(ext_a, ext_b)
 
+    edges_a, indices_a = to_edgelist(mutual_extent, poly_a, T)
+    edges_b, indices_b = to_edgelist(mutual_extent, poly_b, T)
+
+    tree_a = NaturalIndexing.NaturalIndex(edges_a)
+    tree_b = NaturalIndexing.NaturalIndex(edges_b)
+
+    last_a_idx::Int = 1
+
+    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_thinned_idx, b_thinned_idx
+        a_edge_idx = indices_a[a_thinned_idx]
+        b_edge_idx = indices_b[b_thinned_idx]
+
+        a1t, a2t = edges_a[a_thinned_idx].geom
+        b1t, b2t = edges_b[b_thinned_idx].geom
+
+        if last_a_idx < a_edge_idx
+            if !isnothing(f_on_each_a)
+                for i in last_a_idx:(a_edge_idx-1)
+                    f_on_each_a(a1t, a_edge_idx)
+                    !isnothing(f_after_each_a) && f_after_each_a(a1t, a_edge_idx)
+                end
+            end
+            !isnothing(f_on_each_a) && f_on_each_a(a1t, a_edge_idx)
+        end
+
+        f_on_each_maybe_intersect(((a1t, a2t), a_edge_idx), ((b1t, b2t), b_edge_idx))
+
+        if last_a_idx < a_edge_idx
+            if !isnothing(f_after_each_a)
+                f_after_each_a(a1t, a_edge_idx)
+            end
+            last_a_idx = a_edge_idx
+        end
+    end
+    return nothing
 end
 
 #=
