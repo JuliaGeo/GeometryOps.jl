@@ -137,7 +137,7 @@ function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code
     for mod in modules1
         expr = Expr(:block)
         for (var, genkey) in pairs(vars)
-            push!(expr.args, :($genkey = $$(GeoInterface).convert($mod, $var)))
+            push!(expr.args, :($genkey = $(GeoInterface).convert($mod, $var)))
         end
         # Manually define the testset macrocall and all string interpolation
         testset = Expr(
