@@ -20,6 +20,7 @@ end
 
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
+@safetestset "Arclength" begin include("methods/arclength.jl") end
 @safetestset "Area" begin include("methods/area.jl") end
 @safetestset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
 @safetestset "Orientation" begin include("methods/orientation.jl") end
