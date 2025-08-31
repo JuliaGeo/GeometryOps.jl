@@ -34,7 +34,7 @@ import GeometryOps: _arclength_to_point, _point_at_arclength, _point_distance, _
 import Proj
 
 # Geodesic implementations
-function GeometryOps._arclength_to_point(method::Geodesic, linestring, target_point, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+function GeometryOps._arclength_to_point(method::Geodesic, trait1::Union{GI.LineStringTrait, GI.LinearRingTrait}, linestring, trait2::GI.PointTrait, target_point)
     cumulative_distance = 0.0
     closest_distance = Inf
     result_distance = 0.0
@@ -70,7 +70,7 @@ function GeometryOps._arclength_to_point(method::Geodesic, linestring, target_po
     return result_distance
 end
 
-function GeometryOps._point_at_arclength(method::Geodesic, linestring, target_distance, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+function GeometryOps._point_at_arclength(method::Geodesic, trait1::Union{GI.LineStringTrait, GI.LinearRingTrait}, linestring, target_distance)
     if GI.npoint(linestring) < 2
         return GI.npoint(linestring) > 0 ? GI.getpoint(linestring, 1) : nothing
     end

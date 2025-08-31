@@ -78,7 +78,7 @@ function arclength_to_point(linestring, point; threaded::Union{Bool, BoolsAsType
 end
 
 function arclength_to_point(method::Manifold, linestring, point; threaded::Union{Bool, BoolsAsTypes} = False())
-    return _arclength_to_point(method, linestring, point, GI.trait(linestring))
+    return _arclength_to_point(method, GI.trait(linestring), linestring, GI.trait(point), point)
 end
 
 """
@@ -109,11 +109,11 @@ function point_at_arclength(linestring, distance; threaded::Union{Bool, BoolsAsT
 end
 
 function point_at_arclength(method::Manifold, linestring, distance; threaded::Union{Bool, BoolsAsTypes} = False())
-    return _point_at_arclength(method, linestring, distance, GI.trait(linestring))
+    return _point_at_arclength(method, GI.trait(linestring), linestring, distance)
 end
 
 # Implementation for LineString and LinearRing
-function _arclength_to_point(method::Union{Planar, Spherical}, linestring, target_point, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+function _arclength_to_point(method::Union{Planar, Spherical}, trait1::Union{GI.LineStringTrait, GI.LinearRingTrait}, linestring, trait2::GI.PointTrait, target_point)
     cumulative_distance = 0.0
     closest_distance = Inf
     result_distance = 0.0
@@ -149,11 +149,11 @@ function _arclength_to_point(method::Union{Planar, Spherical}, linestring, targe
 end
 
 # Geodesic implementation is in the Proj extension
-function _arclength_to_point(method::Geodesic, linestring, target_point, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+function _arclength_to_point(method::Geodesic, trait1::Union{GI.LineStringTrait, GI.LinearRingTrait}, linestring, trait2::GI.PointTrait, target_point)
     error("Geodesic arclength calculation requires Proj.jl to be loaded. Please run `using Proj`.")
 end
 
-function _point_at_arclength(method::Union{Planar, Spherical}, linestring, target_distance, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+function _point_at_arclength(method::Union{Planar, Spherical}, trait1::Union{GI.LineStringTrait, GI.LinearRingTrait}, linestring, target_distance)
     if GI.npoint(linestring) < 2
         return GI.npoint(linestring) > 0 ? GI.getpoint(linestring, 1) : nothing
     end
@@ -185,7 +185,7 @@ function _point_at_arclength(method::Union{Planar, Spherical}, linestring, targe
 end
 
 # Geodesic implementation is in the Proj extension
-function _point_at_arclength(method::Geodesic, linestring, target_distance, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+function _point_at_arclength(method::Geodesic, trait1::Union{GI.LineStringTrait, GI.LinearRingTrait}, linestring, target_distance)
     error("Geodesic point at arclength calculation requires Proj.jl to be loaded. Please run `using Proj`.")
 end
 
