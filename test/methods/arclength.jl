@@ -103,5 +103,13 @@ import GeoInterface as GI
         point = GO.point_at_arclength(ring, 2.5)
         @test point[1] ≈ 0.5 && point[2] ≈ 1.0
     end
+
+    # Test error handling for Geodesic without Proj
+    @testset "Geodesic error handling" begin
+        line = GI.LineString([(0.0, 0.0), (1.0, 0.0)])
+        
+        @test_throws ErrorException GO.arclength_to_point(GO.Geodesic(), line, (0.5, 0.0))
+        @test_throws ErrorException GO.point_at_arclength(GO.Geodesic(), line, 0.5)
+    end
     
 end

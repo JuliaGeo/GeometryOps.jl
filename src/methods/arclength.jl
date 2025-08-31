@@ -148,6 +148,11 @@ function _arclength_to_point(method::Union{Planar, Spherical}, linestring, targe
     return result_distance
 end
 
+# Geodesic implementation is in the Proj extension
+function _arclength_to_point(method::Geodesic, linestring, target_point, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+    error("Geodesic arclength calculation requires Proj.jl to be loaded. Please run `using Proj`.")
+end
+
 function _point_at_arclength(method::Union{Planar, Spherical}, linestring, target_distance, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
     if GI.npoint(linestring) < 2
         return GI.npoint(linestring) > 0 ? GI.getpoint(linestring, 1) : nothing
@@ -179,11 +184,21 @@ function _point_at_arclength(method::Union{Planar, Spherical}, linestring, targe
     return GI.getpoint(linestring, GI.npoint(linestring))
 end
 
+# Geodesic implementation is in the Proj extension
+function _point_at_arclength(method::Geodesic, linestring, target_distance, T::Union{GI.LineStringTrait, GI.LinearRingTrait})
+    error("Geodesic point at arclength calculation requires Proj.jl to be loaded. Please run `using Proj`.")
+end
+
 # Helper functions for distance calculations
 function _point_distance(::Planar, p1, p2)
     x1, y1 = GI.x(p1), GI.y(p1)
     x2, y2 = GI.x(p2), GI.y(p2)
     return hypot(x2 - x1, y2 - y1)
+end
+
+# Geodesic version is defined in the Proj extension
+function _point_distance(::Geodesic, p1, p2, proj_geodesic)
+    error("Geodesic distance calculation requires Proj.jl to be loaded. Please run `using Proj`.")
 end
 
 # Find the closest point on a line segment to a target point
@@ -217,6 +232,11 @@ function _closest_point_on_segment(::Planar, p1, p2, target)
     return (closest_x, closest_y), t
 end
 
+# Geodesic version is defined in the Proj extension
+function _closest_point_on_segment(::Geodesic, p1, p2, target, proj_geodesic)
+    error("Geodesic closest point calculation requires Proj.jl to be loaded. Please run `using Proj`.")
+end
+
 # Interpolate between two points
 function _interpolate_point(::Planar, p1, p2, t)
     x1, y1 = GI.x(p1), GI.y(p1)
@@ -226,4 +246,9 @@ function _interpolate_point(::Planar, p1, p2, t)
     y = y1 + t * (y2 - y1)
     
     return (x, y)
+end
+
+# Geodesic version is defined in the Proj extension
+function _interpolate_point(::Geodesic, p1, p2, t, proj_geodesic)
+    error("Geodesic interpolation requires Proj.jl to be loaded. Please run `using Proj`.")
 end
