@@ -1,6 +1,7 @@
 module TestHelpers
 
 import GeometryOps as GO
+import GeoInterface
 
 using Test, GeoInterface, ArchGDAL, GeometryBasics, LibGEOS
 
@@ -13,39 +14,39 @@ const TEST_MODULES = [GeoInterface, ArchGDAL, GeometryBasics, LibGEOS]
 
 @eval GeometryBasics begin
     # MultiGeometry ncoord implementations
-    GeoInterface.ncoord(::GeoInterface.MultiPolygonTrait, ::GeometryBasics.MultiPolygon{N}) where N = N
-    GeoInterface.ncoord(::GeoInterface.MultiLineStringTrait, ::GeometryBasics.MultiLineString{N}) where N = N
-    GeoInterface.ncoord(::GeoInterface.MultiPointTrait, ::GeometryBasics.MultiPoint{N}) where N = N
+    $(GeoInterface).ncoord(::$(GeoInterface).MultiPolygonTrait, ::GeometryBasics.MultiPolygon{N}) where N = N
+    $(GeoInterface).ncoord(::$(GeoInterface).MultiLineStringTrait, ::GeometryBasics.MultiLineString{N}) where N = N
+    $(GeoInterface).ncoord(::$(GeoInterface).MultiPointTrait, ::GeometryBasics.MultiPoint{N}) where N = N
     # LinearRing and LineString confusion
-    GeometryBasics.geointerface_geomtype(::GeoInterface.LinearRingTrait) = LineString
-    function GeoInterface.convert(::Type{LineString}, ::GeoInterface.LinearRingTrait, geom)
-        return GeoInterface.convert(LineString, GeoInterface.LineStringTrait(), geom) # forward to the linestring conversion method
+    GeometryBasics.geointerface_geomtype(::$(GeoInterface).LinearRingTrait) = LineString
+    function $(GeoInterface).convert(::Type{LineString}, ::$(GeoInterface).LinearRingTrait, geom)
+        return $(GeoInterface).convert(LineString, $(GeoInterface).LineStringTrait(), geom) # forward to the linestring conversion method
     end
     # Line interface
-    GeometryBasics.geointerface_geomtype(::GeoInterface.LineTrait) = Line
-    function GeoInterface.convert(::Type{Line}, ::GeoInterface.LineTrait, geom)
-        p1, p2 = GeoInterface.getpoint(geom)
-        return Line(GeoInterface.convert(Point, GeoInterface.PointTrait(), p1), GeoInterface.convert(Point, GeoInterface.PointTrait(), p2))
+    GeometryBasics.geointerface_geomtype(::$(GeoInterface).LineTrait) = Line
+    function $(GeoInterface).convert(::Type{Line}, ::$(GeoInterface).LineTrait, geom)
+        p1, p2 = $(GeoInterface).getpoint(geom)
+        return Line($(GeoInterface).convert(Point, $(GeoInterface).PointTrait(), p1), $(GeoInterface).convert(Point, $(GeoInterface).PointTrait(), p2))
     end
     # GeometryCollection interface - currently just a large Union
     const _ALL_GB_GEOM_TYPES = Union{Point, Line, LineString, Polygon, MultiPolygon, MultiLineString, MultiPoint}
-    GeometryBasics.geointerface_geomtype(::GeoInterface.GeometryCollectionTrait) = Vector{_ALL_GB_GEOM_TYPES}
-    function GeoInterface.convert(::Type{Vector{_ALL_GB_GEOM_TYPES}}, ::GeoInterface.GeometryCollectionTrait, geoms)
-        return _ALL_GB_GEOM_TYPES[GeoInterface.convert(GeometryBasics, g) for g in GeoInterface.getgeom(geoms)]
+    GeometryBasics.geointerface_geomtype(::$(GeoInterface).GeometryCollectionTrait) = Vector{_ALL_GB_GEOM_TYPES}
+    function $(GeoInterface).convert(::Type{Vector{_ALL_GB_GEOM_TYPES}}, ::$(GeoInterface).GeometryCollectionTrait, geoms)
+        return _ALL_GB_GEOM_TYPES[$(GeoInterface).convert(GeometryBasics, g) for g in $(GeoInterface).getgeom(geoms)]
     end
 
-    function GeoInterface.convert(
+    function $(GeoInterface).convert(
         ::Type{GeometryBasics.LineString}, 
-        type::GeoInterface.LineStringTrait, 
-        geom::GeoInterface.Wrappers.LinearRing{false, false, StaticArraysCore.SVector{N, Tuple{Float64, Float64}}, Nothing, Nothing} where N
+        type::$(GeoInterface).LineStringTrait, 
+        geom::$(GeoInterface).Wrappers.LinearRing{false, false, StaticArraysCore.SVector{N, Tuple{Float64, Float64}}, Nothing, Nothing} where N
         )
-        return GeoInterface.convert(LineString, GeoInterface.LineStringTrait(), collect(geom.geom))
+        return $(GeoInterface).convert(LineString, $(GeoInterface).LineStringTrait(), collect(geom.geom))
     end
 
-    function GeoInterface.convert(
+    function $(GeoInterface).convert(
         ::Type{GeometryBasics.LineString}, 
-        type::GeoInterface.LineStringTrait, 
-        geom::GeoInterface.Wrappers.LinearRing{false, false, StaticArraysCore.SVector{N, Tuple{Float64, Float64}}, Nothing, Nothing} where N
+        type::$(GeoInterface).LineStringTrait, 
+        geom::$(GeoInterface).Wrappers.LinearRing{false, false, StaticArraysCore.SVector{N, Tuple{Float64, Float64}}, Nothing, Nothing} where N
         )
         return LineString(Point2{Float64}.(collect(geom.geom)))
     end
@@ -53,9 +54,9 @@ end
 
 
 @eval ArchGDAL begin
-    function GeoInterface.convert(
+    function $(GeoInterface).convert(
         ::Type{T},
-        type::GeoInterface.PolygonTrait,
+        type::$(GeoInterface).PolygonTrait,
         geom,
     ) where {T<:IGeometry}
         f = get(lookup_method, typeof(type), nothing)
@@ -63,9 +64,9 @@ end
             "Cannot convert an object of $(typeof(geom)) with the $(typeof(type)) trait (yet). Please report an issue.",
         )
         poly = createpolygon()
-        foreach(GeoInterface.getring(geom)) do ring
-            xs = GeoInterface.x.(GeoInterface.getpoint(ring)) |> collect
-            ys = GeoInterface.y.(GeoInterface.getpoint(ring)) |> collect
+        foreach($(GeoInterface).getring(geom)) do ring
+            xs = $(GeoInterface).x.($(GeoInterface).getpoint(ring)) |> collect
+            ys = $(GeoInterface).y.($(GeoInterface).getpoint(ring)) |> collect
             subgeom = unsafe_createlinearring(xs, ys)
             result = GDAL.ogr_g_addgeometrydirectly(poly, subgeom)
             @ogrerr result "Failed to add linearring."
@@ -76,7 +77,7 @@ end
 
 
 # Macro to run a block of `code` for multiple modules,
-# using GeoInterface.convert for each var in `args`
+# using $(GeoInterface).convert for each var in `args`
 macro test_implementations(code::Expr)
     _test_implementations_inner(TEST_MODULES, code)
 end
@@ -97,10 +98,10 @@ function _test_implementations_inner(modules::Union{Expr,Vector}, code::Expr)
                     if $mod in ($GeoInterface, $LibGEOS)
                         $var
                     else
-                        $GeoInterface.convert($mod, $(GO.extent_to_polygon)($var))
+                        $(GeoInterface).convert($mod, $(GO.extent_to_polygon)($var))
                     end
                 else
-                    $GeoInterface.convert($mod, $var)
+                    $(GeoInterface).convert($mod, $var)
                 end
             ))
         end
@@ -112,7 +113,7 @@ function _test_implementations_inner(modules::Union{Expr,Vector}, code::Expr)
 end
 
 # Macro to run a block of `code` for multiple modules,
-# using GeoInterface.convert for each var in `args`
+# using $(GeoInterface).convert for each var in `args`
 macro testset_implementations(code::Expr)
     _testset_implementations_inner("", TEST_MODULES, code)
 end
@@ -136,7 +137,7 @@ function _testset_implementations_inner(title, modules::Union{Expr,Vector}, code
     for mod in modules1
         expr = Expr(:block)
         for (var, genkey) in pairs(vars)
-            push!(expr.args, :($genkey = $GeoInterface.convert($mod, $var)))
+            push!(expr.args, :($genkey = $(GeoInterface).convert($mod, $var)))
         end
         # Manually define the testset macrocall and all string interpolation
         testset = Expr(
