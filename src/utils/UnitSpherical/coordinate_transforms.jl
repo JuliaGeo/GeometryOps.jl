@@ -79,3 +79,6 @@ function (::GeographicFromUnitSphere)(xyz::AbstractVector)
         asind(z),
     )
 end
+
+Base.inv(::UnitSphereFromGeographic) = GeographicFromUnitSphere()
+Base.inv(::GeographicFromUnitSphere) = UnitSphereFromGeographic()
