@@ -1,4 +1,4 @@
-# Spatial joins
+# [Spatial joins](@id tutorial-spatial-joins)
 
 Spatial joins are [table joins](https://www.geeksforgeeks.org/sql-join-set-1-inner-left-right-and-full-joins/) which are based not on equality, but on some predicate ``p(x, y)``, which takes two geometries, and returns a value of either `true` or `false`.  For geometries, the [`DE-9IM`](https://en.wikipedia.org/wiki/DE-9IM) spatial relationship model is used to determine the spatial relationship between two geometries.  
 

@@ -175,9 +175,11 @@ with the same schema, but with the new geometry column.
 This new table may be of the same type as the old one iff `Tables.materializer` is defined for 
 that table.  If not, then a `NamedTuple` is returned.
 =#
-function _apply_table(f::F, target, iterable::IterableType; geometrycolumn = nothing, preserve_default_metadata = false, threaded, kw...) where {F, IterableType}
-    _get_col_pair(colname) = colname => Tables.getcolumn(iterable, colname)
-    # We extract the geometry column and run `apply` on it.
+function _apply_table(f::F, target, iterable::IterableType; geometrycolumn = nothing, preserve_default_metadata = false, threaded, kw...) where {F, IterableType}    # We extract the geometry column and run `apply` on it.
+    # First, we need the table schema:
+    input_schema = Tables.schema(iterable)
+    input_colnames = input_schema.names
+    # then, we find the geometry column(s)
     geometry_columns = if isnothing(geometrycolumn)
         GI.geometrycolumns(iterable)
     elseif geometrycolumn isa NTuple{N, <: Symbol} where N
@@ -187,31 +189,31 @@ function _apply_table(f::F, target, iterable::IterableType; geometrycolumn = not
     else
         throw(ArgumentError("geometrycolumn must be a Symbol or a tuple of Symbols, got a $(typeof(geometrycolumn))"))
     end
-    if !all(Base.Fix2(in, Tables.columnnames(iterable)), geometry_columns)
+    if !Base.issubset(geometry_columns, input_colnames)
         throw(ArgumentError(
             """
             `apply`: the `geometrycolumn` kwarg must be a subset of the column names of the table, 
             got $(geometry_columns)
             but the table has columns 
-            $(Tables.columnnames(iterable))
+            $(input_colnames)
             """
             ))
     end
-    new_geometry_vecs = map(geometry_columns) do colname
-        _apply(f, target, Tables.getcolumn(iterable, colname); threaded, kw...)
+    # here we apply the function to the geometry column(s).
+    apply_kw = if isempty(used_reconstruct_table_kwargs(iterable))
+        kw
+    else
+        Base.structdiff(values(kw), NamedTuple{used_reconstruct_table_kwargs(iterable)})
     end
-    # Then, we obtain the schema of the table,
-    old_schema = Tables.schema(iterable)
-    # filter the geometry column out,
-    new_names = filter(x -> !(x in geometry_columns), old_schema.names)
+    new_geometry_vecs = map(geometry_columns) do colname
+        _apply(f, target, Tables.getcolumn(iterable, colname); threaded, apply_kw...)
+    end
+    # Then, we filter the geometry column(s) out,
+    new_names = filter(x -> !(x in geometry_columns), input_colnames)
     # and try to rebuild the same table as the best type - either the original type of `iterable`,
     # or a named tuple which is the default fallback.
-    result = Tables.materializer(iterable)(
-        merge(
-            NamedTuple{geometry_columns, Base.Tuple{typeof.(new_geometry_vecs)...}}(new_geometry_vecs),
-            NamedTuple(Iterators.map(_get_col_pair, new_names))
-        )
-    )
+    # See the function directly below this one for the actual fallback implementation.
+    result = reconstruct_table(iterable, geometry_columns, new_geometry_vecs, new_names; kw...)
     # Finally, we ensure that metadata is propagated correctly.
     # This can only happen if the original table supports metadata reads,
     # and the result supports metadata writes.
@@ -244,6 +246,51 @@ function _apply_table(f::F, target, iterable::IterableType; geometrycolumn = not
     end
 
     return result
+end
+
+
+"""
+    used_reconstruct_table_kwargs(input)
+
+Return a tuple of the kwargs that should be passed to `reconstruct_table` for the given input.
+
+This is "semi-public" API, and required for any input type that defines `reconstruct_table`.
+"""
+function used_reconstruct_table_kwargs(input) 
+    ()
+end
+
+"""
+    reconstruct_table(input, geometry_column_names, geometry_columns, other_column_names, args...; kwargs...)
+
+Reconstruct a table from the given input, geometry column names,
+geometry columns, and other column names.
+
+Any function that defines `reconstruct_table` must also define `used_reconstruct_table_kwargs`.
+
+The input must be a table.
+
+The function should return a best-effort attempt at a table of the same type as the input,
+with the new geometry column(s) and other columns.
+
+The fallback implementation invokes `Tables.materializer`.  But if you want to be efficient 
+and pass e.g. arbitrary kwargs to the materializer, or materialize in a different way, you 
+can do so by overloading this function for your desired input type.
+
+This is "semi-public" API and while it may add optional arguments, it will not add new required 
+positional arguments. All implementations must allow arbitrary kwargs to pass through and harvest 
+what they need.
+"""
+function reconstruct_table(input, geometry_column_names, geometry_columns, other_column_names, args...; kwargs...)
+    @assert Tables.istable(input)
+    _get_col_pair(colname) = colname => Tables.getcolumn(input, colname)
+
+    return Tables.materializer(input)(
+        merge(
+            NamedTuple{geometry_column_names, Base.Tuple{typeof.(geometry_columns)...}}(geometry_columns),
+            NamedTuple(Iterators.map(_get_col_pair, other_column_names))
+        )
+    )
 end
 
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
@@ -323,12 +370,20 @@ end
 # So the `Target` is found. We apply `f` to geom and return it to previous
 # _apply calls to be wrapped with the outer geometries/feature/featurecollection/array.
 _apply(f::F, ::TraitTarget{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} = f(geom)
+function _apply(a::WithTrait{F}, ::TraitTarget{Target}, trait::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} 
+    a(trait, geom; Base.structdiff(values(kw), NamedTuple{(:threaded, :calc_extent)})...)
+end
 # Define some specific cases of this match to avoid method ambiguity
 for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString,
     GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait
 )
-    @eval _apply(f::F, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F = f(x)
+    @eval begin 
+        _apply(f::F, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F = f(x)
+        function _apply(a::WithTrait{F}, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F
+            a(trait, x; Base.structdiff(values(kw), NamedTuple{(:threaded, :calc_extent)})...)
+        end
+    end
 end
 
 

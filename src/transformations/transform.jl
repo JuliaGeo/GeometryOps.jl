@@ -1,4 +1,25 @@
-# # Pointwise transformation
+# # Transform
+#=
+
+Transform a geometry by applying some function to all the points,
+which are provided as StaticVectors (which math like `+`, `*`, etc. works on).
+
+You can pass any function or object that takes an `SVector` and returns some GeoInterface-compatible point.
+
+## Example
+
+```@example transformations
+import GeoInterface as GI, GeometryOps as GO
+
+geom = GI.Polygon([[(0,0), (1,0), (1,1), (0,1), (0,0)]])
+geom2 = GO.transform(p -> p .+ (1, 2), geom)
+
+using CairoMakie, GeoInterfaceMakie
+poly([geom, geom2]; color = [:steelblue, :orange])
+``` 
+
+This uses [`apply`](@ref), so will work with any geometry, vector of geometries, table, etc.
+=#
 
 """
     transform(f, obj)

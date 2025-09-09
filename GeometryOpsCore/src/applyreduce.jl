@@ -51,7 +51,7 @@ Literate.jl source code is below.
 =#
 
 """
-    applyreduce(f, op, target::Union{TraitTarget, GI.AbstractTrait}, obj; threaded)
+    applyreduce(f, op, target::Union{TraitTarget, GI.AbstractTrait}, obj; threaded, init, kw...)
 
 Apply function `f` to all objects with the `target` trait,
 and reduce the result with an `op` like `+`. 
@@ -60,6 +60,8 @@ The order and grouping of application of `op` is not guaranteed.
 
 If `threaded==true` threads will be used over arrays and iterables, 
 feature collections and nested geometries.
+
+`init` functions the same way as it does in base Julia functions like `reduce`.
 """
 @inline function applyreduce(
     f::F, op::O, target, geom; threaded=false, init=nothing
@@ -129,6 +131,9 @@ end
 @inline function _applyreduce(f::F, op::O, ::TraitTarget{Target}, ::Trait, x; kw...) where {F,O,Target,Trait<:Target} 
     f(x)
 end
+@inline function _applyreduce(a::WithTrait{F}, op::O, ::TraitTarget{Target}, trait::Trait, x; kw...) where {F,O,Target,Trait<:Target} 
+    a(trait, x; Base.structdiff(values(kw), NamedTuple{(:threaded, :init)})...)
+end
 # Fail if we hit PointTrait
 # _applyreduce(f, op, target::TraitTarget{Target}, trait::PointTrait, geom; kw...) where Target = 
     # throw(ArgumentError("target $target not found"))
@@ -137,7 +142,12 @@ for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString, 
     GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait
 )
-    @eval _applyreduce(f::F, op::O, ::TraitTarget{<:$T}, trait::$T, x; kw...) where {F, O} = f(x)
+    @eval begin
+        _applyreduce(f::F, op::O, ::TraitTarget{<:$T}, trait::$T, x; kw...) where {F, O} = f(x)
+        function _applyreduce(a::WithTrait{F}, op::O, ::TraitTarget{<:$T}, trait::$T, x; kw...) where {F, O}
+            a(trait, x; Base.structdiff(values(kw), NamedTuple{(:threaded, :init)})...)
+        end
+    end
 end
 
 ### `_mapreducetasks` - flexible, threaded mapreduce

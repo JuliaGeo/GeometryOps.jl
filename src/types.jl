@@ -95,7 +95,7 @@ function enforce(alg::CLibraryPlanarAlgorithm, kw::Symbol, f)
     if haskey(alg.params, kw)
         return alg.params[kw]
     else
-        error("$(f) requires a `$(kw)` keyword argument to the `GEOS` algorithm, which was not provided.")
+        throw(GeometryOpsCore.MissingKeywordInAlgorithmException(alg, f, kw))
     end
 end
 
@@ -180,7 +180,7 @@ function enforce(alg::PROJ, kw::Symbol, f)
     if haskey(alg.params, kw)
         return alg.params[kw]
     else
-        error("$(f) requires a `$(kw)` keyword argument to the `GEOS` algorithm, which was not provided.")
+        throw(GeometryOpsCore.MissingKeywordInAlgorithmException(alg, f, kw))
     end
 end
 

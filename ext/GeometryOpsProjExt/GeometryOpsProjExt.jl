@@ -1,3 +1,6 @@
+# # Proj extension
+
+# This is the main module for the GeometryOps extension on Proj.jl.
 module GeometryOpsProjExt
 
 using GeometryOps, Proj

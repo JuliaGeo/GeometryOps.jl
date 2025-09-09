@@ -17,8 +17,8 @@ export reproject
 
 Reproject any GeoInterface.jl compatible `geometry` from `source_crs` to `target_crs`.
 
-The returned object will be constructed from `GeoInterface.WrapperGeometry`
-geometries, wrapping views of a `Vector{Proj.Point{D}}`, where `D` is the dimension.
+The returned object will be constructed from GeoInterface wrapper geometries,
+wrapping `Vector{NTuple{D, Float64}}`, where `D` is the dimension.
 
 !!! tip
     The `Proj.jl` package must be loaded for this method to work, 
