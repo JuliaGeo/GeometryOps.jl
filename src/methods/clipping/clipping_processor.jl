@@ -219,7 +219,9 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     # or -- even now -- just buffering
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
-
+    # Switching behaviour is turned off in the patch release
+    # This should be turned on in a GO v0.2.x
+    #=
     if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
         return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, NestedLoop(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     elseif na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS || nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
@@ -227,6 +229,8 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     else
         return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, DoubleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     end
+    =#
+    return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, NestedLoop(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
 end
 
 function foreach_pair_of_maybe_intersecting_edges_in_order(
