@@ -106,6 +106,24 @@ function _contains(cap::SphericalCap, point::UnitSphericalPoint)
     spherical_distance(cap.point, point) <= cap.radius
 end
 
+#Comment by asinghvi: this could be transformed to GO.union
+function _merge(x::SphericalCap, y::SphericalCap)
+
+    d = spherical_distance(x.point, y.point)
+    newradius = (x.radius + y.radius + d) / 2
+    if newradius < x.radius
+        #x contains y
+        x
+    elseif newradius < y.radius
+        #y contains x
+        y
+    else
+        excenter = 0.5 * (1 - (x.radius - y.radius) / d)
+        newcenter = slerp(x.point, y.point, excenter)
+        SphericalCap(newcenter, newradius)
+    end
+end
+
 
 function circumcenter_on_unit_sphere(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
     LinearAlgebra.normalize(a × b + b × c + c × a)

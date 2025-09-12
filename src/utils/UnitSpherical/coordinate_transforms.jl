@@ -78,10 +78,14 @@ struct GeographicFromUnitSphere <: CoordinateTransformations.Transformation
 end
 
 function (::GeographicFromUnitSphere)(xyz::AbstractVector)
-    @assert length(xyz) == 3 "GeographicFromUnitCartesian expects a 3D Cartesian vector"
+    @assert length(xyz) == 3 "GeographicFromUnitSphere expects a 3D Cartesian vector"
     x, y, z = xyz
     return (
         atand(y, x),
         asind(z),
     )
 end
+
+
+Base.inv(::UnitSphereFromGeographic) = GeographicFromUnitSphere()
+Base.inv(::GeographicFromUnitSphere) = UnitSphereFromGeographic()
