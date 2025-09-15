@@ -7,7 +7,7 @@ module GeometryOpsLibGEOSExt
 import GeometryOps as GO, LibGEOS as LG
 import GeoInterface as GI
 
-import GeometryOps: GEOS, enforce, True, False, booltype
+import GeometryOps: GEOS, enforce, True, False, booltype, booltype, WithTrait, TraitTarget
 
 using GeometryOps
 # The filter statement is required because in Julia, each module has its own versions of these

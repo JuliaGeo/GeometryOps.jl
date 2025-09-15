@@ -26,10 +26,10 @@ export MeanValue
 # This example was taken from [this page of CGAL's documentation](https://doc.cgal.org/latest/Barycentric_coordinates_2/index.html).
 #=
 ```@example barycentric
-import GeometryOps as GO
-using Makie, CairoMakie, GeoInterfaceMakie
+import GeometryOps as GO, GeoInterface as GI
+using CairoMakie, GeoInterfaceMakie # plotting
 # Define a polygon
-polygon_points = Point3f[
+polygon_points = [
 (0.03, 0.05, 0.00), (0.07, 0.04, 0.02), (0.10, 0.04, 0.04),
 (0.14, 0.04, 0.06), (0.17, 0.07, 0.08), (0.20, 0.09, 0.10),
 (0.22, 0.11, 0.12), (0.25, 0.11, 0.14), (0.27, 0.10, 0.16),
@@ -50,7 +50,7 @@ polygon_points = Point3f[
 # Plot it!
 # First, we'll plot the polygon using Makie's rendering:
 f, a1, p1 = poly(
-    Point2.(polygon_points); 
+    Point2.(GO.forcexy(polygon_points)); 
     color = last.(polygon_points), 
     colormap = cgrad(:jet, 18; categorical = true), 
     axis = (; 
@@ -75,7 +75,7 @@ p2box = poly!( # Now, we plot a cropping rectangle around the axis so we only sh
     GI.Polygon( # This is a rectangle with an internal hole shaped like the polygon.
         [
             Point2f[(ext.X[1], ext.Y[1]), (ext.X[2], ext.Y[1]), (ext.X[2], ext.Y[2]), (ext.X[1], ext.Y[2]), (ext.X[1], ext.Y[1])], # exterior 
-            reverse(Point2f.(polygon_points)) # hole
+            reverse(Point2f.(GO.forcexy(polygon_points))) # hole
         ]
     ); color = :white, xautolimits = false, yautolimits = false
 )
@@ -84,10 +84,10 @@ cb = Colorbar(f[2, :], p1.plots[1]; vertical = false, flipaxis = true)
 xrange = LinRange(ext.X..., 400)
 yrange = LinRange(ext.Y..., 400)
 @time mean_values = GO.barycentric_interpolate.(
-    (MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
-    (Point2f.(polygon_points),), # The polygon points as `Point2f`
+    (GO.MeanValue(),), # The barycentric coordinate algorithm (MeanValue is the only one for now)
+    (GI.Polygon(GI.LinearRing.([polygon_points])),), # The polygon
     (last.(polygon_points,),),   # The values per polygon point - can be anything which supports addition and division
-    Point2f.(xrange, yrange')    # The points at which to interpolate
+    tuple.(xrange, yrange')    # The points at which to interpolate
 )
 # and render!
 hm = heatmap!(a2, xrange, yrange, mean_values; colormap = p1.colormap, colorrange = p1.plots[1].colorrange[], xautolimits = false, yautolimits = false)
