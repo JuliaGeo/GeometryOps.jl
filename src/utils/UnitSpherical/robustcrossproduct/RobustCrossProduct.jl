@@ -49,7 +49,7 @@ println("Perpendicular to inputs: ", isapprox(dot_a, 0, atol=1e-14), ", ", isapp
 
 module RobustCrossProduct
 
-using ..UnitSpherical: UnitSphericalPoint, orthogonal
+using ..UnitSpherical: UnitSphericalPoint
 using StaticArrays
 using LinearAlgebra
 
@@ -119,7 +119,7 @@ function robust_cross_product(a::AbstractVector, b::AbstractVector)
     # an arbitrary orthogonal vector.
     if a == b
         # @debug "RCP: Vectors are identical, generating orthogonal vector" a b
-        return orthogonal(a)
+        return find_orthogonal(a)
     end
     
     if isDoubleFloatsAvailable()
