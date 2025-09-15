@@ -40,7 +40,7 @@ c = LG.GeometryCollection([p1, p2, r1])
 c_with_epty_l = LG.GeometryCollection([p1, p2, r1, empty_l])
 empty_c = LG.readgeom("GEOMETRYCOLLECTION EMPTY")
 
-@testset_implementations "That handle empty geoms" [LG] begin 
+@testset_implementations "That handle empty geoms" begin 
     @test GO.area($empty_pt) == LG.area($empty_pt) == 0
     @test GO.area($empty_mpt) == LG.area($empty_mpt) == 0
     @test GO.area($empty_l) == LG.area($empty_l) == 0
