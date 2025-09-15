@@ -54,9 +54,9 @@ struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: Geo
     # TODO: add exact flag
     # TODO: should exact flag be in the type domain?
 end
-FosterHormannClipping(; manifold::Manifold = Planar(), accelerator = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? AutoAccelerator() : accelerator)
-FosterHormannClipping(manifold::Manifold, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? AutoAccelerator() : accelerator)
-FosterHormannClipping(accelerator::Union{Nothing, IntersectionAccelerator}) = FosterHormannClipping(Planar(), isnothing(accelerator) ? AutoAccelerator() : accelerator)
+FosterHormannClipping(; manifold::Manifold = Planar(), accelerator = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : accelerator)
+FosterHormannClipping(manifold::Manifold, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : accelerator)
+FosterHormannClipping(accelerator::Union{Nothing, IntersectionAccelerator}) = FosterHormannClipping(Planar(), isnothing(accelerator) ? NestedLoop() : accelerator)
 # special case for spherical / geodesic manifolds
 # since they can't use STRtrees (because those don't work on the sphere)
 FosterHormannClipping(manifold::Union{Spherical, Geodesic}, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : (accelerator isa AutoAccelerator ? NestedLoop() : accelerator))
@@ -221,7 +221,6 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     nb = GI.npoint(poly_b)
     # Switching behaviour is turned off in the patch release
     # This should be turned on in a GO v0.2.x
-    #=
     if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
         return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, NestedLoop(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     elseif na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS || nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
@@ -229,8 +228,6 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     else
         return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, DoubleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     end
-    =#
-    return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, NestedLoop(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
 end
 
 function foreach_pair_of_maybe_intersecting_edges_in_order(
