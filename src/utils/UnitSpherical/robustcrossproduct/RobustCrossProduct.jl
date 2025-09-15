@@ -85,12 +85,12 @@ Returns a unit-length vector that is perpendicular to both input vectors.
 ## Examples
 
 ```jldoctest
-julia> using GeometryOps.UnitSpherical
-
-julia> a = UnitSphericalPoint(1, 0, 0)
-julia> b = UnitSphericalPoint(0, 1, 0)
-julia> result = robust_cross_product(a, b)
-julia> isapprox(result, UnitSphericalPoint(0, 0, 1))
+using GeometryOps.UnitSpherical: UnitSphericalPoint, robust_cross_product
+a = UnitSphericalPoint(1, 0, 0);
+b = UnitSphericalPoint(0, 1, 0);
+result = robust_cross_product(a, b)
+isapprox(result, UnitSphericalPoint(0, 0, 1))
+# output
 true
 ```
 """
