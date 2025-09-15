@@ -42,8 +42,8 @@ using GeometryOps: CLibraryPlanarAlgorithm, GEOS, TG, PROJ
     @test Base.get(alg, :c, 0) == 0
 
     # Test enforce method
-    @test_throws ErrorException enforce(alg, :a, "test")
-    @test_throws ErrorException enforce(alg, :c, "test")
+    @test_throws GeometryOpsCore.MissingKeywordInAlgorithmException enforce(alg, :a, "test")
+    @test_throws GeometryOpsCore.MissingKeywordInAlgorithmException enforce(alg, :c, "test")
 end
 
 @testset "GEOS" begin
@@ -76,7 +76,7 @@ end
 
     # Test enforce method
     @test enforce(alg, :a, "test") == 1
-    @test_throws ErrorException enforce(alg, :c, "test")
+    @test_throws GeometryOpsCore.MissingKeywordInAlgorithmException enforce(alg, :c, "test")
 end
 
 @testset "TG" begin
@@ -109,7 +109,7 @@ end
 
     # Test enforce method
     @test enforce(alg, :a, "test") == 1
-    @test_throws ErrorException enforce(alg, :c, "test")
+    @test_throws GeometryOpsCore.MissingKeywordInAlgorithmException enforce(alg, :c, "test")
 end
 
 @testset "PROJ" begin
@@ -144,5 +144,5 @@ end
 
     # Test enforce method
     @test enforce(alg1, :a, "test") == 1
-    @test_throws ErrorException enforce(alg1, :c, "test")
+    @test_throws GeometryOpsCore.MissingKeywordInAlgorithmException enforce(alg1, :c, "test")
 end 

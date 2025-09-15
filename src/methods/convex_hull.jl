@@ -19,7 +19,7 @@ Future work could include other algorithms, such as [Quickhull.jl](https://githu
 import GeometryOps as GO, GeoInterface as GI
 using CairoMakie # to plot
 
-points = randn(GO.Point2f, 100)
+points = tuple.(randn(100), randn(100))
 f, a, p = plot(points; label = "Points")
 hull_poly = GO.convex_hull(points)
 lines!(a, hull_poly; label = "Convex hull", color = Makie.wong_colors()[2])
@@ -59,7 +59,7 @@ most algorithms are robust to that, and you can always [`fix`](@ref) it...
 import GeoInterface as GI, GeometryOps as GO, LibGEOS as LG
 using CairoMakie # to plot
 
-points = rand(Point2{Float64}, 100)
+points = tuple.(rand(100), rand(100))
 go_hull = GO.convex_hull(GO.MonotoneChainMethod(), points)
 lg_hull = GO.convex_hull(GO.GEOS(), points)
 
