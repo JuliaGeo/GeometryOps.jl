@@ -213,7 +213,7 @@ checks in the inner loop.
 """
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::AutoAccelerator, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
-) where {FA, FAAfter, FI, T, M <: Manifold, A <: IntersectionAccelerator}
+) where {FA, FAAfter, FI, T, M <: Manifold}
     # this is suitable for planar
     # but spherical / geodesic will need s2 support at some point,
     # or -- even now -- just buffering
