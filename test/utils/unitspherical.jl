@@ -194,4 +194,21 @@ end
         # The radius should be approximately ϵ
         @test isapprox(cap.radius, ϵ, atol=1e-6)
     end
+
+    @testset "Merging of SphericalCaps" begin
+        function test_merge(p1, p2, r1, r2, pmerged, rmerged)
+            r1 = deg2rad(r1)
+            r2 = deg2rad(r2)
+            cap1 = SphericalCap(p1, r1)
+            cap2 = SphericalCap(p2, r2)
+            capmerged = UnitSpherical._merge(cap1, cap2)
+            @test all(isapprox.(GeographicFromUnitSphere()(capmerged.point), pmerged))
+            @test isapprox(capmerged.radius, deg2rad(rmerged))
+        end
+
+        test_merge((10.0, 0.0), (30.0, 0.0), 5, 10, (22.5, 0.0), 17.5)
+        test_merge((10.0, 0.0), (30.0, 0.0), 15, 10, (17.5, 0.0), 22.5)
+        test_merge((10.0, 0.0), (30.0, 0.0), 40, 5, (10.0, 0.0), 40.0)
+        test_merge((10.0, 0.0), (30.0, 0.0), 5, 50, (30.0, 0.0), 50.0)
+    end
 end

@@ -49,7 +49,7 @@ println("Perpendicular to inputs: ", isapprox(dot_a, 0, atol=1e-14), ", ", isapp
 
 module RobustCrossProduct
 
-using ..UnitSpherical: UnitSphericalPoint, orthogonal
+using ..UnitSpherical: UnitSphericalPoint
 using StaticArrays
 using LinearAlgebra
 
@@ -85,12 +85,12 @@ Returns a unit-length vector that is perpendicular to both input vectors.
 ## Examples
 
 ```jldoctest
-julia> using GeometryOps.UnitSpherical
-
-julia> a = UnitSphericalPoint(1, 0, 0)
-julia> b = UnitSphericalPoint(0, 1, 0)
-julia> result = robust_cross_product(a, b)
-julia> isapprox(result, UnitSphericalPoint(0, 0, 1))
+using GeometryOps.UnitSpherical: UnitSphericalPoint, robust_cross_product
+a = UnitSphericalPoint(1, 0, 0);
+b = UnitSphericalPoint(0, 1, 0);
+result = robust_cross_product(a, b)
+isapprox(result, UnitSphericalPoint(0, 0, 1))
+# output
 true
 ```
 """
@@ -119,7 +119,7 @@ function robust_cross_product(a::AbstractVector, b::AbstractVector)
     # an arbitrary orthogonal vector.
     if a == b
         # @debug "RCP: Vectors are identical, generating orthogonal vector" a b
-        return orthogonal(a)
+        return find_orthogonal(a)
     end
     
     if isDoubleFloatsAvailable()

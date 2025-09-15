@@ -62,29 +62,15 @@ end
 
 SphericalCap(point::UnitSphericalPoint{T}, radius::Number) where T = SphericalCap{T}(point, convert(T, radius))
 SphericalCap(point, radius::Number) = SphericalCap(GI.trait(point), point, radius)
+
+SphericalCap(geom) = SphericalCap(GI.trait(geom), geom)
+SphericalCap(t::GI.AbstractGeometryTrait, geom) = SphericalCap(t, geom, 0)
+
 function SphericalCap(::GI.PointTrait, point, radius::Number)
     return SphericalCap(UnitSphereFromGeographic()(point), radius)
 end
-
-SphericalCap(geom) = SphericalCap(GI.trait(geom), geom)
-SphericalCap(t::GI.PointTrait, geom) = SphericalCap(t, geom, 0)
 # TODO: add implementations for line string and polygon traits
-# TODO: add implementations to merge two spherical caps
-function _merge(x::SphericalCap, y::SphericalCap)
-    d = spherical_distance(x.point, y.point)
-    newradius = (x.radius + y.radius + d) / 2
-    if newradius < x.radius
-        #x contains y
-        x
-    elseif newradius < y.radius
-        #y contains x
-        y
-    else
-        excenter = 0.5 * (1 + (y.radius - x.radius) / d)
-        newcenter = x.point + slerp(x.point, y.point, excenter)
-        SphericalCap(newcenter, d)
-    end
-end
+# That will require a minimum bounding circle implementation.
 # TODO: add implementations for multitraits based on this
 
 # TODO: this returns an approximately antipodal point...
@@ -106,6 +92,23 @@ function _contains(cap::SphericalCap, point::UnitSphericalPoint)
     spherical_distance(cap.point, point) <= cap.radius
 end
 
+#Comment by asinghvi: this could be transformed to GO.union
+function _merge(x::SphericalCap, y::SphericalCap)
+
+    d = spherical_distance(x.point, y.point)
+    newradius = (x.radius + y.radius + d) / 2
+    if newradius < x.radius
+        #x contains y
+        x
+    elseif newradius < y.radius
+        #y contains x
+        y
+    else
+        excenter = 0.5 * (1 - (x.radius - y.radius) / d)
+        newcenter = slerp(x.point, y.point, excenter)
+        SphericalCap(newcenter, newradius)
+    end
+end
 
 function circumcenter_on_unit_sphere(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
     LinearAlgebra.normalize(a × b + b × c + c × a)
