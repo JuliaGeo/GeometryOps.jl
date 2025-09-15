@@ -111,7 +111,11 @@ function _merge(x::SphericalCap, y::SphericalCap)
 end
 
 function circumcenter_on_unit_sphere(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
-    LinearAlgebra.normalize(a × b + b × c + c × a)
+    LinearAlgebra.normalize(
+        robust_cross_product(a, b) + 
+        robust_cross_product(b, c) + 
+        robust_cross_product(c, a)
+    )
 end
 
 "Get the circumcenter of the triangle (a, b, c) on the unit sphere.  Returns a normalized 3-vector."
@@ -123,7 +127,7 @@ end
 
 function _is_ccw_unit_sphere(v_0::S, v_c::S, v_i::S) where S <: UnitSphericalPoint
     # checks if the smaller interior angle for the great circles connecting u-v and v-w is CCW
-    return(LinearAlgebra.dot(LinearAlgebra.cross(v_c - v_0,v_i - v_c), v_i) < 0)
+    return(LinearAlgebra.dot(robust_cross_product(v_c - v_0,v_i - v_c), v_i) < 0)
 end
 
 function angle_between(a::S, b::S, c::S) where S <: UnitSphericalPoint
