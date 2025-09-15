@@ -62,13 +62,15 @@ end
 
 SphericalCap(point::UnitSphericalPoint{T}, radius::Number) where T = SphericalCap{T}(point, convert(T, radius))
 SphericalCap(point, radius::Number) = SphericalCap(GI.trait(point), point, radius)
+
+SphericalCap(geom) = SphericalCap(GI.trait(geom), geom)
+SphericalCap(t::GI.AbstractGeometryTrait, geom) = SphericalCap(t, geom, 0)
+
 function SphericalCap(::GI.PointTrait, point, radius::Number)
     return SphericalCap(UnitSphereFromGeographic()(point), radius)
 end
-
-SphericalCap(geom) = SphericalCap(GI.trait(geom), geom)
-SphericalCap(t::GI.PointTrait, geom) = SphericalCap(t, geom, 0)
 # TODO: add implementations for line string and polygon traits
+# That will require a minimum bounding circle implementation.
 # TODO: add implementations for multitraits based on this
 
 # TODO: this returns an approximately antipodal point...
