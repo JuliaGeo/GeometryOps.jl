@@ -58,6 +58,7 @@ cap = SphericalCap(p1, p2, p3)
 struct SphericalCap{T}
     point::UnitSphericalPoint{T}
     radius::T
+    # cartesian_radius::T # TODO: compute using cosine(radius)
 end
 
 SphericalCap(point::UnitSphericalPoint{T}, radius::Number) where T = SphericalCap{T}(point, convert(T, radius))
