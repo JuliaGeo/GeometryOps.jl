@@ -247,7 +247,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     # First, loop over "each edge" in poly_a
     for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
         a1t == a2t && continue
-        isnothing(f_on_each_a) ||f_on_each_a(a1t, i)
+        isnothing(f_on_each_a) || f_on_each_a(a1t, i)
         for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
             b1t == b2t && continue
             LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # this should be aware of manifold by construction.
