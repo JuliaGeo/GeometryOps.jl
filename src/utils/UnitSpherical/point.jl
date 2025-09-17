@@ -55,6 +55,7 @@ UnitSphericalPoint(p::UnitSphericalPoint) = p
 ## handle the GeoInterface case, this is the catch-all method
 UnitSphericalPoint(v) = UnitSphericalPoint(GI.trait(v), v)
 UnitSphericalPoint(::GI.PointTrait, v) = UnitSphereFromGeographic()(v) # since it works on any GI compatible point
+UnitSphericalPoint(::GI.PointTrait, v::UnitSphericalPoint) = v
 ## finally, handle the case where a vector is passed in
 ## we may want it to go to the geographic pipeline _or_ direct materialization
 Base.@propagate_inbounds function UnitSphericalPoint(v::AbstractVector{T}) where T
