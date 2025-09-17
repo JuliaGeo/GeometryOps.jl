@@ -57,6 +57,7 @@ using .NaturalIndexing
 using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
 
 include("methods/angles.jl")
+include("methods/arclength.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
 include("methods/buffer.jl")
