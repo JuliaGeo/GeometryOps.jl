@@ -213,7 +213,7 @@ checks in the inner loop.
 """
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::AutoAccelerator, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
-) where {FA, FAAfter, FI, T, M <: Manifold, A <: IntersectionAccelerator}
+) where {FA, FAAfter, FI, T, M <: Manifold}
     # this is suitable for planar
     # but spherical / geodesic will need s2 support at some point,
     # or -- even now -- just buffering
@@ -247,7 +247,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     # First, loop over "each edge" in poly_a
     for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
         a1t == a2t && continue
-        isnothing(f_on_each_a) ||f_on_each_a(a1t, i)
+        isnothing(f_on_each_a) || f_on_each_a(a1t, i)
         for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
             b1t == b2t && continue
             LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # this should be aware of manifold by construction.
