@@ -66,8 +66,12 @@ This is computed slightly differently for different geometries:
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
-function area(geom, ::Type{T} = Float64; threaded=false) where T <: AbstractFloat
-    applyreduce(WithTrait((trait, g) -> _area(T, trait, g)), +, _AREA_TARGETS, geom; threaded, init=zero(T))
+function area(geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
+    area(Planar(), geom, T; threaded, kwargs...)
+end
+
+function area(::Planar, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
+    applyreduce(WithTrait((trait, g) -> _area(T, trait, g)), +, _AREA_TARGETS, geom; threaded, init=zero(T), kwargs...)
 end
 
 """
@@ -151,3 +155,6 @@ function _signed_area(::Type{T}, geom) where T
     area += _area_component(p1, p2)
     return T(area / 2)
 end
+
+
+# ## Spherical

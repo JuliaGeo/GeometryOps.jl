@@ -7,6 +7,6 @@ using GeometryOps, Proj
 
 include("reproject.jl")
 include("segmentize.jl")
-include("perimeter.jl")
+include("perimeter_area.jl")
 
 end
