@@ -97,3 +97,11 @@ end
     @test GO.area($mp1) == a2 + a4
     @test GO.area($mp1, Float32) isa Float32
 end
+
+
+highlat_poly = LG.Polygon([[[70., 70.], [70., 80.], [80., 80.], [80., 70.], [70., 70.]]])
+
+@testset_implementations "Spherical/geodesic" begin
+    @test GO.area(GO.Planar(), $highlat_poly) == 100
+    @test GO.area(GO.Planar(), $highlat_poly) < GO.area(GO.Geodesic(), $highlat_poly)
+end
