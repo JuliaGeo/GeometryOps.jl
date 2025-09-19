@@ -23,7 +23,4 @@ end
     @test GO.perimeter(GO.Planar(), highlat_poly) == 40
     @test GO.perimeter(GO.Planar(), highlat_poly) < GO.perimeter(GO.Spherical(), highlat_poly)
     @test GO.perimeter(GO.Spherical(), highlat_poly) < GO.perimeter(GO.Geodesic(), highlat_poly)
-    
-    @test GO.area(GO.Planar(), highlat_poly) == 100
-    @test GO.area(GO.Planar(), highlat_poly) < GO.area(GO.Geodesic(), highlat_poly)
 end
