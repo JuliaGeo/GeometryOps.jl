@@ -21,6 +21,8 @@ poly([geom, geom2]; color = [:steelblue, :orange])
 This uses [`apply`](@ref), so will work with any geometry, vector of geometries, table, etc.
 =#
 
+export transform, rotate
+
 """
     transform(f, obj)
 
@@ -64,6 +66,63 @@ ing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}[
 ctor{2, Int64}[[2, 1], [4, 3], [6, 5], [2, 1]], nothing, nothing), GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Int64}}, Nothing, Nothing}(StaticArraysCore.SVector{2, Int64
 }[[4, 3], [6, 5], [7, 6], [4, 3]], nothing, nothing)], nothing, nothing)
 ```
+
+## Rotation Examples
+
+For rotating geometry, you can use various approaches:
+
+### Simple rotation using the rotate convenience function
+```julia
+julia> # Rotate by 45 degrees around the centroid (default)
+julia> GO.rotate(geom, π/4)
+
+julia> # Rotate around a specific point
+julia> GO.rotate(geom, π/4; origin = (0, 0))
+```
+
+### Simple 2D rotation around origin
+```julia
+julia> using StaticArrays
+
+julia> # Rotate by 45 degrees (π/4 radians)
+julia> rotation_matrix = @SMatrix [cos(π/4) -sin(π/4); sin(π/4) cos(π/4)]
+
+julia> GO.transform(p -> rotation_matrix * p, geom)
+```
+
+### Rotation around geometry centroid
+```julia
+julia> # Rotate around the polygon's centroid
+julia> center = GO.centroid(geom)
+
+julia> GO.transform(geom) do p
+           # Translate to origin, rotate, then translate back
+           rotated = rotation_matrix * (p .- center)  
+           return rotated .+ center
+       end
+```
+
+### Using CoordinateTransformations.jl for complex rotations
+```julia
+julia> using CoordinateTransformations
+
+julia> center = GO.centroid(geom)
+
+julia> # Compose transformations: translate, rotate, translate back
+julia> rotation_transform = Translation(center) ∘ LinearMap(rotation_matrix) ∘ Translation(-center[1], -center[2])
+
+julia> GO.transform(rotation_transform, geom)
+```
+
+### Using Rotations.jl for 2D rotation
+```julia
+julia> using Rotations
+
+julia> # For 2D rotation, extract 2x2 submatrix from 3D rotation
+julia> rotation_2d = RotZ(π/4)[1:2, 1:2]
+
+julia> GO.transform(p -> rotation_2d * p, geom)
+```
 """
 function transform(f, geom; kw...) 
     if _is3d(geom)
@@ -73,6 +132,51 @@ function transform(f, geom; kw...)
     else
         return apply(PointTrait(), geom; kw...) do p
             f(StaticArrays.SVector{2}((GI.x(p), GI.y(p))))
+        end
+    end
+end
+
+"""
+    rotate(geom, angle::Real; origin = nothing)
+
+Rotate a geometry by `angle` (in radians) around a point.
+
+If `origin` is not provided, the geometry is rotated around its centroid.
+If `origin` is provided as a point-like object (e.g., tuple or Point), 
+the geometry is rotated around that point.
+
+## Examples
+
+```julia
+# Rotate a square by 45 degrees around its centroid
+square = GI.Polygon([[(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]])
+rotated = GO.rotate(square, π/4)
+
+# Rotate around a specific point
+rotated_around_origin = GO.rotate(square, π/4; origin = (0, 0))
+
+# Rotate by 90 degrees (π/2 radians)
+rotated_90 = GO.rotate(square, π/2)
+```
+"""
+function rotate(geom, angle::Real; origin = nothing)
+    # Create 2D rotation matrix
+    cos_a, sin_a = cos(angle), sin(angle)
+    rotation_matrix = StaticArrays.@SMatrix [cos_a -sin_a; sin_a cos_a]
+    
+    if origin === nothing
+        # Rotate around centroid
+        center = centroid(geom)
+        return transform(geom) do p
+            rotated = rotation_matrix * (p .- center)
+            return rotated .+ center
+        end
+    else
+        # Rotate around specified origin point
+        origin_point = StaticArrays.SVector{2}(origin)
+        return transform(geom) do p
+            rotated = rotation_matrix * (p .- origin_point)
+            return rotated .+ origin_point
         end
     end
 end
