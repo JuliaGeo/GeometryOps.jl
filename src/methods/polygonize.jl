@@ -256,10 +256,10 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
                             end
                         end
                     elseif firstisleft
-                        if wasincreasing 
+                        if wasincreasing
                             (c2, c1, secondisstraight)
                         else
-                            (c1, c2, turning)
+                            (c2, c1, turning)  # Fixed: was (c1, c2), should be (c2, c1) to maintain CCW
                         end
                     else # firstisright
                         if wasincreasing 

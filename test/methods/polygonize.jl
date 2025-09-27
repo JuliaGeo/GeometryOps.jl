@@ -105,3 +105,30 @@ end
         @test GO.equals(data_mp, data_mp_range)
     end
 end
+
+@testset "Polygonize handles holes correctly (issue #338)" begin
+    # Test case from issue #338: polygonize was creating self-intersecting polygons
+    # instead of properly separating exterior and interior rings
+    boolmat = fill(true, 10, 10)
+    boolmat[end, end] = false
+    boolmat[end-1, end-1] = false
+
+    result = polygonize(boolmat)
+    @test result isa GI.MultiPolygon
+    @test GI.ngeom(result) == 1
+
+    plg = only(GI.getgeom(result))
+    @test plg isa GI.Polygon
+    @test GI.nhole(plg) == 1  # Should have exactly one hole
+
+    # Check that exterior ring doesn't have self-intersections
+    ext_coords = GI.coordinates(GI.getexterior(plg))
+    coords_no_closure = ext_coords[1:end-1]
+    unique_coords = unique(coords_no_closure)
+    @test length(unique_coords) == length(coords_no_closure)  # No duplicate coordinates
+
+    # Check hole dimensions
+    hole = only(GI.gethole(plg))
+    hole_coords = GI.coordinates(hole)
+    @test length(hole_coords) == 5  # Square hole should have 5 points (including closure)
+end
