@@ -113,7 +113,7 @@ function _get_geometry_column_for_applyreduce(iterable, geometrycolumn)
         throw(ArgumentError(
             """
             `applyreduce`: the `geometrycolumn` kwarg must be a column name of the table, 
-            got $(geometry_column)
+            got `$(geometry_column)`
             but the table has columns 
             $(input_colnames)
             """
