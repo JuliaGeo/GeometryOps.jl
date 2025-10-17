@@ -96,9 +96,8 @@ end
         end
     end
 end
-# In this case, we don't reconstruct the table, but only operate on the geometry column.
-function _applyreduce_table(f::F, op::O, target, iterable::IterableType; geometrycolumn = nothing, threaded, init, kw...) where {F, O, IterableType}
-    # We extract the geometry column and run `applyreduce` on it.
+# Helper function to get and validate the geometry column for applyreduce operations
+function _get_geometry_column_for_applyreduce(iterable, geometrycolumn)
     # Determine which geometry column to use
     geometry_column = if isnothing(geometrycolumn)
         first(GI.geometrycolumns(iterable))
@@ -120,32 +119,20 @@ function _applyreduce_table(f::F, op::O, target, iterable::IterableType; geometr
             """
             ))
     end
+    return geometry_column
+end
+
+# In this case, we don't reconstruct the table, but only operate on the geometry column.
+function _applyreduce_table(f::F, op::O, target, iterable::IterableType; geometrycolumn = nothing, threaded, init, kw...) where {F, O, IterableType}
+    # We extract the geometry column and run `applyreduce` on it.
+    geometry_column = _get_geometry_column_for_applyreduce(iterable, geometrycolumn)
     return _applyreduce(f, op, target, Tables.getcolumn(iterable, geometry_column); threaded, init, kw...)
 end
 # If `applyreduce` wants features, then applyreduce over the rows as `GI.Feature`s.
 function _applyreduce_table(f::F, op::O, target::GI.FeatureTrait, iterable::IterableType; geometrycolumn = nothing, threaded, init, kw...) where {F, O, IterableType}
-    # We extract the geometry column and run `apply` on it.
-    # Determine which geometry column to use
-    geometry_column = if isnothing(geometrycolumn)
-        first(GI.geometrycolumns(iterable))
-    elseif geometrycolumn isa Symbol
-        geometrycolumn
-    else
-        throw(ArgumentError("geometrycolumn must be a Symbol or nothing, got a $(typeof(geometrycolumn))"))
-    end
-    # Validate that the geometry column exists in the table
-    input_schema = Tables.schema(iterable)
-    input_colnames = input_schema.names
-    if !(geometry_column in input_colnames)
-        throw(ArgumentError(
-            """
-            `applyreduce`: the `geometrycolumn` kwarg must be a column name of the table, 
-            got $(geometry_column)
-            but the table has columns 
-            $(input_colnames)
-            """
-            ))
-    end
+    # We extract the geometry column and run `applyreduce` on it.
+    geometry_column = _get_geometry_column_for_applyreduce(iterable, geometrycolumn)
+    input_colnames = Tables.schema(iterable).names
     property_names = Iterators.filter(!=(geometry_column), input_colnames)
     features = map(Tables.rows(iterable)) do row
         GI.Feature(Tables.getcolumn(row, geometry_column), properties=NamedTuple(Iterators.map(pname -> pname => Tables.getcolumn(row, pname), property_names)))
