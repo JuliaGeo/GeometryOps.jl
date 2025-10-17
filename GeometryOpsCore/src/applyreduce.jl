@@ -51,7 +51,7 @@ Literate.jl source code is below.
 =#
 
 """
-    applyreduce(f, op, target::Union{TraitTarget, GI.AbstractTrait}, obj; threaded, init, kw...)
+    applyreduce(f, op, target::Union{TraitTarget, GI.AbstractTrait}, obj; threaded, init, geometrycolumn, kw...)
 
 Apply function `f` to all objects with the `target` trait,
 and reduce the result with an `op` like `+`. 
@@ -62,6 +62,11 @@ If `threaded==true` threads will be used over arrays and iterables,
 feature collections and nested geometries.
 
 `init` functions the same way as it does in base Julia functions like `reduce`.
+
+## Keywords
+
+- `geometrycolumn`: For tables, specify which column contains the geometry. Can be a `Symbol` 
+  for a single column. If `nothing` (default), uses the first geometry column from `GI.geometrycolumns(table)`.
 """
 @inline function applyreduce(
     f::F, op::O, target, geom; threaded=false, init=nothing, kw...
