@@ -1,12 +1,70 @@
+#=
+# Smooth
+
+Geometry smoothing is meant to make shapes more aesthetically pleasing, usually by rounding out rough edges and corners. 
+
+You can do this by the [`smooth`](@ref) function, which uses the [`Chaikin`](@ref) algorithm by default.
+
+## Example
+
+```@example smooth
+using CairoMakie
+import GeoInterface as GI, GeometryOps as GO
+
+line = GI.LineString([(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)])
+smoothed = GO.smooth(line)
+smoothed_2 = GO.smooth(line; iterations=2)
+
+f, a, p = lines(line; label = "Original")
+lines!(a, smoothed; label = "1 iteration")
+lines!(a, smoothed_2; label = "2 iterations")
+axislegend(a)
+fig
+```
+
+Smoothing also works on the [`Spherical`](@ref) manifold,
+similarly to the planar manifold (default):
+```@example smooth
+using CairoMakie
+import GeoInterface as GI, GeometryOps as GO
+
+line = GI.LineString([(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)])
+smoothed = GO.smooth(GO.Spherical(), line) |> x -> GO.transform(GO.UnitSpherical.GeographicFromUnitSpherical(), x)
+smoothed_2 = GO.smooth(GO.Spherical(), line; iterations=2) |> x -> GO.transform(GO.UnitSpherical.GeographicFromUnitSpherical(), x)
+
+f, a, p = lines(line; label = "Original", axis = (; title = "Spherical smoothing"))
+lines!(a, smoothed; label = "1 iteration")
+lines!(a, smoothed_2; label = "2 iterations")
+axislegend(a)
+fig
+```
+=#
 """
-    Chaikin <: SmoothAlg
+    Chaikin(; iterations=1, manifold=Planar())
 
-    Chaikin(; iterations=1)
-
-Smooths geometries using Chaikin's corner-cutting algorithm.
+Smooths geometries using Chaikin's corner-cutting algorithm [^1].
+This algorithm "slices" off every corner of the geometry to smooth it out,
+equivalent to a sequence of quadratic Bezier curves.
 
 ## Keywords
 - `iterations`: the number of times to apply the algorithm.
+- `manifold`: the [`Manifold`](@ref) to smooth the geometry on.  Currently, [`Planar`](@ref) and [`Spherical`](@ref) are supported.
+
+# Extended help
+
+The algorithm is very simple; for each corner of the line (a -> b -> c),
+insert two new points and remove b, such that `a -> b -> c` becomes 
+`a -> q -> r -> c`, where `q` and `r` are the new points such that:
+
+```math
+q = 3/4 * b + 1/4 * a
+r = 3/4 * b + 1/4 * c
+```
+
+In practice the replacement happens on the level of each edge.
+
+## References
+[^1]: Chaikin, G. An algorithm for high speed curve generation. Computer Graphics and Image Processing 3 (1974), 346-349
 """
 @kwdef struct Chaikin{M} <: Algorithm{M}
     manifold::M = Planar()
