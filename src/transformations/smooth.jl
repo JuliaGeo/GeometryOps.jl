@@ -28,7 +28,7 @@ function smooth(alg::Algorithm, geom; kw...)
     return apply(
         WithTrait(_smooth_function),
         TraitTarget{Union{GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}}(),
-        geom,
+        geom;
         kw...
     )
 end
@@ -36,17 +36,27 @@ end
 _smooth(alg, ::GI.PointTrait, geom) = geom
 _smooth(alg, ::GI.MultiPointTrait, geom) = geom
 
-function _smooth(alg::Chaikin, T::Union{GI.LineStringTrait,GI.LinearRingTrait}, geom)
-    isring = T isa GI.LinearRingTrait
+function _smooth(alg::Chaikin{<: Planar}, trait::Trait, geom) where {M, Trait <: Union{GI.LineStringTrait,GI.LinearRingTrait}}
+    isring = Trait <: GI.LinearRingTrait
     points = tuple_points(geom)
     if isring && first(points) != last(points)
         push!(points, first(points))
     end
-    smoothed_points = _chaikin_smooth(points, alg.iterations, isring)
+    smoothed_points = _chaikin_smooth(alg.manifold, points, alg.iterations, isring)
     return rebuild(geom, smoothed_points)
 end
 
-function _chaikin_smooth(points::Vector{P}, iterations::Int, isring::Bool) where P
+function _smooth(alg::Chaikin{<: M}, trait::Trait, geom) where {M <: Spherical, Trait <: Union{GI.LineStringTrait,GI.LinearRingTrait}}
+    isring = Trait <: GI.LinearRingTrait
+    points = apply(UnitSphereFromGeographic(), GI.PointTrait(), geom).geom
+    if isring && first(points) != last(points)
+        push!(points, first(points))
+    end
+    smoothed_points = _chaikin_smooth(alg.manifold, points, alg.iterations, isring)
+    return rebuild(geom, smoothed_points)
+end
+
+function _chaikin_smooth(manifold::M, points::Vector{P}, iterations::Int, isring::Bool) where {M <: Manifold, P}
     # points is expected to be a vector of points
     smoothed_points = points
     for itr in 1:iterations
@@ -61,12 +71,12 @@ function _chaikin_smooth(points::Vector{P}, iterations::Int, isring::Bool) where
             new_points[begin] = smoothed_points[begin]
             new_points[end] = smoothed_points[end]
         end
-        fill!(new_points, (-9999.0, -9999.0))
+        # fill!(new_points, (P <: NTuple{2, Float64} ? (-9999.0, -9999.0) : UnitSphericalPoint(-9999.0, -9999.0, -9999.0)))
 
         for i in eachindex(smoothed_points)[begin:end-1]
             p1 = smoothed_points[i]
             p2 = smoothed_points[i+1]
-            _add_smoothed_points!(new_points, p1, p2, n)
+            _add_smoothed_points!(manifold, new_points, p1, p2, n)
             n += 2
         end
  
