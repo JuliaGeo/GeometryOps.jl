@@ -15,11 +15,11 @@ line = GI.LineString([(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)])
 smoothed = GO.smooth(line)
 smoothed_2 = GO.smooth(line; iterations=2)
 
-f, a, p = lines(line; label = "Original")
-lines!(a, smoothed; label = "1 iteration")
-lines!(a, smoothed_2; label = "2 iterations")
+f, a, p = lines(line; label = "line")
+lines!(a, smoothed; label = "smooth(line; iterations=1)")
+lines!(a, smoothed_2; label = "smooth(line; iterations=2)")
 axislegend(a)
-fig
+f
 ```
 
 Smoothing also works on the [`Spherical`](@ref) manifold,
@@ -36,7 +36,7 @@ f, a, p = lines(line; label = "Original", axis = (; title = "Spherical smoothing
 lines!(a, smoothed; label = "1 iteration")
 lines!(a, smoothed_2; label = "2 iterations")
 axislegend(a)
-fig
+f
 ```
 =#
 """
