@@ -18,7 +18,7 @@ To provide an example, consider this rectangle:
 ```@example rect
 import GeometryOps as GO
 import GeoInterface as GI
-using CairoMakie, GeoInterfaceMakie
+using CairoMakie
 
 rect = GI.Polygon([[(0,0), (0,1), (1,1), (1,0), (0, 0)]])
 point_in = (0.5, 0.5) 

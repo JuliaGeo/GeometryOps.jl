@@ -14,7 +14,7 @@ import GeoInterface as GI, GeometryOps as GO
 geom = GI.Polygon([[(0,0), (1,0), (1,1), (0,1), (0,0)]])
 geom2 = GO.transform(p -> p .+ (1, 2), geom)
 
-using CairoMakie, GeoInterfaceMakie
+using CairoMakie
 poly([geom, geom2]; color = [:steelblue, :orange])
 ``` 
 
