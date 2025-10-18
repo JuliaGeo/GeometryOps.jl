@@ -45,4 +45,16 @@ import GeoInterface as GI
         @test GI.ngeom(smoothed) == 2
         @test GI.npoint(smoothed) == 18
     end
+
+    @testset "Spherical" begin
+        line = GO.transform(GO.UnitSphereFromGeographic(), GI.LineString([(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)]))
+        expected = [line.geom[1], GO.slerp(line.geom[1], line.geom[2], 0.25), GO.slerp(line.geom[1], line.geom[2], 0.75), GO.slerp(line.geom[2], line.geom[3], 0.25), GO.slerp(line.geom[2], line.geom[3], 0.75), line.geom[end]]
+        smoothed = GO.smooth(GO.Spherical(), line)
+        @test GI.npoint(smoothed) == length(expected)
+        for i in 1:length(expected)
+            @testset let i = i
+                @test GI.getpoint(smoothed, i) == expected[i]
+            end
+        end
+    end
 end
