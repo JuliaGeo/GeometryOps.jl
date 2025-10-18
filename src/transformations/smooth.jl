@@ -24,9 +24,9 @@ The default algorithm is [`Chaikin()`](@ref), which can be used on the spherical
 smooth(geom; kw...) = smooth(Chaikin(; kw...), geom)
 
 function smooth(alg::Algorithm, geom)
-    _smooth_function(geom) = _smooth(alg, GI.trait(geom), geom)
+    _smooth_function(trait, geom) = _smooth(alg, trait, geom)
     return apply(
-        _smooth_function,
+        WithTrait(_smooth_function),
         TraitTarget{Union{GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}}(),
         geom,
     )
