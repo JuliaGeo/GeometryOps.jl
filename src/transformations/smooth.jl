@@ -1,11 +1,4 @@
 """
-    abstract type SmoothAlg
-
-Abstract type for smoothing algorithms.
-"""
-abstract type SmoothAlg end
-
-"""
     Chaikin <: SmoothAlg
 
     Chaikin(; iterations=1)
@@ -15,21 +8,22 @@ Smooths geometries using Chaikin's corner-cutting algorithm.
 ## Keywords
 - `iterations`: the number of times to apply the algorithm.
 """
-@kwdef struct Chaikin <: SmoothAlg
+@kwdef struct Chaikin{M} <: Algorithm{M}
+    manifold::M = Planar()
     iterations::Int = 1
 end
 
 """
-    smooth(alg::SmoothAlg, geom)
+    smooth(alg::Algorithm, geom)
     smooth(geom; kw...)
 
 Smooths a geometry using the provided algorithm.
 
-The default algorithm is `Chaikin()`.
+The default algorithm is [`Chaikin()`](@ref), which can be used on the spherical or planar manifolds.
 """
 smooth(geom; kw...) = smooth(Chaikin(; kw...), geom)
 
-function smooth(alg::SmoothAlg, geom)
+function smooth(alg::Algorithm, geom)
     _smooth_function(geom) = _smooth(alg, GI.trait(geom), geom)
     return apply(
         _smooth_function,
