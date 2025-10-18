@@ -54,6 +54,7 @@ function (::UnitSphereFromGeographic)(geographic_point)
         cosϕ
     )
 end
+(::UnitSphereFromGeographic)(p::UnitSphericalPoint) = p
 
 """
     GeographicFromUnitSphere()
