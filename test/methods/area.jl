@@ -2,7 +2,7 @@ using Test
 import GeoInterface as GI
 import GeometryOps as GO 
 import LibGEOS as LG
-using ..TestHelpers
+using .TestHelpers
 
 pt = LG.Point([0.0, 0.0])
 empty_pt = LG.readgeom("POINT EMPTY")

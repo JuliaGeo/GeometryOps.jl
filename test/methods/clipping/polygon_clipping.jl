@@ -2,7 +2,7 @@ using Test
 import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG
-using ..TestHelpers
+using .TestHelpers
 
 # Test of polygon clipping
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])

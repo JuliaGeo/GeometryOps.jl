@@ -1,7 +1,7 @@
 using Test
 import GeoInterface as GI
 import GeometryOps as GO
-using ..TestHelpers
+using .TestHelpers
 
 p1 = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
 # (p1, p2) -> one polygon inside of the other, sharing an edge

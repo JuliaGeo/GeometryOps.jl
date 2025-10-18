@@ -2,7 +2,7 @@ using Test
 import GeoInterface as GI
 import GeometryOps as GO
 import LibGEOS as LG
-using ..TestHelpers
+using .TestHelpers
 
 l1 = GI.LineString([(90000.0, 1000.0), (90000.0, 22500.0), (95000.0, 22500.0), (95000.0, 1000.0), (90000.0, 1000.0)])
 l2 = GI.LineString([(90000.0, 7500.0), (107500.0, 27500.0), (112500.0, 27500.0), (95000.0, 7500.0), (90000.0, 7500.0)])

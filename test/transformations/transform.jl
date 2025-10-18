@@ -2,7 +2,7 @@ using Test
 using CoordinateTransformations
 import GeoInterface as GI
 import GeometryOps as GO
-using ..TestHelpers
+using .TestHelpers
 
 geom = GI.Polygon([GI.LinearRing([(1, 2), (3, 4), (5, 6), (1, 2)]), 
                    GI.LinearRing([(3, 4), (5, 6), (6, 7), (3, 4)])])

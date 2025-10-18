@@ -1,6 +1,7 @@
 using Test
 import GeometryOps as GO
 import LibGEOS as LG
+import Proj
 
 # Basic geometries for testing
 point = LG.Point([0.0, 0.0])

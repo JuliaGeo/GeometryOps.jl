@@ -3,7 +3,7 @@ import GeoInterface as GI
 import GeometryOps as GO 
 import GeometryBasics as GB 
 import LibGEOS as LG
-using ..TestHelpers
+using .TestHelpers
 
 pt1 = GI.Point((0.0, 0.0))
 mpt1 = GI.MultiPoint([pt1, pt1])

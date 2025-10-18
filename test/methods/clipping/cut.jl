@@ -1,7 +1,7 @@
 using Test
 import GeoInterface as GI
 import GeometryOps as GO
-using ..TestHelpers
+using .TestHelpers
 
 # TODO this should also work with a LineString
 # Some geom packages don't have `Line`
