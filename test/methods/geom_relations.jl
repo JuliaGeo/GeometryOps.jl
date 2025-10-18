@@ -2,7 +2,7 @@ import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG
 using Extents
-using ..TestHelpers
+using .TestHelpers
 
 # Tests of DE-9IM Methods
 pt1 = LG.Point([0.0, 0.0])

@@ -3,7 +3,7 @@ import GeoInterface as GI
 import GeometryBasics as GB 
 import GeometryOps as GO 
 import LibGEOS as LG
-using ..TestHelpers
+using .TestHelpers
 
 p1 = LG.Point([0.0, 0.0])
 p2 = LG.Point([0.0, 1.0])

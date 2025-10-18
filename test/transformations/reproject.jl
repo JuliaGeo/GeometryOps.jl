@@ -3,7 +3,7 @@ using GeoFormatTypes
 import GeoInterface as GI
 import GeometryOps as GO
 import Proj
-using ..TestHelpers
+using .TestHelpers
 
 ring1 = GI.LinearRing([(1, 2), (7, 4), (5, 6), (1, 2)])
 ring2 = GI.LinearRing([(11, 2), (20, 4), (15, 6), (11, 2)])

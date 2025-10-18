@@ -10,7 +10,7 @@ import Proj
 import Shapefile
 import DataFrames, Tables, DataAPI
 using Downloads: download
-using ..TestHelpers
+using .TestHelpers
 
 pv1 = [(1, 2), (3, 4), (5, 6), (1, 2)]
 pv2 = [(3, 4), (5, 6), (6, 7), (3, 4)]

@@ -3,7 +3,7 @@ import GeoInterface as GI
 import GeometryBasics as GB
 import GeometryOps as GO
 import LibGEOS as LG
-using ..TestHelpers
+using .TestHelpers
 
 cell_extremes = (0.0, 20.0, 0.0, 20.0)
 cell_extent = GI.Extents.Extent(X = (0.0, 20.0), Y = (0.0, 20.0))

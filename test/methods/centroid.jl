@@ -3,7 +3,7 @@ import GeoInterface as GI
 import GeometryOps as GO 
 import LibGEOS as LG
 import ArchGDAL as AG
-using ..TestHelpers
+using .TestHelpers
 
 @testset "Lines/Rings" begin
 

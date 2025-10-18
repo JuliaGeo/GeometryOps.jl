@@ -1,6 +1,6 @@
 import GeometryOps as GO
 import GeoInterface as GI
-using ..TestHelpers
+using .TestHelpers
 
 using Test
 

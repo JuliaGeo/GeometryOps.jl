@@ -3,7 +3,7 @@ import ArchGDAL as AG
 import GeoInterface as GI
 import GeometryBasics as GB
 import GeometryOps as GO
-using ..TestHelpers
+using .TestHelpers
 
 open_rectangle = GI.Polygon([collect.([(0, 0), (10, 0), (10, 10), (0, 10)])])
 

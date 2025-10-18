@@ -3,7 +3,7 @@ import ArchGDAL as AG
 import GeoInterface as GI
 import GeometryOps as GO 
 import LibGEOS as LG
-using ..TestHelpers
+using .TestHelpers
 
 pt1 = LG.Point([0.0, 0.0])
 pt2 = LG.Point([0.0, 1.0])

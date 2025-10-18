@@ -3,7 +3,7 @@ import GeoJSON, JLD2
 import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG
-using ..TestHelpers
+using .TestHelpers
 
 datadir = realpath(joinpath(dirname(pathof(GO)), "../test/data"))
 @testset "RadialDistance and VisvalingamWhyatt" begin
