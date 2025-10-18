@@ -15,16 +15,19 @@ import GeoInterface as GI
         @test GI.getpoint(smoothed, 6) == (2.0, 0.0)
 
         smoothed = GO.smooth(line; iterations=2)
-        @test GI.npoint(smoothed) == 10
+        @test GI.npoint(smoothed) == 12
         @test GI.getpoint(smoothed, 1) == (0.0, 0.0)
         @test GI.getpoint(smoothed, 2) == (0.0625, 0.0625)
         @test GI.getpoint(smoothed, 3) == (0.1875, 0.1875)
-        @test GI.getpoint(smoothed, 4) == (0.5, 0.5)
-        @test GI.getpoint(smoothed, 5) == (1.0, 1.0)
-        @test GI.getpoint(smoothed, 6) == (1.5, 0.5)
-        @test GI.getpoint(smoothed, 7) == (1.8125, 0.1875)
-        @test GI.getpoint(smoothed, 8) == (1.9375, 0.0625)
-        @test GI.getpoint(smoothed, 9) == (2.0, 0.0)
+        @test GI.getpoint(smoothed, 4) == (0.375, 0.375)
+        @test GI.getpoint(smoothed, 5) == (0.625, 0.625)
+        @test GI.getpoint(smoothed, 6) == (0.875, 0.75)
+        @test GI.getpoint(smoothed, 7) == (1.125, 0.75)
+        @test GI.getpoint(smoothed, 8) == (1.375, 0.625)
+        @test GI.getpoint(smoothed, 9) == (1.625, 0.375)
+        @test GI.getpoint(smoothed, 10) == (1.8125, 0.1875)
+        @test GI.getpoint(smoothed, 11) == (1.9375, 0.0625)
+        @test GI.getpoint(smoothed, 12) == (2.0, 0.0)
     end
 
     @testset "Polygon" begin
@@ -45,7 +48,7 @@ import GeoInterface as GI
 
     @testset "MultiPolygon" begin
         poly1 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
-        poly2 = GI.Polygon([[(2.0, 2.0, (3.0, 2.0), (3.0, 3.0), (2.0, 3.0), (2.0, 2.0)]])
+        poly2 = GI.Polygon([[(2.0, 2.0), (3.0, 2.0), (3.0, 3.0), (2.0, 3.0), (2.0, 2.0)]])
         mpoly = GI.MultiPolygon([poly1, poly2])
         smoothed = GO.smooth(mpoly)
         @test GI.ngeom(smoothed) == 2
