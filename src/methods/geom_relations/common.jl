@@ -5,20 +5,20 @@ for f in (:coveredby, :crosses, :disjoint, :overlaps, :touches, :within)
 
     @eval begin
         # Features
-        $_f(::GI.FeatureTrait, g1, ::GI.AbstractGeometryTrait, g2) = $f(geometry(g1), g2)
-        $_f(::GI.AbstractGeometryTrait, g1, ::GI.FeatureTrait, g2) = $f(g1, geometry(g2))
-        $_f(::GI.FeatureTrait, g1, ::GI.FeatureTrait, g2) = $f(geometry(g1), geometry(g2))
+        $_f(::GI.FeatureTrait, g1, ::GI.AbstractGeometryTrait, g2; kw...) = $f(geometry(g1), g2; kw...)
+        $_f(::GI.AbstractGeometryTrait, g1, ::GI.FeatureTrait, g2; kw...) = $f(g1, geometry(g2); kw...)
+        $_f(::GI.FeatureTrait, g1, ::GI.FeatureTrait, g2; kw...) = $f(geometry(g1), geometry(g2); kw...)
 
         # Extent forwarding
-        $_f(t1::GI.FeatureTrait, f1, ::Nothing, e::Extents.Extent) =
-            $_f(t1, f1, GI.PolygonTrait(), extent_to_polygon(e))
-        $_f(::Nothing, e1::Extents.Extent, t2::GI.FeatureTrait, f2) =
-            $_f(GI.PolygonTrait(), extent_to_polygon(e1), t2, f2)
-        $_f(t1::GI.AbstractGeometryTrait, g1, ::Nothing, e::Extents.Extent) =
-            $_f(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
-        $_f(::Nothing, e1::Extents.Extent, t2::GI.AbstractGeometryTrait, g2) =
-            $_f(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
-        $_f(::Nothing, e1::Extents.Extent, ::Nothing, e2::Extents.Extent) =
+        $_f(t1::GI.FeatureTrait, f1, ::Nothing, e::Extents.Extent; kw...) =
+            $_f(t1, f1, GI.PolygonTrait(), extent_to_polygon(e); kw...)
+        $_f(::Nothing, e1::Extents.Extent, t2::GI.FeatureTrait, f2; kw...) =
+            $_f(GI.PolygonTrait(), extent_to_polygon(e1), t2, f2; kw...)
+        $_f(t1::GI.AbstractGeometryTrait, g1, ::Nothing, e::Extents.Extent; kw...) =
+            $_f(t1, g1, GI.PolygonTrait(), extent_to_polygon(e); kw...)
+        $_f(::Nothing, e1::Extents.Extent, t2::GI.AbstractGeometryTrait, g2; kw...) =
+            $_f(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2; kw...)
+        $_f(::Nothing, e1::Extents.Extent, ::Nothing, e2::Extents.Extent; kw...) =
             Extents.$f(e1, e2)
 
         # Table rows ? or error
