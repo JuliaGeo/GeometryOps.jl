@@ -90,7 +90,7 @@ function _chaikin_smooth(manifold::M, points::Vector{P}, iterations::Int, isring
     return smoothed_points
 end
 
-function _add_smoothed_points!(new_points, p1, p2, n)
+function _add_smoothed_points!(::Planar, new_points, p1, p2, n)
     q_x = 0.75 * GI.x(p1) + 0.25 * GI.x(p2)
     q_y = 0.75 * GI.y(p1) + 0.25 * GI.y(p2)
     r_x = 0.25 * GI.x(p1) + 0.75 * GI.x(p2)
@@ -98,4 +98,13 @@ function _add_smoothed_points!(new_points, p1, p2, n)
 
     new_points[n] = (q_x, q_y)
     new_points[n+1] = (r_x, r_y)
+end
+
+# For spherical points, we can simply slerp.
+function _add_smoothed_points!(::Spherical, new_points, p1, p2, n)
+    q = slerp(p1, p2, 0.25)
+    r = slerp(p1, p2, 0.75)
+
+    new_points[n] = q
+    new_points[n+1] = r
 end
