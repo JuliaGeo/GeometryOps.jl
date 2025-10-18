@@ -36,7 +36,7 @@ to the algorithm.
 Here is the simplest example:
 
 ```@example polygon_simplification
-using Makie, GeoInterfaceMakie
+using CairoMakie
 import GeoInterface as GI
 import GeometryOps as GO
 
