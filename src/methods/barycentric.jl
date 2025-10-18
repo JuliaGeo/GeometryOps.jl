@@ -27,7 +27,7 @@ export MeanValue
 #=
 ```@example barycentric
 import GeometryOps as GO, GeoInterface as GI
-using CairoMakie, GeoInterfaceMakie # plotting
+using CairoMakie # plotting
 # Define a polygon
 polygon_points = [
 (0.03, 0.05, 0.00), (0.07, 0.04, 0.02), (0.10, 0.04, 0.04),
