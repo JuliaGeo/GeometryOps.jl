@@ -22,13 +22,14 @@ Smooths a geometry using the provided algorithm.
 The default algorithm is [`Chaikin()`](@ref), which can be used on the spherical or planar manifolds.
 """
 smooth(geom; kw...) = smooth(Chaikin(; kw...), geom)
-
-function smooth(alg::Algorithm, geom)
+smooth(m::Manifold, geom; kw...) = smooth(Chaikin(; manifold=m, kw...), geom)
+function smooth(alg::Algorithm, geom; kw...)
     _smooth_function(trait, geom) = _smooth(alg, trait, geom)
     return apply(
         WithTrait(_smooth_function),
         TraitTarget{Union{GI.AbstractCurveTrait,GI.MultiPointTrait,GI.PointTrait}}(),
         geom,
+        kw...
     )
 end
 
