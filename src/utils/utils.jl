@@ -289,9 +289,10 @@ end
 
 # This will accept table rows etc
 # TODO can rows have metadata to detectg the geometry column name?
-function _geometry_or_error(g2; geometrycolumn=:geometry)
-    hasproperty(g2, geometrycolumn) || throw(ArgumentError("Objects that return no geometry or feature traits must at least have a :geometry property"))
-    return getproperty(g2, geometrycolumn)
+function _geometry_or_error(g; geometrycolumn=:geometry)
+    hasproperty(g, geometrycolumn) || throw(ArgumentError("Objects that return no geometry or feature traits must at least have property matching `geometrycolumn: `:$geometrycolumn`"))
+    return getproperty(g, geometrycolumn)
 end
+_geometry_or_error(g::Extents.Extent; kw...) = g
 
 
