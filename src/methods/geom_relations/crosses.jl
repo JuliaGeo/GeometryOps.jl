@@ -9,21 +9,13 @@ both source geometries.
 
 TODO: broken
 
-## Examples 
+## Examples
 ```julia
 import GeoInterface as GI, GeometryOps as GO
 # TODO: Add working example
 ```
 """
-crosses(g1, g2)::Bool = crosses(trait(g1), g1, trait(g2), g2)::Bool
-
-crosses(::MultiPointTrait, g1, ::LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)
-crosses(::MultiPointTrait, g1, ::PolygonTrait, g2)::Bool = multipoint_crosses_poly(g1, g2)
-crosses(::LineStringTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_lines(g2, g1)
-crosses(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = line_crosses_poly(g1, g2)
-crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_line(g1, g2)
-crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
-crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
+crosses(g1, g2)::Bool = _crosses(trait(g1), g1, trait(g2), g2)::Bool
 
 """
     crosses(g1)
@@ -32,6 +24,14 @@ Return a function that checks if its input crosses `g1`.
 This is equivalent to `x -> crosses(x, g1)`.
 """
 crosses(g1) = Base.Fix2(crosses, g1)
+
+_crosses(::MultiPointTrait, g1, ::LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)
+_crosses(::MultiPointTrait, g1, ::PolygonTrait, g2)::Bool = multipoint_crosses_poly(g1, g2)
+_crosses(::LineStringTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_lines(g2, g1)
+_crosses(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = line_crosses_poly(g1, g2)
+_crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_line(g1, g2)
+_crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
+_crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
 
 
 

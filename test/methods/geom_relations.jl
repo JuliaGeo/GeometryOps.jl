@@ -348,33 +348,194 @@ end
 @testset "Features, Table rows and Extents" begin
     feature1 = GI.Feature(pt1; properties=Dict{Symbol, Any}())
     feature2 = GI.Feature(pt2; properties=Dict{Symbol, Any}())
-    
+    feature_l1 = GI.Feature(l1; properties=Dict{Symbol, Any}())
+    feature_l7 = GI.Feature(l7; properties=Dict{Symbol, Any}())
+    feature_p1 = GI.Feature(p1; properties=Dict{Symbol, Any}())
+    feature_p7 = GI.Feature(p7; properties=Dict{Symbol, Any}())
+
     # Test NamedTuple
     named_tuple1 = (; geometry=pt1)
     named_tuple2 = (; geometry=pt2)
-    @test GO.disjoint(named_tuple1, named_tuple2) == GO.disjoint(pt1, pt2)
-    @test GO.coveredby(named_tuple1, ext1) == GO.coveredby(pt1, ext1)
-    @test GO.within(named_tuple1, ext1) == GO.within(pt1, ext1)
+    named_tuple_l1 = (; geometry=l1)
+    named_tuple_l7 = (; geometry=l7)
+    named_tuple_p1 = (; geometry=p1)
+    named_tuple_p7 = (; geometry=p7)
 
     # Test DataFrame row
-    df = DataFrame(geometry=[pt1, pt2])
+    df = DataFrame(geometry=[pt1, pt2, l1, l7, p1, p7])
     df_row1 = df[1, :]
     df_row2 = df[2, :]
-    @test GO.disjoint(df_row1, df_row2) == GO.disjoint(pt1, pt2)
-    @test GO.coveredby(df_row1, ext1) == GO.coveredby(pt1, ext1)
-    @test GO.within(df_row1, ext1) == GO.within(pt1, ext1)
+    df_row_l1 = df[3, :]
+    df_row_l7 = df[4, :]
+    df_row_p1 = df[5, :]
+    df_row_p7 = df[6, :]
 
-    # Test features
-    @test GO.disjoint(feature1, feature2) == GO.disjoint(pt1, pt2)
-    @test GO.coveredby(feature1, ext1) == GO.coveredby(pt1, ext1)
-    @test GO.within(feature1, ext1) == GO.within(pt1, ext1)
-    
-    # Test mixed types
-    @test GO.disjoint(feature1, named_tuple2) == GO.disjoint(pt1, pt2)
-    @test GO.coveredby(feature1, ext1) == GO.coveredby(pt1, ext1)
-    @test GO.within(df_row1, ext1) == GO.within(pt1, ext1)
+    @testset "disjoint" begin
+        # Test NamedTuple
+        @test GO.disjoint(named_tuple1, named_tuple2) == GO.disjoint(pt1, pt2)
+        @test GO.disjoint(named_tuple1, ext1) == GO.disjoint(pt1, ext1)
+        @test GO.disjoint(named_tuple1, ext3) == GO.disjoint(pt1, ext3)
 
-    # Test extents
-    @test GO.disjoint(ext1, ext3) == Extents.disjoint(ext1, ext3)
-    @test GO.coveredby(ext1, ext1) == Extents.coveredby(ext1, ext1)
+        # Test DataFrame row
+        @test GO.disjoint(df_row1, df_row2) == GO.disjoint(pt1, pt2)
+        @test GO.disjoint(df_row1, ext1) == GO.disjoint(pt1, ext1)
+        @test GO.disjoint(df_row1, ext3) == GO.disjoint(pt1, ext3)
+
+        # Test features
+        @test GO.disjoint(feature1, feature2) == GO.disjoint(pt1, pt2)
+        @test GO.disjoint(feature1, ext1) == GO.disjoint(pt1, ext1)
+        @test GO.disjoint(feature1, ext3) == GO.disjoint(pt1, ext3)
+        @test GO.disjoint(feature_p1, feature_p7) == GO.disjoint(p1, p7)
+
+        # Test mixed types (feature with table row, feature with named tuple)
+        @test GO.disjoint(feature1, named_tuple2) == GO.disjoint(pt1, pt2)
+        @test GO.disjoint(named_tuple1, feature2) == GO.disjoint(pt1, pt2)
+        @test GO.disjoint(feature1, df_row2) == GO.disjoint(pt1, pt2)
+        @test GO.disjoint(df_row1, feature2) == GO.disjoint(pt1, pt2)
+
+        # Test extent with features/table rows
+        @test GO.disjoint(ext1, feature2) == GO.disjoint(ext1, pt2)
+        @test GO.disjoint(feature1, ext1) == GO.disjoint(pt1, ext1)
+        @test GO.disjoint(ext1, df_row2) == GO.disjoint(ext1, pt2)
+        @test GO.disjoint(df_row1, ext1) == GO.disjoint(pt1, ext1)
+
+        # Test extents
+        @test GO.disjoint(ext1, ext3) == Extents.disjoint(ext1, ext3)
+        @test GO.disjoint(ext1, ext1) == Extents.disjoint(ext1, ext1)
+    end
+
+    @testset "coveredby" begin
+        # Test NamedTuple
+        @test GO.coveredby(named_tuple1, ext1) == GO.coveredby(pt1, ext1)
+        @test GO.coveredby(named_tuple1, named_tuple_p1) == GO.coveredby(pt1, p1)
+
+        # Test DataFrame row
+        @test GO.coveredby(df_row1, ext1) == GO.coveredby(pt1, ext1)
+        @test GO.coveredby(df_row1, df_row_p1) == GO.coveredby(pt1, p1)
+
+        # Test features
+        @test GO.coveredby(feature1, ext1) == GO.coveredby(pt1, ext1)
+        @test GO.coveredby(feature1, feature_p1) == GO.coveredby(pt1, p1)
+
+        # Test mixed types
+        @test GO.coveredby(feature1, named_tuple_p1) == GO.coveredby(pt1, p1)
+        @test GO.coveredby(named_tuple1, feature_p1) == GO.coveredby(pt1, p1)
+        @test GO.coveredby(df_row1, feature_p1) == GO.coveredby(pt1, p1)
+        @test GO.coveredby(feature1, df_row_p1) == GO.coveredby(pt1, p1)
+
+        # Test extent with features/table rows
+        @test GO.coveredby(ext1, feature_p1) == GO.coveredby(ext1, p1)
+        @test GO.coveredby(feature1, ext1) == GO.coveredby(pt1, ext1)
+
+        # Test extents
+        @test GO.coveredby(ext1, ext1) == Extents.coveredby(ext1, ext1)
+        @test GO.coveredby(ext1, ext2) == Extents.coveredby(ext1, ext2)
+    end
+
+    @testset "within" begin
+        # Test NamedTuple
+        @test GO.within(named_tuple1, ext1) == GO.within(pt1, ext1)
+        @test GO.within(named_tuple1, named_tuple_p1) == GO.within(pt1, p1)
+
+        # Test DataFrame row
+        @test GO.within(df_row1, ext1) == GO.within(pt1, ext1)
+        @test GO.within(df_row1, df_row_p1) == GO.within(pt1, p1)
+
+        # Test features
+        @test GO.within(feature1, ext1) == GO.within(pt1, ext1)
+        @test GO.within(feature1, feature_p1) == GO.within(pt1, p1)
+
+        # Test mixed types
+        @test GO.within(feature1, named_tuple_p1) == GO.within(pt1, p1)
+        @test GO.within(named_tuple1, feature_p1) == GO.within(pt1, p1)
+        @test GO.within(df_row1, feature_p1) == GO.within(pt1, p1)
+
+        # Test extent with features/table rows
+        @test GO.within(ext1, feature_p1) == GO.within(ext1, p1)
+        @test GO.within(feature1, ext1) == GO.within(pt1, ext1)
+
+        # Test extents
+        @test GO.within(ext1, ext1) == Extents.within(ext1, ext1)
+        @test GO.within(ext1, ext2) == Extents.within(ext1, ext2)
+    end
+
+    @testset "crosses" begin
+        # Test NamedTuple
+        @test GO.crosses(named_tuple_l1, named_tuple_l7) == GO.crosses(l1, l7)
+        @test GO.crosses(named_tuple_l1, l1) == GO.crosses(l1, l1)
+
+        # Test DataFrame row
+        @test GO.crosses(df_row_l1, df_row_l7) == GO.crosses(l1, l7)
+        @test GO.crosses(df_row_l1, l1) == GO.crosses(l1, l1)
+
+        # Test features
+        @test GO.crosses(feature_l1, feature_l7) == GO.crosses(l1, l7)
+        @test GO.crosses(feature_l1, l1) == GO.crosses(l1, l1)
+
+        # Test mixed types
+        @test GO.crosses(feature_l1, named_tuple_l7) == GO.crosses(l1, l7)
+        @test GO.crosses(named_tuple_l1, feature_l7) == GO.crosses(l1, l7)
+        @test GO.crosses(df_row_l1, feature_l7) == GO.crosses(l1, l7)
+        @test GO.crosses(feature_l1, df_row_l7) == GO.crosses(l1, l7)
+        @test GO.crosses(named_tuple_l1, df_row_l7) == GO.crosses(l1, l7)
+        @test GO.crosses(df_row_l1, named_tuple_l7) == GO.crosses(l1, l7)
+
+        # Note: crosses with extents is not fully implemented in this PR
+        # (crosses.jl doesn't follow the _crosses pattern that common.jl expects)
+    end
+
+    @testset "overlaps" begin
+        # Test NamedTuple
+        @test GO.overlaps(named_tuple_p1, named_tuple_p7) == GO.overlaps(p1, p7)
+        @test GO.overlaps(named_tuple_p1, p1) == GO.overlaps(p1, p1)
+
+        # Test DataFrame row
+        @test GO.overlaps(df_row_p1, df_row_p7) == GO.overlaps(p1, p7)
+        @test GO.overlaps(df_row_p1, p1) == GO.overlaps(p1, p1)
+
+        # Test features
+        @test GO.overlaps(feature_p1, feature_p7) == GO.overlaps(p1, p7)
+        @test GO.overlaps(feature_p1, p1) == GO.overlaps(p1, p1)
+
+        # Test mixed types
+        @test GO.overlaps(feature_p1, named_tuple_p7) == GO.overlaps(p1, p7)
+        @test GO.overlaps(named_tuple_p1, feature_p7) == GO.overlaps(p1, p7)
+        @test GO.overlaps(df_row_p1, feature_p7) == GO.overlaps(p1, p7)
+        @test GO.overlaps(feature_p1, df_row_p7) == GO.overlaps(p1, p7)
+        @test GO.overlaps(named_tuple_p1, df_row_p7) == GO.overlaps(p1, p7)
+        @test GO.overlaps(df_row_p1, named_tuple_p7) == GO.overlaps(p1, p7)
+
+        # Note: overlaps with extents is not fully implemented in this PR
+        # (overlaps.jl doesn't follow the _overlaps pattern that common.jl expects)
+    end
+
+    @testset "touches" begin
+        # Test NamedTuple with geometries that touch
+        @test GO.touches(named_tuple1, named_tuple_l1) == GO.touches(pt1, l1)
+        @test GO.touches(named_tuple1, ext4) == GO.touches(pt1, ext4)
+
+        # Test DataFrame row
+        @test GO.touches(df_row1, df_row_l1) == GO.touches(pt1, l1)
+        @test GO.touches(df_row_p1, ext4) == GO.touches(p1, ext4)
+
+        # Test features
+        @test GO.touches(feature1, feature_l1) == GO.touches(pt1, l1)
+        @test GO.touches(feature_p1, ext4) == GO.touches(p1, ext4)
+
+        # Test mixed types
+        @test GO.touches(feature1, named_tuple_l1) == GO.touches(pt1, l1)
+        @test GO.touches(named_tuple1, feature_l1) == GO.touches(pt1, l1)
+        @test GO.touches(df_row1, feature_l1) == GO.touches(pt1, l1)
+        @test GO.touches(feature1, df_row_l1) == GO.touches(pt1, l1)
+
+        # Test extent with features/table rows
+        @test GO.touches(ext1, feature_p7) == GO.touches(ext1, p7)
+        @test GO.touches(feature_p1, ext4) == GO.touches(p1, ext4)
+        @test GO.touches(ext1, df_row_p7) == GO.touches(ext1, p7)
+        @test GO.touches(df_row_p1, ext4) == GO.touches(p1, ext4)
+
+        # Test extents
+        @test GO.touches(ext1, ext4) == Extents.touches(ext1, ext4)
+        @test GO.touches(ext1, ext3) == Extents.touches(ext1, ext3)
+    end
 end
