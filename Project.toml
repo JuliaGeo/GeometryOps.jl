@@ -6,7 +6,6 @@ version = "0.1.29"
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
 AdaptivePredicates = "35492f91-a3bd-45ad-95db-fcad7dcfedb7"
-ArchGDAL = "c9ce4bd3-c3d5-55b8-8973-c0e20141b8c3"
 CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
 DataAPI = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 DelaunayTriangulation = "927a84f5-c5f4-47a5-9785-b46e178433df"
