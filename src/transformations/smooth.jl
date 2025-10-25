@@ -94,7 +94,7 @@ end
 _smooth(alg, ::GI.PointTrait, geom) = geom
 _smooth(alg, ::GI.MultiPointTrait, geom) = geom
 
-function _smooth(alg::Chaikin{<: Planar}, trait::Trait, geom) where {M, Trait <: Union{GI.LineStringTrait,GI.LinearRingTrait}}
+function _smooth(alg::Chaikin{<: Planar}, trait::Trait, geom) where {Trait <: Union{GI.LineStringTrait,GI.LinearRingTrait}}
     isring = Trait <: GI.LinearRingTrait
     points = tuple_points(geom)
     if isring && first(points) != last(points)
