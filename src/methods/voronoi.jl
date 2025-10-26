@@ -87,6 +87,8 @@ function voronoi(::Planar, geometries, _t::Type{T} = Float64; clip = true, clip_
         (collect(flatten(tuples, GI.PointTrait, clip_polygon)), collect(1:GI.npoint(clip_polygon)))
     elseif clip_polygon isa Tuple{Vector{Tuple{Float64, Float64}}, Vector{Int}}
         clip_polygon
+    elseif clip_polygon isa Tuple{Tuple{Tuple{Float64, Float64}}, Tuple{Int}}
+        clip_polygon
     else
         error("Clip polygon must be a polygon or other recognizable form, see the docstring for `DelaunayTriangulation.voronoi` for the recognizable form.  Was neither, got $(typeof(clip_polygon))")
     end
