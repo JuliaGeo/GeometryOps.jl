@@ -85,16 +85,16 @@ function voronoi(::Planar, geometries, _t::Type{T} = Float64; clip = true, clip_
     elseif GI.geomtrait(clip_polygon) isa GI.PolygonTrait
         @assert GI.nhole(clip_polygon) == 0
         (collect(flatten(tuples, GI.PointTrait, clip_polygon)), collect(1:GI.npoint(clip_polygon)))
-    elseif clip_polygon isa Tuple{Vector{Tuple{Float64, Float64}}, Vector{Int}}
+    elseif clip_polygon isa Tuple{Vector{Tuple{_t, _t}}, Vector{Int}}
         clip_polygon
-    elseif clip_polygon isa Tuple{Tuple{Tuple{Float64, Float64}}, Tuple{Int}}
+    elseif clip_polygon isa Tuple{NTuple{<:Any, Tuple{_t, _t}}, NTuple{<:Any, Int}}
         clip_polygon
     else
         error("Clip polygon must be a polygon or other recognizable form, see the docstring for `DelaunayTriangulation.voronoi` for the recognizable form.  Was neither, got $(typeof(clip_polygon))")
     end
     vorn = DelTri.voronoi(tri; clip = clip, clip_polygon = _clip_polygon)
     
-    polygons = GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, typeof(crs)}[]
+    polygons = GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{_t, _t}}, Nothing, Nothing}}, Nothing, typeof(crs)}[]
     sizehint!(polygons, DelTri.num_polygons(vorn))
     # Implementation below copied from Makie.jl
     # see https://github.com/MakieOrg/Makie.jl/blob/687c4466ce00154714297e36a7f610443c6ad5be/Makie/src/basic_recipes/voronoiplot.jl#L101-L110
