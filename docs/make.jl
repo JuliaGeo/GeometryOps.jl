@@ -7,9 +7,7 @@ CairoMakie.activate!(px_per_unit = 2, type = "svg", inline = true) # TODO: make 
 # import packages that activate extensions
 import FlexiJoins, LibGEOS, Proj, TGGeometry
 
-DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps; using GeometryBasics); recursive=true)
-
-using GeoInterfaceMakie
+DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps; using GeometryBasics; using GeometryOps.GeometryOpsCore); recursive=true)
 
 include(joinpath(dirname(@__DIR__), "benchmarks", "benchmark_plots.jl"))
 

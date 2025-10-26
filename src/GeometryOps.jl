@@ -21,12 +21,16 @@ export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, f
 using GeoInterface
 using LinearAlgebra, Statistics
 
+using StaticArrays
+
 import Tables, DataAPI
 import StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
 import GeoInterface.Extents: Extents
+import SortTileRecursiveTree
+import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
 const DelTri = DelaunayTriangulation
@@ -41,9 +45,17 @@ include("not_implemented_yet.jl")
 include("utils/utils.jl")
 include("utils/LoopStateMachine/LoopStateMachine.jl")
 include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
+include("utils/UnitSpherical/UnitSpherical.jl")
 
-using .LoopStateMachine, .SpatialTreeInterface
+# Load utility modules in
+using .LoopStateMachine, .SpatialTreeInterface, .UnitSpherical
 
+include("utils/NaturalIndexing.jl")
+using .NaturalIndexing
+
+
+# Load utility modules in
+using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
 
 include("methods/angles.jl")
 include("methods/area.jl")
@@ -53,6 +65,7 @@ include("methods/centroid.jl")
 include("methods/convex_hull.jl")
 include("methods/distance.jl")
 include("methods/equals.jl")
+include("methods/perimeter.jl")
 include("methods/clipping/predicates.jl")
 include("methods/clipping/clipping_processor.jl")
 include("methods/clipping/coverage.jl")
@@ -79,6 +92,7 @@ include("transformations/flip.jl")
 include("transformations/reproject.jl")
 include("transformations/segmentize.jl")
 include("transformations/simplify.jl")
+include("transformations/smooth.jl")
 include("transformations/tuples.jl")
 include("transformations/transform.jl")
 include("transformations/forcedims.jl")

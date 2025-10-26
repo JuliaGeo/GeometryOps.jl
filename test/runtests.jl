@@ -17,10 +17,12 @@ end
 @safetestset "Utils" begin include("utils/utils.jl") end
 @safetestset "LoopStateMachine" begin include("utils/LoopStateMachine.jl") end
 @safetestset "SpatialTreeInterface" begin include("utils/SpatialTreeInterface.jl") end
-
+@safetestset "UnitSpherical" begin include("utils/unitspherical.jl") end
+@safetestset "RobustCrossProduct" begin include("utils/robustcrossproduct.jl") end
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
 @safetestset "Area" begin include("methods/area.jl") end
+@safetestset "Perimeter" begin include("methods/perimeter.jl") end
 @safetestset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
 @safetestset "Orientation" begin include("methods/orientation.jl") end
 @safetestset "Centroid" begin include("methods/centroid.jl") end
@@ -40,6 +42,7 @@ end
 @safetestset "Flip" begin include("transformations/flip.jl") end
 @safetestset "Simplify" begin include("transformations/simplify.jl") end
 @safetestset "Segmentize" begin include("transformations/segmentize.jl") end
+@safetestset "Smooth" begin include("transformations/smooth.jl") end
 @safetestset "Transform" begin include("transformations/transform.jl") end
 @safetestset "Force Dimensions" begin include("transformations/forcedims.jl") end
 @safetestset "Geometry Correction" begin include("transformations/correction/geometry_correction.jl") end
