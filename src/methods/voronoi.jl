@@ -52,11 +52,11 @@ in the same order as the input points.
     The polygons are returned in the same order as the input points after flattening.
     Each polygon corresponds to the Voronoi cell of the point at the same index.
 """
-function voronoi(geometries; kwargs...)
-    return voronoi(Planar(), geometries, Float64; kwargs...)
+function voronoi(geometries, ::Type{T} = Float64; kwargs...) where T
+    return voronoi(Planar(), geometries, T; kwargs...)
 end
 
-function voronoi(::Planar, geometries, _t::Type{T} = Float64; clip = true, clip_polygon = nothing, crs = __NoCRSProvided()) where T
+function voronoi(::Planar, geometries, ::Type{T} = Float64; clip = true, clip_polygon = nothing, crs = __NoCRSProvided()) where T
     # Extract all points as tuples using GO.flatten
     # This handles any GeoInterface-compatible input
     points_iter = collect(flatten(tuples, GI.PointTrait, geometries))
@@ -85,16 +85,16 @@ function voronoi(::Planar, geometries, _t::Type{T} = Float64; clip = true, clip_
     elseif GI.geomtrait(clip_polygon) isa GI.PolygonTrait
         @assert GI.nhole(clip_polygon) == 0
         (collect(flatten(tuples, GI.PointTrait, clip_polygon)), collect(1:GI.npoint(clip_polygon)))
-    elseif clip_polygon isa Tuple{Vector{Tuple{_t, _t}}, Vector{Int}}
+    elseif clip_polygon isa Tuple{Vector{Tuple{T, T}}, Vector{Int}}
         clip_polygon
-    elseif clip_polygon isa Tuple{NTuple{<:Any, Tuple{_t, _t}}, NTuple{<:Any, Int}}
+    elseif clip_polygon isa Tuple{NTuple{<:Any, Tuple{T, T}}, NTuple{<:Any, Int}}
         clip_polygon
     else
         error("Clip polygon must be a polygon or other recognizable form, see the docstring for `DelaunayTriangulation.voronoi` for the recognizable form.  Was neither, got $(typeof(clip_polygon))")
     end
     vorn = DelTri.voronoi(tri; clip = clip, clip_polygon = _clip_polygon)
     
-    polygons = GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{_t, _t}}, Nothing, Nothing}}, Nothing, typeof(crs)}[]
+    polygons = GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, typeof(crs)}[]
     sizehint!(polygons, DelTri.num_polygons(vorn))
     # Implementation below copied from Makie.jl
     # see https://github.com/MakieOrg/Makie.jl/blob/687c4466ce00154714297e36a7f610443c6ad5be/Makie/src/basic_recipes/voronoiplot.jl#L101-L110
