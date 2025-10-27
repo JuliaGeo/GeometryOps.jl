@@ -27,6 +27,9 @@ f
 
 ## Implementation
 
+This implementation mainly just preforms some assertion checks before passing the Arguments
+to the DelaunayTriangulation package. It then unpacks the voronoi output into GeoInterface
+polygons, whose point match the float type input by the user.
 =#
 
 struct __NoCRSProvided end
@@ -109,65 +112,3 @@ function voronoi(::Planar, geometries, ::Type{T} = Float64; clip = true, clip_po
     
     return polygons
 end
-
-# """
-#     voronoi(geometries, boundary::GI.AbstractPolygon)
-
-# Compute the Voronoi tessellation of the points in `geometries`, clipped to the given `boundary` polygon.
-# Returns a vector of `GI.Polygon` objects representing the Voronoi cells.
-
-# ## Arguments
-# - `geometries`: Any GeoInterface-compatible geometry or collection of geometries
-# - `boundary`: A polygon to clip the Voronoi cells to (must be convex)
-
-# !!! warning
-#     The boundary polygon must be convex for correct results.
-# """
-# function voronoi(geometries, boundary::GI.AbstractPolygon)
-#     # Extract all points as before
-#     points_iter = flatten(GI.PointTrait, geometries)
-#     points = Vector{NTuple{2, Float64}}()
-#     for point in points_iter
-#         x, y = GI.x(point), GI.y(point)
-#         push!(points, (Float64(x), Float64(y)))
-#     end
-    
-#     if length(points) < 3
-#         throw(ArgumentError("Voronoi tessellation requires at least 3 points, got $(length(points))"))
-#     end
-    
-#     # Extract boundary points for clipping
-#     boundary_ring = GI.getexterior(boundary)
-#     clip_points = Vector{NTuple{2, Float64}}()
-#     for point in GI.getpoint(boundary_ring)
-#         x, y = GI.x(point), GI.y(point)
-#         push!(clip_points, (Float64(x), Float64(y)))
-#     end
-    
-#     # Create clip polygon in DelaunayTriangulation format
-#     # Need vertex indices - DelaunayTriangulation expects 1-based indices
-#     clip_vertices = collect(1:length(clip_points))
-#     if !GI.isclosed(boundary_ring)
-#         # Ensure the polygon is closed
-#         push!(clip_vertices, 1)
-#     end
-#     clip_polygon = (clip_points, clip_vertices)
-    
-#     # Compute triangulation and clipped Voronoi
-#     tri = DelaunayTriangulation.triangulate(points)
-#     vorn = DelaunayTriangulation.voronoi(tri; clip = true, clip_polygon = clip_polygon)
-    
-#     # Extract polygons as before
-#     polygons = Vector{GI.Polygon}()
-#     for i in DelaunayTriangulation.each_polygon_index(vorn)
-#         coords = DelaunayTriangulation.get_polygon_coordinates(vorn, i)
-#         if isempty(coords)
-#             continue
-#         end
-#         ring = GI.LinearRing(coords)
-#         poly = GI.Polygon([ring])
-#         push!(polygons, poly)
-#     end
-    
-#     return polygons
-# end
