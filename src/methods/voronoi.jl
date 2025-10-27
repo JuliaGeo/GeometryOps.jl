@@ -72,9 +72,9 @@ function voronoi(::Planar, geometries, ::Type{T} = Float64; clip = true, clip_po
     end
     
     # Handle edge case of too few points
-    # if length(points_iter) < 3
-    #     throw(ArgumentError("Voronoi tessellation requires at least 3 points, got $(length(points_iter))"))
-    # end
+    if length(points_iter) < 3
+        throw(ArgumentError("Voronoi tessellation requires at least 3 points, got $(length(points_iter))"))
+    end
     
     # Compute Delaunay triangulation
     tri = DelTri.triangulate(points_iter)
