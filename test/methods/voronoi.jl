@@ -2,7 +2,7 @@ using Test
 using DelaunayTriangulation
 
 import GeometryOps as GO
-import GeometryInterface as GI
+import GeoInterface as GI
 
 @testset "Voronoi" begin
     @testset "Basic voronoi tessellation" begin
