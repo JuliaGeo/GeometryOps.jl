@@ -179,11 +179,11 @@ Return true if polygon overlaps with at least one of the polygons within the
 multipolygon. Else false.
 """
 function _overlaps(
-    ::GI.PolygonTrait, poly1,
-    ::GI.MultiPolygonTrait, polys2,
-)
+    trait1::GI.PolygonTrait, poly1,
+    trait2::GI.MultiPolygonTrait, polys2,
+    )
     for poly2 in GI.getgeom(polys2)
-        _overlaps(GI.trait(poly1), poly1, GI.trait(poly2), poly2) && return true
+            _overlaps(trait1, poly1, trait2, polys2) && return true
     end
     return false
 end
@@ -210,11 +210,11 @@ Return true if at least one pair of polygons from multipolygons overlap. Else
 false.
 """
 function _overlaps(
-    ::GI.MultiPolygonTrait, polys1,
-    ::GI.MultiPolygonTrait, polys2,
+    t1::GI.MultiPolygonTrait, polys1,
+    t2::GI.MultiPolygonTrait, polys2,
 )
     for poly1 in GI.getgeom(polys1)
-        _overlaps(GI.trait(poly1), poly1, GI.MultiPolygonTrait(), polys2) && return true
+        _overlaps(t1, polys1, t2, polys2) && return true
     end
     return false
 end
