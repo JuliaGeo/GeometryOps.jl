@@ -82,6 +82,7 @@ include("methods/geom_relations/intersects.jl")
 include("methods/geom_relations/overlaps.jl")
 include("methods/geom_relations/touches.jl")
 include("methods/geom_relations/within.jl")
+include("methods/geom_relations/common.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 

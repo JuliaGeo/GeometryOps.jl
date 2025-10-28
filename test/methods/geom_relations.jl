@@ -2,6 +2,7 @@ import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG
 using Extents
+using DataFrames
 using ..TestHelpers
 
 # Tests of DE-9IM Methods
@@ -342,4 +343,38 @@ end
     @test GO.overlaps(p2)(p1) == GO.overlaps(p1, p2)
     @test GO.touches(p2)(p1) == GO.touches(p1, p2)
     @test GO.within(p2)(p1) == GO.within(p1, p2)
+end
+
+@testset "Features, Table rows and Extents" begin
+    feature1 = GI.Feature(pt1; properties=Dict{Symbol, Any}())
+    feature2 = GI.Feature(pt2; properties=Dict{Symbol, Any}())
+    
+    # Test NamedTuple
+    named_tuple1 = (; geometry=pt1)
+    named_tuple2 = (; geometry=pt2)
+    @test GO.disjoint(named_tuple1, named_tuple2) == GO.disjoint(pt1, pt2)
+    @test GO.coveredby(named_tuple1, ext1) == GO.coveredby(pt1, ext1)
+    @test GO.within(named_tuple1, ext1) == GO.within(pt1, ext1)
+
+    # Test DataFrame row
+    df = DataFrame(geometry=[pt1, pt2])
+    df_row1 = df[1, :]
+    df_row2 = df[2, :]
+    @test GO.disjoint(df_row1, df_row2) == GO.disjoint(pt1, pt2)
+    @test GO.coveredby(df_row1, ext1) == GO.coveredby(pt1, ext1)
+    @test GO.within(df_row1, ext1) == GO.within(pt1, ext1)
+
+    # Test features
+    @test GO.disjoint(feature1, feature2) == GO.disjoint(pt1, pt2)
+    @test GO.coveredby(feature1, ext1) == GO.coveredby(pt1, ext1)
+    @test GO.within(feature1, ext1) == GO.within(pt1, ext1)
+    
+    # Test mixed types
+    @test GO.disjoint(feature1, named_tuple2) == GO.disjoint(pt1, pt2)
+    @test GO.coveredby(feature1, ext1) == GO.coveredby(pt1, ext1)
+    @test GO.within(df_row1, ext1) == GO.within(pt1, ext1)
+
+    # Test extents
+    @test GO.disjoint(ext1, ext3) == Extents.disjoint(ext1, ext3)
+    @test GO.coveredby(ext1, ext1) == Extents.coveredby(ext1, ext1)
 end
