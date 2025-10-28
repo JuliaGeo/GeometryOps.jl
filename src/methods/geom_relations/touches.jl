@@ -86,11 +86,6 @@ This is equivalent to `x -> touches(x, g1)`.
 """
 touches(g1) = Base.Fix2(touches, g1)
 
-# # Convert features to geometries
-_touches(::GI.FeatureTrait, g1, ::Any, g2) = touches(GI.geometry(g1), g2)
-_touches(::Any, g1, t2::GI.FeatureTrait, g2) = touches(g1, GI.geometry(g2))
-_touches(::FeatureTrait, g1, ::FeatureTrait, g2) = touches(GI.geometry(g1), GI.geometry(g2))
-
 # # Point touches geometries
 
 # Point cannot touch another point as if they are equal, interiors interact
@@ -302,18 +297,3 @@ function _touches(
     end
     return has_touched
 end
-
-# Extent forwarding
-
-
-function _touches(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
-    return _touches(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
-end
-function _touches(t1, e1::Extents.Extent, t2::GI.AbstractGeometryTrait, g2)
-    return _touches(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
-end
-function _touches(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
-    return Extents.touches(e1, e2)
-end
-
-
