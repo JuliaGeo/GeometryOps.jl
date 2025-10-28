@@ -41,6 +41,7 @@ end
 @safetestset "Flip" begin include("transformations/flip.jl") end
 @safetestset "Simplify" begin include("transformations/simplify.jl") end
 @safetestset "Segmentize" begin include("transformations/segmentize.jl") end
+@safetestset "Smooth" begin include("transformations/smooth.jl") end
 @safetestset "Transform" begin include("transformations/transform.jl") end
 @safetestset "Force Dimensions" begin include("transformations/forcedims.jl") end
 @safetestset "Geometry Correction" begin include("transformations/correction/geometry_correction.jl") end

@@ -36,7 +36,7 @@ to the algorithm.
 Here is the simplest example:
 
 ```@example polygon_simplification
-using Makie, GeoInterfaceMakie
+using CairoMakie
 import GeoInterface as GI
 import GeometryOps as GO
 
@@ -240,7 +240,14 @@ function _simplify(alg::RadialDistance, points::Vector, _)
     end
     ## Never remove the end points
     distances[begin] = distances[end] = Inf
-    return _get_points(alg, points, distances)
+    indices = _get_indices(alg, points, distances)
+    # Check there is at least one mid point
+    if !any(view(indices, firstindex(indices)+1:lastindex(indices)-1))
+        # If not use the midpoint of the removed points ?
+        indices[lastindex(indices) ÷ 2] = true
+    end
+
+    return points[indices]
 end
 
 
@@ -410,7 +417,7 @@ end
 function _simplify(alg::VisvalingamWhyatt, points::Vector, _)
     length(points) <= MIN_POINTS && return points
     areas = _build_tolerances(_triangle_double_area, points)
-    return _get_points(alg, points, areas)
+    return points[_get_indices(alg, points, areas)]
 end
 
 # Calculates double the area of a triangle given its vertices
@@ -481,20 +488,19 @@ function tuple_points(geom)
     return points
 end
 
-function _get_points(alg, points, tolerances)
+function _get_indices(alg, points, tolerances)
     ## This assumes that `alg` has the properties
     ## `tol`, `number`, and `ratio` available...
     tol = alg.tol
     number = alg.number
     ratio = alg.ratio
-    bit_indices = if !isnothing(tol)
+    return if !isnothing(tol)
         _tol_indices(alg.tol::Float64, points, tolerances)
     elseif !isnothing(number)
         _number_indices(alg.number::Int64, points, tolerances)
     else
         _ratio_indices(alg.ratio::Float64, points, tolerances)
     end
-    return points[bit_indices]
 end
 
 function _tol_indices(tol, points, tolerances)
