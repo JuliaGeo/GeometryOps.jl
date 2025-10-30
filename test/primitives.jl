@@ -100,7 +100,7 @@ end
 
 @testset "unwrap" begin
     flipped_vectors = GO.unwrap(GO.PointTrait, poly) do p
-        (GO.y(p), GO.x(p))
+        (GO.y(p), GI.x(p))
     end
 
     @test flipped_vectors == [[(2, 1), (4, 3), (6, 5), (2, 1)], [(4, 3), (6, 5), (7, 6), (4, 3)]]
