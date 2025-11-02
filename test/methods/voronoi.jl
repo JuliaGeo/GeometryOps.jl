@@ -3,6 +3,7 @@ using DelaunayTriangulation
 
 import GeometryOps as GO
 import GeoInterface as GI
+using Random
 
 @testset "Voronoi" begin
     @testset "Basic voronoi tessellation" begin
@@ -36,46 +37,28 @@ import GeoInterface as GI
         @test length(polygons) == 4  # 1 + 2 + 1 points
     end
     
-    # @testset "Voronoi with clipping" begin
-    #     # Test clipped vs unclipped
-    #     points = [(0.0, 0.0), (1.0, 0.0), (0.5, 1.0), (0.5, 0.5)]
-        
-    #     # Clipped (default)
-    #     clipped_polygons = GO.voronoi(points; clip = true)
-    #     @test length(clipped_polygons) == 4
-        
-    #     # Unclipped  
-    #     unclipped_polygons = GO.voronoi(points; clip = false)
-    #     @test length(unclipped_polygons) == 4
-        
-    #     # The polygons should be different (unclipped extends to infinity conceptually)
-    #     # But both should have valid polygons
-    #     for poly in clipped_polygons
-    #         @test GI.isgeometry(poly)
-    #     end
-    #     for poly in unclipped_polygons
-    #         @test GI.isgeometry(poly)
-    #     end
-    # end
+    @testset "Voronoi with custom boundary" begin
+        rng = Xoshiro(0)
     
-    # @testset "Voronoi with custom boundary" begin
-    #     # Create points inside a square
-    #     points = [(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75), (0.5, 0.5)]
-        
-    #     # Create a square boundary
-    #     boundary = GI.Polygon([
-    #         GI.LinearRing([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)])
-    #     ])
-        
-    #     polygons = GO.voronoi(points, boundary)
-    #     @test length(polygons) == 5
-        
-    #     # All polygons should be valid
-    #     for poly in polygons
-    #         @test GI.isgeometry(poly)
-    #         @test GI.geomtrait(poly) isa GI.PolygonTrait
-    #     end
-    # end
+        points = [(0.25, 0.25), (0.75, 0.25), (0.75, 0.75), (0.25, 0.75), (0.5, 0.5)]
+        boundary1 = (((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0)), (1, 2, 3, 4, 1))
+        boundary2 = ([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)], [1, 2, 3, 4, 1])
+        boundary3 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+
+        vorn0 = GO.voronoi(points) # clipped to convex hull
+        vorn1 = GO.voronoi(points, clip_polygon = boundary1, rng = Xoshiro(0))
+        vorn2 = GO.voronoi(points, clip_polygon = boundary2, rng = Xoshiro(0))
+        vorn3 = GO.voronoi(points, clip_polygon = boundary3, rng = Xoshiro(0))
+
+        for vorn in (vorn0, vorn1, vorn2, vorn3)
+            @test length(vorn) == 5
+            # All polygons should be valid
+            for poly in vorn
+                @test GI.isgeometry(poly)
+                @test GI.geomtrait(poly) isa GI.PolygonTrait
+            end
+        end
+    end
     
     @testset "Grid of points" begin
         # Create a regular grid
