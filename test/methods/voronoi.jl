@@ -103,4 +103,29 @@ using Random
             @test GI.geomtrait(poly) isa GI.PolygonTrait
         end
     end
+
+    @testset "Clean clipping input" begin
+        points = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0))
+        order = (1, 2, 3, 4, 1)
+        new_points, new_order = GO._clean_voronoi_clip_point_inputs((points, order))
+        @test all(points .== new_points)
+        @test all(order .== new_order)
+
+        reverse_points = reverse(points)
+        new_points, new_order = GO._clean_voronoi_clip_point_inputs((reverse_points, order))
+        @test all(points .== new_points)
+        @test all(order .== new_order)
+
+        short_points = points[1:end-1]
+        short_order = order[1:end-1]
+        new_points, new_order = GO._clean_voronoi_clip_point_inputs((short_points, short_order))
+        @test all(points .== new_points)
+        @test all(order .== new_order)
+
+        shuffled_combos = shuffle(Xoshiro(0), collect(zip(points, order)))
+        shuffled_points, shuffled_order = first.(shuffled_combos), last.(shuffled_combos)
+        new_points, new_order = GO._clean_voronoi_clip_point_inputs((shuffled_points, shuffled_order))
+        @test all(points .== new_points)
+        @test all(order .== new_order)
+    end
 end

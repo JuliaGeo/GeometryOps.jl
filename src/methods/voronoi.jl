@@ -76,7 +76,7 @@ import GeoInterface as GI
 using Random
 
 rng = Xoshiro(0)
-points = [(rand(rng), rand(rng)) .* 5 for i in range(1, 10)]
+points = [(rand(rng), rand(rng)) .* 5 for i in range(1, 3)]
 GO.voronoi(points; rng = rng)
 # output
 3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
@@ -90,17 +90,32 @@ clip_points = ((0.0,0.0), (5.0,0.0), (5.0,5.0), (0.0,5.0), (0.0,0.0))
 clip_order = (1, 2, 3, 4, 1)
 clip_poly1 = GI.Polygon([collect(clip_points)])
 GO.voronoi(points; clip_polygon = clip_poly1, rng = rng)
+# output
+3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(5.0, 0.0), … (3) … , (5.0, 0.0)])])
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7328227614527916, 0.0), … (3) … , (3.7328227614527916, 0.0)])])
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(0.0, 5.0), … (3) … , (0.0, 5.0)])])
 ````
 
 ```jldoctest voronoi
 clip_poly2 = (clip_points, clip_order) # tuples
 GO.voronoi(points; clip_polygon = clip_poly2, rng = rng)
+# output
+3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(5.0, 0.0), … (3) … , (5.0, 0.0)])])
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7328227614527916, 0.0), … (3) … , (3.7328227614527916, 0.0)])])
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(0.0, 5.0), … (3) … , (0.0, 5.0)])])
 ````
 
 
 ```jldoctest voronoi
 clip_poly3 = (collect(clip_points), collect(clip_order)) # vectors
 GO.voronoi(points; clip_polygon = clip_poly3, rng = rng)
+# output
+3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(5.0, 0.0), … (3) … , (5.0, 0.0)])])
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7328227614527916, 0.0), … (3) … , (3.7328227614527916, 0.0)])])
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(0.0, 5.0), … (3) … , (0.0, 5.0)])])
 ````
 
 """
