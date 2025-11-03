@@ -70,6 +70,8 @@ in the same order as the input points.
     Each polygon corresponds to the Voronoi cell of the point at the same index.
 
 ## Examples
+An example with default clipping to the convex hull.
+
 ```jldoctest voronoi
 import GeometryOps as GO
 import GeoInterface as GI
@@ -85,28 +87,40 @@ GO.voronoi(points; rng = rng)
  GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(2.685897788908803, 0.3678259474564151), … (2) … , (2.685897788908803, 0.3678259474564151)])])
 ```
 
+An example with clipping to a GeoInterface polygon.
 ```jldoctest voronoi
 clip_points = ((0.0,0.0), (5.0,0.0), (5.0,5.0), (0.0,5.0), (0.0,0.0))
 clip_order = (1, 2, 3, 4, 1)
-clip_poly1 = (clip_points, clip_order) # tuples
+clip_poly1 = GI.Polygon([collect(clip_points)])
 GO.voronoi(points; clip_polygon = clip_poly1, rng = rng)
 # output
 3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
  GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(5.0, 0.0), … (3) … , (5.0, 0.0)])])
  GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7328227614527916, 0.0), … (3) … , (3.7328227614527916, 0.0)])])
  GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(0.0, 5.0), … (3) … , (0.0, 5.0)])])
-````
+```
 
-
+An example with clipping to a tuple of tuples.
 ```jldoctest voronoi
-clip_poly2 = (collect(clip_points), collect(clip_order)) # vectors
+clip_poly2 = (clip_points, clip_order) # tuples
 GO.voronoi(points; clip_polygon = clip_poly2, rng = rng)
 # output
 3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
  GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(5.0, 0.0), … (3) … , (5.0, 0.0)])])
  GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7328227614527916, 0.0), … (3) … , (3.7328227614527916, 0.0)])])
  GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(0.0, 5.0), … (3) … , (0.0, 5.0)])])
-````
+```
+
+An example with clipping to a tuple of vectors.
+```jldoctest voronoi
+clip_poly3 = (collect(clip_points), collect(clip_order)) # vectors
+GO.voronoi(points; clip_polygon = clip_poly3, rng = rng)
+# output
+3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(5.0, 0.0), … (3) … , (5.0, 0.0)])])
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7328227614527916, 0.0), … (3) … , (3.7328227614527916, 0.0)])])
+ GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(0.0, 5.0), … (3) … , (0.0, 5.0)])])
+```
 
 """
 function voronoi(geometries, ::Type{T} = Float64; kwargs...) where T
