@@ -21,7 +21,6 @@ Commit messages in this repository follow a simple, descriptive style:
 - **No trailing periods**: Commit messages don't end with a period
 - **Use backticks for code**: Reference functions/types with backticks like `smooth` or `TraitTarget`
 - **No conventional commit prefixes**: Don't use "feat:", "fix:", "docs:", etc.
-- **Include PR numbers when applicable**: Add (#123) at the end if merging a PR
 
 Examples from the project:
 ```
