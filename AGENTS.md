@@ -18,6 +18,26 @@ Build documentation (uses Literate.jl to convert source to markdown):
 julia --project=docs docs/make.jl
 ```
 
+### Git Commit Style
+Commit messages in this repository follow a simple, descriptive style:
+
+- **Use imperative mood**: "Fix bug" not "Fixed bug" or "Fixes bug"
+- **Start with a capital letter**: "Add feature" not "add feature"
+- **Be concise but descriptive**: Explain what changed, not why (unless non-obvious)
+- **No trailing periods**: Commit messages don't end with a period
+- **Use backticks for code**: Reference functions/types with backticks like `smooth` or `TraitTarget`
+- **No conventional commit prefixes**: Don't use "feat:", "fix:", "docs:", etc.
+- **Include PR numbers when applicable**: Add (#123) at the end if merging a PR
+
+Examples from the project:
+```
+Fix type constraint in _smooth function
+Add a `smooth` function  (#346)
+Refactor tests to be a bit easier to parse
+Tree based acceleration for polygon clipping / boolean ops (#274)
+Bump version from 0.1.30 to 0.1.31 (#350)
+```
+
 ## High-Level Architecture
 
 ### Monorepo Structure
