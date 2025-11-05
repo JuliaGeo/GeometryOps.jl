@@ -12,12 +12,6 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 
 Note: There is currently no way to run a single test file in isolation.
 
-### Documentation
-Build documentation (uses Literate.jl to convert source to markdown):
-```bash
-julia --project=docs docs/make.jl
-```
-
 ### Git Commit Style
 Commit messages in this repository follow a simple, descriptive style:
 
