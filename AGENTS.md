@@ -262,14 +262,16 @@ Optional dependencies are loaded via extensions:
 - **DataFrames**: `apply` works on DataFrame columns
 - **FlexiJoins**: Spatial join operations
 
-Use algorithm types to dispatch to these implementations:
+Use algorithm types to dispatch to these implementations. **The algorithm is always the first argument:**
 ```julia
-# Use GEOS implementation
-buffer(geom, 10.0, GEOS())
+# Use GEOS implementation (algorithm comes first)
+buffer(GEOS(), geom, 10.0)
 
 # Use native Julia implementation (default)
 buffer(geom, 10.0)
 ```
+
+The `Algorithm` type and its subtypes are defined in `GeometryOpsCore/src/types/algorithm.jl`.
 
 ### Working with Tables
 `apply` and `applyreduce` work with any Tables.jl-compatible table (DataFrames, etc.):
