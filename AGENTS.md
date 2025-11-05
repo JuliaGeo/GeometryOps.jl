@@ -25,7 +25,7 @@ Commit messages in this repository follow a simple, descriptive style:
 Examples from the project:
 ```
 Fix type constraint in _smooth function
-Add a `smooth` function  (#346)
+Add a `smooth` function 
 Refactor tests to be a bit easier to parse
 Tree based acceleration for polygon clipping / boolean ops
 Bump version from 0.1.30 to 0.1.31
