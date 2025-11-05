@@ -28,8 +28,8 @@ Examples from the project:
 Fix type constraint in _smooth function
 Add a `smooth` function  (#346)
 Refactor tests to be a bit easier to parse
-Tree based acceleration for polygon clipping / boolean ops (#274)
-Bump version from 0.1.30 to 0.1.31 (#350)
+Tree based acceleration for polygon clipping / boolean ops
+Bump version from 0.1.30 to 0.1.31
 ```
 
 ## High-Level Architecture
