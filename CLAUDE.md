@@ -16,16 +16,7 @@ Run all tests:
 julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-Run a single test file (example for area tests):
-```bash
-julia --project=. -e 'using Pkg; Pkg.test(); include("test/methods/area.jl")'
-```
-
-Or use SafeTestsets directly from the REPL after loading the package:
-```julia
-using GeometryOps, Test, SafeTestsets
-@safetestset "Area" begin include("test/methods/area.jl") end
-```
+Note: There is currently no way to run a single test file in isolation.
 
 ### Documentation
 Build documentation (uses Literate.jl to convert source to markdown):
