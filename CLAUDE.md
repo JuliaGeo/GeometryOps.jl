@@ -4,12 +4,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
-### Setup
-Before running tests or building, you must develop GeometryOpsCore (the core package lives in a subdirectory):
-```bash
-julia --project=. -e 'using Pkg; Pkg.develop(; path = joinpath(".", "GeometryOpsCore"));'
-```
-
 ### Testing
 Run all tests:
 ```bash
