@@ -4,6 +4,7 @@
 [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://JuliaGeo.github.io/GeometryOps.jl/stable/)
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://JuliaGeo.github.io/GeometryOps.jl/dev/)
 [![Build Status](https://github.com/JuliaGeo/GeometryOps.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/JuliaGeo/GeometryOps.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![blazingly fast](https://blazingly.fast/api/badge.svg?repo=JuliaGeo%2FGeometryOps.jl)](https://blazingly.fast)
 
 <img src="docs/src/assets/logo.png" alt="GeometryOps logo" width="250">
 
