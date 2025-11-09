@@ -301,20 +301,66 @@ end
         @test GO.overlaps($p1, $p2) == LG.overlaps($p1, $p2)
         @test !GO.overlaps($p1, (1, 1))
         @test !GO.overlaps((1, 1), $p2)
-    
+
         # Test basic polygons that overlap
         @test GO.overlaps($p1, $p3) == LG.overlaps($p1, $p3)
-    
+
         # Test one polygon within the other
         @test GO.overlaps($p2, $p4) == GO.overlaps($p4, $p2) == LG.overlaps($p2, $p4)
-    
+
         # Test equal polygons
         @test GO.overlaps($p5, $p5) == LG.overlaps($p5, $p5)
-    
+
         # Test polygon that overlaps with multipolygon
         @test GO.overlaps($m1, $p3) == LG.overlaps($m1, $p3)
         # Test polygon in hole of multipolygon, doesn't overlap
         @test GO.overlaps($m1, $p4) == LG.overlaps($m1, $p4)
+    end
+
+    # Test Line × Line overlaps (GI.Line, not LineString)
+    @testset "Line × Line overlaps" begin
+        # Overlapping collinear lines
+        line1 = GI.Line([(0.0, 0.0), (2.0, 0.0)])
+        line2 = GI.Line([(1.0, 0.0), (3.0, 0.0)])
+        @test GO.overlaps(line1, line2) == true
+
+        # Non-overlapping collinear lines
+        line3 = GI.Line([(0.0, 0.0), (1.0, 0.0)])
+        line4 = GI.Line([(2.0, 0.0), (3.0, 0.0)])
+        @test GO.overlaps(line3, line4) == false
+
+        # One line fully contains the other
+        line5 = GI.Line([(0.0, 0.0), (4.0, 0.0)])
+        line6 = GI.Line([(1.0, 0.0), (2.0, 0.0)])
+        @test GO.overlaps(line5, line6) == false
+
+        # Non-collinear lines
+        line7 = GI.Line([(0.0, 0.0), (1.0, 0.0)])
+        line8 = GI.Line([(0.0, 0.0), (0.0, 1.0)])
+        @test GO.overlaps(line7, line8) == false
+    end
+
+    # Test MultiPolygon × MultiPolygon overlaps
+    @testset "MultiPolygon × MultiPolygon overlaps" begin
+        # Create two multipolygons that overlap
+        mp1 = GI.MultiPolygon([
+            [[[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]]],
+            [[[5.0, 5.0], [7.0, 5.0], [7.0, 7.0], [5.0, 7.0], [5.0, 5.0]]]
+        ])
+        mp2 = GI.MultiPolygon([
+            [[[1.0, 1.0], [3.0, 1.0], [3.0, 3.0], [1.0, 3.0], [1.0, 1.0]]],
+            [[[6.0, 6.0], [8.0, 6.0], [8.0, 8.0], [6.0, 8.0], [6.0, 6.0]]]
+        ])
+        @test GO.overlaps(mp1, mp2) == true
+
+        # Create two multipolygons that don't overlap
+        mp3 = GI.MultiPolygon([
+            [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]]
+        ])
+        mp4 = GI.MultiPolygon([
+            [[[5.0, 5.0], [6.0, 5.0], [6.0, 6.0], [5.0, 6.0], [5.0, 5.0]]]
+        ])
+        @test GO.overlaps(mp3, mp4) == false
     end
 end
 
