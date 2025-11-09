@@ -66,21 +66,23 @@ function _union(
     # First, I get the exteriors of the two polygons
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
+
+    crs = mutual_crs(poly_a, poly_b)
     # Then, I get the union of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _union_delay_cross_f, _union_delay_bounce_f; exact)
-    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _union_step, poly_a, poly_b)
+    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _union_step, poly_a, poly_b; crs)
     n_pieces = length(polys)
     # Check if one polygon totally within other and if so, return the larger polygon
     a_in_b, b_in_a = false, false
     if n_pieces == 0 # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([_linearring(tuples(ext_b))]))
+            push!(polys, GI.Polygon([_linearring(tuples(ext_b; crs))]; crs))
         elseif b_in_a
-            push!(polys,  GI.Polygon([_linearring(tuples(ext_a))]))
+            push!(polys,  GI.Polygon([_linearring(tuples(ext_a; crs))]; crs))
         else
-            push!(polys, tuples(poly_a))
-            push!(polys, tuples(poly_b))
+            push!(polys, tuples(poly_a; crs))
+            push!(polys, tuples(poly_b; crs))
             return polys
         end
     elseif n_pieces > 1
@@ -94,7 +96,7 @@ function _union(
     end
     # Add in holes
     if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
-        _add_union_holes!(alg, polys, a_in_b, b_in_a, poly_a, poly_b; exact)
+        _add_union_holes!(alg, polys, a_in_b, b_in_a, poly_a, poly_b; exact, crs)
     end
     # Remove unneeded collinear points on same edge
     _remove_collinear_points!(alg, polys, [false], poly_a, poly_b)
@@ -121,11 +123,11 @@ _union_step(x, _) = x ? (-1) : 1
 #= Add holes from two polygons to the exterior polygon formed by their union. If adding the
 the holes reveals that the polygons aren't actually intersecting, return the original
 polygons. =#
-function _add_union_holes!(alg::FosterHormannClipping, polys, a_in_b, b_in_a, poly_a, poly_b; exact)
+function _add_union_holes!(alg::FosterHormannClipping, polys, a_in_b, b_in_a, poly_a, poly_b; exact, crs)
     if a_in_b
-        _add_union_holes_contained_polys!(alg, polys, poly_a, poly_b; exact)
+        _add_union_holes_contained_polys!(alg, polys, poly_a, poly_b; exact, crs)
     elseif b_in_a
-        _add_union_holes_contained_polys!(alg, polys, poly_b, poly_a; exact)
+        _add_union_holes_contained_polys!(alg, polys, poly_b, poly_a; exact, crs)
     else  # Polygons intersect, but neither is contained in the other
         n_a_holes = GI.nhole(poly_a)
         ext_poly_a = GI.Polygon(StaticArrays.SVector(GI.getexterior(poly_a)))
@@ -166,7 +168,7 @@ end
 #= Add holes holes to the union of two polygons where one of the original polygons was
 inside of the other. If adding the the holes reveal that the polygons aren't actually
 intersecting, return the original polygons.=#
-function _add_union_holes_contained_polys!(alg::FosterHormannClipping, polys, interior_poly, exterior_poly; exact)
+function _add_union_holes_contained_polys!(alg::FosterHormannClipping, polys, interior_poly, exterior_poly; exact, crs)
     union_poly = polys[1]
     ext_int_ring = GI.getexterior(interior_poly)
     for (i, ih) in enumerate(GI.gethole(exterior_poly))
@@ -176,8 +178,8 @@ function _add_union_holes_contained_polys!(alg::FosterHormannClipping, polys, in
             if !on_ih && !out_ih
                 #= interior polygon is completely within the ith hole - polygons aren't
                 touching and do not actually form a union =#
-                polys[1] = tuples(interior_poly)
-                push!(polys, tuples(exterior_poly))
+                polys[1] = tuples(interior_poly; crs)
+                push!(polys, tuples(exterior_poly; crs))
                 return polys
             else
                 #= interior polygon is partially within the ith hole - area of interior
@@ -231,19 +233,20 @@ function _union(
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
         multipoly_b = fix_multipoly(multipoly_b)
     end
-    polys = [tuples(poly_a, T)]
+    crs = mutual_crs(poly_a, multipoly_b)
+    polys = [tuples(poly_a, T; crs)]
     for poly_b in GI.getpolygon(multipoly_b)
         if intersects(#=TODO: alg.manifold, =#polys[1], poly_b)
             # If polygons intersect and form a new polygon, swap out polygon
             new_polys = union(alg, polys[1], poly_b; target)
             if length(new_polys) > 1 # case where they intersect by just one point
-                push!(polys, tuples(poly_b, T))  # add poly_b to list
+                push!(polys, tuples(poly_b, T; crs))  # add poly_b to list
             else
                 polys[1] = new_polys[1]
             end
         else
             # If they don't intersect, poly_b is now a part of the union as its own polygon
-            push!(polys, tuples(poly_b, T))
+            push!(polys, tuples(poly_b, T; crs))
         end
     end
     return polys
