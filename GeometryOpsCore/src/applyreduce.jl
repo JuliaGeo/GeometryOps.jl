@@ -51,7 +51,7 @@ Literate.jl source code is below.
 =#
 
 """
-    applyreduce(f, op, target::Union{TraitTarget, GI.AbstractTrait}, obj; threaded, init, kw...)
+    applyreduce(f, op, target::Union{TraitTarget, GI.AbstractTrait}, obj; threaded, init, geometrycolumn, kw...)
 
 Apply function `f` to all objects with the `target` trait,
 and reduce the result with an `op` like `+`. 
@@ -62,70 +62,102 @@ If `threaded==true` threads will be used over arrays and iterables,
 feature collections and nested geometries.
 
 `init` functions the same way as it does in base Julia functions like `reduce`.
+
+## Keywords
+
+- `geometrycolumn`: For tables, specify which column contains the geometry. Can be a `Symbol` 
+  for a single column. If `nothing` (default), uses the first geometry column from `GI.geometrycolumns(table)`.
 """
 @inline function applyreduce(
-    f::F, op::O, target, geom; threaded=false, init=nothing
+    f::F, op::O, target, geom; threaded=false, init=nothing, kw...
 ) where {F, O}
     threaded = booltype(threaded)
-    _applyreduce(f, op, TraitTarget(target), geom; threaded, init)
+    _applyreduce(f, op, TraitTarget(target), geom; threaded, init, kw...)
 end
 
-@inline _applyreduce(f::F, op::O, target, geom; threaded, init) where {F, O} =
-    _applyreduce(f, op, target, GI.trait(geom), geom; threaded, init)
+@inline _applyreduce(f::F, op::O, target, geom; threaded, init, kw...) where {F, O} =
+    _applyreduce(f, op, target, GI.trait(geom), geom; threaded, init, kw...)
 # Maybe use threads reducing over arrays
-@inline function _applyreduce(f::F, op::O, target, ::Nothing, A::AbstractArray; threaded, init) where {F, O}
-    applyreduce_array(i) = _applyreduce(f, op, target, A[i]; threaded=False(), init)
+@inline function _applyreduce(f::F, op::O, target, ::Nothing, A::AbstractArray; threaded, init, kw...) where {F, O}
+    applyreduce_array(i) = _applyreduce(f, op, target, A[i]; threaded=False(), init, kw...)
     _mapreducetasks(applyreduce_array, op, eachindex(A), threaded; init)
 end
 # Try to applyreduce over iterables
-@inline function _applyreduce(f::F, op::O, target, ::Nothing, iterable::IterableType; threaded, init) where {F, O, IterableType}
+@inline function _applyreduce(f::F, op::O, target, ::Nothing, iterable::IterableType; threaded, init, kw...) where {F, O, IterableType}
     if Tables.istable(iterable)
-        _applyreduce_table(f, op, target, iterable; threaded, init)
+        _applyreduce_table(f, op, target, iterable; threaded, init, kw...)
     else
-        applyreduce_iterable(i) = _applyreduce(f, op, target, i; threaded=False(), init)
+        applyreduce_iterable(i) = _applyreduce(f, op, target, i; threaded=False(), init, kw...)
         if threaded isa True # Try to `collect` and reduce over the vector with threads
-            _applyreduce(f, op, target, collect(iterable); threaded, init)
+            _applyreduce(f, op, target, collect(iterable); threaded, init, kw...)
         else
             # Try to `mapreduce` the iterable as-is
             mapreduce(applyreduce_iterable, op, iterable; init)
         end
     end
 end
+# Helper function to get and validate the geometry column for applyreduce operations
+function _get_geometry_column_for_applyreduce(iterable, geometrycolumn)
+    # Determine which geometry column to use
+    geometry_column = if isnothing(geometrycolumn)
+        first(GI.geometrycolumns(iterable))
+    elseif geometrycolumn isa Symbol
+        geometrycolumn
+    else
+        throw(ArgumentError("geometrycolumn must be a Symbol or nothing, got a $(typeof(geometrycolumn))"))
+    end
+    # Validate that the geometry column exists in the table
+    input_schema = Tables.schema(iterable)
+    input_colnames = input_schema.names
+    if !(geometry_column in input_colnames)
+        throw(ArgumentError(
+            """
+            `applyreduce`: the `geometrycolumn` kwarg must be a column name of the table, 
+            got `$(geometry_column)`
+            but the table has columns 
+            $(input_colnames)
+            """
+            ))
+    end
+    return geometry_column
+end
+
 # In this case, we don't reconstruct the table, but only operate on the geometry column.
-function _applyreduce_table(f::F, op::O, target, iterable::IterableType; threaded, init) where {F, O, IterableType}
+function _applyreduce_table(f::F, op::O, target, iterable::IterableType; geometrycolumn = nothing, threaded, init, kw...) where {F, O, IterableType}
     # We extract the geometry column and run `applyreduce` on it.
-    geometry_column = first(GI.geometrycolumns(iterable))
-    return _applyreduce(f, op, target, Tables.getcolumn(iterable, geometry_column); threaded, init)
+    geometry_column = _get_geometry_column_for_applyreduce(iterable, geometrycolumn)
+    return _applyreduce(f, op, target, Tables.getcolumn(iterable, geometry_column); threaded, init, kw...)
 end
 # If `applyreduce` wants features, then applyreduce over the rows as `GI.Feature`s.
-function _applyreduce_table(f::F, op::O, target::GI.FeatureTrait, iterable::IterableType; threaded, init) where {F, O, IterableType}
-    # We extract the geometry column and run `apply` on it.
-    geometry_column = first(GI.geometrycolumns(iterable))
-    property_names = Iterators.filter(!=(geometry_column), Tables.schema(iterable).names)
+function _applyreduce_table(f::F, op::O, target::GI.FeatureTrait, iterable::IterableType; geometrycolumn = nothing, threaded, init, kw...) where {F, O, IterableType}
+    # We extract the geometry column and run `applyreduce` on it.
+    geometry_column = _get_geometry_column_for_applyreduce(iterable, geometrycolumn)
+    input_colnames = Tables.schema(iterable).names
+    property_names = Iterators.filter(!=(geometry_column), input_colnames)
     features = map(Tables.rows(iterable)) do row
-        GI.Feature(Tables.getcolumn(row, geometry_column), properties=NamedTuple(Iterators.map(Base.Fix1(_get_col_pair, row), property_names)))
+        GI.Feature(Tables.getcolumn(row, geometry_column), properties=NamedTuple(Iterators.map(pname -> pname => Tables.getcolumn(row, pname), property_names)))
     end
-    return _applyreduce(f, op, target, features; threaded, init)
+    return _applyreduce(f, op, target, features; threaded, init, kw...)
 end
 # Maybe use threads reducing over features of feature collections
-@inline function _applyreduce(f::F, op::O, target, ::GI.FeatureCollectionTrait, fc; threaded, init) where {F, O}
-    applyreduce_fc(i) = _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=False(), init)
+@inline function _applyreduce(f::F, op::O, target, ::GI.FeatureCollectionTrait, fc; threaded, init, kw...) where {F, O}
+    applyreduce_fc(i) = _applyreduce(f, op, target, GI.getfeature(fc, i); threaded=False(), init, kw...)
     _mapreducetasks(applyreduce_fc, op, 1:GI.nfeature(fc), threaded; init)
 end
 # Features just applyreduce to their geometry
-@inline _applyreduce(f::F, op::O, target, ::GI.FeatureTrait, feature; threaded, init) where {F, O} =
-    _applyreduce(f, op, target, GI.geometry(feature); threaded, init)
+@inline _applyreduce(f::F, op::O, target, ::GI.FeatureTrait, feature; threaded, init, kw...) where {F, O} =
+    _applyreduce(f, op, target, GI.geometry(feature); threaded, init, kw...)
 # Maybe use threads over components of nested geometries
-@inline function _applyreduce(f::F, op::O, target, trait, geom; threaded, init) where {F, O}
-    applyreduce_geom(i) = _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=False(), init)
+@inline function _applyreduce(f::F, op::O, target, trait, geom; threaded, init, kw...) where {F, O}
+    applyreduce_geom(i) = _applyreduce(f, op, target, GI.getgeom(geom, i); threaded=False(), init, kw...)
     _mapreducetasks(applyreduce_geom, op, 1:GI.ngeom(geom), threaded; init)
 end
 # Don't thread over points it won't pay off
 @inline function _applyreduce(
     f::F, op::O, target, trait::Union{GI.LinearRing,GI.LineString,GI.MultiPoint}, geom;
-    threaded, init
+    threaded, init, kw...
 ) where {F, O}
-    _applyreduce(f, op, target, GI.getgeom(geom); threaded=False(), init)
+    _applyreduce(f, op, target, GI.getgeom(geom); threaded=False(), init, kw...)
 end
 # Apply f to the target
 @inline function _applyreduce(f::F, op::O, ::TraitTarget{Target}, ::Trait, x; kw...) where {F,O,Target,Trait<:Target} 
