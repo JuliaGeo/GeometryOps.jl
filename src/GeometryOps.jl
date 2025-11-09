@@ -33,6 +33,7 @@ import SortTileRecursiveTree
 import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
+const DelTri = DelaunayTriangulation
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
@@ -85,6 +86,7 @@ include("methods/geom_relations/within.jl")
 include("methods/geom_relations/common.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
+include("methods/voronoi.jl")
 
 include("transformations/extent.jl")
 include("transformations/flip.jl")
