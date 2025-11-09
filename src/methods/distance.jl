@@ -192,7 +192,7 @@ end
 
 # Returns the Euclidean distance between two points.
 Base.@propagate_inbounds _euclid_distance(::Type{T}, p1, p2) where T =
-    sqrt(_squared_euclid_distance(T, p1, p2))
+    hypot(T(GI.x(p2)) - T(GI.x(p1)), T(GI.y(p2)) - T(GI.y(p1)))
 
 # Returns the square of the euclidean distance between two points
 Base.@propagate_inbounds _squared_euclid_distance(::Type{T}, p1, p2) where T =

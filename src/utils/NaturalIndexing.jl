@@ -237,8 +237,11 @@ GI.isgeometry(::Type{<: NaturallyIndexedRing}) = true
 GI.geomtrait(::NaturallyIndexedRing) = GI.LinearRingTrait()
 
 function prepare_naturally(geom)
-    return GO.apply(GI.PolygonTrait(), geom) do poly
-        return GI.Polygon([GI.convert(NaturallyIndexedRing, GI.LinearRingTrait(), ring) for ring in GI.getring(poly)])
+    crs = GI.crs(geom)
+    return GO.apply(GI.PolygonTrait(), geom; calc_extent = true) do poly
+        rings = [GI.convert(NaturallyIndexedRing, GI.LinearRingTrait(), ring) for ring in GI.getring(poly)]
+        extent = mapreduce(GI.extent, Extents.union, rings)
+        return GI.Polygon(rings; extent, crs)
     end
 end
 
