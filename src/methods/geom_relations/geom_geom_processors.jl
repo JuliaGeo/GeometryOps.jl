@@ -493,6 +493,60 @@ of the curve if it didn't return 'on'.
 See paper for more information on cases denoted in comments.
 =#
 
+#=
+Helper function that implements the core Hao-Sun algorithm logic for a single edge.
+This function processes one edge of a polygon to determine if a ray from point (x,y)
+intersects the edge, which is used for point-in-polygon testing.
+
+Arguments:
+- x, y: coordinates of the test point
+- p_start, p_end: start and end points of the edge
+- exact: whether to use exact predicates
+
+Returns a tuple (should_return_on, should_increment_k):
+- should_return_on: true if the point is on the edge (early return case)
+- should_increment_k: true if the ray crosses this edge (increment crossing counter)
+
+The function implements the 26 cases from Hao & Sun (2018):
+- Cases 1-2: Point on horizontal edge
+- Cases 3-4, 9-10: Ray crosses edge (not at vertex)
+- Cases 7-8, 14-15, 17-18: Ray touches edge at vertex (various configurations)
+- Cases 11, 26: Ray doesn't intersect edge (both vertices on same side)
+- Cases 12-13, 16, 19-25: Ray intersects at edge vertex (need orientation check)
+=#
+@inline function _hao_sun_edge_case(x, y, p_start, p_end; exact)
+    v1 = GI.y(p_start) - y
+    v2 = GI.y(p_end) - y
+
+    # Skip if both vertices are on the same side of the horizontal ray (cases 11 or 26)
+    ((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) && return (false, false)
+
+    u1, u2 = GI.x(p_start) - x, GI.x(p_end) - x
+    f = Predicates.orient(p_start, p_end, (x, y); exact)
+
+    if v2 > 0 && v1 ≤ 0                # Cases 3, 9, 16, 21, 13, or 24
+        # Edge crosses ray upward
+        f == 0 && return (true, false)  # Point on edge (cases 16 or 21)
+        f > 0 && return (false, true)   # Ray crosses edge from right (cases 3 or 9)
+    elseif v1 > 0 && v2 ≤ 0            # Cases 4, 10, 19, 20, 12, or 25
+        # Edge crosses ray downward
+        f == 0 && return (true, false)  # Point on edge (cases 19 or 20)
+        f < 0 && return (false, true)   # Ray crosses edge from left (cases 4 or 10)
+    elseif v2 == 0 && v1 < 0           # Cases 7, 14, or 17
+        # End vertex on ray, start vertex below
+        f == 0 && return (true, false)  # Point on edge (case 17)
+    elseif v1 == 0 && v2 < 0           # Cases 8, 15, or 18
+        # Start vertex on ray, end vertex below
+        f == 0 && return (true, false)  # Point on edge (case 18)
+    elseif v1 == 0 && v2 == 0          # Cases 1, 2, 5, 6, 22, or 23
+        # Both vertices on ray (horizontal edge)
+        u2 ≤ 0 && u1 ≥ 0 && return (true, false)  # Point between vertices (case 1)
+        u1 ≤ 0 && u2 ≥ 0 && return (true, false)  # Point between vertices (case 2)
+    end
+
+    return (false, false)  # No crossing, point not on edge
+end
+
 function _point_filled_curve_orientation(
     ::Planar, point, curve;
     in::T = point_in, on::T = point_on, out::T = point_out, exact,
@@ -504,26 +558,9 @@ function _point_filled_curve_orientation(
     p_start = GI.getpoint(curve, n)
     for (i, p_end) in enumerate(GI.getpoint(curve))
         i > n && break
-        v1 = GI.y(p_start) - y
-        v2 = GI.y(p_end) - y
-        if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
-            u1, u2 = GI.x(p_start) - x, GI.x(p_end) - x
-            f = Predicates.orient(p_start, p_end, (x, y); exact)
-            if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
-                f == 0 && return on         # Case 16 or 21
-                f > 0 && (k += 1)              # Case 3 or 9
-            elseif v1 > 0 && v2 ≤ 0            # Case 4, 10, 19, 20, 12, or 25
-                f == 0 && return on         # Case 19 or 20
-                f < 0 && (k += 1)              # Case 4 or 10
-            elseif v2 == 0 && v1 < 0           # Case 7, 14, or 17
-                f == 0 && return on         # Case 17
-            elseif v1 == 0 && v2 < 0           # Case 8, 15, or 18
-                f == 0 && return on         # Case 18
-            elseif v1 == 0 && v2 == 0          # Case 1, 2, 5, 6, 22, or 23
-                u2 ≤ 0 && u1 ≥ 0 && return on  # Case 1
-                u1 ≤ 0 && u2 ≥ 0 && return on  # Case 2
-            end
-        end
+        should_return_on, should_increment_k = _hao_sun_edge_case(x, y, p_start, p_end; exact)
+        should_return_on && return on
+        should_increment_k && (k += 1)
         p_start = p_end
     end
     return iseven(k) ? out : in
@@ -544,28 +581,10 @@ function _point_filled_curve_orientation(
     function per_edge_function(i)
         p_start = _tuple_point(GI.getpoint(curve, i))
         p_end = _tuple_point(GI.getpoint(curve, i + 1))
-        v1 = GI.y(p_start) - y
-        v2 = GI.y(p_end) - y
-        if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
-            u1, u2 = GI.x(p_start) - x, GI.x(p_end) - x
-            f = Predicates.orient(p_start, p_end, (x, y); exact)
-            if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
-                f == 0 && return LSM.Action{T}(:full_return, on)         # Case 16 or 21
-                f > 0 && (k += 1)              # Case 3 or 9
-            elseif v1 > 0 && v2 ≤ 0            # Case 4, 10, 19, 20, 12, or 25
-                f == 0 && return LSM.Action{T}(:full_return, on)         # Case 19 or 20
-                f < 0 && (k += 1)              # Case 4 or 10
-            elseif v2 == 0 && v1 < 0           # Case 7, 14, or 17
-                f == 0 && return LSM.Action{T}(:full_return, on)         # Case 17
-            elseif v1 == 0 && v2 < 0           # Case 8, 15, or 18
-                f == 0 && return LSM.Action{T}(:full_return, on)         # Case 18
-            elseif v1 == 0 && v2 == 0          # Case 1, 2, 5, 6, 22, or 23
-                u2 ≤ 0 && u1 ≥ 0 && return LSM.Action{T}(:full_return, on)  # Case 1
-                u1 ≤ 0 && u2 ≥ 0 && return LSM.Action{T}(:full_return, on)  # Case 2
-            end
-            return LSM.Action(:continue, on)
-        end
-        p_start = p_end
+        should_return_on, should_increment_k = _hao_sun_edge_case(x, y, p_start, p_end; exact)
+        should_return_on && return LSM.Action{T}(:full_return, on)
+        should_increment_k && (k += 1)
+        return nothing
     end
 
     result = SpatialTreeInterface.depth_first_search(per_edge_function,extent -> extent.Y[1] <= y <= extent.Y[2], tree)
