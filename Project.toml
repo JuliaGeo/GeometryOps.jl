@@ -70,6 +70,7 @@ Downloads = "f43a241f-c20a-4ad4-852c-f6b1247861c6"
 FlexiJoins = "e37f2e79-19fa-4eb7-8510-b63b51fe0a37"
 GeoJSON = "61d90e0f-e114-555e-ac52-39dfb47a3ef9"
 GeometryBasics = "5c1252a2-5f33-56bf-86c9-59e7332b4326"
+GeometryOpsTestHelpers = "47ae2730-6264-4af1-919b-a18bc445f019"
 JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
 LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
 NaturalEarth = "436b0209-26ab-4e65-94a9-6526d86fea76"
@@ -84,4 +85,8 @@ TGGeometry = "d7e755d2-3c95-4bcf-9b3c-79ab1a78647b"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "Downloads", "FlexiJoins", "GeoJSON", "GeometryBasics", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "NaturalEarth", "OffsetArrays", "Polylabel", "SafeTestsets", "Shapefile", "TGGeometry", "Test"]
+test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "Downloads", "FlexiJoins", "GeoJSON", "GeometryBasics", "GeometryOpsTestHelpers", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "NaturalEarth", "OffsetArrays", "Polylabel", "SafeTestsets", "Shapefile", "TGGeometry", "Test"]
+
+[sources]
+GeometryOpsTestHelpers = {path = "GeometryOpsTestHelpers"}
+GeometryOpsCore = {path = "GeometryOpsCore"}
