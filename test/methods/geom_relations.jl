@@ -57,6 +57,11 @@ p10 = LG.Polygon([
     [[0.15, 0.55], [0.15, 0.95], [0.55, 0.95], [0.55, 0.55], [0.15, 0.55]]
 ])
 p11 = LG.Polygon(r3)
+"Rectangle going from 0,0 to 1,1"
+p12 = GI.Polygon([Tuple{Float64, Float64}[(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]])
+"Pentagon - take a rectangle going from (1, 0) to (2, 1), and add a point at (0.5, 0.5)"
+p13 = GI.Polygon([Tuple{Float64, Float64}[(1, 0), (2, 0), (2, 1), (1, 1), (0.5, 0.5),  (1, 0)]])
+
 
 mpt1 = LG.MultiPoint([pt1, pt2])
 mpt2 = LG.MultiPoint([pt2, pt3])
@@ -157,6 +162,7 @@ test_pairs = [
     (p6, p1, "p6", "p1", "Polygon inside of other polygon's hole"),
     (p7, p1, "p7", "p1", "Polygons overlap"),
     (p10, p1, "p10", "p1", "Polygon's with nested holes"),
+    (p12, p13, "p12", "p13", "Polygons only intersect at vertices, but intersect and overlap"),
     # Multigeometries
     (mpt1, mpt1, "mpt1", "mpt1", "Same set of points for multipoints"),
     (mpt1, mpt2, "mpt1", "mpt2", "Some point matches, others are different"),
