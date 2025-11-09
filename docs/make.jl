@@ -134,6 +134,7 @@ makedocs(;
         "API Reference" => "api.md",
         "Tutorials" => [
             "Creating Geometry" => "tutorials/creating_geometry.md",
+            "Rotating Geometry" => "tutorials/rotating_geometry.md",
             "Spatial Joins" => "tutorials/spatial_joins.md",
         ],
         "Explanations" => [
