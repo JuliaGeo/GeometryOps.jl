@@ -27,6 +27,7 @@ end
 @safetestset "Orientation" begin include("methods/orientation.jl") end
 @safetestset "Centroid" begin include("methods/centroid.jl") end
 @safetestset "Convex Hull" begin include("methods/convex_hull.jl") end
+@safetestset "Voronoi" begin include("methods/voronoi.jl") end
 @safetestset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end
@@ -41,6 +42,7 @@ end
 @safetestset "Flip" begin include("transformations/flip.jl") end
 @safetestset "Simplify" begin include("transformations/simplify.jl") end
 @safetestset "Segmentize" begin include("transformations/segmentize.jl") end
+@safetestset "Smooth" begin include("transformations/smooth.jl") end
 @safetestset "Transform" begin include("transformations/transform.jl") end
 @safetestset "Force Dimensions" begin include("transformations/forcedims.jl") end
 @safetestset "Geometry Correction" begin include("transformations/correction/geometry_correction.jl") end

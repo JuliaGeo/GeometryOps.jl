@@ -4,7 +4,6 @@ export overlaps
 
 #=
 ## What is overlaps?
-
 The overlaps function checks if two geometries overlap. Two geometries can only
 overlap if they have the same dimension, and if they overlap, but one is not
 contained, within, or equal to the other.
@@ -233,18 +232,6 @@ function _overlaps(
     a_fully_within = _point_on_seg(a1, b1, b2) && _point_on_seg(a2, b1, b2)
     b_fully_within = _point_on_seg(b1, a1, a2) && _point_on_seg(b2, a1, a2)
     return seg_val == line_over && (!a_fully_within && !b_fully_within)
-end
-
-# Extent forwarding
-
-function _overlaps(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
-    return _overlaps(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
-end
-function _overlaps(t1, e1::Extents.Extent, t2, g2)
-    return _overlaps(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
-end
-function _overlaps(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
-    return Extents.overlaps(e1, e2)
 end
 
 #= TODO: Once overlaps is swapped over to use the geom relations workflow, can

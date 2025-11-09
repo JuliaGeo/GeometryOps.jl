@@ -24,7 +24,7 @@ Here's an animated example of what `depth_first_search` is doing:
 
 
 ```julia
-using Makie, GeoInterfaceMakie
+using Makie
 using Extents, GeometryOps.SpatialTreeInterface, SortTileRecursiveTree
 import GeoInterface as GI
 

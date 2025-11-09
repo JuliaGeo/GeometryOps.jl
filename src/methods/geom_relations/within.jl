@@ -90,11 +90,6 @@ This is equivalent to `x -> within(x, g1)`.
 """
 within(g1) = Base.Fix2(within, g1)
 
-# # Convert features to geometries
-_within(::GI.FeatureTrait, g1, ::Any, g2) = within(GI.geometry(g1), g2)
-_within(::Any, g1, t2::GI.FeatureTrait, g2) = within(g1, GI.geometry(g2))
-_within(::FeatureTrait, g1, ::FeatureTrait, g2) = within(GI.geometry(g1), GI.geometry(g2))
-
 
 # # Points within geometries
 
@@ -286,19 +281,3 @@ function _within(
     end
     return true
 end
-
-
-# Extent forwarding
-
-
-function _within(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
-    return _within(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
-end
-function _within(t1, e1::Extents.Extent, t2, g2)
-    return _within(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
-end
-function _within(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
-    return Extents.within(e1, e2)
-end
-
-
