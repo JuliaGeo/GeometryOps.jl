@@ -63,7 +63,7 @@ in the same order as the input points.
 !!! warning
     This interface only computes the 2-dimensional Voronoi tessellation!
     Only clipped voronoi tesselations can be created!
-    Only `T = Float64` is guaranteed good results by underlying package DelaunayTriangulation.
+    Only `T = Float64` or `Float32` are guaranteed good results by the underlying package DelaunayTriangulation.
     
 !!! note
     The polygons are returned in the same order as the input points after flattening.
