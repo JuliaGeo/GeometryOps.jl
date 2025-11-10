@@ -65,6 +65,9 @@ end
     coords2 = [(0.5, 0.0), (1.5, 0.0), (1.5, 1.0), (0.5, 1.0), (0.5, 0.0)]
     gi_poly2 = GI.Polygon([GI.LinearRing(coords2)])
 
+    # Create a polygon with CRS
+    gi_poly_crs = GI.Polygon([GI.LinearRing(coords)]; crs=4326)
+
     # Create MultiPolygons
     gi_multi1 = GI.MultiPolygon([gi_poly1])
     gi_multi2 = GI.MultiPolygon([gi_poly2])
