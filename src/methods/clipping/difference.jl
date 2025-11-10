@@ -57,19 +57,21 @@ function _difference(
     # Get the exterior of the polygons
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
+
+    crs = mutual_crs(poly_a, poly_b)
     # Find the difference of the exterior of the polygons
     a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f; exact)
-    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b)
+    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b; crs)
     # if no crossing points, determine if either poly is inside of the other
     if isempty(polys)
         a_in_b, b_in_a = _find_non_cross_orientation(alg.manifold, a_list, b_list, ext_a, ext_b; exact)
         # add case for if they polygons are the same (all intersection points!)
         # add a find_first check to find first non-inter poly!
         if b_in_a && !a_in_b  # b in a and can't be the same polygon
-            poly_a_b_hole = GI.Polygon([tuples(ext_a), tuples(ext_b)])
+            poly_a_b_hole = GI.Polygon([tuples(ext_a; crs), tuples(ext_b; crs)]; crs)
             push!(polys, poly_a_b_hole)
         elseif !b_in_a && !a_in_b # polygons don't intersect
-            push!(polys, tuples(poly_a))
+            push!(polys, tuples(poly_a; crs))
             return polys
         end
     end
@@ -119,7 +121,8 @@ function _difference(
     ::GI.MultiPolygonTrait, multipoly_b;
     kwargs...,
 ) where T
-    polys = [tuples(poly_a, T)]
+    crs = mutual_crs(poly_a, multipoly_b)
+    polys = [tuples(poly_a, T; crs)]
     for poly_b in GI.getpolygon(multipoly_b)
         isempty(polys) && break
         polys = mapreduce(p -> difference(alg, p, poly_b; target), append!, polys)
@@ -140,7 +143,8 @@ function _difference(
     if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
         multipoly_a = fix_multipoly(multipoly_a)
     end
-    polys = Vector{_get_poly_type(T)}()
+    crs = mutual_crs(multipoly_a, poly_b)
+    polys = Vector{_get_poly_type(T, crs)}()
     sizehint!(polys, GI.npolygon(multipoly_a))
     for poly_a in GI.getpolygon(multipoly_a)
         append!(polys, difference(alg, poly_a, poly_b; target))
@@ -163,6 +167,7 @@ function _difference(
         multipoly_a = fix_multipoly(multipoly_a)
         fix_multipoly = nothing
     end
+    crs = mutual_crs(multipoly_a, multipoly_b)
     local polys
     for (i, poly_b) in enumerate(GI.getpolygon(multipoly_b))
         #= Removing intersections of `multipoly_a`` with pieces of `multipoly_b`` - as
@@ -171,7 +176,7 @@ function _difference(
         polys = if i == 1
             difference(alg, multipoly_a, poly_b; target, fix_multipoly)
         else
-            difference(alg, GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
+            difference(alg, GI.MultiPolygon(polys; crs), poly_b; target, fix_multipoly)
         end
         #= One multipoly_a has been completely covered (and thus removed) there is no need to
         continue taking the difference =#

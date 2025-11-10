@@ -3,7 +3,6 @@ using Test
 using SafeTestsets
 
 include("helpers.jl")
-
 @testset "Core" begin
     @safetestset "Algorithm" begin include("core/algorithm.jl") end
     @safetestset "Manifold" begin include("core/manifold.jl") end
@@ -36,6 +35,7 @@ end
 @safetestset "Cut" begin include("methods/clipping/cut.jl") end
 @safetestset "Intersection Point" begin include("methods/clipping/intersection_points.jl") end
 @safetestset "Polygon Clipping" begin include("methods/clipping/polygon_clipping.jl") end
+@safetestset "Clipping Type mismatches" begin include("methods/clipping/type_mismatches.jl") end
 # Transformations
 @safetestset "Embed Extent" begin include("transformations/extent.jl") end
 @safetestset "Reproject" begin include("transformations/reproject.jl") end
