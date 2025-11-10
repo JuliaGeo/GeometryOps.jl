@@ -311,6 +311,15 @@ function mutual_crs(a, b)
     elseif !isnothing(GI.crs(a)) && isnothing(GI.crs(b))
         return GI.crs(a)
     else
-        return nothing
+        error("""
+        Cannot perform clipping operation on two geometries with different CRS! 
+        
+        Either pass an explicit `crs` keyword to the toplevel function you called (`intersection, difference, union`) or make sure the geometries you're clipping have the same crs.
+        
+        Got the CRSes:
+        $(GI.crs(a))
+        and
+        $(GI.crs(b))
+        """)
     end
 end
