@@ -308,7 +308,7 @@ function mutual_crs(a, b)
         return GI.crs(a)
     elseif isnothing(GI.crs(a)) && !isnothing(GI.crs(b))
         return GI.crs(b)
-    elseif GI.crs(a) != nothing && GI.crs(b) == nothing
+    elseif !isnothing(GI.crs(a)) && isnothing(GI.crs(b))
         return GI.crs(a)
     else
         return nothing
