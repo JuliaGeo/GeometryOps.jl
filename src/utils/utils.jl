@@ -306,7 +306,7 @@ This is tolerant of `nothing` values in one of a or b, it assumes that they are 
 function mutual_crs(a, b)
     if GI.crs(a) == GI.crs(b)
         return GI.crs(a)
-    elseif GI.crs(a) == nothing && GI.crs(b) != nothing
+    elseif isnothing(GI.crs(a)) && !isnothing(GI.crs(b))
         return GI.crs(b)
     elseif GI.crs(a) != nothing && GI.crs(b) == nothing
         return GI.crs(a)
