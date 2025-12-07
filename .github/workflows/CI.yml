@@ -47,7 +47,7 @@ jobs:
         with:
           directories: src,ext
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v4.0.1
+        uses: codecov/codecov-action@v5.5.1
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
