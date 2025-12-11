@@ -153,3 +153,25 @@ end
     # For very small regions, spherical area should be positive for CCW ring
     @test small_area > 0
 end
+
+@testset "Spherical polygon area (with holes)" begin
+    # Simple polygon without holes: octant
+    simple_poly = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+
+    simple_area = GO._girard_spherical_polygon_area(Float64, GI.PolygonTrait(), simple_poly)
+    @test abs(simple_area) ≈ π/2 atol=1e-10
+
+    # Polygon with a hole - the hole should subtract from the area
+    # Create a polygon with exterior and a small interior hole
+    exterior = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]
+    # Small hole inside
+    hole = [(2.0, 2.0), (2.0, 3.0), (3.0, 3.0), (3.0, 2.0), (2.0, 2.0)]
+    poly_with_hole = GI.Polygon([exterior, hole])
+
+    area_with_hole = GO._girard_spherical_polygon_area(Float64, GI.PolygonTrait(), poly_with_hole)
+    area_exterior_only = abs(GO._girard_spherical_ring_area(Float64, GI.LinearRing(exterior)))
+    area_hole = abs(GO._girard_spherical_ring_area(Float64, GI.LinearRing(hole)))
+
+    # Area with hole should be exterior minus hole
+    @test abs(area_with_hole) ≈ area_exterior_only - area_hole atol=1e-10
+end

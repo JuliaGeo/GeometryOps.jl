@@ -191,7 +191,6 @@ struct GirardSphericalArea{S <: Spherical} <: SingleManifoldAlgorithm{S}
     manifold::S
 end
 
-GirardSphericalArea() = GirardSphericalArea(Spherical())
 GirardSphericalArea(; radius = Spherical().radius) = GirardSphericalArea(Spherical(; radius))
 
 GeometryOpsCore.manifold(alg::GirardSphericalArea) = alg.manifold
@@ -269,6 +268,31 @@ function _girard_spherical_ring_area(::Type{T}, ring) where T
         p2 = points[i]
         p3 = points[i+1]
         area += _girard_spherical_triangle_area(p1, p2, p3)
+    end
+
+    return T(area)
+end
+
+"""
+    _girard_spherical_polygon_area(::Type{T}, ::GI.PolygonTrait, poly) where T
+
+Compute the area of a spherical polygon on the unit sphere, accounting for holes.
+
+The polygon is assumed to be in geographic coordinates (longitude, latitude in degrees).
+Returns the absolute area on the unit sphere (always positive).
+"""
+function _girard_spherical_polygon_area(::Type{T}, ::GI.PolygonTrait, poly) where T
+    GI.isempty(poly) && return zero(T)
+
+    # Compute exterior ring area
+    ext_area = _girard_spherical_ring_area(T, GI.getexterior(poly))
+    area = abs(ext_area)
+
+    area == zero(T) && return area
+
+    # Subtract hole areas
+    for hole in GI.gethole(poly)
+        area -= abs(_girard_spherical_ring_area(T, hole))
     end
 
     return T(area)
