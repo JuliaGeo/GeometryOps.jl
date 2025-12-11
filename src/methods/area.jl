@@ -196,4 +196,44 @@ GirardSphericalArea(; radius = Spherical().radius) = GirardSphericalArea(Spheric
 
 GeometryOpsCore.manifold(alg::GirardSphericalArea) = alg.manifold
 
+"""
+    _girard_spherical_triangle_area(p1::UnitSphericalPoint, p2::UnitSphericalPoint, p3::UnitSphericalPoint)
+
+Compute the signed area of a spherical triangle on the unit sphere using Girard's theorem.
+
+The three points must be `UnitSphericalPoint`s (Cartesian coordinates on the unit sphere).
+
+Returns the spherical excess (sum of angles - π), which equals the area on the unit sphere.
+The sign indicates the winding direction.
+"""
+function _girard_spherical_triangle_area(p1::UnitSpherical.UnitSphericalPoint, p2::UnitSpherical.UnitSphericalPoint, p3::UnitSpherical.UnitSphericalPoint)
+    # Compute the spherical excess using the formula:
+    # tan(E/2) = |p1 · (p2 × p3)| / (1 + p1·p2 + p2·p3 + p3·p1)
+    # where E is the spherical excess
+
+    # Cross product p2 × p3
+    cross_23 = p2 × p3
+
+    # Scalar triple product: p1 · (p2 × p3)
+    triple = p1 ⋅ cross_23
+
+    # Dot products
+    d12 = p1 ⋅ p2
+    d23 = p2 ⋅ p3
+    d31 = p3 ⋅ p1
+
+    # Denominator
+    denom = 1 + d12 + d23 + d31
+
+    # Handle degenerate cases
+    if abs(denom) < eps(Float64)
+        return zero(Float64)
+    end
+
+    # Spherical excess using the half-angle formula
+    E = 2 * atan(triple, denom)
+
+    return E
+end
+
 # ## Spherical

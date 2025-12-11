@@ -117,3 +117,22 @@ end
     # Test manifold accessor
     @test GO.GeometryOpsCore.manifold(alg) isa GO.Spherical
 end
+
+@testset "Spherical triangle area" begin
+    using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
+
+    # Test a known spherical triangle: 1/8 of the unit sphere
+    # Vertices at (0,0), (90,0), (0,90) in lon,lat
+    # This is an octant of the sphere with area = 4πR²/8 = πR²/2
+    p1 = UnitSphereFromGeographic()((0.0, 0.0))   # lon=0, lat=0
+    p2 = UnitSphereFromGeographic()((90.0, 0.0))  # lon=90, lat=0
+    p3 = UnitSphereFromGeographic()((0.0, 90.0))  # lon=0, lat=90 (north pole)
+
+    # On unit sphere, area should be π/2
+    area = GO._girard_spherical_triangle_area(p1, p2, p3)
+    @test area ≈ π/2 atol=1e-10
+
+    # Test with reversed winding (should give same absolute area)
+    area_rev = GO._girard_spherical_triangle_area(p1, p3, p2)
+    @test abs(area_rev) ≈ π/2 atol=1e-10
+end
