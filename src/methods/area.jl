@@ -236,4 +236,42 @@ function _girard_spherical_triangle_area(p1::UnitSpherical.UnitSphericalPoint, p
     return E
 end
 
+"""
+    _girard_spherical_ring_area(::Type{T}, ring) where T
+
+Compute the signed spherical area of a ring (linear ring) on the unit sphere.
+
+The ring is assumed to be in geographic coordinates (longitude, latitude in degrees).
+Returns the signed area on the unit sphere (multiply by R² for actual area).
+"""
+function _girard_spherical_ring_area(::Type{T}, ring) where T
+    np = GI.npoint(ring)
+    np < 3 && return zero(T)
+
+    # Convert all points to unit sphere coordinates
+    to_sphere = UnitSpherical.UnitSphereFromGeographic()
+
+    points = [to_sphere(p) for p in GI.getpoint(ring)]
+
+    # Remove the closing point if it duplicates the first
+    if np > 1 && points[end] ≈ points[1]
+        pop!(points)
+    end
+
+    np = length(points)
+    np < 3 && return zero(T)
+
+    # Triangulate from the first vertex and sum areas
+    area = zero(T)
+    p1 = points[1]
+
+    for i in 2:(np-1)
+        p2 = points[i]
+        p3 = points[i+1]
+        area += _girard_spherical_triangle_area(p1, p2, p3)
+    end
+
+    return T(area)
+end
+
 # ## Spherical

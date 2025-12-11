@@ -136,3 +136,20 @@ end
     area_rev = GO._girard_spherical_triangle_area(p1, p3, p2)
     @test abs(area_rev) ≈ π/2 atol=1e-10
 end
+
+@testset "Spherical ring area" begin
+    # Test the octant triangle as a ring
+    ring = GI.LinearRing([(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)])
+
+    # On unit sphere, area should be π/2
+    area = GO._girard_spherical_ring_area(Float64, ring)
+    @test abs(area) ≈ π/2 atol=1e-10
+
+    # Test a small polygon where spherical ≈ planar (for sanity check)
+    small_ring = GI.LinearRing([
+        (0.0, 0.0), (0.001, 0.0), (0.001, 0.001), (0.0, 0.001), (0.0, 0.0)
+    ])
+    small_area = GO._girard_spherical_ring_area(Float64, small_ring)
+    # For very small regions, spherical area should be positive for CCW ring
+    @test small_area > 0
+end
