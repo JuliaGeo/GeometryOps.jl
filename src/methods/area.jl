@@ -298,4 +298,30 @@ function _girard_spherical_polygon_area(::Type{T}, ::GI.PolygonTrait, poly) wher
     return T(area)
 end
 
+# Dispatch area(::Spherical, ...) to use GirardSphericalArea
+function area(m::Spherical, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
+    area(GirardSphericalArea(m), geom, T; threaded, kwargs...)
+end
+
+# Main implementation for GirardSphericalArea
+function area(alg::GirardSphericalArea, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
+    R = manifold(alg).radius
+    # Compute area on unit sphere, then multiply by R²
+    unit_area = applyreduce(
+        WithTrait((trait, g) -> _girard_spherical_area(T, trait, g)),
+        +,
+        _AREA_TARGETS,
+        geom;
+        threaded,
+        init=zero(T),
+        kwargs...
+    )
+    return T(unit_area * R^2)
+end
+
+# Spherical area dispatch for different geometry types
+_girard_spherical_area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
+_girard_spherical_area(::Type{T}, ::GI.LinearRingTrait, geom) where T = zero(T)
+_girard_spherical_area(::Type{T}, trait::GI.PolygonTrait, poly) where T = _girard_spherical_polygon_area(T, trait, poly)
+
 # ## Spherical

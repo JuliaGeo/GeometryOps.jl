@@ -175,3 +175,30 @@ end
     # Area with hole should be exterior minus hole
     @test abs(area_with_hole) ≈ area_exterior_only - area_hole atol=1e-10
 end
+
+@testset "area(Spherical(), geom) dispatch" begin
+    # Test that Spherical manifold dispatches correctly
+    octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+
+    # Default Earth radius from Spherical()
+    spherical = GO.Spherical()
+    R = spherical.radius
+
+    # Area should be (π/2) * R²
+    expected_area = (π/2) * R^2
+    computed_area = GO.area(spherical, octant)
+
+    @test computed_area ≈ expected_area rtol=1e-10
+
+    # Test with custom radius
+    custom_spherical = GO.Spherical(radius=1.0)
+    unit_area = GO.area(custom_spherical, octant)
+    @test unit_area ≈ π/2 rtol=1e-10
+
+    # Test that points/lines return zero
+    pt = GI.Point((0.0, 0.0))
+    @test GO.area(spherical, pt) == 0.0
+
+    line = GI.LineString([(0.0, 0.0), (1.0, 1.0)])
+    @test GO.area(spherical, line) == 0.0
+end
