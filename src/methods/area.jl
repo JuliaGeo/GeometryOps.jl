@@ -156,5 +156,44 @@ function _signed_area(::Type{T}, geom) where T
     return T(area / 2)
 end
 
+# ## Spherical Area using Girard's Theorem
+
+export GirardSphericalArea
+
+"""
+    GirardSphericalArea <: SingleManifoldAlgorithm{Spherical}
+
+An algorithm for computing spherical polygon area using Girard's theorem.
+
+Girard's theorem states that the area of a spherical triangle equals R² × E,
+where E is the spherical excess (sum of interior angles minus π).
+
+For general polygons, the algorithm triangulates from the first vertex and
+sums the areas of all spherical triangles.
+
+## Example
+
+```julia
+import GeometryOps as GO
+import GeoInterface as GI
+
+# A polygon on the sphere (lon, lat coordinates)
+poly = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+
+# Compute spherical area with default Earth radius
+area = GO.area(GO.Spherical(), poly)
+
+# Or explicitly use the algorithm
+area = GO.area(GO.GirardSphericalArea(), poly)
+```
+"""
+struct GirardSphericalArea{S <: Spherical} <: SingleManifoldAlgorithm{S}
+    manifold::S
+end
+
+GirardSphericalArea() = GirardSphericalArea(Spherical())
+GirardSphericalArea(; radius = Spherical().radius) = GirardSphericalArea(Spherical(; radius))
+
+GeometryOpsCore.manifold(alg::GirardSphericalArea) = alg.manifold
 
 # ## Spherical

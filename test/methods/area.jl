@@ -105,3 +105,15 @@ highlat_poly = LG.Polygon([[[70., 70.], [70., 80.], [80., 80.], [80., 70.], [70.
     @test GO.area(GO.Planar(), $highlat_poly) == 100
     @test GO.area(GO.Planar(), $highlat_poly) < GO.area(GO.Geodesic(), $highlat_poly)
 end
+
+@testset "GirardSphericalArea algorithm type" begin
+    # Test that the algorithm type exists and is a SingleManifoldAlgorithm for Spherical
+    @test GO.GirardSphericalArea <: GO.GeometryOpsCore.SingleManifoldAlgorithm{<:GO.Spherical}
+
+    # Test construction with default manifold
+    alg = GO.GirardSphericalArea()
+    @test alg isa GO.GirardSphericalArea
+
+    # Test manifold accessor
+    @test GO.GeometryOpsCore.manifold(alg) isa GO.Spherical
+end
