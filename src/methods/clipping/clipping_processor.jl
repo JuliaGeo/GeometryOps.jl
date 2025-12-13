@@ -74,24 +74,32 @@ polygons, or not an endpoint of a chain. =#
 
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
-@kwdef struct PolyNode{T <: AbstractFloat}
-    point::Tuple{T,T}          # (x, y) values of given point
+@kwdef struct PolyNode{T <: AbstractFloat, P}
+    point::P                   # Tuple{T,T} for Planar, UnitSphericalPoint{T} for Spherical
     inter::Bool = false        # If ipt, true, else 0
     neighbor::Int = 0          # If ipt, index of equivalent point in a_list or b_list, else 0
     idx::Int = 0               # If crossing point, index within sorted a_idx_list
     ent_exit::Bool = false     # If ipt, true if enter and false if exit, else false
     crossing::Bool = false     # If ipt, true if intersection crosses from out/in polygon, else false
     endpoint::EndPointType = not_endpoint # If ipt, denotes if point is the start or end of an overlapping chain
-    fracs::Tuple{T,T} = (0., 0.) # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
+    fracs::Tuple{T,T} = (zero(T), zero(T)) # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
 end
+
+# Type aliases for ergonomics - USE THESE EVERYWHERE
+const PlanarPolyNode{T} = PolyNode{T, Tuple{T,T}}
+const SphericalPolyNode{T} = PolyNode{T, UnitSpherical.UnitSphericalPoint{T}}
+
+# Helper to get point type for a manifold
+point_type(::Planar, ::Type{T}) where T = Tuple{T,T}
+point_type(::Spherical, ::Type{T}) where T = UnitSpherical.UnitSphericalPoint{T}
 
 #= Create a new node with all of the same field values as the given PolyNode unless
 alternative values are provided, in which case those should be used. =#
-PolyNode(node::PolyNode{T};
+PolyNode(node::PolyNode{T,P};
     point = node.point, inter = node.inter, neighbor = node.neighbor, idx = node.idx,
     ent_exit = node.ent_exit, crossing = node.crossing, endpoint = node.endpoint,
     fracs = node.fracs,
-) where T = PolyNode{T}(;
+) where {T,P} = PolyNode{T,P}(;
     point = point, inter = inter, neighbor = neighbor, idx = idx, ent_exit = ent_exit,
     crossing = crossing, endpoint = endpoint, fracs = fracs)
 
@@ -103,19 +111,19 @@ Base.:(==)(pn1::PolyNode, pn2::PolyNode) = equals(pn1, pn2)
 # This stores the polygons, the a_list, and the b_list, and the a_idx_list.
 # allowing the user to understand what happened and why.
 """
-    TracingError{T1, T2} <: Exception
+    TracingError{T1, T2, T, P} <: Exception
 
 An error that is thrown when the clipping tracing algorithm fails somehow.
 This is a bug in the algorithm, and should be reported.
 
 The polygons are contained in the exception object, accessible by try-catch or as `err` in the REPL.
 """
-struct TracingError{T1, T2, T} <: Exception
+struct TracingError{T1, T2, T, P} <: Exception
     message::String
     poly_a::T1
     poly_b::T2
-    a_list::Vector{PolyNode{T}}
-    b_list::Vector{PolyNode{T}}
+    a_list::Vector{PolyNode{T,P}}
+    b_list::Vector{PolyNode{T,P}}
     a_idx_list::Vector{Int}
 end
 
@@ -468,7 +476,7 @@ index i of a_idx_list is the location in a_list where the ith intersection point
 =#
 function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly_b; exact) where {T, M, A}
     n_a_edges = _nedge(poly_a)
-    a_list = PolyNode{T}[]  # list of points in poly_a
+    a_list = PlanarPolyNode{T}[]  # list of points in poly_a
     sizehint!(a_list, n_a_edges)
     a_idx_list = Vector{Int}()  # finds indices of intersection points in a_list
     local a_count::Int = 0  # number of points added to a_list
@@ -476,7 +484,7 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     local prev_counter::Int = 0
 
     function on_each_a(a_pt, i)
-        new_point = PolyNode{T}(;point = a_pt)
+        new_point = PlanarPolyNode{T}(;point = a_pt)
         a_count += 1
         push!(a_list, new_point)
         prev_counter = a_count
@@ -503,7 +511,7 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
         if line_orient != line_out  # edges intersect
             if line_orient == line_cross  # Intersection point that isn't a vertex
                 int_pt, fracs = intr1
-                new_intr = PolyNode{T}(;
+                new_intr = PlanarPolyNode{T}(;
                     point = int_pt, inter = true, neighbor = j, # j is now equivalent to old j-1
                     crossing = true, fracs = fracs,
                 )
@@ -531,14 +539,14 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                 # Add intersection points determined above
                 if add_a1
                     n_b_intrs += a1_β == 0 ? 0 : 1
-                    a_list[prev_counter] = PolyNode{T}(;
+                    a_list[prev_counter] = PlanarPolyNode{T}(;
                         point = a_pt1, inter = true, neighbor = j,
                         fracs = (zero(T), a1_β),
                     )
                     push!(a_idx_list, prev_counter)
                 end
                 if add_b1
-                    new_intr = PolyNode{T}(;
+                    new_intr = PlanarPolyNode{T}(;
                         point = b_pt1, inter = true, neighbor = j,
                         fracs = (b1_α, zero(T)),
                     )
@@ -579,13 +587,13 @@ is needed for clipping using the Greiner-Hormann clipping algorithm.
 Note: after calling this function, b_list is not fully updated. The entry/exit flags still
 need to be updated. However, the neighbor value in a_list is now updated.
 =#
-function _build_b_list(alg::FosterHormannClipping{M, A}, ::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where {T, M, A} 
+function _build_b_list(alg::FosterHormannClipping{M, A}, ::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where {T, M, A}
     # Sort intersection points by insertion order in b_list
     sort!(a_idx_list, by = x-> a_list[x].neighbor + a_list[x].fracs[2])
     # Initialize needed values and lists
     n_b_edges = _nedge(poly_b)
     n_intr_pts = length(a_idx_list)
-    b_list = PolyNode{T}[]
+    b_list = PlanarPolyNode{T}[]
     sizehint!(b_list, n_b_edges + n_b_intrs)
     intr_curr = 1
     b_count = 0
@@ -598,7 +606,7 @@ function _build_b_list(alg::FosterHormannClipping{M, A}, ::Type{T}, a_idx_list, 
             continue
         end
         b_count += 1
-        push!(b_list, PolyNode{T}(; point = b_pt1))
+        push!(b_list, PlanarPolyNode{T}(; point = b_pt1))
         if intr_curr ≤ n_intr_pts
             curr_idx = a_idx_list[intr_curr]
             curr_node = a_list[curr_idx]
