@@ -63,26 +63,29 @@ If the point is in an "allowed" location, return true. Else, return false.
 =#
 function _point_polygon_process(
     point, polygon;
-    in_allow, on_allow, out_allow, exact,
+    in_allow, on_allow, out_allow, exact, manifold = Planar(),
 )
-    skip, returnval = _maybe_skip_disjoint_extents(point, polygon; in_allow, on_allow, out_allow, on_require = false, out_require = false, in_require = false)
-    skip && return returnval
+    # Skip extent check for spherical geometry (planar extents don't work on sphere)
+    if !(manifold isa Spherical)
+        skip, returnval = _maybe_skip_disjoint_extents(point, polygon; in_allow, on_allow, out_allow, on_require = false, out_require = false, in_require = false)
+        skip && return returnval
+    end
     # Check interaction of geom with polygon's exterior boundary
-    ext_val = _point_filled_curve_orientation(point, GI.getexterior(polygon); exact)
+    ext_val = _point_filled_curve_orientation(manifold, point, GI.getexterior(polygon); exact)
     # If a point is outside, it isn't interacting with any holes
     ext_val == point_out && return out_allow
     # if a point is on an external boundary, it isn't interacting with any holes
     ext_val == point_on && return on_allow
-    
+
     # If geom is within the polygon, need to check interactions with holes
     for hole in GI.gethole(polygon)
-        hole_val = _point_filled_curve_orientation(point, hole; exact)
+        hole_val = _point_filled_curve_orientation(manifold, point, hole; exact)
         # If a point in in a hole, it is outside of the polygon
         hole_val == point_in && return out_allow
         # If a point in on a hole edge, it is on the edge of the polygon
         hole_val == point_on && return on_allow
     end
-    
+
     # Point is within external boundary and on in/on any holes
     return in_allow
 end
@@ -531,6 +534,92 @@ _point_filled_curve_orientation(
     point, curve;
     in::T = point_in, on::T = point_on, out::T = point_out, exact,
 ) where {T} = _point_filled_curve_orientation(Planar(), point, curve; in, on, out, exact)
+
+#=
+Spherical point-in-polygon using S2-style ray crossing algorithm.
+
+Algorithm (from Google S2 geometry):
+1. Pick a fixed reference point O (e.g., north pole)
+2. Determine if O is inside the polygon (origin_inside)
+3. Count edge crossings from O to test point P
+4. Result = origin_inside XOR (crossings is odd)
+
+This handles polygons spanning more than a hemisphere correctly.
+=#
+function _point_filled_curve_orientation(
+    ::Spherical, point, curve;
+    in::T = point_in, on::T = point_on, out::T = point_out, exact,
+) where {T}
+    transform = UnitSpherical.UnitSphereFromGeographic()
+    point_on_spherical_arc = UnitSpherical.point_on_spherical_arc
+    spherical_orient = UnitSpherical.spherical_orient
+
+    # Convert test point - pass directly, works for geographic or UnitSphericalPoint
+    p = transform(point)
+
+    n = GI.npoint(curve)
+    # Check if ring is closed (first == last point)
+    n -= equals(GI.getpoint(curve, 1), GI.getpoint(curve, n)) ? 1 : 0
+
+    # Reference point O: north pole, unless test point is near a pole
+    O = if abs(p.z) > 0.99
+        UnitSpherical.UnitSphericalPoint(1.0, 0.0, 0.0)  # equator if p near pole
+    else
+        UnitSpherical.UnitSphericalPoint(0.0, 0.0, 1.0)  # north pole
+    end
+
+    # Determine if O is inside the polygon using signed area from O's perspective
+    # Signed area = sum of (O × v_i) · v_{i+1}
+    # If |signed_area| < tolerance, O is on the polygon's "horizon" and we fall back
+    signed_area = 0.0
+    v_prev = transform(GI.getpoint(curve, n))
+    for i in 1:n
+        v_curr = transform(GI.getpoint(curve, i))
+        signed_area += (O × v_prev) ⋅ v_curr
+        v_prev = v_curr
+    end
+
+    # Use tolerance: if signed_area is too small, O is on the horizon
+    # In that case, assume O is outside (works for most small polygons)
+    tol = 1e-10
+    origin_inside = signed_area > tol
+
+    # Second pass: count crossings from O to P, and check if P is on boundary
+    crossings = 0
+    v_start = transform(GI.getpoint(curve, n))
+
+    for i in 1:n
+        v_end = transform(GI.getpoint(curve, i))
+
+        # Check if test point is on this edge
+        if point_on_spherical_arc(p, v_start, v_end)
+            return on
+        end
+
+        # Check if edge crosses the great circle arc from O to P
+        # Edge crosses if v_start and v_end are on opposite sides of plane(O, P)
+        # AND O and P are on opposite sides of plane(v_start, v_end)
+        orient_start = spherical_orient(O, p, v_start)
+        orient_end = spherical_orient(O, p, v_end)
+
+        if orient_start * orient_end < 0
+            # Edge crosses the great circle through O and P
+            # Now check if crossing is on the arc from O to P (not the antipodal arc)
+            orient_O = spherical_orient(v_start, v_end, O)
+            orient_P = spherical_orient(v_start, v_end, p)
+
+            if orient_O * orient_P < 0
+                crossings += 1
+            end
+        end
+
+        v_start = v_end
+    end
+
+    # XOR: origin_inside ⊻ (crossings is odd)
+    inside = xor(origin_inside, isodd(crossings))
+    return inside ? in : out
+end
 
 #=
 Determines the types of interactions of a line with a filled-in curve. By

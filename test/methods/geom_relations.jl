@@ -476,3 +476,34 @@ end
     @test GO.crosses(nt_line_a, nt_line_b) == GO.crosses(line_a, line_b)
     @test GO.overlaps(nt_poly_overlap1, nt_poly_overlap2) == GO.overlaps(poly_overlap1, poly_overlap2)
 end
+
+@testset "Spherical point-in-polygon" begin
+    import GeometryOps as GO
+    import GeoInterface as GI
+
+    # Simple spherical polygon: a small square around (0°, 0°)
+    poly = GI.Polygon([[
+        (-10.0, -10.0), (10.0, -10.0), (10.0, 10.0), (-10.0, 10.0), (-10.0, -10.0)
+    ]])
+
+    # Point inside
+    @test GO.within(GO.Spherical(), GI.Point((0.0, 0.0)), poly) == true
+    @test GO.contains(GO.Spherical(), poly, GI.Point((0.0, 0.0))) == true
+
+    # Point outside
+    @test GO.within(GO.Spherical(), GI.Point((50.0, 50.0)), poly) == false
+    @test GO.contains(GO.Spherical(), poly, GI.Point((50.0, 50.0))) == false
+
+    # Point at various locations relative to polygon
+    @test GO.within(GO.Spherical(), GI.Point((5.0, 5.0)), poly) == true
+    @test GO.within(GO.Spherical(), GI.Point((-15.0, 0.0)), poly) == false
+
+    # Northern cap polygon (lat > 45°) - tests hemisphere-spanning case
+    arctic = GI.Polygon([[
+        (-135.0, 45.0), (-45.0, 45.0), (45.0, 45.0), (135.0, 45.0), (-135.0, 45.0)
+    ]])
+
+    @test GO.within(GO.Spherical(), GI.Point((0.0, 90.0)), arctic) == true   # North pole inside
+    @test GO.within(GO.Spherical(), GI.Point((0.0, 60.0)), arctic) == true   # Point at 60°N inside
+    @test GO.within(GO.Spherical(), GI.Point((0.0, 0.0)), arctic) == false   # Equator outside
+end
