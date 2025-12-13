@@ -200,7 +200,7 @@ struct NaiveTriangulatedSphericalArea{S <: Spherical, T <: SphericalTriangleArea
     method::T
 end
 NaiveTriangulatedSphericalArea(; radius = Spherical().radius, method = Eriksson()) = NaiveTriangulatedSphericalArea(Spherical(; radius), method)
-
+NaiveTriangulatedSphericalArea(manifold::Spherical) = NaiveTriangulatedSphericalArea(manifold, Eriksson())
 GeometryOpsCore.manifold(alg::NaiveTriangulatedSphericalArea) = alg.manifold
 
 using .UnitSpherical: UnitSphericalPoint
@@ -268,7 +268,7 @@ function area(alg::NaiveTriangulatedSphericalArea, geom, ::Type{T} = Float64; th
         end
         return ext_area
     end
-    _polygon_area(::GI.PointTrait, geom) = zero(T)
+    _polygon_area(::GI.PointTrait, alg, geom) = zero(T)
 
     unit_area = applyreduce(
         WithTrait((trait, g) -> _polygon_area(trait, alg.method, g)),

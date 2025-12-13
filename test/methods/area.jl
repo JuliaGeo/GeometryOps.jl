@@ -108,11 +108,11 @@ end
 
 @testset "GirardSphericalArea algorithm type" begin
     # Test that the algorithm type exists and is a SingleManifoldAlgorithm for Spherical
-    @test GO.GirardSphericalArea <: GO.GeometryOpsCore.SingleManifoldAlgorithm{<:GO.Spherical}
+    @test GO.NaiveTriangulatedSphericalArea <: GO.GeometryOpsCore.SingleManifoldAlgorithm{<:GO.Spherical}
 
     # Test construction with default manifold
-    alg = GO.GirardSphericalArea()
-    @test alg isa GO.GirardSphericalArea
+    alg = GO.NaiveTriangulatedSphericalArea()
+    @test alg isa GO.NaiveTriangulatedSphericalArea
 
     # Test manifold accessor
     @test GO.GeometryOpsCore.manifold(alg) isa GO.Spherical
@@ -129,11 +129,11 @@ end
     p3 = UnitSphereFromGeographic()((0.0, 90.0))  # lon=0, lat=90 (north pole)
 
     # On unit sphere, area should be π/2
-    area = GO._girard_spherical_triangle_area(p1, p2, p3)
+    area = GO._spherical_triangle_area(GO.Eriksson(), p1, p2, p3)
     @test area ≈ π/2 atol=1e-10
 
     # Test with reversed winding (should give same absolute area)
-    area_rev = GO._girard_spherical_triangle_area(p1, p3, p2)
+    area_rev = GO._spherical_triangle_area(GO.Eriksson(), p1, p3, p2)
     @test abs(area_rev) ≈ π/2 atol=1e-10
 end
 
@@ -257,11 +257,11 @@ end
         @test mars_area ≈ (π/2) * mars_radius^2 rtol=1e-8
     end
 
-    @testset "area(GirardSphericalArea(), geom) direct call" begin
+    @testset "area(NaiveTriangulatedSphericalArea(), geom) direct call" begin
         octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
 
         # Direct algorithm call should use default Spherical manifold
-        alg = GO.GirardSphericalArea()
+        alg = GO.NaiveTriangulatedSphericalArea()
         R = GO.Spherical().radius
 
         expected_area = (π/2) * R^2
