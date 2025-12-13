@@ -52,16 +52,44 @@ const _AREA_TARGETS = TraitTarget{Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI
 
 """
     area(geom, [T = Float64])::T
+    area(manifold::Manifold, geom, [T = Float64])::T
+    area(algorithm::Algorithm, geom, [T = Float64])::T
 
-Returns the area of a geometry or collection of geometries. 
+Returns the area of a geometry or collection of geometries.
 This is computed slightly differently for different geometries:
 
     - The area of a point/multipoint is always zero.
     - The area of a curve/multicurve is always zero.
     - The area of a polygon is the absolute value of the signed area.
     - The area multi-polygon is the sum of the areas of all of the sub-polygons.
-    - The area of a geometry collection, feature collection of array/iterable 
-        is the sum of the areas of all of the sub-geometries. 
+    - The area of a geometry collection, feature collection of array/iterable
+        is the sum of the areas of all of the sub-geometries.
+
+## Manifold support
+
+- `Planar()`: Uses the shoelace formula for 2D Cartesian coordinates (default).
+- `Spherical()`: Uses Girard's theorem for spherical polygons. Coordinates
+   are interpreted as (longitude, latitude) in degrees. Returns area in
+   square units of the sphere's radius (default: Earth's mean radius in meters).
+- `Geodesic()`: Uses geodesic calculations (requires Proj extension).
+
+## Examples
+
+```julia
+import GeometryOps as GO
+import GeoInterface as GI
+
+# Planar area (default)
+rect = GI.Polygon([[(0,0), (1,0), (1,1), (0,1), (0,0)]])
+GO.area(rect)  # 1.0
+
+# Spherical area (1/8 of Earth's surface)
+octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+GO.area(GO.Spherical(), octant)  # ≈ 6.38e13 m²
+
+# Spherical area with custom radius (unit sphere)
+GO.area(GO.Spherical(radius=1.0), octant)  # ≈ π/2
+```
 
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
