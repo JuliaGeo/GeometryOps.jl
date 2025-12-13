@@ -238,8 +238,9 @@ end
 #= Calculates the list of intersection points between two geometries, including line
 segments, line strings, linear rings, polygons, and multipolygons. =#
 function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = True()) where {M <: Manifold, A <: IntersectionAccelerator, T}
-    # Initialize an empty list of points
-    result = Tuple{T, T}[]
+    # Initialize an empty list of points with the correct point type for the manifold
+    PT = point_type(manifold, T)
+    result = PT[]
     # Check if the geometries extents even overlap
     Extents.intersects(GI.extent(a), GI.extent(b)) || return result
     # Create a list of edges from the two input geometries

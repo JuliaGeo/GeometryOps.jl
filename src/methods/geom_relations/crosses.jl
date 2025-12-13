@@ -16,6 +16,8 @@ import GeoInterface as GI, GeometryOps as GO
 ```
 """
 crosses(g1, g2)::Bool = _crosses(GI.trait(g1), g1, GI.trait(g2), g2)::Bool
+# Manifold version - forwards to non-manifold (no spherical-specific implementation yet)
+crosses(::Manifold, g1, g2)::Bool = _crosses(GI.trait(g1), g1, GI.trait(g2), g2)::Bool
 
 _crosses(::GI.MultiPointTrait, g1, ::GI.LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)
 _crosses(::GI.MultiPointTrait, g1, ::GI.PolygonTrait, g2)::Bool = multipoint_crosses_poly(g1, g2)

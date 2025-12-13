@@ -34,6 +34,9 @@ p1, p2 = GI.Polygon([l1]), GI.Polygon([l2])
 end
 
 @testset "Spherical intersection points" begin
+    # Helper to convert UnitSphericalPoint to geographic (lon, lat)
+    to_geo = GO.UnitSpherical.GeographicFromUnitSphere()
+
     # Two lines crossing on the sphere: equator meets prime meridian
     # Line along equator (from -45° to 45° longitude at 0° latitude)
     line1 = GI.LineString([(-45.0, 0.0), (45.0, 0.0)])
@@ -42,8 +45,10 @@ end
 
     pts = GO.intersection_points(GO.Spherical(), line1, line2)
     @test length(pts) == 1
-    @test isapprox(pts[1][1], 0.0, atol=1e-6)  # longitude
-    @test isapprox(pts[1][2], 0.0, atol=1e-6)  # latitude
+    @test pts[1] isa GO.UnitSpherical.UnitSphericalPoint
+    geo = to_geo(pts[1])
+    @test isapprox(geo[1], 0.0, atol=1e-6)  # longitude
+    @test isapprox(geo[2], 0.0, atol=1e-6)  # latitude
 
     # Two disjoint lines on the sphere (parallel lines on different latitudes)
     line3 = GI.LineString([(-45.0, 10.0), (45.0, 10.0)])
@@ -58,8 +63,10 @@ end
 
     pts = GO.intersection_points(GO.Spherical(), line5, line6)
     @test length(pts) == 1
-    @test isapprox(pts[1][1], 0.0, atol=1e-6)
-    @test isapprox(pts[1][2], 0.0, atol=1e-6)
+    @test pts[1] isa GO.UnitSpherical.UnitSphericalPoint
+    geo = to_geo(pts[1])
+    @test isapprox(geo[1], 0.0, atol=1e-6)  # longitude
+    @test isapprox(geo[2], 0.0, atol=1e-6)  # latitude
 
     # Test crossing at a non-origin point
     # Two great circle arcs that cross at approximately (45°, 22.5°)
@@ -68,7 +75,9 @@ end
 
     pts = GO.intersection_points(GO.Spherical(), line7, line8)
     @test length(pts) == 1
+    @test pts[1] isa GO.UnitSpherical.UnitSphericalPoint
+    geo = to_geo(pts[1])
     # The intersection should be somewhere between the endpoints
-    @test 0.0 < pts[1][1] < 90.0  # longitude
-    @test 0.0 < pts[1][2] < 45.0  # latitude
+    @test 0.0 < geo[1] < 90.0  # longitude
+    @test 0.0 < geo[2] < 45.0  # latitude
 end

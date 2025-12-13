@@ -74,6 +74,13 @@ overlaps(geom1, geom2)::Bool = _overlaps(
     GI.trait(geom2),
     geom2,
 )
+# Manifold version - forwards to non-manifold (no spherical-specific implementation yet)
+overlaps(::Manifold, geom1, geom2)::Bool = _overlaps(
+    GI.trait(geom1),
+    geom1,
+    GI.trait(geom2),
+    geom2,
+)
 
 """
     overlaps(g1)

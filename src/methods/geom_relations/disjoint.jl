@@ -74,6 +74,8 @@ true
 ```
 """
 disjoint(g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)
+# Manifold version - forwards to non-manifold (no spherical-specific implementation yet)
+disjoint(::Manifold, g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)
 
 """
     disjoint(g1)

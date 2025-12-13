@@ -78,6 +78,8 @@ true
 ```
 """
 coveredby(g1, g2) = _coveredby(trait(g1), g1, trait(g2), g2)
+# Manifold version - forwards to non-manifold (no spherical-specific implementation yet)
+coveredby(::Manifold, g1, g2) = _coveredby(trait(g1), g1, trait(g2), g2)
 
 """
     coveredby(g1)
