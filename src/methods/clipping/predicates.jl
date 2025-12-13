@@ -2,7 +2,7 @@ module Predicates
     using ExactPredicates, ExactPredicates.Codegen
     import ExactPredicates: ext
     import ExactPredicates.Codegen: group!, @genpredicate
-    import GeometryOps: False, True, booltype, _tuple_point
+    import GeometryOps: False, True, booltype, _tuple_point, Spherical, UnitSpherical
     import GeoInterface as GI
     import AdaptivePredicates
 
@@ -51,7 +51,17 @@ module Predicates
         end
         return c_val
     end
-    
+
+    #= Spherical orientation predicate using UnitSpherical module.
+    Convert geographic coordinates to unit spherical points and use spherical_orient. =#
+    function orient(::Spherical, a, b, c; exact)
+        transform = UnitSpherical.UnitSphereFromGeographic()
+        a_sph = transform(_tuple_point(a, Float64))
+        b_sph = transform(_tuple_point(b, Float64))
+        c_sph = transform(_tuple_point(c, Float64))
+        return UnitSpherical.spherical_orient(a_sph, b_sph, c_sph)
+    end
+
 end
 
 import .Predicates

@@ -55,11 +55,12 @@ struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: Geo
     # TODO: should exact flag be in the type domain?
 end
 FosterHormannClipping(; manifold::Manifold = Planar(), accelerator = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : accelerator)
-FosterHormannClipping(manifold::Manifold, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : accelerator)
+FosterHormannClipping(manifold::Manifold, accelerator::Nothing) = FosterHormannClipping(manifold, NestedLoop())
+FosterHormannClipping(manifold::Manifold, accelerator::AutoAccelerator) = FosterHormannClipping(manifold, NestedLoop())
 FosterHormannClipping(accelerator::Union{Nothing, IntersectionAccelerator}) = FosterHormannClipping(Planar(), isnothing(accelerator) ? NestedLoop() : accelerator)
-# special case for spherical / geodesic manifolds
-# since they can't use STRtrees (because those don't work on the sphere)
-FosterHormannClipping(manifold::Union{Spherical, Geodesic}, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : (accelerator isa AutoAccelerator ? NestedLoop() : accelerator))
+FosterHormannClipping(manifold::Manifold) = FosterHormannClipping(manifold, NestedLoop())
+# special case for spherical / geodesic manifolds - AutoAccelerator becomes NestedLoop
+FosterHormannClipping(manifold::Union{Spherical, Geodesic}, accelerator::AutoAccelerator) = FosterHormannClipping(manifold, NestedLoop())
 
 # This enum defines which side of an edge a point is on
 @enum PointEdgeSide left=1 right=2 unknown=3

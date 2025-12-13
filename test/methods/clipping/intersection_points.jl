@@ -32,3 +32,43 @@ p1, p2 = GI.Polygon([l1]), GI.Polygon([l2])
     # No intersection points between polygon and line
     @test isempty(GO.intersection_points($p1, $l6))
 end
+
+@testset "Spherical intersection points" begin
+    # Two lines crossing on the sphere: equator meets prime meridian
+    # Line along equator (from -45° to 45° longitude at 0° latitude)
+    line1 = GI.LineString([(-45.0, 0.0), (45.0, 0.0)])
+    # Line along prime meridian (from -45° to 45° latitude at 0° longitude)
+    line2 = GI.LineString([(0.0, -45.0), (0.0, 45.0)])
+
+    pts = GO.intersection_points(GO.Spherical(), line1, line2)
+    @test length(pts) == 1
+    @test isapprox(pts[1][1], 0.0, atol=1e-6)  # longitude
+    @test isapprox(pts[1][2], 0.0, atol=1e-6)  # latitude
+
+    # Two disjoint lines on the sphere (parallel lines on different latitudes)
+    line3 = GI.LineString([(-45.0, 10.0), (45.0, 10.0)])
+    line4 = GI.LineString([(-45.0, 20.0), (45.0, 20.0)])
+
+    pts = GO.intersection_points(GO.Spherical(), line3, line4)
+    @test isempty(pts)
+
+    # Lines that share an endpoint (hinge)
+    line5 = GI.LineString([(0.0, 0.0), (30.0, 0.0)])
+    line6 = GI.LineString([(0.0, 0.0), (0.0, 30.0)])
+
+    pts = GO.intersection_points(GO.Spherical(), line5, line6)
+    @test length(pts) == 1
+    @test isapprox(pts[1][1], 0.0, atol=1e-6)
+    @test isapprox(pts[1][2], 0.0, atol=1e-6)
+
+    # Test crossing at a non-origin point
+    # Two great circle arcs that cross at approximately (45°, 22.5°)
+    line7 = GI.LineString([(0.0, 0.0), (90.0, 45.0)])
+    line8 = GI.LineString([(90.0, 0.0), (0.0, 45.0)])
+
+    pts = GO.intersection_points(GO.Spherical(), line7, line8)
+    @test length(pts) == 1
+    # The intersection should be somewhere between the endpoints
+    @test 0.0 < pts[1][1] < 90.0  # longitude
+    @test 0.0 < pts[1][2] < 45.0  # latitude
+end

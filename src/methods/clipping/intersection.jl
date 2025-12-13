@@ -219,6 +219,7 @@ inter_points = GO.intersection_points(line1, line2)
  (125.58375366067548, -14.83572303404496)
 """
 intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat = intersection_points(FosterHormannClipping(Planar()), geom_a, geom_b, T)
+intersection_points(m::Manifold, geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat = intersection_points(FosterHormannClipping(m), geom_a, geom_b, T)
 function intersection_points(alg::FosterHormannClipping{M, A}, geom_a, geom_b, ::Type{T} = Float64) where {M, A, T <: AbstractFloat}
     return _intersection_points(alg.manifold, alg.accelerator, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
@@ -328,6 +329,52 @@ end
 
 # TODO: deprecate this
 _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T = _intersection_point(Planar(), T, (a1, a2), (b1, b2); exact)
+
+#= Spherical edge intersection using great circle arc intersection.
+Converts geographic coordinates to unit spherical points, computes intersection,
+and converts results back to geographic coordinates. =#
+function _intersection_point(::Spherical, ::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T
+    # Default answer for no intersection
+    line_orient = line_out
+    intr1 = ((zero(T), zero(T)), (zero(T), zero(T)))
+    intr2 = intr1
+    no_intr_result = (line_orient, intr1, intr2)
+
+    # Convert to unit spherical points
+    transform = UnitSpherical.UnitSphereFromGeographic()
+    inverse_transform = UnitSpherical.GeographicFromUnitSphere()
+
+    a1_sph = transform(_tuple_point(a1, T))
+    a2_sph = transform(_tuple_point(a2, T))
+    b1_sph = transform(_tuple_point(b1, T))
+    b2_sph = transform(_tuple_point(b2, T))
+
+    # Compute spherical arc intersection
+    result = UnitSpherical.spherical_arc_intersection(a1_sph, a2_sph, b1_sph, b2_sph)
+
+    # Map result type to line orientation
+    if result.type == UnitSpherical.arc_disjoint
+        return no_intr_result
+    elseif result.type == UnitSpherical.arc_cross
+        pt_geo = inverse_transform(result.points[1])
+        α, β = result.fracs[1]
+        intr1 = ((T(pt_geo[1]), T(pt_geo[2])), (T(α), T(β)))
+        return (line_cross, intr1, intr2)
+    elseif result.type == UnitSpherical.arc_hinge
+        pt_geo = inverse_transform(result.points[1])
+        α, β = result.fracs[1]
+        intr1 = ((T(pt_geo[1]), T(pt_geo[2])), (T(α), T(β)))
+        return (line_hinge, intr1, intr2)
+    else  # arc_overlap
+        pt1_geo = inverse_transform(result.points[1])
+        pt2_geo = inverse_transform(result.points[2])
+        α1, β1 = result.fracs[1]
+        α2, β2 = result.fracs[2]
+        intr1 = ((T(pt1_geo[1]), T(pt1_geo[2])), (T(α1), T(β1)))
+        intr2 = ((T(pt2_geo[1]), T(pt2_geo[2])), (T(α2), T(β2)))
+        return (line_over, intr1, intr2)
+    end
+end
 
 #= If lines defined by (a1, a2) and (b1, b2) are collinear, find endpoints of overlapping
 region if they exist. This could result in three possibilities. First, there could be no
