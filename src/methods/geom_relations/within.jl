@@ -60,6 +60,7 @@ const WITHIN_EXACT = (exact = False(),)
 
 """
     within(geom1, geom2)::Bool
+    within(manifold::Manifold, geom1, geom2)::Bool
 
 Return `true` if the first geometry is completely within the second geometry.
 The interiors of both geometries must intersect and the interior and boundary of
@@ -67,6 +68,11 @@ the primary geometry (geom1) must not intersect the exterior of the secondary
 geometry (geom2).
 
 Furthermore, `within` returns the exact opposite result of `contains`.
+
+## Manifold support
+
+- `Planar()`: Uses Cartesian coordinate system (default).
+- `Spherical()`: Uses spherical geometry for point-in-polygon tests.
 
 ## Examples
 ```jldoctest setup=:(using GeometryOps, GeometryBasics)
@@ -80,7 +86,8 @@ GO.within(point, line)
 true
 ```
 """
-within(g1, g2) = _within(trait(g1), g1, trait(g2), g2)
+within(g1, g2) = _within(Planar(), trait(g1), g1, trait(g2), g2)
+within(m::Manifold, g1, g2) = _within(m, trait(g1), g1, trait(g2), g2)
 
 """
     within(g1)
@@ -95,6 +102,7 @@ within(g1) = Base.Fix2(within, g1)
 
 # Point is within another point if those points are equal.
 _within(
+    ::Manifold,
     ::GI.PointTrait, g1,
     ::GI.PointTrait, g2,
 ) = equals(g1, g2)
@@ -102,6 +110,7 @@ _within(
 #= Point is within a linestring if it is on a vertex or an edge of that line,
 excluding the start and end vertex if the line is not closed. =#
 _within(
+    ::Manifold,
     ::GI.PointTrait, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _point_curve_process(
@@ -112,6 +121,7 @@ _within(
 
 # Point is within a linearring if it is on a vertex or an edge of that ring.
 _within(
+    ::Manifold,
     ::GI.PointTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _point_curve_process(
@@ -123,16 +133,19 @@ _within(
 #= Point is within a polygon if it is inside of that polygon, excluding edges,
 vertices, and holes. =#
 _within(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
     g1, g2;
     WITHIN_POINT_ALLOWS...,
     WITHIN_EXACT...,
+    manifold = m,
 )
 
 # No geometries other than points can be within points
 _within(
+    ::Manifold,
     ::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::GI.PointTrait, g2,
 ) = false
@@ -143,6 +156,7 @@ _within(
 #= Linestring is within another linestring if their interiors intersect and no
 points of the first line are in the exterior of the second line. =#
 _within(
+    ::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
@@ -157,6 +171,7 @@ _within(
 #= Linestring is within a linear ring if their interiors intersect and no points
 of the line are in the exterior of the ring. =#
 _within(
+    ::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
@@ -171,6 +186,7 @@ _within(
 #= Linestring is within a polygon if their interiors intersect and no points of
 the line are in the exterior of the polygon, although they can be on an edge. =#
 _within(
+    ::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
@@ -187,6 +203,7 @@ _within(
 #= Linearring is within a linestring if their interiors intersect and no points
 of the ring are in the exterior of the line. =#
 _within(
+    ::Manifold,
     ::GI.LinearRingTrait, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
@@ -201,6 +218,7 @@ _within(
 #= Linearring is within another linearring if their interiors intersect and no
 points of the first ring are in the exterior of the second ring. =#
 _within(
+    ::Manifold,
     ::GI.LinearRingTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
@@ -215,6 +233,7 @@ _within(
 #= Linearring is within a polygon if their interiors intersect and no points of
 the ring are in the exterior of the polygon, although they can be on an edge. =#
 _within(
+    ::Manifold,
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
@@ -228,10 +247,11 @@ _within(
 
 # # Polygons within geometries
 
-#= Polygon is within another polygon if the interior of the first polygon 
+#= Polygon is within another polygon if the interior of the first polygon
 intersects with the interior of the second and no points of the first polygon
 are outside of the second polygon. =#
 _within(
+    ::Manifold,
     ::GI.PolygonTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _polygon_polygon_process(
@@ -243,6 +263,7 @@ _within(
 
 # Polygons cannot be within any curves
 _within(
+    ::Manifold,
     ::GI.PolygonTrait, g1,
     ::GI.AbstractCurveTrait, g2,
 ) = false
@@ -253,6 +274,7 @@ _within(
 #= Geometry is within a multi-geometry or a collection if the geometry is within
 at least one of the collection elements. =#
 function _within(
+    m::Manifold,
     ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
@@ -260,7 +282,7 @@ function _within(
     }, g2,
 )
     for sub_g2 in GI.getgeom(g2)
-        within(g1, sub_g2) && return true
+        within(m, g1, sub_g2) && return true
     end
     return false
 end
@@ -270,6 +292,7 @@ end
 #= Multi-geometry or a geometry collection is within a geometry if all
 elements of the collection are within the geometry. =#
 function _within(
+    m::Manifold,
     ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
@@ -277,7 +300,7 @@ function _within(
     ::GI.AbstractGeometryTrait, g2,
 )
     for sub_g1 in GI.getgeom(g1)
-        !within(sub_g1, g2) && return false
+        !within(m, sub_g1, g2) && return false
     end
     return true
 end

@@ -42,6 +42,7 @@ inputs variables, swapped in order, to within.
 
 """
     contains(g1::AbstractGeometry, g2::AbstractGeometry)::Bool
+    contains(manifold::Manifold, g1::AbstractGeometry, g2::AbstractGeometry)::Bool
 
 Return true if the second geometry is completely contained by the first
 geometry. The interiors of both geometries must intersect and the interior and
@@ -49,6 +50,11 @@ boundary of the secondary (g2) must not intersect the exterior of the first
 (g1).
 
 `contains` returns the exact opposite result of `within`.
+
+## Manifold support
+
+- `Planar()`: Uses Cartesian coordinate system (default).
+- `Spherical()`: Uses spherical geometry for point-in-polygon tests.
 
 ## Examples
 
@@ -63,6 +69,7 @@ true
 ```
 """
 contains(g1, g2) = GeometryOps.within(g2, g1)
+contains(m::Manifold, g1, g2) = GeometryOps.within(m, g2, g1)
 
 """
     contains(g1)

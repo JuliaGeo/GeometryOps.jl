@@ -58,11 +58,17 @@ const TOUCHES_EXACT = (exact = False(),)
 
 """
     touches(geom1, geom2)::Bool
+    touches(manifold::Manifold, geom1, geom2)::Bool
 
 Return `true` if the first geometry touches the second geometry. In other words,
 the two interiors cannot interact, but one of the geometries must have a
 boundary point that interacts with either the other geometry's interior or
 boundary.
+
+## Manifold support
+
+- `Planar()`: Uses Cartesian coordinate system (default).
+- `Spherical()`: Uses spherical geometry for point-in-polygon tests.
 
 ## Examples
 ```jldoctest setup=:(using GeometryOps, GeometryBasics)
@@ -76,7 +82,8 @@ GO.touches(l1, l2)
 true
 ```
 """
-touches(g1, g2)::Bool = _touches(trait(g1), g1, trait(g2), g2)
+touches(g1, g2)::Bool = _touches(Planar(), trait(g1), g1, trait(g2), g2)
+touches(m::Manifold, g1, g2)::Bool = _touches(m, trait(g1), g1, trait(g2), g2)
 
 """
     touches(g1)
@@ -90,12 +97,14 @@ touches(g1) = Base.Fix2(touches, g1)
 
 # Point cannot touch another point as if they are equal, interiors interact
 _touches(
+    ::Manifold,
     ::GI.PointTrait, g1,
     ::GI.PointTrait, g2,
 ) = false
 
 # Point touches a linestring if it equal to the first of last point of the line
 function _touches(
+    ::Manifold,
     ::GI.PointTrait, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 )
@@ -108,25 +117,29 @@ end
 
 # Point cannot 'touch' a linearring given that the ring has no boundary points
 _touches(
+    ::Manifold,
     ::GI.PointTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = false
 
 # Point touches a polygon if it is on the boundary of that polygon
 _touches(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
     g1, g2;
     TOUCHES_POINT_ALLOWED...,
     TOUCHES_EXACT...,
+    manifold = m,
 )
 
 #= Geometry touches a point if the point is on the geometry boundary. =#
 _touches(
+    m::Manifold,
     trait1::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     trait2::GI.PointTrait, g2,
-) = _touches(trait2, g2, trait1, g1)
+) = _touches(m, trait2, g2, trait1, g1)
 
 
 # # Lines touching geometries
@@ -134,6 +147,7 @@ _touches(
 #= Linestring touches another line if at least one boundary point interacts with
 the boundary of interior of the other line, but the interiors don't interact. =#
 _touches(
+    ::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
@@ -149,6 +163,7 @@ _touches(
 #= Linestring touches a linearring if at least one of the boundary points of the
 line interacts with the linear ring, but their interiors can't interact. =#
 _touches(
+    ::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
@@ -163,6 +178,7 @@ _touches(
 #= Linestring touches a polygon if at least one of the boundary points of the
 line interacts with the boundary of the polygon. =#
 _touches(
+    ::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
@@ -179,13 +195,15 @@ _touches(
 #= Linearring touches a linestring if at least one of the boundary points of the
 line interacts with the linear ring, but their interiors can't interact. =#
 _touches(
+    m::Manifold,
     trait1::GI.LinearRingTrait, g1,
     trait2::Union{GI.LineTrait, GI.LineStringTrait}, g2,
-) = _touches(trait2, g2, trait1, g1)
+) = _touches(m, trait2, g2, trait1, g1)
 
 #= Linearring cannot touch another linear ring since they are both exclusively
 made up of interior points and no boundary points =#
 _touches(
+    ::Manifold,
     ::GI.LinearRingTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = false
@@ -193,6 +211,7 @@ _touches(
 #= Linearring touches a polygon if at least one of the points of the ring
 interact with the polygon boundary and non are in the polygon interior. =#
 _touches(
+    ::Manifold,
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
@@ -209,14 +228,16 @@ _touches(
 #= Polygon touches a curve if at least one of the curve boundary points interacts
 with the polygon's boundary and no curve points interact with the interior.=#
 _touches(
+    m::Manifold,
     trait1::GI.PolygonTrait, g1,
     trait2::GI.AbstractCurveTrait, g2
-) = _touches(trait2, g2, trait1, g1)
+) = _touches(m, trait2, g2, trait1, g1)
 
 
 #= Polygon touches another polygon if they share at least one boundary point and
 no interior points. =#
 _touches(
+    ::Manifold,
     ::GI.PolygonTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _polygon_polygon_process(
@@ -252,6 +273,7 @@ That's a project for later though.  Right now we need to get this correct, so I'
 
 =#
 function _touches(
+    m::Manifold,
     ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
@@ -260,9 +282,9 @@ function _touches(
 )
     has_touched = false
     for sub_g2 in GI.getgeom(g2)
-        if touches(g1, sub_g2)
+        if touches(m, g1, sub_g2)
             has_touched = true
-        else 
+        else
             # if not touching, they are either intersecting or disjoint
             # if disjoint, then we can continue
             # else, we can short circuit, since the geoms are not touching and not disjoint
@@ -278,6 +300,7 @@ end
 #= Multi-geometry or a geometry collection touches a geometry if at least one
 elements of the collection touches the geometry. =#
 function _touches(
+    m::Manifold,
     ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
@@ -286,9 +309,9 @@ function _touches(
 )
     has_touched = false
     for sub_g1 in GI.getgeom(g1)
-        if touches(sub_g1, g2)
+        if touches(m, sub_g1, g2)
             has_touched = true
-        else 
+        else
             # if not touching, they are either intersecting or disjoint
             # if disjoint, then we can continue
             # else, we can short circuit, since the geoms are not touching and not disjoint
