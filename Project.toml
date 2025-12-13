@@ -85,3 +85,6 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "Downloads", "FlexiJoins", "GeoJSON", "GeometryBasics", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "NaturalEarth", "OffsetArrays", "Polylabel", "SafeTestsets", "Shapefile", "TGGeometry", "Test"]
+
+[workspace]
+projects = ["GeometryOpsCore", "test", "docs"]
