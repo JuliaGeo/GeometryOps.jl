@@ -244,3 +244,37 @@ end
     # if the polygon is large enoughs
     @test_throws "The polygons are contained in the exception object" throw(GO.TracingError(message, poly_a_large, poly_b_large, GO.PolyNode{Float64}[], GO.PolyNode{Float64}[], Int[]))
 end
+
+@testset "Spherical polygon clipping pipeline" begin
+    # Test that the spherical clipping pipeline runs without error
+    # Note: Full spherical clipping requires additional work on the tracing algorithm
+    # to properly handle spherical geometry. Currently, intersection point detection
+    # works correctly but polygon tracing still uses planar assumptions.
+
+    # Two overlapping squares on the sphere (small enough to be well-behaved)
+    poly1 = GI.Polygon([[
+        (-10.0, -10.0), (10.0, -10.0), (10.0, 10.0), (-10.0, 10.0), (-10.0, -10.0)
+    ]])
+    poly2 = GI.Polygon([[
+        (0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0), (0.0, 0.0)
+    ]])
+
+    # Verify the pipeline runs without throwing
+    result = @test_nowarn GO.intersection(GO.Spherical(), poly1, poly2; target=GI.PolygonTrait())
+    @test result isa Vector
+
+    # Verify intersection_points works correctly with Spherical manifold
+    # This is the part that's fully implemented
+    line1 = GI.LineString([(-10.0, 0.0), (10.0, 0.0)])
+    line2 = GI.LineString([(0.0, -10.0), (0.0, 10.0)])
+    pts = GO.intersection_points(GO.Spherical(), line1, line2)
+    @test length(pts) == 1
+    @test isapprox(pts[1][1], 0.0, atol=1e-6)
+    @test isapprox(pts[1][2], 0.0, atol=1e-6)
+
+    # Test that spherical area function works on results
+    if !isempty(result)
+        area_result = @test_nowarn GO.area(GO.Spherical(), result[1])
+        @test area_result isa Number
+    end
+end
