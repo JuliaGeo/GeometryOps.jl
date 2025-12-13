@@ -235,14 +235,18 @@ end
 
     poly_a_large, poly_b_large = GO.segmentize.((poly_a_small, poly_b_small), max_distance = 0.001)
 
+    # PolyNode now has two type parameters: {T, P} where P is the point type
+    PT = Tuple{Float64, Float64}
+    empty_nodes = GO.PolyNode{Float64, PT}[]
+
     # Test that the message is contained in the exception
-    @test_throws "Test tracing error" throw(GO.TracingError(message, poly_a_small, poly_b_small, GO.PolyNode{Float64}[], GO.PolyNode{Float64}[], Int[]))
+    @test_throws "Test tracing error" throw(GO.TracingError(message, poly_a_small, poly_b_small, empty_nodes, empty_nodes, Int[]))
     # Test that the coordinates of the polygons are contained in the exception,
     # if the polygon is small enough
-    @test_throws "$(GI.coordinates(poly_a_small))" throw(GO.TracingError(message, poly_a_small, poly_b_small, GO.PolyNode{Float64}[], GO.PolyNode{Float64}[], Int[]))
+    @test_throws "$(GI.coordinates(poly_a_small))" throw(GO.TracingError(message, poly_a_small, poly_b_small, empty_nodes, empty_nodes, Int[]))
     # Test that the coordinates of the polygons are not contained in the exception,
     # if the polygon is large enoughs
-    @test_throws "The polygons are contained in the exception object" throw(GO.TracingError(message, poly_a_large, poly_b_large, GO.PolyNode{Float64}[], GO.PolyNode{Float64}[], Int[]))
+    @test_throws "The polygons are contained in the exception object" throw(GO.TracingError(message, poly_a_large, poly_b_large, empty_nodes, empty_nodes, Int[]))
 end
 
 @testset "Spherical polygon clipping pipeline" begin
@@ -269,8 +273,12 @@ end
     line2 = GI.LineString([(0.0, -10.0), (0.0, 10.0)])
     pts = GO.intersection_points(GO.Spherical(), line1, line2)
     @test length(pts) == 1
-    @test isapprox(pts[1][1], 0.0, atol=1e-6)
-    @test isapprox(pts[1][2], 0.0, atol=1e-6)
+    @test pts[1] isa GO.UnitSpherical.UnitSphericalPoint
+    # Convert to geographic to check longitude/latitude
+    to_geo = GO.UnitSpherical.GeographicFromUnitSphere()
+    geo = to_geo(pts[1])
+    @test isapprox(geo[1], 0.0, atol=1e-6)  # longitude
+    @test isapprox(geo[2], 0.0, atol=1e-6)  # latitude
 
     # Test that spherical area function works on results
     if !isempty(result)

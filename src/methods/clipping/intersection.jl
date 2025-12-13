@@ -86,13 +86,13 @@ function _intersection(
     if isempty(polys) # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            # Use the converted points from a_list to maintain point type consistency
-            ring_pts = [node.point for node in a_list if !node.inter]
+            # Convert original ring using manifold-appropriate point converter
+            ring_pts = _convert_ring_points(alg.manifold, T, ext_a)
             ring = GI.LinearRing{false, false}(ring_pts)
             push!(polys, GI.Polygon{false, false}([ring]))
         elseif b_in_a
-            # Use the converted points from b_list to maintain point type consistency
-            ring_pts = [node.point for node in b_list if !node.inter]
+            # Convert original ring using manifold-appropriate point converter
+            ring_pts = _convert_ring_points(alg.manifold, T, ext_b)
             ring = GI.LinearRing{false, false}(ring_pts)
             push!(polys, GI.Polygon{false, false}([ring]))
         end
@@ -234,6 +234,18 @@ function intersection_points(m::Manifold, a::IntersectionAccelerator, geom_a, ge
     return _intersection_points(m, a, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
+# Helper function to convert ring points using manifold-appropriate point converter
+function _convert_ring_points(manifold::Planar, ::Type{T}, ring) where T
+    # For planar, just convert to tuples - tuples() returns a LinearRing, we need points
+    return collect(GI.getpoint(tuples(ring, T)))
+end
+
+function _convert_ring_points(manifold::Spherical, ::Type{T}, ring) where T
+    # For spherical, convert to unit spherical points
+    transform = UnitSpherical.UnitSphereFromGeographic()
+    return [transform(pt) for pt in GI.getpoint(ring)]
+end
+
 
 #= Calculates the list of intersection points between two geometries, including line
 segments, line strings, linear rings, polygons, and multipolygons. =#
@@ -351,10 +363,10 @@ function _intersection_point(::Spherical, ::Type{T}, (a1, a2)::Edge, (b1, b2)::E
     # Convert to unit spherical points
     transform = UnitSpherical.UnitSphereFromGeographic()
 
-    a1_sph = transform(_tuple_point(a1, T))
-    a2_sph = transform(_tuple_point(a2, T))
-    b1_sph = transform(_tuple_point(b1, T))
-    b2_sph = transform(_tuple_point(b2, T))
+    a1_sph = transform(a1)
+    a2_sph = transform(a2)
+    b1_sph = transform(b1)
+    b2_sph = transform(b2)
 
     # Compute spherical arc intersection
     result = UnitSpherical.spherical_arc_intersection(a1_sph, a2_sph, b1_sph, b2_sph)
