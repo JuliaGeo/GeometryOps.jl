@@ -8,6 +8,7 @@ include("helpers.jl")
     @safetestset "Algorithm" begin include("core/algorithm.jl") end
     @safetestset "Manifold" begin include("core/manifold.jl") end
     @safetestset "Applicators" begin include("core/applicators.jl") end
+    @safetestset "Geometry Utils" begin include("core/geometry_utils.jl") end
 end
 
 @safetestset "Types" begin include("types.jl") end
