@@ -937,11 +937,12 @@ A list of GeoInterface polygons is returned from this function.
 Note: `poly_a` and `poly_b` are temporary inputs used for debugging and can be removed
 eventually.
 =#
-function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T, M, A}
+function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b; crs = mutual_crs(poly_a, poly_b)) where {T, M, A}
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
-    return_polys = Vector{_get_poly_type(T)}(undef, 0)
+
+    return_polys = Vector{_get_poly_type(T, crs)}(undef, 0)
     # Keep track of number of processed intersection points
     visited_pts = 0
     processed_pts = 0
@@ -996,15 +997,16 @@ function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b
             idx = curr.neighbor
             curr = curr_list[idx]
         end
-        push!(return_polys, GI.Polygon([pt_list]))
+        push!(return_polys, GI.Polygon([GI.LinearRing(pt_list; crs)]; crs))
     end
     return return_polys
 end
 
 # Get type of polygons that will be made
 # TODO: Increase type options
-_get_poly_type(::Type{T}) where T =
-    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
+function _get_poly_type(::Type{T}, crs::CRST = nothing) where {T, CRST}
+    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, CRST}}, Nothing, CRST}
+end
 
 #=
     _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)

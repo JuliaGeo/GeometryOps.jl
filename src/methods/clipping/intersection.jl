@@ -80,15 +80,17 @@ function _intersection(
     # First we get the exteriors of 'poly_a' and 'poly_b'
     ext_a = GI.getexterior(poly_a)
     ext_b = GI.getexterior(poly_b)
+
+    crs = mutual_crs(poly_a, poly_b)
     # Then we find the intersection of the exteriors
     a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact)
-    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b)
+    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b; crs)
     if isempty(polys) # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([tuples(ext_a)]))
+            push!(polys, GI.Polygon([_linearring(tuples(ext_a; crs))]; crs))
         elseif b_in_a
-            push!(polys, GI.Polygon([tuples(ext_b)]))
+            push!(polys, GI.Polygon([_linearring(tuples(ext_b; crs))]; crs))
         end
     end
     remove_idx = falses(length(polys))
@@ -130,7 +132,8 @@ function _intersection(
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
         multipoly_b = fix_multipoly(multipoly_b)
     end
-    polys = Vector{_get_poly_type(T)}()
+    crs = mutual_crs(poly_a, multipoly_b)
+    polys = Vector{_get_poly_type(T, crs)}()
     for poly_b in GI.getpolygon(multipoly_b)
         append!(polys, intersection(alg, poly_a, poly_b; target))
     end
@@ -163,7 +166,8 @@ function _intersection(
         multipoly_b = fix_multipoly(multipoly_b)
         fix_multipoly = nothing
     end
-    polys = Vector{_get_poly_type(T)}()
+    crs = mutual_crs(multipoly_a, multipoly_b)
+    polys = Vector{_get_poly_type(T, crs)}()
     for poly_a in GI.getpolygon(multipoly_a)
         append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly))
     end
