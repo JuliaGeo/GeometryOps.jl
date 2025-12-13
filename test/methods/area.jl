@@ -202,3 +202,77 @@ end
     line = GI.LineString([(0.0, 0.0), (1.0, 1.0)])
     @test GO.area(spherical, line) == 0.0
 end
+
+@testset "Spherical area integration tests" begin
+    @testset "Known spherical areas" begin
+        # Test 1: Octant (1/8 of sphere) = 4πR²/8 = πR²/2
+        octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+        R = GO.Spherical().radius
+        @test GO.area(GO.Spherical(), octant) ≈ (π/2) * R^2 rtol=1e-8
+
+        # Test 2: Very small polygon (should be positive and small)
+        # At equator, 1° ≈ 111km, so 0.01° ≈ 1.1km
+        tiny = GI.Polygon([[
+            (0.0, 0.0), (0.01, 0.0), (0.01, 0.01), (0.0, 0.01), (0.0, 0.0)
+        ]])
+        tiny_spherical = GO.area(GO.Spherical(radius=1.0), tiny)
+        # In radians: 0.01° = 0.01 * π/180 ≈ 1.745e-4 rad
+        # Planar approx: (1.745e-4)² ≈ 3e-8 on unit sphere
+        @test tiny_spherical > 0
+        @test tiny_spherical < 1e-6  # Should be very small
+    end
+
+    @testset "Spherical vs Planar comparison" begin
+        # High latitude polygon should have different spherical vs planar area
+        highlat = GI.Polygon([[(70.0, 70.0), (80.0, 70.0), (80.0, 80.0), (70.0, 80.0), (70.0, 70.0)]])
+
+        planar_area = GO.area(GO.Planar(), highlat)
+        spherical_area = GO.area(GO.Spherical(), highlat)
+
+        # Spherical area should be different from planar (in degrees²)
+        # Spherical returns m², planar returns degrees²
+        @test planar_area != spherical_area
+    end
+
+    @testset "MultiPolygon spherical area" begin
+        poly1 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+        poly2 = GI.Polygon([[(10.0, 10.0), (11.0, 10.0), (11.0, 11.0), (10.0, 11.0), (10.0, 10.0)]])
+        mpoly = GI.MultiPolygon([poly1, poly2])
+
+        area1 = GO.area(GO.Spherical(), poly1)
+        area2 = GO.area(GO.Spherical(), poly2)
+        multi_area = GO.area(GO.Spherical(), mpoly)
+
+        @test multi_area ≈ area1 + area2 rtol=1e-10
+    end
+
+    @testset "Empty geometry spherical area" begin
+        # Use LibGEOS to create empty polygon (GeoInterface.Polygon doesn't support empty rings)
+        empty_poly = LG.readgeom("POLYGON EMPTY")
+        @test GO.area(GO.Spherical(), empty_poly) == 0.0
+    end
+
+    @testset "Custom radius" begin
+        # Mars radius approximately
+        mars_radius = 3389.5e3  # meters
+        mars = GO.Spherical(radius=mars_radius)
+
+        octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+        mars_area = GO.area(mars, octant)
+
+        @test mars_area ≈ (π/2) * mars_radius^2 rtol=1e-8
+    end
+
+    @testset "area(GirardSphericalArea(), geom) direct call" begin
+        octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+
+        # Direct algorithm call should use default Spherical manifold
+        alg = GO.GirardSphericalArea()
+        R = GO.Spherical().radius
+
+        expected_area = (π/2) * R^2
+        computed_area = GO.area(alg, octant)
+
+        @test computed_area ≈ expected_area rtol=1e-10
+    end
+end
