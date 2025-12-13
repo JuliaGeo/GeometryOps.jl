@@ -1,7 +1,7 @@
 name = "GeometryOps"
 uuid = "3251bfac-6a57-4b6d-aa61-ac1fef2975ab"
 authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "Rafael Schouten <rafaelschouten@gmail.com>", "Skylar Gering <skygering@gmail.com>", "and contributors"]
-version = "0.1.31"
+version = "0.1.32"
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
@@ -49,7 +49,7 @@ FlexiJoins = "0.1.30"
 GeoFormatTypes = "0.4"
 GeoInterface = "1.2"
 GeometryBasics = "0.4.7, 0.5"
-GeometryOpsCore = "=0.1.7"
+GeometryOpsCore = "=0.1.8"
 LibGEOS = "0.9.2"
 LinearAlgebra = "1"
 Proj = "1"
@@ -86,6 +86,9 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "Downloads", "FlexiJoins", "GeoJSON", "GeometryBasics", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "NaturalEarth", "OffsetArrays", "Polylabel", "SafeTestsets", "Shapefile", "TGGeometry", "Test"]
+
+[sources]
+GeometryOpsCore = { path = "GeometryOpsCore" }
 
 [workspace]
 projects = ["GeometryOpsCore", "test", "docs"]
