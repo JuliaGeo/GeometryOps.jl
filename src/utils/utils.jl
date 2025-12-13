@@ -299,27 +299,33 @@ _geometry_or_error(g::Extents.Extent; kw...) = g
 """
     mutual_crs(a, b)
 
-Return the CRS of `a` if it is the same as `b`, or `nothing` if they are not the same.
+Return the mutual CRS of `a` and `b`, or error if they have different non-nothing CRSes.
 
-This is tolerant of `nothing` values in one of a or b, it assumes that they are the same crs.
+This is tolerant of `nothing` values in one of a or b, assuming they share the same CRS.
 """
 function mutual_crs(a, b)
-    if GI.crs(a) == GI.crs(b)
-        return GI.crs(a)
-    elseif isnothing(GI.crs(a)) && !isnothing(GI.crs(b))
-        return GI.crs(b)
-    elseif !isnothing(GI.crs(a)) && isnothing(GI.crs(b))
-        return GI.crs(a)
+    crs_a = GI.crs(a)
+    crs_b = GI.crs(b)
+    # Handle nothing cases first - compiler will optimize these away
+    if isnothing(crs_a) && isnothing(crs_b)
+        return nothing
+    elseif isnothing(crs_a)
+        return crs_b
+    elseif isnothing(crs_b)
+        return crs_a
+    # Now the real check - both are non-nothing
+    elseif crs_a == crs_b
+        return crs_a
     else
         error("""
-        Cannot perform clipping operation on two geometries with different CRS! 
-        
+        Cannot perform clipping operation on two geometries with different CRS!
+
         Either pass an explicit `crs` keyword to the toplevel function you called (`intersection, difference, union`) or make sure the geometries you're clipping have the same crs.
-        
+
         Got the CRSes:
-        $(GI.crs(a))
+        $(crs_a)
         and
-        $(GI.crs(b))
+        $(crs_b)
         """)
     end
 end
