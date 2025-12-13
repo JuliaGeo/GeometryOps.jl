@@ -672,7 +672,7 @@ function _classify_crossing!(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list
             a_next_is_b_prev = a_next.inter && equals(a_next, b_prev)
             a_next_is_b_next = a_next.inter && equals(a_next, b_next)
             # determine which side of a segments the p points are on
-            b_prev_side, b_next_side = _get_sides(#=TODO: alg.manifold, =#b_prev, b_next, a_prev, curr_pt, a_next,
+            b_prev_side, b_next_side = _get_sides(alg.manifold, b_prev, b_next, a_prev, curr_pt, a_next,
                 i, j, a_list, b_list; exact)
             # no sides overlap
             if !a_prev_is_b_prev && !a_prev_is_b_next && !a_next_is_b_prev && !a_next_is_b_next
@@ -750,15 +750,40 @@ end
 # Check if PolyNode is a vertex of original polygon
 _is_vertex(pt) = !pt.inter || pt.fracs[1] == 0 || pt.fracs[1] == 1 || pt.fracs[2] == 0 || pt.fracs[2] == 1
 
+# Helper function to compute midpoint between two points
+_midpoint(::Planar, p1, p2) = (p1 .+ p2) ./ 2
+
+function _midpoint(::Spherical, p1::Tuple{T, T}, p2::Tuple{T, T}) where T
+    # Convert to unit spherical points, use slerp at t=0.5, convert back
+    transform_to = UnitSpherical.UnitSphereFromGeographic()
+    transform_from = UnitSpherical.GeographicFromUnitSphere()
+    p1_sph = transform_to(p1)
+    p2_sph = transform_to(p2)
+    mid_sph = UnitSpherical.slerp(p1_sph, p2_sph, 0.5)
+    return transform_from(mid_sph)
+end
+
+# Helper function to check if three points are collinear
+_is_collinear(::Planar, p1, p2, p3; exact) = Predicates.orient(p1, p2, p3; exact) == 0
+
+function _is_collinear(::Spherical, p1, p2, p3; exact)
+    # Convert to unit spherical points and use spherical_orient
+    transform = UnitSpherical.UnitSphereFromGeographic()
+    p1_sph = transform(p1)
+    p2_sph = transform(p2)
+    p3_sph = transform(p3)
+    return UnitSpherical.spherical_orient(p1_sph, p2_sph, p3_sph) == 0
+end
+
 #= Determines which side (right or left) of the segment a_prev-curr_pt-a_next the points
 b_prev and b_next are on. Given this is only called when curr_pt is an intersection point
 that wasn't initially classified as crossing, we know that curr_pt is either from a hinge or
 overlapping intersection and thus is an original vertex of either poly_a or poly_b. Due to
-floating point error when calculating new intersection points, we only want to use original 
+floating point error when calculating new intersection points, we only want to use original
 vertices to determine orientation. Thus, for other points, find nearest point that is a
 vertex. Given other intersection points will be collinear along existing segments, this
 won't change the orientation. =#
-function _get_sides(b_prev, b_next, a_prev, curr_pt, a_next, i, j, a_list, b_list; exact)
+function _get_sides(m::M, b_prev, b_next, a_prev, curr_pt, a_next, i, j, a_list, b_list; exact) where {M <: Manifold}
     b_prev_pt = if _is_vertex(b_prev)
         b_prev.point
     else  # Find original start point of segment formed by b_prev and curr_pt
@@ -788,16 +813,37 @@ function _get_sides(b_prev, b_next, a_prev, curr_pt, a_next, i, j, a_list, b_lis
         a_list[next_idx].point
     end
     # Determine side orientation of b_prev and b_next
-    b_prev_side = _get_side(b_prev_pt, a_prev_pt, curr_pt.point, a_next_pt; exact)
-    b_next_side = _get_side(b_next_pt, a_prev_pt, curr_pt.point, a_next_pt; exact)
+    b_prev_side = _get_side(m, b_prev_pt, a_prev_pt, curr_pt.point, a_next_pt; exact)
+    b_next_side = _get_side(m, b_next_pt, a_prev_pt, curr_pt.point, a_next_pt; exact)
     return b_prev_side, b_next_side
 end
 
 # Determines if Q lies to the left or right of the line formed by P1-P2-P3
-function _get_side(Q, P1, P2, P3; exact)
+function _get_side(::Planar, Q, P1, P2, P3; exact)
     s1 = Predicates.orient(Q, P1, P2; exact)
     s2 = Predicates.orient(Q, P2, P3; exact)
     s3 = Predicates.orient(P1, P2, P3; exact)
+
+    side = if s3 ≥ 0
+        (s1 < 0) || (s2 < 0) ? right : left
+    else #  s3 < 0
+        (s1 > 0) || (s2 > 0) ? left : right
+    end
+    return side
+end
+
+# Spherical version using spherical_orient
+function _get_side(::Spherical, Q, P1, P2, P3; exact)
+    # Convert to unit spherical points
+    transform = UnitSpherical.UnitSphereFromGeographic()
+    Q_sph = transform(Q)
+    P1_sph = transform(P1)
+    P2_sph = transform(P2)
+    P3_sph = transform(P3)
+
+    s1 = UnitSpherical.spherical_orient(Q_sph, P1_sph, P2_sph)
+    s2 = UnitSpherical.spherical_orient(Q_sph, P2_sph, P3_sph)
+    s3 = UnitSpherical.spherical_orient(P1_sph, P2_sph, P3_sph)
 
     side = if s3 ≥ 0
         (s1 < 0) || (s2 < 0) ? right : left
@@ -824,7 +870,7 @@ function _pt_off_edge_status(alg::FosterHormannClipping{M, A}, ::Type{T}, pt_lis
     start_pt = if is_non_intr_pt
         pt_list[start_idx].point
     else
-        (pt_list[start_idx].point .+ pt_list[next_idx].point) ./ 2
+        _midpoint(alg.manifold, pt_list[start_idx].point, pt_list[next_idx].point)
     end
     start_status = !_point_filled_curve_orientation(alg.manifold, start_pt, poly; in = true, on = false, out = false, exact)
     return next_idx, start_status
@@ -874,7 +920,7 @@ function _flag_ent_exit!(alg::FosterHormannClipping{M, A}, ::Type{T}, ::GI.Linea
                     start_crossing, end_crossing = delay_cross_f(status)
                 else  # delayed bouncing
                     next_idx = ii < npts ? (ii + 1) : 1
-                    next_val = (curr_pt.point .+ pt_list[next_idx].point) ./ 2
+                    next_val = _midpoint(alg.manifold, curr_pt.point, pt_list[next_idx].point)
                     pt_in_poly = _point_filled_curve_orientation(alg.manifold, next_val, poly; in = true, on = false, out = false, exact)
                     #= start and end crossing status are the same and depend on if adjacent
                     edges of pt_list are within poly =#
@@ -904,7 +950,7 @@ returns false. Used for cutting polygons by lines.
 Assumes that the first point is outside of the polygon and not on an edge.
 =#
 function _flag_ent_exit!(alg::FosterHormannClipping{M, A}, ::GI.LineTrait, poly, pt_list; exact) where {M, A}
-    status = !_point_filled_curve_orientation(#=TODO: alg.manifold=#pt_list[1].point, poly; in = true, on = false, out = false, exact)
+    status = !_point_filled_curve_orientation(alg.manifold, pt_list[1].point, poly; in = true, on = false, out = false, exact)
     # Loop over points and mark entry and exit status
     for (ii, curr_pt) in enumerate(pt_list)
         if curr_pt.crossing
@@ -1030,9 +1076,9 @@ function _find_non_cross_orientation(m::M, a_list, b_list, a_poly, b_poly; exact
     #= Determine if non-intersection point is in or outside of polygon - if there isn't A
     non-intersection point, then all points are on the polygon edge =#
     a_pt_orient = isnothing(non_intr_a_idx) ? point_on :
-        _point_filled_curve_orientation(a_list[non_intr_a_idx].point, b_poly; exact)
+        _point_filled_curve_orientation(m, a_list[non_intr_a_idx].point, b_poly; exact)
     b_pt_orient = isnothing(non_intr_b_idx) ? point_on :
-        _point_filled_curve_orientation(b_list[non_intr_b_idx].point, a_poly; exact)
+        _point_filled_curve_orientation(m, b_list[non_intr_b_idx].point, a_poly; exact)
     a_in_b = a_pt_orient != point_out && b_pt_orient != point_in
     b_in_a = b_pt_orient != point_out && a_pt_orient != point_in
     return a_in_b, b_in_a
@@ -1061,7 +1107,8 @@ function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, retur
                 curr_poly = return_polys[j]
                 remove_poly_idx[j] && continue
                 curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
-                in_ext, on_ext, out_ext = _line_polygon_interactions(#=TODO: alg.manifold=#curr_hole, curr_poly_ext; exact, closed_line = true)
+                # TODO: _line_polygon_interactions needs manifold support - tracked separately
+                in_ext, on_ext, out_ext = _line_polygon_interactions(curr_hole, curr_poly_ext; exact, closed_line = true)
                 if in_ext  # hole is at least partially within the polygon's exterior
                     new_hole, new_hole_poly, n_new_pieces = _combine_holes!(alg, T, curr_hole, curr_poly, return_polys, remove_hole_idx)
                     if n_new_pieces > 0
@@ -1083,7 +1130,8 @@ function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, retur
                         end
                     end
                 # polygon is completely within hole
-                elseif coveredby(#=TODO: alg.manifold=#curr_poly_ext, GI.Polygon(StaticArrays.SVector(curr_hole)))
+                # TODO: coveredby needs manifold support - tracked separately
+                elseif coveredby(curr_poly_ext, GI.Polygon(StaticArrays.SVector(curr_hole)))
                     remove_poly_idx[j] = true
                 end
             end
@@ -1115,7 +1163,8 @@ function _combine_holes!(alg::FosterHormannClipping{M, A}, ::Type{T}, new_hole, 
     # Combine any existing holes in curr_poly with new hole
     for (k, old_hole) in enumerate(GI.gethole(curr_poly))
         old_hole_poly = GI.Polygon(StaticArrays.SVector(old_hole))
-        if intersects(#=TODO: alg.manifold=#new_hole_poly, old_hole_poly)
+        # TODO: intersects needs manifold support - tracked separately
+        if intersects(new_hole_poly, old_hole_poly)
             # If the holes intersect, combine them into a bigger hole
             hole_union = union(alg, new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait())[1]
             push!(remove_hole_idx, k + 1)
@@ -1164,15 +1213,14 @@ function _remove_collinear_points!(alg::FosterHormannClipping{M, A}, polys, remo
                 else
                     p3 = p
                     # check if p2 is approximately on the edge formed by p1 and p3 - remove if so
-                    # TODO: make this manifold aware
-                    if Predicates.orient(p1, p2, p3; exact = False()) == 0
+                    if _is_collinear(alg.manifold, p1, p2, p3; exact = False())
                         remove_idx[i - 1] = true
                     end
                 end
                 p1, p2 = p2, p3
             end
-            # Check if the first point (which is repeated as the last point) is needed 
-            if Predicates.orient(ring.geom[end - 1], ring.geom[1], ring.geom[2]; exact = False()) == 0
+            # Check if the first point (which is repeated as the last point) is needed
+            if _is_collinear(alg.manifold, ring.geom[end - 1], ring.geom[1], ring.geom[2]; exact = False())
                 remove_idx[1], remove_idx[end] = true, true
             end
             # Remove unneeded collinear points
