@@ -94,6 +94,10 @@ const SphericalPolyNode{T} = PolyNode{T, UnitSpherical.UnitSphericalPoint{T}}
 point_type(::Planar, ::Type{T}) where T = Tuple{T,T}
 point_type(::Spherical, ::Type{T}) where T = UnitSpherical.UnitSphericalPoint{T}
 
+# Helper to get point converter for a manifold
+_get_point_converter(::Planar, ::Type{T}) where T = identity  # tuples stay as-is
+_get_point_converter(::Spherical, ::Type{T}) where T = UnitSpherical.UnitSphereFromGeographic()
+
 #= Create a new node with all of the same field values as the given PolyNode unless
 alternative values are provided, in which case those should be used. =#
 PolyNode(node::PolyNode{T,P};
@@ -477,15 +481,20 @@ index i of a_idx_list is the location in a_list where the ith intersection point
 =#
 function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly_b; exact) where {T, M, A}
     n_a_edges = _nedge(poly_a)
-    a_list = PlanarPolyNode{T}[]  # list of points in poly_a
+    # Choose point type based on manifold
+    PT = point_type(alg.manifold, T)
+    a_list = PolyNode{T, PT}[]  # list of points in poly_a
     sizehint!(a_list, n_a_edges)
     a_idx_list = Vector{Int}()  # finds indices of intersection points in a_list
     local a_count::Int = 0  # number of points added to a_list
     local n_b_intrs::Int = 0
     local prev_counter::Int = 0
 
+    # Convert points to appropriate type for manifold
+    convert_point = _get_point_converter(alg.manifold, T)
+
     function on_each_a(a_pt, i)
-        new_point = PlanarPolyNode{T}(;point = a_pt)
+        new_point = PolyNode{T, PT}(;point = convert_point(a_pt))
         a_count += 1
         push!(a_list, new_point)
         prev_counter = a_count
@@ -512,7 +521,7 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
         if line_orient != line_out  # edges intersect
             if line_orient == line_cross  # Intersection point that isn't a vertex
                 int_pt, fracs = intr1
-                new_intr = PlanarPolyNode{T}(;
+                new_intr = PolyNode{T, PT}(;
                     point = int_pt, inter = true, neighbor = j, # j is now equivalent to old j-1
                     crossing = true, fracs = fracs,
                 )
@@ -521,34 +530,36 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                 push!(a_list, new_intr)
                 push!(a_idx_list, a_count)
             else
-                (_, (α1, β1)) = intr1
+                (int_pt1, (α1, β1)) = intr1
                 # Determine if a1 or b1 should be added to a_list
                 add_a1 = α1 == 0 && 0 ≤ β1 < 1
                 a1_β = add_a1 ? β1 : zero(T)
                 add_b1 = β1 == 0 && 0 < α1 < 1
                 b1_α = add_b1 ? α1 : zero(T)
+                b1_pt = int_pt1  # store the intersection point (may be from b)
                 # If lines are collinear and overlapping, a second intersection exists
                 if line_orient == line_over
-                    (_, (α2, β2)) = intr2
+                    (int_pt2, (α2, β2)) = intr2
                     if α2 == 0 && 0 ≤ β2 < 1
                         add_a1, a1_β = true, β2
                     end
                     if β2 == 0 && 0 < α2 < 1
                         add_b1, b1_α = true, α2
+                        b1_pt = int_pt2
                     end
                 end
                 # Add intersection points determined above
                 if add_a1
                     n_b_intrs += a1_β == 0 ? 0 : 1
-                    a_list[prev_counter] = PlanarPolyNode{T}(;
-                        point = a_pt1, inter = true, neighbor = j,
+                    a_list[prev_counter] = PolyNode{T, PT}(;
+                        point = convert_point(a_pt1), inter = true, neighbor = j,
                         fracs = (zero(T), a1_β),
                     )
                     push!(a_idx_list, prev_counter)
                 end
                 if add_b1
-                    new_intr = PlanarPolyNode{T}(;
-                        point = b_pt1, inter = true, neighbor = j,
+                    new_intr = PolyNode{T, PT}(;
+                        point = b1_pt, inter = true, neighbor = j,
                         fracs = (b1_α, zero(T)),
                     )
                     a_count += 1
@@ -594,10 +605,14 @@ function _build_b_list(alg::FosterHormannClipping{M, A}, ::Type{T}, a_idx_list, 
     # Initialize needed values and lists
     n_b_edges = _nedge(poly_b)
     n_intr_pts = length(a_idx_list)
-    b_list = PlanarPolyNode{T}[]
+    # Choose point type based on manifold
+    PT = point_type(alg.manifold, T)
+    b_list = PolyNode{T, PT}[]
     sizehint!(b_list, n_b_edges + n_b_intrs)
     intr_curr = 1
     b_count = 0
+    # Convert points to appropriate type for manifold
+    convert_point = _get_point_converter(alg.manifold, T)
     # Loop over points in poly_b and add each point and intersection point
     local b_pt1
     for (i, b_p2) in enumerate(GI.getpoint(poly_b))
@@ -607,7 +622,7 @@ function _build_b_list(alg::FosterHormannClipping{M, A}, ::Type{T}, a_idx_list, 
             continue
         end
         b_count += 1
-        push!(b_list, PlanarPolyNode{T}(; point = b_pt1))
+        push!(b_list, PolyNode{T, PT}(; point = convert_point(b_pt1)))
         if intr_curr ≤ n_intr_pts
             curr_idx = a_idx_list[intr_curr]
             curr_node = a_list[curr_idx]
@@ -996,7 +1011,9 @@ function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
-    return_polys = Vector{_get_poly_type(T)}(undef, 0)
+    # Get point type from the first element of a_list
+    PT = typeof(a_list[1].point)
+    return_polys = Vector{_get_poly_type(T, PT)}(undef, 0)
     # Keep track of number of processed intersection points
     visited_pts = 0
     processed_pts = 0
@@ -1051,7 +1068,9 @@ function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b
             idx = curr.neighbor
             curr = curr_list[idx]
         end
-        push!(return_polys, GI.Polygon([pt_list]))
+        # Wrap pt_list in explicit linearring and polygon with Z=false, M=false
+        ring = GI.LinearRing{false, false}(pt_list)
+        push!(return_polys, GI.Polygon{false, false}([ring]))
     end
     return return_polys
 end
@@ -1059,6 +1078,14 @@ end
 # Get type of polygons that will be made
 # TODO: Increase type options
 _get_poly_type(::Type{T}) where T =
+    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
+
+# Version for UnitSphericalPoint
+_get_poly_type(::Type{T}, ::Type{UnitSpherical.UnitSphericalPoint{T}}) where T =
+    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{UnitSpherical.UnitSphericalPoint{T}}, Nothing, Nothing}}, Nothing, Nothing}
+
+# Version for Tuple{T,T} (planar)
+_get_poly_type(::Type{T}, ::Type{Tuple{T,T}}) where T =
     GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
 
 #=

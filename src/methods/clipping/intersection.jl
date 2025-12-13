@@ -86,9 +86,15 @@ function _intersection(
     if isempty(polys) # no crossing points, determine if either poly is inside the other
         a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([tuples(ext_a)]))
+            # Use the converted points from a_list to maintain point type consistency
+            ring_pts = [node.point for node in a_list if !node.inter]
+            ring = GI.LinearRing{false, false}(ring_pts)
+            push!(polys, GI.Polygon{false, false}([ring]))
         elseif b_in_a
-            push!(polys, GI.Polygon([tuples(ext_b)]))
+            # Use the converted points from b_list to maintain point type consistency
+            ring_pts = [node.point for node in b_list if !node.inter]
+            ring = GI.LinearRing{false, false}(ring_pts)
+            push!(polys, GI.Polygon{false, false}([ring]))
         end
     end
     remove_idx = falses(length(polys))
@@ -334,15 +340,15 @@ _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T = 
 Converts geographic coordinates to unit spherical points, computes intersection,
 and converts results back to geographic coordinates. =#
 function _intersection_point(::Spherical, ::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T
-    # Default answer for no intersection
+    # Default answer for no intersection - use UnitSphericalPoint as default
     line_orient = line_out
-    intr1 = ((zero(T), zero(T)), (zero(T), zero(T)))
+    default_pt = UnitSpherical.UnitSphericalPoint{T}(zero(T), zero(T), zero(T))
+    intr1 = (default_pt, (zero(T), zero(T)))
     intr2 = intr1
     no_intr_result = (line_orient, intr1, intr2)
 
     # Convert to unit spherical points
     transform = UnitSpherical.UnitSphereFromGeographic()
-    inverse_transform = UnitSpherical.GeographicFromUnitSphere()
 
     a1_sph = transform(_tuple_point(a1, T))
     a2_sph = transform(_tuple_point(a2, T))
@@ -353,25 +359,22 @@ function _intersection_point(::Spherical, ::Type{T}, (a1, a2)::Edge, (b1, b2)::E
     result = UnitSpherical.spherical_arc_intersection(a1_sph, a2_sph, b1_sph, b2_sph)
 
     # Map result type to line orientation
+    # Return UnitSphericalPoints directly instead of converting to geographic
     if result.type == UnitSpherical.arc_disjoint
         return no_intr_result
     elseif result.type == UnitSpherical.arc_cross
-        pt_geo = inverse_transform(result.points[1])
         α, β = result.fracs[1]
-        intr1 = ((T(pt_geo[1]), T(pt_geo[2])), (T(α), T(β)))
+        intr1 = (result.points[1], (T(α), T(β)))
         return (line_cross, intr1, intr2)
     elseif result.type == UnitSpherical.arc_hinge
-        pt_geo = inverse_transform(result.points[1])
         α, β = result.fracs[1]
-        intr1 = ((T(pt_geo[1]), T(pt_geo[2])), (T(α), T(β)))
+        intr1 = (result.points[1], (T(α), T(β)))
         return (line_hinge, intr1, intr2)
     else  # arc_overlap
-        pt1_geo = inverse_transform(result.points[1])
-        pt2_geo = inverse_transform(result.points[2])
         α1, β1 = result.fracs[1]
         α2, β2 = result.fracs[2]
-        intr1 = ((T(pt1_geo[1]), T(pt1_geo[2])), (T(α1), T(β1)))
-        intr2 = ((T(pt2_geo[1]), T(pt2_geo[2])), (T(α2), T(β2)))
+        intr1 = (result.points[1], (T(α1), T(β1)))
+        intr2 = (result.points[2], (T(α2), T(β2)))
         return (line_over, intr1, intr2)
     end
 end
