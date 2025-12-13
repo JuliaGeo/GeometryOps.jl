@@ -137,43 +137,37 @@ end
     @test abs(area_rev) ≈ π/2 atol=1e-10
 end
 
-@testset "Spherical ring area" begin
-    # Test the octant triangle as a ring
-    ring = GI.LinearRing([(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)])
+@testset "Spherical polygon area" begin
+    unit_sphere = GO.Spherical(radius=1.0)
 
+    # Simple polygon: octant (1/8 of sphere)
     # On unit sphere, area should be π/2
-    area = GO._girard_spherical_ring_area(Float64, ring)
-    @test abs(area) ≈ π/2 atol=1e-10
+    octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+    @test GO.area(unit_sphere, octant) ≈ π/2 atol=1e-10
 
-    # Test a small polygon where spherical ≈ planar (for sanity check)
-    small_ring = GI.LinearRing([
+    # Test a small polygon where spherical area should be positive
+    small_poly = GI.Polygon([[
         (0.0, 0.0), (0.001, 0.0), (0.001, 0.001), (0.0, 0.001), (0.0, 0.0)
-    ])
-    small_area = GO._girard_spherical_ring_area(Float64, small_ring)
-    # For very small regions, spherical area should be positive for CCW ring
-    @test small_area > 0
+    ]])
+    @test GO.area(unit_sphere, small_poly) > 0
 end
 
-@testset "Spherical polygon area (with holes)" begin
-    # Simple polygon without holes: octant
-    simple_poly = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
-
-    simple_area = GO._girard_spherical_polygon_area(Float64, GI.PolygonTrait(), simple_poly)
-    @test abs(simple_area) ≈ π/2 atol=1e-10
+@testset "Spherical polygon area with holes" begin
+    unit_sphere = GO.Spherical(radius=1.0)
 
     # Polygon with a hole - the hole should subtract from the area
-    # Create a polygon with exterior and a small interior hole
     exterior = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]
-    # Small hole inside
     hole = [(2.0, 2.0), (2.0, 3.0), (3.0, 3.0), (3.0, 2.0), (2.0, 2.0)]
     poly_with_hole = GI.Polygon([exterior, hole])
+    poly_no_hole = GI.Polygon([exterior])
+    hole_poly = GI.Polygon([hole])
 
-    area_with_hole = GO._girard_spherical_polygon_area(Float64, GI.PolygonTrait(), poly_with_hole)
-    area_exterior_only = abs(GO._girard_spherical_ring_area(Float64, GI.LinearRing(exterior)))
-    area_hole = abs(GO._girard_spherical_ring_area(Float64, GI.LinearRing(hole)))
+    area_with_hole = GO.area(unit_sphere, poly_with_hole)
+    area_exterior = GO.area(unit_sphere, poly_no_hole)
+    area_hole = GO.area(unit_sphere, hole_poly)
 
     # Area with hole should be exterior minus hole
-    @test abs(area_with_hole) ≈ area_exterior_only - area_hole atol=1e-10
+    @test area_with_hole ≈ area_exterior - area_hole atol=1e-10
 end
 
 @testset "area(Spherical(), geom) dispatch" begin

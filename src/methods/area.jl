@@ -223,107 +223,19 @@ GirardSphericalArea(; radius = Spherical().radius) = GirardSphericalArea(Spheric
 
 GeometryOpsCore.manifold(alg::GirardSphericalArea) = alg.manifold
 
-"""
-    _girard_spherical_triangle_area(p1::UnitSphericalPoint, p2::UnitSphericalPoint, p3::UnitSphericalPoint)
+using .UnitSpherical: UnitSphericalPoint
 
-Compute the signed area of a spherical triangle on the unit sphere using Girard's theorem.
-
-The three points must be `UnitSphericalPoint`s (Cartesian coordinates on the unit sphere).
-
-Returns the spherical excess (sum of angles - π), which equals the area on the unit sphere.
-The sign indicates the winding direction.
-"""
-function _girard_spherical_triangle_area(p1::UnitSpherical.UnitSphericalPoint, p2::UnitSpherical.UnitSphericalPoint, p3::UnitSpherical.UnitSphericalPoint)
-    # Compute the spherical excess using the formula:
-    # tan(E/2) = |p1 · (p2 × p3)| / (1 + p1·p2 + p2·p3 + p3·p1)
-    # where E is the spherical excess
-
-    # Cross product p2 × p3
+# Compute signed area of a spherical triangle on the unit sphere using the half-angle formula.
+# Returns the spherical excess E, which equals the area on the unit sphere.
+function _girard_spherical_triangle_area(p1::UnitSphericalPoint, p2::UnitSphericalPoint, p3::UnitSphericalPoint)
     cross_23 = p2 × p3
-
-    # Scalar triple product: p1 · (p2 × p3)
     triple = p1 ⋅ cross_23
-
-    # Dot products
     d12 = p1 ⋅ p2
     d23 = p2 ⋅ p3
     d31 = p3 ⋅ p1
-
-    # Denominator
     denom = 1 + d12 + d23 + d31
-
-    # Handle degenerate cases
-    if abs(denom) < eps(Float64)
-        return zero(Float64)
-    end
-
-    # Spherical excess using the half-angle formula
-    E = 2 * atan(triple, denom)
-
-    return E
-end
-
-"""
-    _girard_spherical_ring_area(::Type{T}, ring) where T
-
-Compute the signed spherical area of a ring (linear ring) on the unit sphere.
-
-The ring is assumed to be in geographic coordinates (longitude, latitude in degrees).
-Returns the signed area on the unit sphere (multiply by R² for actual area).
-"""
-function _girard_spherical_ring_area(::Type{T}, ring) where T
-    np = GI.npoint(ring)
-    np < 3 && return zero(T)
-
-    # Convert all points to unit sphere coordinates
-    to_sphere = UnitSpherical.UnitSphereFromGeographic()
-
-    points = [to_sphere(p) for p in GI.getpoint(ring)]
-
-    # Remove the closing point if it duplicates the first
-    if np > 1 && points[end] ≈ points[1]
-        pop!(points)
-    end
-
-    np = length(points)
-    np < 3 && return zero(T)
-
-    # Triangulate from the first vertex and sum areas
-    area = zero(T)
-    p1 = points[1]
-
-    for i in 2:(np-1)
-        p2 = points[i]
-        p3 = points[i+1]
-        area += _girard_spherical_triangle_area(p1, p2, p3)
-    end
-
-    return T(area)
-end
-
-"""
-    _girard_spherical_polygon_area(::Type{T}, ::GI.PolygonTrait, poly) where T
-
-Compute the area of a spherical polygon on the unit sphere, accounting for holes.
-
-The polygon is assumed to be in geographic coordinates (longitude, latitude in degrees).
-Returns the absolute area on the unit sphere (always positive).
-"""
-function _girard_spherical_polygon_area(::Type{T}, ::GI.PolygonTrait, poly) where T
-    GI.isempty(poly) && return zero(T)
-
-    # Compute exterior ring area
-    ext_area = _girard_spherical_ring_area(T, GI.getexterior(poly))
-    area = abs(ext_area)
-
-    area == zero(T) && return area
-
-    # Subtract hole areas
-    for hole in GI.gethole(poly)
-        area -= abs(_girard_spherical_ring_area(T, hole))
-    end
-
-    return T(area)
+    abs(denom) < eps(Float64) && return zero(Float64)
+    return 2 * atan(triple, denom)
 end
 
 # Dispatch area(::Spherical, ...) to use GirardSphericalArea
@@ -333,10 +245,44 @@ end
 
 # Main implementation for GirardSphericalArea
 function area(alg::GirardSphericalArea, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
-    R = manifold(alg).radius
-    # Compute area on unit sphere, then multiply by R²
+    # Compute signed area of a ring using streaming iteration (no allocation)
+    function _ring_area(ring)
+        GI.npoint(ring) < 3 && return zero(T)
+        # Get first point and remaining points
+        p1_geo, rest = Iterators.peel(GI.getpoint(ring))
+        p1 = UnitSphericalPoint(GI.PointTrait(), p1_geo)
+        pfirst = p1
+        # Collect remaining points, converting to unit sphere
+        points = collect(Iterators.map(p -> UnitSphericalPoint(GI.PointTrait(), p), rest))
+        isempty(points) && return zero(T)
+        # Skip closing point if it matches first
+        if points[end] ≈ pfirst
+            pop!(points)
+        end
+        length(points) < 2 && return zero(T)
+        # Triangulate from first vertex
+        area = zero(T)
+        for i in 1:(length(points)-1)
+            area += _girard_spherical_triangle_area(pfirst, points[i], points[i+1])
+        end
+        return area
+    end
+
+    function _polygon_area(trait::GI.PolygonTrait, poly)
+        GI.isempty(poly) && return zero(T)
+        ext_area = abs(_ring_area(GI.getexterior(poly)))
+        for hole in GI.gethole(poly)
+            ext_area -= abs(_ring_area(hole))
+        end
+        return ext_area
+    end
+
+    _spherical_area(::GI.AbstractGeometryTrait, geom) = zero(T)
+    _spherical_area(::GI.LinearRingTrait, geom) = zero(T)
+    _spherical_area(trait::GI.PolygonTrait, poly) = _polygon_area(trait, poly)
+
     unit_area = applyreduce(
-        WithTrait((trait, g) -> _girard_spherical_area(T, trait, g)),
+        WithTrait(_spherical_area),
         +,
         _AREA_TARGETS,
         geom;
@@ -344,12 +290,7 @@ function area(alg::GirardSphericalArea, geom, ::Type{T} = Float64; threaded=fals
         init=zero(T),
         kwargs...
     )
-    return T(unit_area * R^2)
+    return T(unit_area * manifold(alg).radius^2)
 end
-
-# Spherical area dispatch for different geometry types
-_girard_spherical_area(::Type{T}, ::GI.AbstractGeometryTrait, geom) where T = zero(T)
-_girard_spherical_area(::Type{T}, ::GI.LinearRingTrait, geom) where T = zero(T)
-_girard_spherical_area(::Type{T}, trait::GI.PolygonTrait, poly) where T = _girard_spherical_polygon_area(T, trait, poly)
 
 # ## Spherical
