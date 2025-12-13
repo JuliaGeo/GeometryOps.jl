@@ -1,4 +1,4 @@
-# # Polygonizing raster data
+# # Polygonize
 
 export polygonize
 
@@ -19,7 +19,7 @@ polygonize
 
 Here's a basic example, using the `Makie.peaks()` function.  First, let's investigate the nature of the function:
 ```@example polygonize
-using Makie, CairoMakie, GeoInterfaceMakie
+using Makie, CairoMakie
 using GeometryOps
 n = 49
 xs, ys = LinRange(-3, 3, n), LinRange(-3, 3, n)
@@ -256,10 +256,10 @@ function _polygonize(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A::Abstrac
                             end
                         end
                     elseif firstisleft
-                        if wasincreasing 
+                        if wasincreasing
                             (c2, c1, secondisstraight)
                         else
-                            (c1, c2, turning)
+                            (c2, c1, turning)  # Fixed: was (c1, c2), should be (c2, c1) to maintain CCW
                         end
                     else # firstisright
                         if wasincreasing 

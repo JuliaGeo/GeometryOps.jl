@@ -63,3 +63,11 @@ true
 ```
 """
 contains(g1, g2) = GeometryOps.within(g2, g1)
+
+"""
+    contains(g1)
+
+Return a function that checks if its input contains `g1`.
+This is equivalent to `x -> contains(x, g1)`.
+"""
+contains(g1) = Base.Fix2(contains, g1)

@@ -15,16 +15,25 @@ import GeoInterface as GI, GeometryOps as GO
 # TODO: Add working example
 ```
 """
-crosses(g1, g2)::Bool = crosses(trait(g1), g1, trait(g2), g2)::Bool
-crosses(t1::FeatureTrait, g1, t2, g2)::Bool = crosses(GI.geometry(g1), g2)
-crosses(t1, g1, t2::FeatureTrait, g2)::Bool = crosses(g1, geometry(g2))
-crosses(::MultiPointTrait, g1, ::LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)
-crosses(::MultiPointTrait, g1, ::PolygonTrait, g2)::Bool = multipoint_crosses_poly(g1, g2)
-crosses(::LineStringTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_lines(g2, g1)
-crosses(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = line_crosses_poly(g1, g2)
-crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_line(g1, g2)
-crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
-crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
+crosses(g1, g2)::Bool = _crosses(GI.trait(g1), g1, GI.trait(g2), g2)::Bool
+
+_crosses(::GI.MultiPointTrait, g1, ::GI.LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)
+_crosses(::GI.MultiPointTrait, g1, ::GI.PolygonTrait, g2)::Bool = multipoint_crosses_poly(g1, g2)
+_crosses(::GI.LineStringTrait, g1, ::GI.MultiPointTrait, g2)::Bool = multipoint_crosses_lines(g2, g1)
+_crosses(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool = line_crosses_poly(g1, g2)
+_crosses(::GI.LineStringTrait, g1, ::GI.LineStringTrait, g2)::Bool = line_crosses_line(g1, g2)
+_crosses(::GI.PolygonTrait, g1, ::GI.MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
+_crosses(::GI.PolygonTrait, g1, ::GI.LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
+
+"""
+    crosses(g1)
+
+Return a function that checks if its input crosses `g1`.
+This is equivalent to `x -> crosses(x, g1)`.
+"""
+crosses(g1) = Base.Fix2(crosses, g1)
+
+
 
 function multipoint_crosses_line(geom1, geom2)
     int_point = false
@@ -128,3 +137,5 @@ function _point_on_segment(point, (start, stop); exclude_boundary::Symbol=:none)
     end
     return false
 end
+
+

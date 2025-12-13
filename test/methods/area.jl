@@ -40,7 +40,7 @@ c = LG.GeometryCollection([p1, p2, r1])
 c_with_epty_l = LG.GeometryCollection([p1, p2, r1, empty_l])
 empty_c = LG.readgeom("GEOMETRYCOLLECTION EMPTY")
 
-@testset_implementations "That handle empty geoms" [LG] begin 
+@testset_implementations "That handle empty geoms" begin 
     @test GO.area($empty_pt) == LG.area($empty_pt) == 0
     @test GO.area($empty_mpt) == LG.area($empty_mpt) == 0
     @test GO.area($empty_l) == LG.area($empty_l) == 0
@@ -96,4 +96,12 @@ end
     # Multipolygon calculations work
     @test GO.area($mp1) == a2 + a4
     @test GO.area($mp1, Float32) isa Float32
+end
+
+
+highlat_poly = LG.Polygon([[[70., 70.], [70., 80.], [80., 80.], [80., 70.], [70., 70.]]])
+
+@testset_implementations "Spherical/geodesic" begin
+    @test GO.area(GO.Planar(), $highlat_poly) == 100
+    @test GO.area(GO.Planar(), $highlat_poly) < GO.area(GO.Geodesic(), $highlat_poly)
 end

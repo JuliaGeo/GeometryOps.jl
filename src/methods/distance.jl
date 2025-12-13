@@ -1,4 +1,4 @@
-# # Distance and signed distance
+# # Distance
 
 export distance, signed_distance
 
@@ -18,7 +18,6 @@ To provide an example, consider this rectangle:
 ```@example rect
 import GeometryOps as GO
 import GeoInterface as GI
-using Makie
 using CairoMakie
 
 rect = GI.Polygon([[(0,0), (0,1), (1,1), (1,0), (0, 0)]])
@@ -43,8 +42,8 @@ GO.signed_distance(point_out, rect)  # > 0
 Consider also a heatmap of signed distances around this object:
 ```@example rect
 xrange = yrange = LinRange(-0.5, 1.5, 300)
-f, a, p = heatmap(xrange, yrange, GO.signed_distance.(Point2f.(xrange, yrange'), Ref(rect)); colormap = :RdBu, colorrange = (-0.75, 0.75))
-a.aspect = DataAspect(); Colorbar(f[1, 2], p, label = "Signed distance"); lines!(a, GI.convert(GO.GeometryBasics, rect)); f
+f, a, p = heatmap(xrange, yrange, GO.signed_distance.(tuple.(xrange, yrange'), (rect,)); colormap = :RdBu, colorrange = (-0.75, 0.75))
+a.aspect = DataAspect(); Colorbar(f[1, 2], p, label = "Signed distance"); lines!(a, rect); f
 ```
 
 ## Implementation

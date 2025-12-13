@@ -25,14 +25,20 @@ jobs:
           - ubuntu-latest
         arch:
           - x64
+        include:
+          - os: windows-latest
+            version: '1'
+            arch: x64
+          - os: macos-latest
+            version: '1'
+            arch: arm64
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v6
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - uses: julia-actions/cache@v1
       - name: Dev GeometryOpsCore and add other packages
         run: julia --project=. -e 'using Pkg; Pkg.develop(; path = joinpath(".", "GeometryOpsCore"));'
       - uses: julia-actions/julia-buildpkg@v1
@@ -54,13 +60,13 @@ jobs:
       statuses: write
       actions: write
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v6
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
       - name: Build and add versions
-        run: julia --project=docs -e 'using Pkg; Pkg.add([PackageSpec(name = "GeoMakie", rev = "master")])'
+        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(name = "GeoMakie"), PackageSpec(name = "GeometryOpsCore", path = "./GeometryOpsCore"), PackageSpec(name = "GeometryOps", path = ".")])'
       - uses: julia-actions/julia-docdeploy@v1
         with:
           install-package: false
@@ -75,13 +81,13 @@ jobs:
       statuses: write
       actions: write
     steps:
-      - uses: actions/checkout@v2
-      - uses: julia-actions/cache@v1
-      - uses: julia-actions/setup-julia@v1
+      - uses: actions/checkout@v6
+      - uses: julia-actions/cache@v2
+      - uses: julia-actions/setup-julia@v2
         with:
           version: '1'
       - name: Build and add versions
-        run: julia --project=docs -e 'using Pkg; Pkg.add([PackageSpec(name = "GeoMakie", rev = "master")])'
+        run: julia --project=docs -e 'using Pkg; Pkg.develop([PackageSpec(name = "GeoMakie"), PackageSpec(name = "GeometryOpsCore", path = "./GeometryOpsCore"), PackageSpec(name = "GeometryOps", path = ".")])'
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest

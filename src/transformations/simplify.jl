@@ -1,21 +1,42 @@
-# # Geometry simplification
+# # Simplify
 
 #=
-This file holds implementations for the RadialDistance, Douglas-Peucker, and
-Visvalingam-Whyatt algorithms for simplifying geometries (specifically for
-polygons and lines).
+```@meta
+CollapsedDocStrings = true
+```
 
-The GEOS extension also allows for GEOS's topology preserving simplification 
+```@docs; canonical=false
+simplify
+VisvalingamWhyatt
+DouglasPeucker
+RadialDistance
+```
+
+## What is Geometry Simplification?
+
+Geometry simplification reduces the number of points in a geometry while preserving its essential shape.
+This is usually done by specifying some tolerance.
+
+GeometryOps provides three simplification algorithms: [`VisvalingamWhyatt`](@ref), [`DouglasPeucker`](@ref),
+and [`RadialDistance`](@ref), listed in order of decreasing quality but increasing performance.
+
+The default algorithm is [`DouglasPeucker`](@ref), which is also available through the GEOS extension.
+
+In GeometryOps' algorithms, you can specify
+`tol`, `number` of points, or `ratio` of points after simplification to points in the input geometry.
+
+The GEOS extension (activated by loading [LibGEOS.jl](https://github.com/JuliaGeo/LibGEOS.jl)) also allows for GEOS's topology preserving simplification
 as well as Douglas-Peucker simplification implemented in GEOS.  Call this by
-passing `GEOS(; method = :TopologyPreserve)` or `GEOS(; method = :DouglasPeucker)`
+passing [`GEOS(; method = :TopologyPreserve)`](@ref GEOS) or [`GEOS(; method = :DouglasPeucker)`](@ref GEOS)
 to the algorithm.
+
 
 ## Examples
 
-A quick and dirty example is:
+Here is the simplest example:
 
 ```@example polygon_simplification
-using Makie, GeoInterfaceMakie
+using CairoMakie
 import GeoInterface as GI
 import GeometryOps as GO
 
@@ -29,69 +50,18 @@ axislegend(a)
 f
 ```
 
-## Benchmark
+You can also choose the algorithm to use.  The algorithm we run here is the same as
+what we used above:
 
-We benchmark these methods against LibGEOS's `simplify` implementation, which uses the Douglas-Peucker algorithm.
-
-```@example benchmark
-using BenchmarkTools, Chairmarks, GeoJSON, CairoMakie
-import GeometryOps as GO, LibGEOS as LG, GeoInterface as GI
-using CoordinateTransformations
-using NaturalEarth
-import Main: plot_trials # hide
-lg_and_go(geometry) = (GI.convert(LG, geometry), GO.tuples(geometry))
-# Load in the Natural Earth admin GeoJSON, then extract the USA's geometry
-fc = NaturalEarth.naturalearth("admin_0_countries", 10)
-usa_multipoly = fc.geometry[findfirst(==("United States of America"), fc.NAME)] |> x -> GI.convert(LG, x) |> LG.makeValid |> GO.tuples
-include(joinpath(dirname(dirname(pathof(GO))), "test", "data", "polygon_generation.jl"))
-
-usa_poly = GI.getgeom(usa_multipoly, findmax(GO.area.(GI.getgeom(usa_multipoly)))[2]) # isolate the poly with the most area
-usa_centroid = GO.centroid(usa_poly)
-usa_reflected = GO.transform(Translation(usa_centroid...) ∘ LinearMap(Makie.rotmatrix2d(π)) ∘ Translation((-).(usa_centroid)...), usa_poly)
-f, a, p = plot(usa_poly; label = "Original", axis = (; aspect = DataAspect()))#; plot!(usa_reflected; label = "Reflected")
-```
-This is the complex polygon we'll be benchmarking.
-```@example benchmark
-simplify_suite = BenchmarkGroup(["Simplify"])
-singlepoly_suite = BenchmarkGroup(["Polygon", "title:Polygon simplify", "subtitle:Random blob"])
-
-include(joinpath(dirname(dirname(pathof(GO))), "test", "data", "polygon_generation.jl"))
-
-for n_verts in round.(Int, exp10.(LinRange(log10(10), log10(10_000), 10)))
-    geom = GI.Wrappers.Polygon(generate_random_poly(0, 0, n_verts, 2, 0.2, 0.3))
-    geom_lg, geom_go = lg_and_go(LG.makeValid(GI.convert(LG, geom)))
-    singlepoly_suite["GO-DP"][GI.npoint(geom)] = @be GO.simplify($geom_go; tol = 0.1) seconds=1
-    singlepoly_suite["GO-VW"][GI.npoint(geom)] = @be GO.simplify($(GO.VisvalingamWhyatt(; tol = 0.1)), $geom_go) seconds=1
-    singlepoly_suite["GO-RD"][GI.npoint(geom)] = @be GO.simplify($(GO.RadialDistance(; tol = 0.1)), $geom_go) seconds=1
-    singlepoly_suite["LibGEOS"][GI.npoint(geom)] = @be LG.simplify($geom_lg, 0.1) seconds=1
-end
-
-plot_trials(singlepoly_suite; legend_position=(1, 1, TopRight()), legend_valign = -2, legend_halign = 1.2, legend_orientation = :horizontal)
+```@example polygon_simplification
+GO.simplify(GO.DouglasPeucker(number = 6), original)
 ```
 
-```@example benchmark
-multipoly_suite = BenchmarkGroup(["MultiPolygon", "title:Multipolygon simplify", "subtitle:USA multipolygon"])
+## Benchmarks
 
-for frac in exp10.(LinRange(log10(0.3), log10(1), 6)) # TODO: this example isn't the best.  How can we get this better?
-    geom = GO.simplify(usa_multipoly; ratio = frac)
-    geom_lg, geom_go = lg_and_go(geom)
-    _tol = 0.001
-    multipoly_suite["GO-DP"][GI.npoint(geom)] = @be GO.simplify($geom_go; tol = $_tol) seconds=1
-    # multipoly_suite["GO-VW"][GI.npoint(geom)] = @be GO.simplify($(GO.VisvalingamWhyatt(; tol = $_tol)), $geom_go) seconds=1
-    multipoly_suite["GO-RD"][GI.npoint(geom)] = @be GO.simplify($(GO.RadialDistance(; tol = _tol)), $geom_go) seconds=1
-    multipoly_suite["LibGEOS"][GI.npoint(geom)] = @be LG.simplify($geom_lg, $_tol) seconds=1
-    println("""
-    For $(GI.npoint(geom)) points, the algorithms generated polygons with the following number of vertices:
-    GO-DP : $(GI.npoint( GO.simplify(geom_go; tol = _tol)))
-    GO-RD : $(GI.npoint( GO.simplify((GO.RadialDistance(; tol = _tol)), geom_go)))
-    LGeos : $(GI.npoint( LG.simplify(geom_lg, _tol)))
-    """)
-    # GO-VW : $(GI.npoint( GO.simplify((GO.VisvalingamWhyatt(; tol = _tol)), geom_go)))
-    println()
-end
-plot_trials(multipoly_suite)
-```
+Let's benchmark the performance of the algorithms to get a clearer idea of what's going on.
 
+TODO: I had benchmarks but they were not particularly useful.  We need to make them better.
 =#
 
 export simplify, VisvalingamWhyatt, DouglasPeucker, RadialDistance
@@ -101,7 +71,7 @@ const MIN_POINTS = 3
 const SIMPLIFY_ALG_KEYWORDS = """
 ## Keywords
 
-- `ratio`: the fraction of points that should remain after `simplify`. 
+- `ratio`: the fraction of points that should remain after `simplify`.
     Useful as it will generalise for large collections of objects.
 - `number`: the number of points that should remain after `simplify`.
     Less useful for large collections of mixed size objects.
@@ -119,9 +89,9 @@ Abstract type for simplification algorithms.
 
 ## API
 
-For now, the algorithm must hold the `number`, `ratio` and `tol` properties.  
+For now, the algorithm must hold the `number`, `ratio` and `tol` properties.
 
-Simplification algorithm types can hook into the interface by implementing 
+Simplification algorithm types can hook into the interface by implementing
 the `_simplify(trait, alg, geom)` methods for whichever traits are necessary.
 """
 abstract type SimplifyAlg end
@@ -130,11 +100,11 @@ abstract type SimplifyAlg end
     simplify(obj; kw...)
     simplify(::SimplifyAlg, obj; kw...)
 
-Simplify a geometry, feature, feature collection, 
+Simplify a geometry, feature, feature collection,
 or nested vectors or a table of these.
 
-[`RadialDistance`](@ref), [`DouglasPeucker`](@ref), or 
-[`VisvalingamWhyatt`](@ref) algorithms are available, 
+[`RadialDistance`](@ref), [`DouglasPeucker`](@ref), or
+[`VisvalingamWhyatt`](@ref) algorithms are available,
 listed in order of increasing quality but decreasing performance.
 
 `PoinTrait` and `MultiPointTrait` are returned unchanged.
@@ -191,7 +161,6 @@ GI.npoint(simple)
 ```
 """
 simplify(alg::SimplifyAlg, data; kw...) = _simplify(alg, data; kw...)
-simplify(alg::GEOS, data; kw...) = _simplify(alg, data; kw...)
 
 # Default algorithm is DouglasPeucker
 simplify(
@@ -203,8 +172,8 @@ simplify(
 #= For each algorithm, apply simplification to all curves, multipoints, and
 points, reconstructing everything else around them. =#
 function _simplify(alg::Union{SimplifyAlg, GEOS}, data; prefilter_alg=nothing, kw...)
-    simplifier(geom) = _simplify(GI.trait(geom), alg, geom; prefilter_alg)
-    return apply(simplifier, _SIMPLIFY_TARGET, data; kw...)
+    simplifier(trait, geom) = _simplify(trait, alg, geom; prefilter_alg)
+    return apply(WithTrait(simplifier), _SIMPLIFY_TARGET, data; kw...)
 end
 
 
@@ -248,7 +217,7 @@ $SIMPLIFY_ALG_KEYWORDS
 
 Note: user input `tol` is squared to avoid unnecessary computation in algorithm.
 """
-@kwdef struct RadialDistance <: SimplifyAlg 
+@kwdef struct RadialDistance <: SimplifyAlg
     number::Union{Int64,Nothing} = nothing
     ratio::Union{Float64,Nothing} = nothing
     tol::Union{Float64,Nothing} = nothing
@@ -271,7 +240,14 @@ function _simplify(alg::RadialDistance, points::Vector, _)
     end
     ## Never remove the end points
     distances[begin] = distances[end] = Inf
-    return _get_points(alg, points, distances)
+    indices = _get_indices(alg, points, distances)
+    # Check there is at least one mid point
+    if !any(view(indices, firstindex(indices)+1:lastindex(indices)-1))
+        # If not use the midpoint of the removed points ?
+        indices[lastindex(indices) ÷ 2] = true
+    end
+
+    return points[indices]
 end
 
 
@@ -425,7 +401,7 @@ $SIMPLIFY_ALG_KEYWORDS
     its neighboring points.
 Note: user input `tol` is doubled to avoid unnecessary computation in algorithm.
 """
-@kwdef struct VisvalingamWhyatt <: SimplifyAlg 
+@kwdef struct VisvalingamWhyatt <: SimplifyAlg
     number::Union{Int,Nothing} = nothing
     ratio::Union{Float64,Nothing} = nothing
     tol::Union{Float64,Nothing} = nothing
@@ -441,7 +417,7 @@ end
 function _simplify(alg::VisvalingamWhyatt, points::Vector, _)
     length(points) <= MIN_POINTS && return points
     areas = _build_tolerances(_triangle_double_area, points)
-    return _get_points(alg, points, areas)
+    return points[_get_indices(alg, points, areas)]
 end
 
 # Calculates double the area of a triangle given its vertices
@@ -512,20 +488,19 @@ function tuple_points(geom)
     return points
 end
 
-function _get_points(alg, points, tolerances)
+function _get_indices(alg, points, tolerances)
     ## This assumes that `alg` has the properties
     ## `tol`, `number`, and `ratio` available...
     tol = alg.tol
     number = alg.number
     ratio = alg.ratio
-    bit_indices = if !isnothing(tol) 
+    return if !isnothing(tol)
         _tol_indices(alg.tol::Float64, points, tolerances)
-    elseif !isnothing(number) 
+    elseif !isnothing(number)
         _number_indices(alg.number::Int64, points, tolerances)
     else
         _ratio_indices(alg.ratio::Float64, points, tolerances)
     end
-    return points[bit_indices]
 end
 
 function _tol_indices(tol, points, tolerances)
@@ -536,7 +511,7 @@ function _number_indices(n, points, tolerances)
     tol = partialsort(tolerances, length(points) - n + 1)
     bit_indices = _tol_indices(tol, points, tolerances)
     nselected = sum(bit_indices)
-    ## If there are multiple values exactly at `tol` we will get 
+    ## If there are multiple values exactly at `tol` we will get
     ## the wrong output length. So we need to remove some.
     while nselected > n
         min_tol = Inf
@@ -551,7 +526,7 @@ function _number_indices(n, points, tolerances)
         nselected -= 1
         bit_indices[min_i] = false
     end
-    return bit_indices 
+    return bit_indices
 end
 
 function _ratio_indices(r, points, tolerances)
@@ -569,7 +544,7 @@ function _flat_tolerances(f, points)::Vector{Float64}
     return result
 end
 
-function _remove!(s, i) 
+function _remove!(s, i)
     for j in i:lastindex(s)-1
         s[j] = s[j+1]
     end

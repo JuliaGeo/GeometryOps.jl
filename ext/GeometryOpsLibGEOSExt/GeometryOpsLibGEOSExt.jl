@@ -1,9 +1,13 @@
+# # LibGEOS extension
+
+# This is the main file for the LibGEOS extension of GeometryOps.
+
 module GeometryOpsLibGEOSExt
 
 import GeometryOps as GO, LibGEOS as LG
 import GeoInterface as GI
 
-import GeometryOps: GEOS, enforce, True, False, booltype
+import GeometryOps: GEOS, enforce, True, False, booltype, booltype, WithTrait, TraitTarget
 
 using GeometryOps
 # The filter statement is required because in Julia, each module has its own versions of these
@@ -11,6 +15,9 @@ using GeometryOps
 # However, if you import those from another module (which you would with `all=true`),
 # that creates an ambiguity which causes a warning during precompile/load time.
 # In order to avoid this, we filter out these special functions.
+
+# This is kind of like ImportAll.jl but without the macro.  It only imports the functions
+# in names(GeometryOps; all=false).
 for name in filter(!in((:var"#eval", :eval, :var"#include", :include)), names(GeometryOps))
     @eval import GeometryOps: $name
 end

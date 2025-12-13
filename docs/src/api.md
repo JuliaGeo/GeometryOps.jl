@@ -56,11 +56,13 @@ barycentric_interpolate
 ```
 
 ## Other methods
+
 ```@autodocs
 Modules = [GeometryOps]
 ```
 
 ## Core types
+
 ```@autodocs
 Modules = [GeometryOpsCore]
 ```

@@ -145,11 +145,8 @@ end
     _apply(f, target, GI.trait(geom), geom; kw...)
 # There is no trait and this is an AbstractArray - so just iterate over it calling _apply on the contents
 @inline function _apply(f::F, target, ::Nothing, A::AbstractArray; threaded, kw...) where F
-    # For an Array there is nothing else to do but map `_apply` over all values
-    # _maptasks may run this level threaded if `threaded==true`,
-    # but deeper `_apply` called in the closure will not be threaded
-    apply_to_array(i) = _apply(f, target, A[i]; threaded=False(), kw...)
-    _maptasks(apply_to_array, eachindex(A), threaded)
+    applicator = ApplyToArray(f, target, A; kw...)
+    _maptasks(applicator, eachindex(A), threaded)
 end
 # There is no trait and this is not an AbstractArray.
 # Try to call _apply over it. We can't use threading
@@ -157,7 +154,7 @@ end
 @inline function _apply(f::F, target, ::Nothing, iterable::IterableType; threaded, kw...) where {F, IterableType}
     # Try the Tables.jl interface first
     if Tables.istable(iterable)
-    _apply_table(f, target, iterable; threaded, kw...)
+        _apply_table(f, target, iterable; threaded, kw...)
     else # this is probably some form of iterable...
         if threaded isa True
             # `collect` first so we can use threads
@@ -178,23 +175,45 @@ with the same schema, but with the new geometry column.
 This new table may be of the same type as the old one iff `Tables.materializer` is defined for 
 that table.  If not, then a `NamedTuple` is returned.
 =#
-function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) where {F, IterableType}
-    _get_col_pair(colname) = colname => Tables.getcolumn(iterable, colname)
-    # We extract the geometry column and run `apply` on it.
-    geometry_column = first(GI.geometrycolumns(iterable))
-    new_geometry = _apply(f, target, Tables.getcolumn(iterable, geometry_column); threaded, kw...)
-    # Then, we obtain the schema of the table,
-    old_schema = Tables.schema(iterable)
-    # filter the geometry column out,
-    new_names = filter(Base.Fix1(!==, geometry_column), old_schema.names)
+function _apply_table(f::F, target, iterable::IterableType; geometrycolumn = nothing, preserve_default_metadata = false, threaded, kw...) where {F, IterableType}    # We extract the geometry column and run `apply` on it.
+    # First, we need the table schema:
+    input_schema = Tables.schema(iterable)
+    input_colnames = input_schema.names
+    # then, we find the geometry column(s)
+    geometry_columns = if isnothing(geometrycolumn)
+        GI.geometrycolumns(iterable)
+    elseif geometrycolumn isa NTuple{N, <: Symbol} where N
+        geometrycolumn
+    elseif geometrycolumn isa Symbol
+        (geometrycolumn,)
+    else
+        throw(ArgumentError("geometrycolumn must be a Symbol or a tuple of Symbols, got a $(typeof(geometrycolumn))"))
+    end
+    if !Base.issubset(geometry_columns, input_colnames)
+        throw(ArgumentError(
+            """
+            `apply`: the `geometrycolumn` kwarg must be a subset of the column names of the table, 
+            got $(geometry_columns)
+            but the table has columns 
+            $(input_colnames)
+            """
+            ))
+    end
+    # here we apply the function to the geometry column(s).
+    apply_kw = if isempty(used_reconstruct_table_kwargs(iterable))
+        kw
+    else
+        Base.structdiff(values(kw), NamedTuple{used_reconstruct_table_kwargs(iterable)})
+    end
+    new_geometry_vecs = map(geometry_columns) do colname
+        _apply(f, target, Tables.getcolumn(iterable, colname); threaded, apply_kw...)
+    end
+    # Then, we filter the geometry column(s) out,
+    new_names = filter(x -> !(x in geometry_columns), input_colnames)
     # and try to rebuild the same table as the best type - either the original type of `iterable`,
     # or a named tuple which is the default fallback.
-    result = Tables.materializer(iterable)(
-        merge(
-            NamedTuple{(geometry_column,), Base.Tuple{typeof(new_geometry)}}((new_geometry,)),
-            NamedTuple(Iterators.map(_get_col_pair, new_names))
-        )
-    )
+    # See the function directly below this one for the actual fallback implementation.
+    result = reconstruct_table(iterable, geometry_columns, new_geometry_vecs, new_names; kw...)
     # Finally, we ensure that metadata is propagated correctly.
     # This can only happen if the original table supports metadata reads,
     # and the result supports metadata writes.
@@ -204,7 +223,9 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
         if DataAPI.metadatasupport(IterableType).read
             for (key, (value, style)) in DataAPI.metadata(iterable; style = true)
                 # Default styles are not preserved on data transformation, so we must skip them!
-                style == :default && continue
+                if !preserve_default_metadata 
+                    style == :default && continue
+                end
                 # We assume that any other style is preserved.
                 DataAPI.metadata!(result, key, value; style)
             end
@@ -217,19 +238,59 @@ function _apply_table(f::F, target, iterable::IterableType; threaded, kw...) whe
         # so we don't need to set them.
         if !("GEOINTERFACE:geometrycolumns" in mdk)
             # If the geometry columns are not already set, we need to set them.
-            DataAPI.metadata!(result, "GEOINTERFACE:geometrycolumns", (geometry_column,); style = :default)
+            DataAPI.metadata!(result, "GEOINTERFACE:geometrycolumns", geometry_columns; style = :note)
         end
         # Force reset CRS always, since you can pass `crs` to `apply`.
-        new_crs = if haskey(kw, :crs)
-            kw[:crs]
-        else
-            GI.crs(iterable) # this will automatically check `GEOINTERFACE:crs` unless the type has a specialized implementation.
-        end
-
-        DataAPI.metadata!(result, "GEOINTERFACE:crs", new_crs; style = :default)
+        new_crs = get(kw, :crs, GI.crs(iterable)) 
+        DataAPI.metadata!(result, "GEOINTERFACE:crs", new_crs; style = :note)
     end
 
     return result
+end
+
+
+"""
+    used_reconstruct_table_kwargs(input)
+
+Return a tuple of the kwargs that should be passed to `reconstruct_table` for the given input.
+
+This is "semi-public" API, and required for any input type that defines `reconstruct_table`.
+"""
+function used_reconstruct_table_kwargs(input) 
+    ()
+end
+
+"""
+    reconstruct_table(input, geometry_column_names, geometry_columns, other_column_names, args...; kwargs...)
+
+Reconstruct a table from the given input, geometry column names,
+geometry columns, and other column names.
+
+Any function that defines `reconstruct_table` must also define `used_reconstruct_table_kwargs`.
+
+The input must be a table.
+
+The function should return a best-effort attempt at a table of the same type as the input,
+with the new geometry column(s) and other columns.
+
+The fallback implementation invokes `Tables.materializer`.  But if you want to be efficient 
+and pass e.g. arbitrary kwargs to the materializer, or materialize in a different way, you 
+can do so by overloading this function for your desired input type.
+
+This is "semi-public" API and while it may add optional arguments, it will not add new required 
+positional arguments. All implementations must allow arbitrary kwargs to pass through and harvest 
+what they need.
+"""
+function reconstruct_table(input, geometry_column_names, geometry_columns, other_column_names, args...; kwargs...)
+    @assert Tables.istable(input)
+    _get_col_pair(colname) = colname => Tables.getcolumn(input, colname)
+
+    return Tables.materializer(input)(
+        merge(
+            NamedTuple{geometry_column_names, Base.Tuple{typeof.(geometry_columns)...}}(geometry_columns),
+            NamedTuple(Iterators.map(_get_col_pair, other_column_names))
+        )
+    )
 end
 
 # Rewrap all FeatureCollectionTrait feature collections as GI.FeatureCollection
@@ -239,9 +300,8 @@ end
 ) where F
 
     # Run _apply on all `features` in the feature collection, possibly threaded
-    apply_to_feature(i) =
-        _apply(f, target, GI.getfeature(fc, i); crs, calc_extent, threaded=False())::GI.Feature
-    features = _maptasks(apply_to_feature, 1:GI.nfeature(fc), threaded)
+    applicator = ApplyToFeatures(f, target, fc; crs, calc_extent)
+    features = _maptasks(applicator, 1:GI.nfeature(fc), threaded)
     if calc_extent isa True
         # Calculate the extent of the features
         extent = mapreduce(GI.extent, Extents.union, features)
@@ -278,21 +338,16 @@ end
     # Map `_apply` over all sub geometries of `geom`
     # to create a new vector of geometries
     # TODO handle zero length
-    apply_to_geom(i) = _apply(f, target, GI.getgeom(geom, i); crs, calc_extent, threaded=False())
-    geoms = _maptasks(apply_to_geom, 1:GI.ngeom(geom), threaded)
+    applicator = ApplyToGeom(f, target, geom; crs, calc_extent)
+    geoms = _maptasks(applicator, 1:GI.ngeom(geom), threaded)
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
 @inline function _apply(f::F, target::TraitTarget{<:PointTrait}, trait::GI.PolygonTrait, geom;
     crs=GI.crs(geom), calc_extent=False(), threaded
 )::(GI.geointerface_geomtype(trait)) where F
     # We need to force rebuilding a LinearRing not a LineString
-    geoms = _maptasks(1:GI.ngeom(geom), threaded) do i
-        lr = GI.getgeom(geom, i)
-        points = map(GI.getgeom(lr)) do p
-            _apply(f, target, p; crs, calc_extent, threaded=False())
-        end
-        _linearring(_apply_inner(lr, points, crs, calc_extent))
-    end
+    applicator = ApplyPointsToPolygon(f, target, geom; crs, calc_extent)
+    geoms = _maptasks(applicator, 1:GI.ngeom(geom), threaded)
     return _apply_inner(geom, geoms, crs, calc_extent)
 end
 function _apply_inner(geom, geoms, crs, calc_extent::True)
@@ -315,12 +370,20 @@ end
 # So the `Target` is found. We apply `f` to geom and return it to previous
 # _apply calls to be wrapped with the outer geometries/feature/featurecollection/array.
 _apply(f::F, ::TraitTarget{Target}, ::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} = f(geom)
+function _apply(a::WithTrait{F}, ::TraitTarget{Target}, trait::Trait, geom; crs=GI.crs(geom), kw...) where {F,Target,Trait<:Target} 
+    a(trait, geom; Base.structdiff(values(kw), NamedTuple{(:threaded, :calc_extent)})...)
+end
 # Define some specific cases of this match to avoid method ambiguity
 for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString,
     GI.MultiPoint, GI.FeatureTrait, GI.FeatureCollectionTrait
 )
-    @eval _apply(f::F, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F = f(x)
+    @eval begin 
+        _apply(f::F, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F = f(x)
+        function _apply(a::WithTrait{F}, target::TraitTarget{<:$T}, trait::$T, x; kw...) where F
+            a(trait, x; Base.structdiff(values(kw), NamedTuple{(:threaded, :calc_extent)})...)
+        end
+    end
 end
 
 
@@ -353,6 +416,24 @@ end
     task_chunks = Iterators.partition(taskrange, chunk_size)
     # Map over the chunks
     tasks = map(task_chunks) do chunk
+        # Spawn a task to process this chunk
+        StableTasks.@spawn begin
+            # Where we map `f` over the chunk indices
+            map(f, chunk)
+        end
+    end
+
+    # Finally we join the results into a new vector
+    return mapreduce(fetch, vcat, tasks)
+end
+@inline function _maptasks(a::Applicator{<:TaskFunctors}, taskrange, threaded::True)::Vector
+    ntasks = length(taskrange)
+    chunk_size = max(1, cld(ntasks, (length(a.f.functors))))
+    # partition the range into chunks
+    task_chunks = Iterators.partition(taskrange, chunk_size)
+    # Map over the chunks
+    tasks = map(task_chunks, view(a.f.functors, 1:length(task_chunks))) do chunk, ft
+        f = rebuild(a, ft)
         # Spawn a task to process this chunk
         StableTasks.@spawn begin
             # Where we map `f` over the chunk indices

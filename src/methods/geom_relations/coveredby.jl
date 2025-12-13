@@ -79,10 +79,13 @@ true
 """
 coveredby(g1, g2) = _coveredby(trait(g1), g1, trait(g2), g2)
 
-# # Convert features to geometries
-_coveredby(::GI.FeatureTrait, g1, ::Any, g2) = coveredby(GI.geometry(g1), g2)
-_coveredby(::Any, g1, t2::GI.FeatureTrait, g2) = coveredby(g1, GI.geometry(g2))
-_coveredby(::FeatureTrait, g1, ::FeatureTrait, g2) = coveredby(GI.geometry(g1), GI.geometry(g2))
+"""
+    coveredby(g1)
+
+Return a function that checks if its input is covered by `g1`.
+This is equivalent to `x -> coveredby(x, g1)`.
+"""
+coveredby(g1) = Base.Fix2(coveredby, g1)
 
 # # Points coveredby geometries
 

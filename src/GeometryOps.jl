@@ -6,8 +6,12 @@ import GeometryOpsCore
 import GeometryOpsCore: 
                 TraitTarget,
                 Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
+                manifold, best_manifold,
                 Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
-                BoolsAsTypes, True, False, booltype,
+                BoolsAsTypes, True, False, booltype, istrue,
+                TaskFunctors, 
+                WithTrait,
+                WithXY, WithXYZ, WithXYM, WithXYZM,
                 apply, applyreduce, 
                 flatten, reconstruct, rebuild, unwrap, _linearring,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
@@ -15,26 +19,43 @@ import GeometryOpsCore:
 export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
 
 using GeoInterface
-using GeometryBasics
 using LinearAlgebra, Statistics
 
+using StaticArrays
+
 import Tables, DataAPI
-import GeometryBasics.StaticArrays
+import StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
 import Base.@kwdef
 import GeoInterface.Extents: Extents
+import SortTileRecursiveTree
+import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
-const GB = GeometryBasics
+const DelTri = DelaunayTriangulation
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
 
 include("types.jl")
 include("primitives.jl")
-include("utils.jl")
 include("not_implemented_yet.jl")
+
+include("utils/utils.jl")
+include("utils/LoopStateMachine/LoopStateMachine.jl")
+include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
+include("utils/UnitSpherical/UnitSpherical.jl")
+
+# Load utility modules in
+using .LoopStateMachine, .SpatialTreeInterface, .UnitSpherical
+
+include("utils/NaturalIndexing.jl")
+using .NaturalIndexing
+
+
+# Load utility modules in
+using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
 
 include("methods/angles.jl")
 include("methods/area.jl")
@@ -44,6 +65,7 @@ include("methods/centroid.jl")
 include("methods/convex_hull.jl")
 include("methods/distance.jl")
 include("methods/equals.jl")
+include("methods/perimeter.jl")
 include("methods/clipping/predicates.jl")
 include("methods/clipping/clipping_processor.jl")
 include("methods/clipping/coverage.jl")
@@ -61,14 +83,17 @@ include("methods/geom_relations/intersects.jl")
 include("methods/geom_relations/overlaps.jl")
 include("methods/geom_relations/touches.jl")
 include("methods/geom_relations/within.jl")
+include("methods/geom_relations/common.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
+include("methods/voronoi.jl")
 
 include("transformations/extent.jl")
 include("transformations/flip.jl")
 include("transformations/reproject.jl")
 include("transformations/segmentize.jl")
 include("transformations/simplify.jl")
+include("transformations/smooth.jl")
 include("transformations/tuples.jl")
 include("transformations/transform.jl")
 include("transformations/forcedims.jl")
