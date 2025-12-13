@@ -39,6 +39,7 @@ GeometryOpsProjExt = "Proj"
 GeometryOpsTGGeometryExt = "TGGeometry"
 
 [compat]
+ArchGDAL = "0.10.10"
 AbstractTrees = "0.4"
 AdaptivePredicates = "1.2"
 CoordinateTransformations = "0.5, 0.6"
