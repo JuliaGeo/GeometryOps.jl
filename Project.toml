@@ -89,3 +89,6 @@ test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", 
 
 [sources]
 GeometryOpsCore = { path = "GeometryOpsCore" }
+
+[workspace]
+projects = ["GeometryOpsCore", "test", "docs"]
