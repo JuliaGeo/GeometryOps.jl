@@ -3,20 +3,21 @@
 module GeometryOps
 
 import GeometryOpsCore
-import GeometryOpsCore: 
+import GeometryOpsCore:
                 TraitTarget,
                 Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
                 manifold, best_manifold,
                 Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype, istrue,
-                TaskFunctors, 
+                TaskFunctors,
                 WithTrait,
                 WithXY, WithXYZ, WithXYM, WithXYZM,
-                apply, applyreduce, 
+                apply, applyreduce,
                 flatten, reconstruct, rebuild, unwrap, _linearring,
+                get_geometries,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
 
-export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
+export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap, get_geometries 
 
 using GeoInterface
 using LinearAlgebra, Statistics
