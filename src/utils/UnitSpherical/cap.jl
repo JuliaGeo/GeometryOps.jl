@@ -56,8 +56,14 @@ cap = SphericalCap(p1, p2, p3)
 
 # Spherical cap implementation
 struct SphericalCap{T}
+    "The point at the center of the cap."
     point::UnitSphericalPoint{T}
+    "The radius of the cap (in radians).  This is what should normally be used in any calculation or comparison."
     radius::T
+    """
+    The distance from the center of the cap to any point along its circumference in Cartesian units, basically `cos(radius)`.  
+    Using this allows you to avoid an `acos` when testing if a point is inside the cap.
+    """
     cartesian_radius::T # TODO: compute using cosine(radius)
 end
 
