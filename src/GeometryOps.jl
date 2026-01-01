@@ -3,20 +3,21 @@
 module GeometryOps
 
 import GeometryOpsCore
-import GeometryOpsCore: 
+import GeometryOpsCore:
                 TraitTarget,
                 Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
                 manifold, best_manifold,
                 Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype, istrue,
-                TaskFunctors, 
+                TaskFunctors,
                 WithTrait,
                 WithXY, WithXYZ, WithXYM, WithXYZM,
-                apply, applyreduce, 
+                apply, applyreduce,
                 flatten, reconstruct, rebuild, unwrap, _linearring,
+                get_geometries,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
 
-export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
+export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap, get_geometries 
 
 using GeoInterface
 using LinearAlgebra, Statistics, Random
@@ -33,6 +34,7 @@ import SortTileRecursiveTree
 import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
+const DelTri = DelaunayTriangulation
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
@@ -82,9 +84,11 @@ include("methods/geom_relations/intersects.jl")
 include("methods/geom_relations/overlaps.jl")
 include("methods/geom_relations/touches.jl")
 include("methods/geom_relations/within.jl")
+include("methods/geom_relations/common.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")
+include("methods/voronoi.jl")
 
 include("transformations/extent.jl")
 include("transformations/flip.jl")

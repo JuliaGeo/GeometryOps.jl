@@ -52,16 +52,44 @@ const _AREA_TARGETS = TraitTarget{Union{GI.PolygonTrait,GI.AbstractCurveTrait,GI
 
 """
     area(geom, [T = Float64])::T
+    area(manifold::Manifold, geom, [T = Float64])::T
+    area(algorithm::Algorithm, geom, [T = Float64])::T
 
-Returns the area of a geometry or collection of geometries. 
+Returns the area of a geometry or collection of geometries.
 This is computed slightly differently for different geometries:
 
     - The area of a point/multipoint is always zero.
     - The area of a curve/multicurve is always zero.
     - The area of a polygon is the absolute value of the signed area.
     - The area multi-polygon is the sum of the areas of all of the sub-polygons.
-    - The area of a geometry collection, feature collection of array/iterable 
-        is the sum of the areas of all of the sub-geometries. 
+    - The area of a geometry collection, feature collection of array/iterable
+        is the sum of the areas of all of the sub-geometries.
+
+## Manifold support
+
+- `Planar()`: Uses the shoelace formula for 2D Cartesian coordinates (default).
+- `Spherical()`: Uses Girard's theorem for spherical polygons. Coordinates
+   are interpreted as (longitude, latitude) in degrees. Returns area in
+   square units of the sphere's radius (default: Earth's mean radius in meters).
+- `Geodesic()`: Uses geodesic calculations (requires Proj extension).
+
+## Examples
+
+```julia
+import GeometryOps as GO
+import GeoInterface as GI
+
+# Planar area (default)
+rect = GI.Polygon([[(0,0), (1,0), (1,1), (0,1), (0,0)]])
+GO.area(rect)  # 1.0
+
+# Spherical area (1/8 of Earth's surface)
+octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+GO.area(GO.Spherical(), octant)  # ≈ 6.38e13 m²
+
+# Spherical area with custom radius (unit sphere)
+GO.area(GO.Spherical(radius=1.0), octant)  # ≈ π/2
+```
 
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
@@ -156,5 +184,100 @@ function _signed_area(::Type{T}, geom) where T
     return T(area / 2)
 end
 
+# ## Spherical Area
+# The first implementation here is a naive triangulated implementation.
+# The second cut implementation that is planned will use the algorithm that Google's s2 uses
+# to get numerically stable triangles from a spherical polygon.
 
-# ## Spherical
+export NaiveTriangulatedSphericalArea
+
+abstract type SphericalTriangleAreaMethod end
+
+struct Girard <: SphericalTriangleAreaMethod end
+struct Eriksson <: SphericalTriangleAreaMethod end
+struct NaiveTriangulatedSphericalArea{S <: Spherical, T <: SphericalTriangleAreaMethod} <: SingleManifoldAlgorithm{S}
+    manifold::S
+    method::T
+end
+NaiveTriangulatedSphericalArea(; radius = Spherical().radius, method = Eriksson()) = NaiveTriangulatedSphericalArea(Spherical(; radius), method)
+NaiveTriangulatedSphericalArea(manifold::Spherical) = NaiveTriangulatedSphericalArea(manifold, Eriksson())
+GeometryOpsCore.manifold(alg::NaiveTriangulatedSphericalArea) = alg.manifold
+
+using .UnitSpherical: UnitSphericalPoint
+
+# Compute signed area of a spherical triangle on the unit sphere using the half-angle formula.
+# Returns the spherical excess E, which equals the area on the unit sphere.
+function _spherical_triangle_area(::Girard, p1::UnitSphericalPoint, p2::UnitSphericalPoint, p3::UnitSphericalPoint)
+    cross_23 = p2 × p3
+    triple = p1 ⋅ cross_23
+    d12 = p1 ⋅ p2
+    d23 = p2 ⋅ p3
+    d31 = p3 ⋅ p1
+    denom = 1 + d12 + d23 + d31
+    abs(denom) < eps(Float64) && return zero(Float64)
+    return 2 * atan(triple, denom)
+end
+
+# Using Eriksson's formula for the area of spherical triangles: https://www.jstor.org/stable/2691141
+function _spherical_triangle_area(::Eriksson, a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
+    #t = abs(dot(a, cross(b, c)))
+    #t /= 1 + dot(b,c) + dot(c, a) + dot(a, b)
+    t = abs(dot(a, (cross(b - a, c - a))) / dot(b + a, c + a))
+    return 2*atan(t)
+end
+
+
+
+# Compute signed area of a ring using streaming iteration (no allocation)
+function _naive_triangulated_spherical_ring_area(method::SphericalTriangleAreaMethod, trait::GI.AbstractCurveTrait, ring, T)
+    GI.npoint(trait, ring) < 3 && return zero(T)
+    # Get first point and remaining points
+    p1_geo, rest = Iterators.peel(GI.getpoint(trait, ring))
+    p1 = UnitSphericalPoint(GI.PointTrait(), p1_geo)
+    pfirst = p1
+    # Collect remaining points, converting to unit sphere
+    points = collect(Iterators.map(p -> UnitSphericalPoint(GI.PointTrait(), p), rest))
+    isempty(points) && return zero(T)
+    # Skip closing point if it matches first
+    if points[end] ≈ pfirst
+        pop!(points)
+    end
+    length(points) < 2 && return zero(T)
+    # Triangulate from first vertex
+    area = zero(T)
+    for i in 1:(length(points)-1)
+        area += _spherical_triangle_area(method, pfirst, points[i], points[i+1])
+    end
+    return area
+end
+# Dispatch area(::Spherical, ...) to use NaiveTriangulatedSphericalArea with Eriksson's formula for triangles
+function area(m::Spherical, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
+    area(NaiveTriangulatedSphericalArea(m), geom, T; threaded, kwargs...)
+end
+
+# Main implementation for NaiveTriangulatedSphericalArea
+function area(alg::NaiveTriangulatedSphericalArea, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
+
+    function _polygon_area(trait::GI.PolygonTrait, alg::SphericalTriangleAreaMethod, poly)
+        GI.isempty(poly) && return zero(T)
+        ext = GI.getexterior(poly)
+        ext_area = abs(_naive_triangulated_spherical_ring_area(alg, GI.trait(ext), ext, T))
+        for hole in GI.gethole(poly)
+            hole_trait = GI.trait(hole)
+            ext_area -= abs(_naive_triangulated_spherical_ring_area(alg, hole_trait, hole, T))
+        end
+        return ext_area
+    end
+    _polygon_area(::GI.PointTrait, alg, geom) = zero(T)
+
+    unit_area = applyreduce(
+        WithTrait((trait, g) -> _polygon_area(trait, alg.method, g)),
+        +,
+        TraitTarget{Union{GI.PolygonTrait, GI.PointTrait}}(),
+        geom;
+        threaded,
+        init=zero(T),
+        kwargs...
+    )
+    return T(unit_area * manifold(alg).radius^2)
+end

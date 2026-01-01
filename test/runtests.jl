@@ -8,6 +8,7 @@ include("helpers.jl")
     @safetestset "Algorithm" begin include("core/algorithm.jl") end
     @safetestset "Manifold" begin include("core/manifold.jl") end
     @safetestset "Applicators" begin include("core/applicators.jl") end
+    @safetestset "Geometry Utils" begin include("core/geometry_utils.jl") end
 end
 
 @safetestset "Types" begin include("types.jl") end
@@ -27,6 +28,7 @@ end
 @safetestset "Orientation" begin include("methods/orientation.jl") end
 @safetestset "Centroid" begin include("methods/centroid.jl") end
 @safetestset "Convex Hull" begin include("methods/convex_hull.jl") end
+@safetestset "Voronoi" begin include("methods/voronoi.jl") end
 @safetestset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end

@@ -15,16 +15,15 @@ import GeoInterface as GI, GeometryOps as GO
 # TODO: Add working example
 ```
 """
-crosses(g1, g2)::Bool = crosses(trait(g1), g1, trait(g2), g2)::Bool
-crosses(t1::FeatureTrait, g1, t2, g2)::Bool = crosses(GI.geometry(g1), g2)
-crosses(t1, g1, t2::FeatureTrait, g2)::Bool = crosses(g1, geometry(g2))
-crosses(::MultiPointTrait, g1, ::LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)
-crosses(::MultiPointTrait, g1, ::PolygonTrait, g2)::Bool = multipoint_crosses_poly(g1, g2)
-crosses(::LineStringTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_lines(g2, g1)
-crosses(::LineStringTrait, g1, ::PolygonTrait, g2)::Bool = line_crosses_poly(g1, g2)
-crosses(::LineStringTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_line(g1, g2)
-crosses(::PolygonTrait, g1, ::MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
-crosses(::PolygonTrait, g1, ::LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
+crosses(g1, g2)::Bool = _crosses(GI.trait(g1), g1, GI.trait(g2), g2)::Bool
+
+_crosses(::GI.MultiPointTrait, g1, ::GI.LineStringTrait, g2)::Bool = multipoint_crosses_line(g1, g2)
+_crosses(::GI.MultiPointTrait, g1, ::GI.PolygonTrait, g2)::Bool = multipoint_crosses_poly(g1, g2)
+_crosses(::GI.LineStringTrait, g1, ::GI.MultiPointTrait, g2)::Bool = multipoint_crosses_lines(g2, g1)
+_crosses(::GI.LineStringTrait, g1, ::GI.PolygonTrait, g2)::Bool = line_crosses_poly(g1, g2)
+_crosses(::GI.LineStringTrait, g1, ::GI.LineStringTrait, g2)::Bool = line_crosses_line(g1, g2)
+_crosses(::GI.PolygonTrait, g1, ::GI.MultiPointTrait, g2)::Bool = multipoint_crosses_poly(g2, g1)
+_crosses(::GI.PolygonTrait, g1, ::GI.LineStringTrait, g2)::Bool = line_crosses_poly(g2, g1)
 
 """
     crosses(g1)
@@ -33,21 +32,6 @@ Return a function that checks if its input crosses `g1`.
 This is equivalent to `x -> crosses(x, g1)`.
 """
 crosses(g1) = Base.Fix2(crosses, g1)
-
-function crosses(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
-    return crosses(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
-end
-function crosses(t1, e1::Extents.Extent, t2, g2)
-    return crosses(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
-end
-function crosses(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
-    return false # two extents can never cross!
-    # TODO that's not quite true, if one extent is a line...
-end
-
-
-
-
 
 
 

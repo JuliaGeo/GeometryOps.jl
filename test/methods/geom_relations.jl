@@ -2,6 +2,7 @@ import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG
 using Extents
+using DataFrames
 using ..TestHelpers
 
 # Tests of DE-9IM Methods
@@ -300,20 +301,66 @@ end
         @test GO.overlaps($p1, $p2) == LG.overlaps($p1, $p2)
         @test !GO.overlaps($p1, (1, 1))
         @test !GO.overlaps((1, 1), $p2)
-    
+
         # Test basic polygons that overlap
         @test GO.overlaps($p1, $p3) == LG.overlaps($p1, $p3)
-    
+
         # Test one polygon within the other
         @test GO.overlaps($p2, $p4) == GO.overlaps($p4, $p2) == LG.overlaps($p2, $p4)
-    
+
         # Test equal polygons
         @test GO.overlaps($p5, $p5) == LG.overlaps($p5, $p5)
-    
+
         # Test polygon that overlaps with multipolygon
         @test GO.overlaps($m1, $p3) == LG.overlaps($m1, $p3)
         # Test polygon in hole of multipolygon, doesn't overlap
         @test GO.overlaps($m1, $p4) == LG.overlaps($m1, $p4)
+    end
+
+    # Test Line × Line overlaps (GI.Line, not LineString)
+    @testset "Line × Line overlaps" begin
+        # Overlapping collinear lines
+        line1 = GI.Line([(0.0, 0.0), (2.0, 0.0)])
+        line2 = GI.Line([(1.0, 0.0), (3.0, 0.0)])
+        @test GO.overlaps(line1, line2) == true
+
+        # Non-overlapping collinear lines
+        line3 = GI.Line([(0.0, 0.0), (1.0, 0.0)])
+        line4 = GI.Line([(2.0, 0.0), (3.0, 0.0)])
+        @test GO.overlaps(line3, line4) == false
+
+        # One line fully contains the other
+        line5 = GI.Line([(0.0, 0.0), (4.0, 0.0)])
+        line6 = GI.Line([(1.0, 0.0), (2.0, 0.0)])
+        @test GO.overlaps(line5, line6) == false
+
+        # Non-collinear lines
+        line7 = GI.Line([(0.0, 0.0), (1.0, 0.0)])
+        line8 = GI.Line([(0.0, 0.0), (0.0, 1.0)])
+        @test GO.overlaps(line7, line8) == false
+    end
+
+    # Test MultiPolygon × MultiPolygon overlaps
+    @testset "MultiPolygon × MultiPolygon overlaps" begin
+        # Create two multipolygons that overlap
+        mp1 = GI.MultiPolygon([
+            [[[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]]],
+            [[[5.0, 5.0], [7.0, 5.0], [7.0, 7.0], [5.0, 7.0], [5.0, 5.0]]]
+        ])
+        mp2 = GI.MultiPolygon([
+            [[[1.0, 1.0], [3.0, 1.0], [3.0, 3.0], [1.0, 3.0], [1.0, 1.0]]],
+            [[[6.0, 6.0], [8.0, 6.0], [8.0, 8.0], [6.0, 8.0], [6.0, 6.0]]]
+        ])
+        @test GO.overlaps(mp1, mp2) == true
+
+        # Create two multipolygons that don't overlap
+        mp3 = GI.MultiPolygon([
+            [[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]]
+        ])
+        mp4 = GI.MultiPolygon([
+            [[[5.0, 5.0], [6.0, 5.0], [6.0, 6.0], [5.0, 6.0], [5.0, 5.0]]]
+        ])
+        @test GO.overlaps(mp3, mp4) == false
     end
 end
 
@@ -342,4 +389,90 @@ end
     @test GO.overlaps(p2)(p1) == GO.overlaps(p1, p2)
     @test GO.touches(p2)(p1) == GO.touches(p1, p2)
     @test GO.within(p2)(p1) == GO.within(p1, p2)
+end
+
+@testset "Features, Table rows and Extents" begin
+    feature1 = GI.Feature(pt1; properties=Dict{Symbol, Any}())
+    feature2 = GI.Feature(pt2; properties=Dict{Symbol, Any}())
+
+    # Test NamedTuple
+    named_tuple1 = (; geometry=pt1)
+    named_tuple2 = (; geometry=pt2)
+    @test GO.disjoint(named_tuple1, named_tuple2) == GO.disjoint(pt1, pt2)
+    @test GO.coveredby(named_tuple1, ext1) == GO.coveredby(pt1, ext1)
+    @test GO.within(named_tuple1, ext1) == GO.within(pt1, ext1)
+
+    # Test DataFrame row
+    df = DataFrame(geometry=[pt1, pt2])
+    df_row1 = df[1, :]
+    df_row2 = df[2, :]
+    @test GO.disjoint(df_row1, df_row2) == GO.disjoint(pt1, pt2)
+    @test GO.coveredby(df_row1, ext1) == GO.coveredby(pt1, ext1)
+    @test GO.within(df_row1, ext1) == GO.within(pt1, ext1)
+
+    # Test features
+    @test GO.disjoint(feature1, feature2) == GO.disjoint(pt1, pt2)
+    @test GO.coveredby(feature1, ext1) == GO.coveredby(pt1, ext1)
+    @test GO.within(feature1, ext1) == GO.within(pt1, ext1)
+
+    # Test mixed types
+    @test GO.disjoint(feature1, named_tuple2) == GO.disjoint(pt1, pt2)
+    @test GO.coveredby(feature1, ext1) == GO.coveredby(pt1, ext1)
+    @test GO.within(df_row1, ext1) == GO.within(pt1, ext1)
+
+    # Test extents
+    @test GO.disjoint(ext1, ext3) == Extents.disjoint(ext1, ext3)
+    @test GO.coveredby(ext1, ext1) == Extents.coveredby(ext1, ext1)
+
+    # Test crosses with Features
+    line_a = GI.LineString([(-2.0, 2.0), (4.0, 2.0)])
+    line_b = GI.LineString([(1.0, 1.0), (1.0, 2.0), (1.0, 3.0), (1.0, 4.0)])
+    poly_c = GI.Polygon([[(-1.0, 2.0), (3.0, 2.0), (3.0, 3.0), (-1.0, 3.0), (-1.0, 2.0)]])
+    line_d = GI.LineString([(0.5, 2.5), (1.0, 1.0)])
+    mpt_e = GI.MultiPoint([(1.0, 2.0), (12.0, 12.0)])
+
+    feature_line_a = GI.Feature(line_a; properties=Dict{Symbol, Any}())
+    feature_line_b = GI.Feature(line_b; properties=Dict{Symbol, Any}())
+    feature_poly_c = GI.Feature(poly_c; properties=Dict{Symbol, Any}())
+    feature_line_d = GI.Feature(line_d; properties=Dict{Symbol, Any}())
+    feature_mpt_e = GI.Feature(mpt_e; properties=Dict{Symbol, Any}())
+
+    # Test crosses with both geometries as Features
+    @test GO.crosses(feature_line_a, feature_line_b) == GO.crosses(line_a, line_b)
+    @test GO.crosses(feature_line_d, feature_poly_c) == GO.crosses(line_d, poly_c)
+    @test GO.crosses(feature_mpt_e, feature_line_b) == GO.crosses(mpt_e, line_b)
+
+    # Test crosses with one Feature and one raw geometry
+    @test GO.crosses(feature_line_a, line_b) == GO.crosses(line_a, line_b)
+    @test GO.crosses(line_a, feature_line_b) == GO.crosses(line_a, line_b)
+    @test GO.crosses(feature_line_d, poly_c) == GO.crosses(line_d, poly_c)
+    @test GO.crosses(line_d, feature_poly_c) == GO.crosses(line_d, poly_c)
+
+    # Test overlaps with Features
+    poly_overlap1 = GI.Polygon([[[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0], [0.0, 0.0]]])
+    poly_overlap2 = GI.Polygon([[[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5], [0.5, 0.5]]])
+    poly_disjoint = GI.Polygon([[[2.0, 2.0], [3.0, 2.0], [3.0, 3.0], [2.0, 3.0], [2.0, 2.0]]])
+
+    feature_overlap1 = GI.Feature(poly_overlap1; properties=Dict{Symbol, Any}())
+    feature_overlap2 = GI.Feature(poly_overlap2; properties=Dict{Symbol, Any}())
+    feature_disjoint = GI.Feature(poly_disjoint; properties=Dict{Symbol, Any}())
+
+    # Test overlaps with both geometries as Features
+    @test GO.overlaps(feature_overlap1, feature_overlap2) == GO.overlaps(poly_overlap1, poly_overlap2)
+    @test GO.overlaps(feature_overlap1, feature_disjoint) == GO.overlaps(poly_overlap1, poly_disjoint)
+
+    # Test overlaps with one Feature and one raw geometry
+    @test GO.overlaps(feature_overlap1, poly_overlap2) == GO.overlaps(poly_overlap1, poly_overlap2)
+    @test GO.overlaps(poly_overlap1, feature_overlap2) == GO.overlaps(poly_overlap1, poly_overlap2)
+    @test GO.overlaps(feature_overlap1, poly_disjoint) == GO.overlaps(poly_overlap1, poly_disjoint)
+    @test GO.overlaps(poly_overlap1, feature_disjoint) == GO.overlaps(poly_overlap1, poly_disjoint)
+
+    # Test with NamedTuples for crosses and overlaps
+    nt_line_a = (; geometry=line_a)
+    nt_line_b = (; geometry=line_b)
+    nt_poly_overlap1 = (; geometry=poly_overlap1)
+    nt_poly_overlap2 = (; geometry=poly_overlap2)
+
+    @test GO.crosses(nt_line_a, nt_line_b) == GO.crosses(line_a, line_b)
+    @test GO.overlaps(nt_poly_overlap1, nt_poly_overlap2) == GO.overlaps(poly_overlap1, poly_overlap2)
 end
