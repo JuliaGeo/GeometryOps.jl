@@ -150,9 +150,11 @@ end
         c = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), pts)
         # All points should be inside or on the circle
         for pt in pts
-            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
-            d = GO.UnitSpherical.spherical_distance(p, c.point)
-            @test d <= c.radius * (1 + 1e-10)
+            @testset let pt=pt
+                p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+                d = GO.UnitSpherical.spherical_distance(p, c.point)
+                @test d <= c.radius * (1 + 1e-10)
+            end
         end
     end
 
