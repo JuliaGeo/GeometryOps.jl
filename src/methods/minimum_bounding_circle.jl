@@ -73,8 +73,9 @@ function GI.getpoint(::GI.LinearRingTrait, r::PlanarCircleRing, i::Int)
     idx = mod1(i, nsegs)
     θ = 2π * (idx - 1) / nsegs
     rad = radius(r.circle)
-    x = r.circle.center[1] + rad * cos(θ)
-    y = r.circle.center[2] + rad * sin(θ)
+    sinθ, cosθ = sincos(θ) # faster than sin/cos separately
+    x = r.circle.center[1] + rad * cosθ
+    y = r.circle.center[2] + rad * sinθ
     return (x, y)
 end
 
@@ -108,7 +109,7 @@ Welzl(; manifold::Manifold=Planar()) = Welzl(manifold)
 GeometryOpsCore.manifold(alg::Welzl) = alg.manifold
 
 # Helper: check if point is inside or on circle (using squared distance)
-function _point_in_circle(p, circle::PlanarCircle)
+function _point_in_circle(::Planar, p, circle::PlanarCircle)
     isnan(circle.radius_squared) && return false
     dx = p[1] - circle.center[1]
     dy = p[2] - circle.center[2]
@@ -118,7 +119,7 @@ function _point_in_circle(p, circle::PlanarCircle)
 end
 
 # Create circle with diameter from p1 to p2
-function _circle_from_two_points(p1, p2)
+function _circle_from_two_points(m::Planar, p1, p2)
     T = promote_type(typeof(p1[1]), typeof(p2[1]))
     center = ((p1[1] + p2[1]) / 2, (p1[2] + p2[2]) / 2)
     dx = p1[1] - center[1]
@@ -128,7 +129,7 @@ function _circle_from_two_points(p1, p2)
 end
 
 # Create circumcircle of three points
-function _circle_from_three_points(p1, p2, p3)
+function _circle_from_three_points(m::Planar, p1, p2, p3)
     T = promote_type(typeof(p1[1]), typeof(p2[1]), typeof(p3[1]))
 
     ax, ay = p1[1], p1[2]
@@ -143,11 +144,11 @@ function _circle_from_three_points(p1, p2, p3)
         d23 = (bx - cx)^2 + (by - cy)^2
         d13 = (ax - cx)^2 + (ay - cy)^2
         if d12 >= d23 && d12 >= d13
-            return _circle_from_two_points(p1, p2)
+            return _circle_from_two_points(m, p1, p2)
         elseif d23 >= d13
-            return _circle_from_two_points(p2, p3)
+            return _circle_from_two_points(m, p2, p3)
         else
-            return _circle_from_two_points(p1, p3)
+            return _circle_from_two_points(m, p1, p3)
         end
     end
 
@@ -161,16 +162,16 @@ function _circle_from_three_points(p1, p2, p3)
 end
 
 # Create minimum circle from 0-3 boundary points
-function _make_circle(boundary::Vector)
+function _make_circle(m::Planar, boundary::Vector)
     if isempty(boundary)
         return PlanarCircle((NaN, NaN), NaN)
     elseif length(boundary) == 1
         T = typeof(boundary[1][1])
         return PlanarCircle{T}(boundary[1], zero(T))
     elseif length(boundary) == 2
-        return _circle_from_two_points(boundary[1], boundary[2])
+        return _circle_from_two_points(m, boundary[1], boundary[2])
     else
-        return _circle_from_three_points(boundary[1], boundary[2], boundary[3])
+        return _circle_from_three_points(m, boundary[1], boundary[2], boundary[3])
     end
 end
 
@@ -178,25 +179,25 @@ end
 # points: all points to consider
 # idx: current index (1-based, processes points[idx:end])
 # boundary: points that must be on the circle boundary (0-3 points)
-function _welzl!(points::Vector, idx::Int, boundary::Vector)
+function _welzl!(m::Manifold, points::Vector, idx::Int, boundary::Vector)
     # Base case: no more points or 3 boundary points define a unique circle
     if idx > length(points) || length(boundary) == 3
-        return _make_circle(boundary)
+        return _make_circle(m, boundary)
     end
 
     p = points[idx]
 
     # Recursively compute circle without p
-    circle = _welzl!(points, idx + 1, boundary)
+    circle = _welzl!(m, points, idx + 1, boundary)
 
     # If p is inside the circle, we're done
-    if _point_in_circle(p, circle)
+    if _point_in_circle(m, p, circle)
         return circle
     end
 
     # Otherwise, p must be on the boundary of the minimum circle
     push!(boundary, p)
-    result = _welzl!(points, idx + 1, boundary)
+    result = _welzl!(m, points, idx + 1, boundary)
     pop!(boundary)
 
     return result
@@ -250,5 +251,62 @@ function minimum_bounding_circle(alg::Welzl{Planar}, geom)
     T = typeof(shuffled[1][1])
     boundary = Tuple{T, T}[]
 
-    return _welzl!(shuffled, 1, boundary)
+    return _welzl!(alg.manifold, shuffled, 1, boundary)
+end
+
+
+function minimum_bounding_circle(alg::Welzl{<: Spherical}, geom)
+    # Extract all points as UnitSphericalPoints
+    points = collect(flatten(UnitSpherical.UnitSphereFromGeographic(), GI.PointTrait, geom))
+
+    # Handle edge cases
+    if isempty(points)
+        return SphericalCap(UnitSphericalPoint(NaN, NaN, NaN), NaN, NaN)
+    elseif length(points) == 1
+        T = typeof(points[1][1])
+        return SphericalCap{T}(points[1], zero(T), one(T))
+    end
+
+    # Shuffle for expected O(n) performance
+    shuffled = Random.shuffle(points)
+
+    # Initialize empty boundary
+    T = typeof(shuffled[1][1])
+    boundary = UnitSphericalPoint{T}[]
+
+    return _welzl!(alg.manifold, shuffled, 1, boundary)
+end
+
+
+# Create minimum circle from 0-3 boundary points
+function _make_circle(m::Spherical, boundary::Vector)
+    if isempty(boundary)
+        return SphericalCap(UnitSphericalPoint(NaN, NaN, NaN), NaN, NaN)
+    elseif length(boundary) == 1
+        T = typeof(boundary[1][1])
+        return SphericalCap{T}(boundary[1], zero(T), one(T))
+    elseif length(boundary) == 2
+        return _circle_from_two_points(m, boundary[1], boundary[2])
+    else
+        return _circle_from_three_points(m, boundary[1], boundary[2], boundary[3])
+    end
+end
+
+function _circle_from_two_points(m::Spherical, p1::UnitSphericalPoint, p2::UnitSphericalPoint)
+    midpoint = UnitSpherical.slerp(p1, p2, 0.5)
+    radius = UnitSpherical.spherical_distance(p1, p2) / 2
+    return SphericalCap(midpoint, radius)
+end
+
+function _circle_from_three_points(m::Spherical, p1::UnitSphericalPoint, p2::UnitSphericalPoint, p3::UnitSphericalPoint)
+    return SphericalCap(p1, p2, p3)
+end
+
+# TODO: replace this internal calculation with some other thing using `distancelike`
+function _point_in_circle(m::Spherical, p::UnitSphericalPoint, c::SphericalCap)
+    isnan(c.radiuslike) && return false
+    # For point inside cap: angular_distance(p, center) <= radius
+    # Equivalently: cos(angular_distance) >= cos(radius)
+    # Since p ⋅ center = cos(angular_distance) and radiuslike = cos(radius):
+    return (p ⋅ c.point) >= c.radiuslike
 end

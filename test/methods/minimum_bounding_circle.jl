@@ -110,3 +110,78 @@ import GeoInterface as GI
         end
     end
 end
+
+@testset "Spherical minimum_bounding_circle" begin
+    @testset "Single point" begin
+        # Geographic point (lon, lat)
+        c = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), [(0.0, 0.0)])
+        @test c.radius == 0.0
+        @test c.radiuslike == 1.0  # cos(0) = 1
+    end
+
+    @testset "Two points" begin
+        # Two points on the equator, 90 degrees apart
+        pts = [(0.0, 0.0), (90.0, 0.0)]  # (lon, lat)
+        c = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), pts)
+        # Center should be at (45, 0), radius should be π/4 radians (45 degrees)
+        @test c.radius ≈ π/4 atol=1e-10
+    end
+
+    @testset "Three points (equilateral spherical triangle)" begin
+        # Three points forming an equilateral triangle on the sphere
+        # Points at 120 degree intervals on the equator
+        pts = [(0.0, 0.0), (120.0, 0.0), (240.0, 0.0)]
+        c = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), pts)
+        # All three points should be equidistant from center
+        p1 = GO.UnitSpherical.UnitSphereFromGeographic()(pts[1])
+        p2 = GO.UnitSpherical.UnitSphereFromGeographic()(pts[2])
+        p3 = GO.UnitSpherical.UnitSphereFromGeographic()(pts[3])
+        d1 = GO.UnitSpherical.spherical_distance(p1, c.point)
+        d2 = GO.UnitSpherical.spherical_distance(p2, c.point)
+        d3 = GO.UnitSpherical.spherical_distance(p3, c.point)
+        @test d1 ≈ d2 atol=1e-10
+        @test d2 ≈ d3 atol=1e-10
+        @test d1 ≈ c.radius atol=1e-10
+    end
+
+    @testset "Four points with interior point" begin
+        # Three boundary points plus one interior point
+        pts = [(0.0, 0.0), (10.0, 0.0), (5.0, 8.66), (5.0, 3.0)]  # last point is interior
+        c = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), pts)
+        # All points should be inside or on the circle
+        for pt in pts
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-10)
+        end
+    end
+
+    @testset "Empty input" begin
+        c = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), Tuple{Float64, Float64}[])
+        @test isnan(c.radius)
+        @test isnan(c.radiuslike)
+    end
+
+    @testset "All points inside circle" begin
+        # Generate random geographic points and verify all are inside
+        pts = [(rand() * 20 - 10, rand() * 20 - 10) for _ in 1:20]  # small region
+        c = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), pts)
+        for pt in pts
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-10)
+        end
+    end
+
+    @testset "From polygon" begin
+        poly = GI.Polygon([[(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0), (-5.0, -5.0)]])
+        c = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), poly)
+        # Verify corners are on or inside the circle
+        corners = [(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)]
+        for pt in corners
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-10)
+        end
+    end
+end
