@@ -55,16 +55,24 @@ cap = SphericalCap(p1, p2, p3)
 =#
 
 # Spherical cap implementation
+"""
+    SphericalCap{T}
+    SphericalCap(point::UnitSphericalPoint{T}, radius::T)
+
+A spherical cap represents a section of a unit sphere about some point, bounded by a radius.
+It is defined by a center point on the unit sphere and a radius (in radians).
+"""
 struct SphericalCap{T}
     "The point at the center of the cap."
     point::UnitSphericalPoint{T}
-    "The radius of the cap (in radians).  This is what should normally be used in any calculation or comparison."
+    "The radius of the cap (in radians). This is what should normally be used in any calculation or comparison."
     radius::T
     """
-    The distance from the center of the cap to any point along its circumference in Cartesian units, basically `cos(radius)`.  
-    Using this allows you to avoid an `acos` when testing if a point is inside the cap.
+    A comparison-friendly value equal to `cos(radius)`. Used for efficient containment tests:
+    a point `p` is inside the cap if `p ⋅ center >= radiuslike`. Note that this value is
+    *inversely* related to cap size (radiuslike=1 for a point, radiuslike=0 for a hemisphere).
     """
-    cartesian_radius::T # TODO: compute using cosine(radius)
+    radiuslike::T
 end
 
 function SphericalCap(point::UnitSphericalPoint{T}, radius::Number) where T
