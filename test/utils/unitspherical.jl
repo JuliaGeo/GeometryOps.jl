@@ -195,6 +195,65 @@ end
         @test isapprox(cap.radius, ϵ, atol=1e-6)
     end
 
+    @testset "Circumcenter winding order independence" begin
+        # The circumcenter should be the same regardless of point order
+        # This tests the fix for the antipodal circumcenter bug
+
+        using LinearAlgebra: norm
+
+        # Test with a triangle in the first octant
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        b = UnitSphericalPoint(0.0, 1.0, 0.0)
+        c = UnitSphericalPoint(0.0, 0.0, 1.0)
+
+        # All 6 permutations should give the same circumcenter
+        centers = [
+            UnitSpherical.circumcenter_on_unit_sphere(a, b, c),
+            UnitSpherical.circumcenter_on_unit_sphere(a, c, b),
+            UnitSpherical.circumcenter_on_unit_sphere(b, a, c),
+            UnitSpherical.circumcenter_on_unit_sphere(b, c, a),
+            UnitSpherical.circumcenter_on_unit_sphere(c, a, b),
+            UnitSpherical.circumcenter_on_unit_sphere(c, b, a),
+        ]
+
+        # All centers should be approximately equal
+        for i in 2:6
+            @test isapprox(centers[1][1], centers[i][1], atol=1e-10)
+            @test isapprox(centers[1][2], centers[i][2], atol=1e-10)
+            @test isapprox(centers[1][3], centers[i][3], atol=1e-10)
+        end
+
+        # The center should be at (1/√3, 1/√3, 1/√3) - the smaller circumcircle
+        expected = 1/√3
+        @test isapprox(centers[1][1], expected, atol=1e-10)
+        @test isapprox(centers[1][2], expected, atol=1e-10)
+        @test isapprox(centers[1][3], expected, atol=1e-10)
+
+        # Test with random triangles - all should give radius < π/2
+        # (the smaller circumcircle, not the antipodal one)
+        using Random
+        Random.seed!(42)
+        for _ in 1:100
+            # Generate 3 random points on the unit sphere
+            points = [UnitSphericalPoint(randn(), randn(), randn()) for _ in 1:3]
+            points = [p / norm(p) for p in points]  # Normalize
+
+            cap = SphericalCap(points[1], points[2], points[3])
+
+            # The circumcircle should always be the smaller one (radius ≤ π/2)
+            # unless points are nearly collinear (on a great circle)
+            @test cap.radius <= π/2 + 1e-10
+
+            # All 3 points should be equidistant from the center
+            d1 = UnitSpherical.spherical_distance(cap.point, points[1])
+            d2 = UnitSpherical.spherical_distance(cap.point, points[2])
+            d3 = UnitSpherical.spherical_distance(cap.point, points[3])
+            @test isapprox(d1, d2, atol=1e-10)
+            @test isapprox(d2, d3, atol=1e-10)
+            @test isapprox(d1, cap.radius, atol=1e-10)
+        end
+    end
+
     @testset "Merging of SphericalCaps" begin
         function test_merge(p1, p2, r1, r2, pmerged, rmerged)
             r1 = deg2rad(r1)
