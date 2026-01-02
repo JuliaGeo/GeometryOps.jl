@@ -130,11 +130,21 @@ function _merge(x::SphericalCap, y::SphericalCap)
 end
 
 function circumcenter_on_unit_sphere(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
-    LinearAlgebra.normalize(
-        LinearAlgebra.cross(a, b) + 
-        LinearAlgebra.cross(b, c) + 
-        LinearAlgebra.cross(c, a)
-    )
+    raw = LinearAlgebra.cross(a, b) +
+          LinearAlgebra.cross(b, c) +
+          LinearAlgebra.cross(c, a)
+    center = LinearAlgebra.normalize(raw)
+
+    # The formula can return either of two antipodal circumcenters depending on
+    # the winding order of the input points. We want the smaller circumcircle,
+    # which has its center on the same hemisphere as the input points.
+    # If dot(a, center) < 0, then center is on the opposite hemisphere from a,
+    # meaning we have the far circumcenter and need to negate it.
+    if LinearAlgebra.dot(a, center) < 0
+        center = -center
+    end
+
+    return center
 end
 
 "Get the circumcenter of the triangle (a, b, c) on the unit sphere.  Returns a normalized 3-vector."
