@@ -2,7 +2,8 @@ module GeometryOpsTestHelpersArchGDALExt
 
 using GeometryOpsTestHelpers
 using GeoInterface
-using ArchGDAL
+import ArchGDAL as AG
+import ArchGDAL
 
 function __init__()
     # Register ArchGDAL in the test modules list
@@ -10,26 +11,24 @@ function __init__()
 end
 
 # Monkey-patch ArchGDAL to handle polygon conversion correctly
-@eval ArchGDAL begin
-    function GeoInterface.convert(
-        ::Type{T},
-        type::GeoInterface.PolygonTrait,
-        geom,
-    ) where {T<:IGeometry}
-        f = get(lookup_method, typeof(type), nothing)
-        isnothing(f) && error(
-            "Cannot convert an object of $(typeof(geom)) with the $(typeof(type)) trait (yet). Please report an issue.",
-        )
-        poly = createpolygon()
-        foreach(GeoInterface.getring(geom)) do ring
-            xs = GeoInterface.x.(GeoInterface.getpoint(ring)) |> collect
-            ys = GeoInterface.y.(GeoInterface.getpoint(ring)) |> collect
-            subgeom = unsafe_createlinearring(xs, ys)
-            result = GDAL.ogr_g_addgeometrydirectly(poly, subgeom)
-            @ogrerr result "Failed to add linearring."
-        end
-        return poly
+function GeoInterface.convert(
+    ::Type{T},
+    type::GeoInterface.PolygonTrait,
+    geom,
+) where {T<:AG.IGeometry}
+    f = get(AG.lookup_method, typeof(type), nothing)
+    isnothing(f) && error(
+        "Cannot convert an object of $(typeof(geom)) with the $(typeof(type)) trait (yet). Please report an issue.",
+    )
+    poly = AG.createpolygon()
+    foreach(GeoInterface.getring(geom)) do ring
+        xs = GeoInterface.x.(GeoInterface.getpoint(ring)) |> collect
+        ys = GeoInterface.y.(GeoInterface.getpoint(ring)) |> collect
+        subgeom = AG.unsafe_createlinearring(xs, ys)
+        result = AG.GDAL.ogr_g_addgeometrydirectly(poly, subgeom)
+        AG.@ogrerr result "Failed to add linearring."
     end
+    return poly
 end
 
 end # module GeometryOpsTestHelpersArchGDALExt
