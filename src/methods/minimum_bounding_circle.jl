@@ -26,6 +26,11 @@ A circle in 2D Euclidean space, represented by its center and squared radius.
 
 Use `radius(circle)` to get the actual radius (computes sqrt).
 
+!!! warning "Experimental"
+    This type is not part of the public API and is subject to change without a breaking version.
+    It implements GeoInterface's `PolygonTrait`, so code using GeoInterface methods will remain
+    compatible even if the concrete type changes.
+
 ## Fields
 - `center::Tuple{T, T}`: The (x, y) coordinates of the center
 - `radius_squared::T`: The squared radius (avoids sqrt in distance comparisons)
@@ -47,6 +52,9 @@ radius(c::PlanarCircle) = sqrt(c.radius_squared)
 
 A lazy wrapper that presents a `PlanarCircle` as a `LinearRing` with interpolated points.
 Used internally for GeoInterface compatibility.
+
+!!! warning "Internal"
+    This is an internal type and not part of the public API.
 """
 struct PlanarCircleRing{T}
     circle::PlanarCircle{T}
@@ -204,20 +212,27 @@ function _welzl!(m::Manifold, points::Vector, idx::Int, boundary::Vector)
 end
 
 """
-    minimum_bounding_circle([algorithm], geometry) -> PlanarCircle
+    minimum_bounding_circle([algorithm], geometry)
 
 Compute the minimum bounding circle of `geometry`.
 
-Returns a `PlanarCircle` containing all points of the input geometry.
+Returns a circle geometry containing all points of the input. For planar geometries,
+returns a `PlanarCircle`; for spherical geometries, returns a `SphericalCap`.
+
+!!! warning "Return type subject to change"
+    The concrete return type (currently `PlanarCircle` for planar manifold) may change
+    in future versions without a breaking release. However, the return type will always
+    implement GeoInterface, so code using GeoInterface methods (e.g., `GI.getexterior`,
+    `GI.getpoint`) will remain compatible.
 
 ## Arguments
-- `algorithm`: The algorithm to use. Defaults to `Welzl()`.
+- `algorithm`: The algorithm to use. Defaults to `Welzl()` which uses Welzl's expected O(n) algorithm.
 - `geometry`: Any geometry compatible with GeoInterface, or a vector of point-like objects.
 
 ## Example
 
 ```julia
-import GeometryOps as GO
+import GeometryOps as GO, GeoInterface as GI
 
 # From points
 points = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
@@ -226,6 +241,9 @@ circle = GO.minimum_bounding_circle(points)
 # From any geometry
 polygon = GI.Polygon([[(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]])
 circle = GO.minimum_bounding_circle(polygon)
+
+# Access via GeoInterface for forward compatibility
+ring = GI.getexterior(circle)
 ```
 """
 function minimum_bounding_circle end
