@@ -162,12 +162,12 @@ function _distance(::Planar, args...)
 end
 
 function _distance(m::Spherical, ::Type{T}, trait1::GI.PointTrait, p1, trait2::GI.PointTrait, p2) where T <: AbstractFloat
-    t = UnitSpherical.UnitSphericalFromGeographic()
+    t = UnitSpherical.UnitSphereFromGeographic()
     p1_us = t(p1)
     p2_us = t(p2)
 
     dist = UnitSpherical.spherical_distance(p1_us, p2_us)
-    return dist * R / 2pi
+    return T(dist * m.radius)
 end
 
 """
