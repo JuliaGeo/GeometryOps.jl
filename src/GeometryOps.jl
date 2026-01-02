@@ -20,7 +20,7 @@ import GeometryOpsCore:
 export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap, get_geometries 
 
 using GeoInterface
-using LinearAlgebra, Statistics
+using LinearAlgebra, Statistics, Random
 
 using StaticArrays
 
@@ -87,6 +87,7 @@ include("methods/geom_relations/within.jl")
 include("methods/geom_relations/common.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
+include("methods/minimum_bounding_circle.jl")
 include("methods/voronoi.jl")
 
 include("transformations/extent.jl")
