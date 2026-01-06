@@ -8,6 +8,7 @@ include("helpers.jl")
     @safetestset "Algorithm" begin include("core/algorithm.jl") end
     @safetestset "Manifold" begin include("core/manifold.jl") end
     @safetestset "Applicators" begin include("core/applicators.jl") end
+    @safetestset "Geometry Utils" begin include("core/geometry_utils.jl") end
 end
 
 @safetestset "Types" begin include("types.jl") end
@@ -31,6 +32,7 @@ end
 @safetestset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end
+@safetestset "Minimum Bounding Circle" begin include("methods/minimum_bounding_circle.jl") end
 # Clipping
 @safetestset "Coverage" begin include("methods/clipping/coverage.jl") end
 @safetestset "Cut" begin include("methods/clipping/cut.jl") end

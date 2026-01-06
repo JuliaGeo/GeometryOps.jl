@@ -67,7 +67,7 @@ const _DISTANCE_TARGETS = TraitTarget{Union{GI.AbstractPolygonTrait,GI.LineStrin
 """
     distance(point, geom, ::Type{T} = Float64)::T
 
-Calculates the  ditance from the geometry `g1` to the `point`. The distance
+Calculates the distance from the geometry `g1` to the `point`. The distance
 will always be positive or zero.
 
 The method will differ based on the type of the geometry provided:
@@ -128,6 +128,46 @@ _distance(::Type{T}, ::GI.PointTrait, point, ::GI.LinearRingTrait, geom) where T
 function _distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
     within(point, geom) && return zero(T)
     return _distance_polygon(T, point, geom)
+end
+
+function distance(m::Manifold, geom1, geom2, ::Type{T} = Float64; kwargs...) where T <: AbstractFloat
+    distance(m, GI.trait(geom1), geom1, GI.trait(geom2), geom2, T; kwargs...)
+end
+
+
+function distance(
+    m::Manifold, trait1, geom, trait2::GI.PointTrait, point, ::Type{T} = Float64;
+    threaded=false
+) where T<:AbstractFloat
+    distance(m, trait2, point, trait1, geom, T) # Swap order
+end
+function distance(
+    m::Manifold, trait1::GI.PointTrait, point, trait2, geom, ::Type{T} = Float64;
+    threaded=false
+) where T<:AbstractFloat
+    applyreduce(min, _DISTANCE_TARGETS, geom; threaded, init=typemax(T)) do g
+        _distance(m, T, trait1, point, GI.trait(g), g)
+    end
+end
+# Needed for method ambiguity
+function distance(
+    m::Manifold, trait1::GI.PointTrait, point1, trait2::GI.PointTrait, point2, ::Type{T} = Float64;
+    threaded=false
+) where T<:AbstractFloat
+    _distance(m, T, trait1, point1, trait2, point2)
+end
+
+function _distance(::Planar, args...)
+    _distance(args...)
+end
+
+function _distance(m::Spherical, ::Type{T}, trait1::GI.PointTrait, p1, trait2::GI.PointTrait, p2) where T <: AbstractFloat
+    t = UnitSpherical.UnitSphereFromGeographic()
+    p1_us = t(p1)
+    p2_us = t(p2)
+
+    dist = UnitSpherical.spherical_distance(p1_us, p2_us)
+    return T(dist * m.radius)
 end
 
 """
