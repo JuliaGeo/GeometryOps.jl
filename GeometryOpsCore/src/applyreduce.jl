@@ -76,7 +76,7 @@ feature collections and nested geometries.
 `init` functions the same way as it does in base Julia functions like `reduce`.
 """
 @inline function applyreduce(
-    f::F, op::O, target, geom; threaded=false, init=nothing
+    f::F, op::O, target, geom; threaded=false, init=_InitialValue()
 ) where {F, O}
     threaded = booltype(threaded)
     _applyreduce(f, op, TraitTarget(target), geom; threaded, init)
@@ -99,7 +99,7 @@ end
             _applyreduce(f, op, target, collect(iterable); threaded, init)
         else
             # Try to `mapreduce` the iterable as-is
-            mapreduce(applyreduce_iterable, op, iterable; init)
+            _mapreduce_maybe_init(applyreduce_iterable, op, iterable, init)
         end
     end
 end
@@ -189,14 +189,14 @@ import Base.Threads: nthreads, @threads, @spawn
         # Spawn a task to process this chunk
         StableTasks.@spawn begin
             # Where we map `f` over the chunk indices
-            mapreduce(f, op, chunk; init)
+            _mapreduce_maybe_init(f, op, chunk, init)
         end
     end
 
     # Finally we join the results into a new vector
-    return mapreduce(fetch, op, tasks; init)
+    return _mapreduce_maybe_init(fetch, op, tasks, init)
 end
 
 function _mapreducetasks(f::F, op, taskrange, threaded::False; init) where F
-    mapreduce(f, op, taskrange; init)
+    _mapreduce_maybe_init(f, op, taskrange, init)
 end
