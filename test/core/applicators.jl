@@ -219,4 +219,22 @@ end
     end
     @test result2 == [4]
     @test !any(x -> x === nothing, result2)
+
+    # Test with empty geometry (FeatureCollection since MultiPolygon cannot be empty)
+    empty_fc = GI.FeatureCollection(Any[])
+    @test_throws ArgumentError GO.applyreduce(vcat, GO.TraitTarget(GI.AbstractCurveTrait), empty_fc) do geom
+        [GI.npoint(geom)]
+    end
+
+    # Test with explicit init still works
+    result_with_init = GO.applyreduce(vcat, GO.TraitTarget(GI.AbstractCurveTrait), mp; init=Int[]) do geom
+        [GI.npoint(geom)]
+    end
+    @test result_with_init == [4, 4]
+
+    # Test numeric reduction without init
+    sum_result = GO.applyreduce(+, GO.TraitTarget(GI.AbstractCurveTrait), mp) do geom
+        GI.npoint(geom)
+    end
+    @test sum_result == 8
 end
