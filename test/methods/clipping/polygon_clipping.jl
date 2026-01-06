@@ -286,3 +286,42 @@ end
         @test area_result isa Number
     end
 end
+
+@testset "Spherical intersection vs union correctness" begin
+    # This test verifies that intersection and union are not swapped.
+    # Intersection should produce smaller area, union should produce larger area.
+
+    # Two overlapping polygons on the sphere
+    poly1 = GI.Polygon([[
+        (-15.0, -15.0), (15.0, -15.0), (15.0, 15.0), (-15.0, 15.0), (-15.0, -15.0)
+    ]])
+    poly2 = GI.Polygon([[
+        (0.0, 0.0), (30.0, 0.0), (30.0, 30.0), (0.0, 30.0), (0.0, 0.0)
+    ]])
+
+    # Compute areas of input polygons
+    area1 = GO.area(GO.Spherical(), poly1)
+    area2 = GO.area(GO.Spherical(), poly2)
+    min_input_area = min(area1, area2)
+    max_input_area = max(area1, area2)
+
+    # Compute intersection
+    intersection_result = GO.intersection(GO.Spherical(), poly1, poly2; target=GI.PolygonTrait())
+    @test !isempty(intersection_result)
+    intersection_area = sum(p -> GO.area(GO.Spherical(), p), intersection_result)
+
+    # Compute union
+    union_result = GO.union(GO.Spherical(), poly1, poly2; target=GI.PolygonTrait())
+    @test !isempty(union_result)
+    union_area = sum(p -> GO.area(GO.Spherical(), p), union_result)
+
+    # Key invariants that would fail if intersection/union are swapped:
+    # 1. Intersection area must be smaller than the smallest input polygon
+    @test intersection_area < min_input_area
+    # 2. Union area must be larger than the largest input polygon
+    @test union_area > max_input_area
+    # 3. Intersection area must be smaller than union area
+    @test intersection_area < union_area
+    # 4. Inclusion-exclusion: area(A) + area(B) = area(A ∪ B) + area(A ∩ B)
+    @test isapprox(area1 + area2, union_area + intersection_area, rtol=0.01)
+end

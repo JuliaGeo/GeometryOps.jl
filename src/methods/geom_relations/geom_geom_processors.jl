@@ -579,10 +579,11 @@ function _point_filled_curve_orientation(
         v_prev = v_curr
     end
 
-    # Use tolerance: if signed_area is too small, O is on the horizon
-    # In that case, assume O is outside (works for most small polygons)
+    # For a CCW polygon: O inside → sees CW winding → negative signed_area
+    #                     O outside → sees CCW winding → positive signed_area
+    # If |signed_area| < tol, O is on the horizon; assume outside (works for small polygons)
     tol = 1e-10
-    origin_inside = signed_area > tol
+    origin_inside = signed_area < -tol
 
     # Second pass: count crossings from O to P, and check if P is on boundary
     crossings = 0
