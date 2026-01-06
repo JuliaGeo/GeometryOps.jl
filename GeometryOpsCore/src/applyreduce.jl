@@ -4,12 +4,13 @@
 
 export applyreduce
 
-# Sentinel for "no init provided" - use Julia's internal type
-const _InitialValue = Base._InitialValue
+# Sentinel for "no init provided"
+struct _InitialValueType end
+const _InitialValue = _InitialValueType()
 
 # Helper to call mapreduce with or without init
 @inline function _mapreduce_maybe_init(f, op, iter, init)
-    if init isa _InitialValue
+    if init isa _InitialValueType
         return mapreduce(f, op, iter)
     else
         return mapreduce(f, op, iter; init)
@@ -80,7 +81,7 @@ to provide `init`. For numeric reductions like `+`, you may want to
 provide `init=zero(T)` to ensure type stability.
 """
 @inline function applyreduce(
-    f::F, op::O, target, geom; threaded=false, init=_InitialValue()
+    f::F, op::O, target, geom; threaded=false, init=_InitialValue
 ) where {F, O}
     threaded = booltype(threaded)
     _applyreduce(f, op, TraitTarget(target), geom; threaded, init)
