@@ -4,6 +4,18 @@
 
 export applyreduce
 
+# Sentinel for "no init provided" - use Julia's internal type
+const _InitialValue = Base._InitialValue
+
+# Helper to call mapreduce with or without init
+@inline function _mapreduce_maybe_init(f, op, iter, init)
+    if init isa _InitialValue
+        return mapreduce(f, op, iter)
+    else
+        return mapreduce(f, op, iter; init)
+    end
+end
+
 #=
 This file mainly defines the [`applyreduce`](@ref) function.  
     
