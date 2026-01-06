@@ -66,14 +66,18 @@ Literate.jl source code is below.
     applyreduce(f, op, target::Union{TraitTarget, GI.AbstractTrait}, obj; threaded, init, kw...)
 
 Apply function `f` to all objects with the `target` trait,
-and reduce the result with an `op` like `+`. 
+and reduce the result with an `op` like `+`.
 
 The order and grouping of application of `op` is not guaranteed.
 
-If `threaded==true` threads will be used over arrays and iterables, 
+If `threaded==true` threads will be used over arrays and iterables,
 feature collections and nested geometries.
 
-`init` functions the same way as it does in base Julia functions like `reduce`.
+`init` specifies the initial value for the reduction. If not provided,
+the reduction uses the first result as the starting point (like `reduce`
+without `init`). For operations like `vcat`, you typically don't need
+to provide `init`. For numeric reductions like `+`, you may want to
+provide `init=zero(T)` to ensure type stability.
 """
 @inline function applyreduce(
     f::F, op::O, target, geom; threaded=false, init=_InitialValue()
