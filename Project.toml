@@ -1,7 +1,10 @@
 name = "GeometryOps"
 uuid = "3251bfac-6a57-4b6d-aa61-ac1fef2975ab"
-authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "Rafael Schouten <rafaelschouten@gmail.com>", "Skylar Gering <skygering@gmail.com>", "and contributors"]
 version = "0.1.33"
+authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "Rafael Schouten <rafaelschouten@gmail.com>", "Skylar Gering <skygering@gmail.com>", "and contributors"]
+
+[workspace]
+projects = ["GeometryOpsCore", "test", "docs"]
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
@@ -27,6 +30,10 @@ FlexiJoins = "e37f2e79-19fa-4eb7-8510-b63b51fe0a37"
 LibGEOS = "a90b1aa1-3769-5649-ba7e-abc5a9d163eb"
 Proj = "c94c279d-25a6-4763-9509-64d165bea63e"
 TGGeometry = "d7e755d2-3c95-4bcf-9b3c-79ab1a78647b"
+Makie = "ee78f7c6-11fb-53f2-987a-cfe4a2b5a57a"
+
+[sources]
+GeometryOpsCore = {path = "GeometryOpsCore"}
 
 [extensions]
 GeometryOpsDataFramesExt = "DataFrames"
@@ -34,11 +41,12 @@ GeometryOpsFlexiJoinsExt = "FlexiJoins"
 GeometryOpsLibGEOSExt = "LibGEOS"
 GeometryOpsProjExt = "Proj"
 GeometryOpsTGGeometryExt = "TGGeometry"
+GeometryOpsMakieExt = "Makie"
 
 [compat]
-ArchGDAL = "0.10.10"
 AbstractTrees = "0.4"
 AdaptivePredicates = "1.2"
+ArchGDAL = "0.10.10"
 CoordinateTransformations = "0.5, 0.6"
 DataAPI = "1"
 DataFrames = "1"
@@ -86,9 +94,3 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "Downloads", "FlexiJoins", "GeoJSON", "GeometryBasics", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "NaturalEarth", "OffsetArrays", "Polylabel", "SafeTestsets", "Shapefile", "TGGeometry", "Test"]
-
-[sources]
-GeometryOpsCore = { path = "GeometryOpsCore" }
-
-[workspace]
-projects = ["GeometryOpsCore", "test", "docs"]
