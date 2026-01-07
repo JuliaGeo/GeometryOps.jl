@@ -60,7 +60,7 @@ end
 function Makie.convert_arguments(::Type{Makie.Mesh}, cap::UnitSpherical.SphericalCap)
     N = 40
     rmin = 0.1
-    rect = GeometryBasics.Tesselation(Rect2d(0, 0, 2pi, cap.radius), (N, ceil(Int, cap.radius / rmin)))
+    rect = GeometryBasics.Tesselation(Rect2d(0, 0, 2pi, cap.radius), (N, max(2, ceil(Int, cap.radius / rmin))))
     faces = GeometryBasics.decompose(Makie.GLTriangleFace, rect)
     points = GeometryBasics.coordinates(rect)
     # Remove the first N points and set the first point to (0,0)
