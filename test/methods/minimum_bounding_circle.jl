@@ -187,3 +187,118 @@ end
         end
     end
 end
+
+@testset "QuickhullSphericalMBC algorithm type" begin
+    # Test that the algorithm type exists and can be constructed
+    alg = GO.QuickhullSphericalMBC()
+    @test alg isa GO.QuickhullSphericalMBC
+    @test GO.manifold(alg) isa GO.Spherical
+end
+
+@testset "QuickhullSphericalMBC basic functionality" begin
+    @testset "Two points on equator" begin
+        pts = [(0.0, 0.0), (90.0, 0.0)]  # (lon, lat)
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+        # Center should be at (45, 0), radius should be pi/4 radians (45 degrees)
+        @test c.radius ≈ π/4 atol=1e-6
+    end
+
+    @testset "Three points equilateral on equator" begin
+        pts = [(0.0, 0.0), (120.0, 0.0), (240.0, 0.0)]
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+        # All three points should be equidistant from center
+        p1 = GO.UnitSpherical.UnitSphereFromGeographic()(pts[1])
+        p2 = GO.UnitSpherical.UnitSphereFromGeographic()(pts[2])
+        p3 = GO.UnitSpherical.UnitSphereFromGeographic()(pts[3])
+        d1 = GO.UnitSpherical.spherical_distance(p1, c.point)
+        d2 = GO.UnitSpherical.spherical_distance(p2, c.point)
+        d3 = GO.UnitSpherical.spherical_distance(p3, c.point)
+        @test d1 ≈ d2 atol=1e-6
+        @test d2 ≈ d3 atol=1e-6
+        @test d1 ≈ c.radius atol=1e-6
+    end
+
+    @testset "Four points (uses Quickhull)" begin
+        # Four corners of a square on the sphere - this exercises the actual Quickhull code path
+        pts = [(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)]
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+        # All four points should be inside or on the circle
+        for pt in pts
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-10)
+        end
+    end
+
+    @testset "Many random points (uses Quickhull)" begin
+        # Generate random geographic points and verify all are inside
+        pts = [(rand() * 20 - 10, rand() * 20 - 10) for _ in 1:50]  # small region
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+        for pt in pts
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-10)
+        end
+    end
+end
+
+@testset "QuickhullSphericalMBC lat-long grid" begin
+    @testset "Full globe grid" begin
+        # Create a lat-long grid covering the full sphere
+        lons = -180:30:180
+        lats = -90:30:90
+        pts = [(lon, lat) for lon in lons for lat in lats]
+
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+
+        # For a full globe, the minimum bounding circle should be a hemisphere (radius = pi/2)
+        # Actually, for points at poles + equator, it's the full sphere
+        # The radius should be approximately pi (covers full sphere)
+        @test c.radius >= π/2 - 0.1  # At least a hemisphere
+
+        # All points should be inside the cap
+        for pt in pts
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-6)
+        end
+    end
+
+    @testset "Quadrant grid (NE hemisphere)" begin
+        # Create a grid covering the NE quadrant
+        lons = 0:10:90
+        lats = 0:10:90
+        pts = [(lon, lat) for lon in lons for lat in lats]
+
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+
+        # All points should be inside the cap
+        for pt in pts
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-6)
+        end
+
+        # The radius should be less than a full hemisphere for a quadrant
+        @test c.radius < π/2 + 0.1
+    end
+
+    @testset "Small region grid" begin
+        # Small region around origin
+        lons = -5:1:5
+        lats = -5:1:5
+        pts = [(lon, lat) for lon in lons for lat in lats]
+
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+
+        # All points should be inside
+        for pt in pts
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-6)
+        end
+
+        # Small region should have small radius
+        @test c.radius < 0.2  # Less than ~11 degrees
+    end
+end

@@ -17,7 +17,7 @@ GO.radius(circle)  # approximately 0.707
 ```
 =#
 
-export minimum_bounding_circle, PlanarCircle, radius
+export minimum_bounding_circle, PlanarCircle, radius, QuickhullSphericalMBC
 
 """
     PlanarCircle{T}
@@ -115,6 +115,37 @@ end
 Welzl(; manifold::Manifold=Planar()) = Welzl(manifold)
 
 GeometryOpsCore.manifold(alg::Welzl) = alg.manifold
+
+"""
+    QuickhullSphericalMBC <: SingleManifoldAlgorithm{Spherical}
+
+Algorithm for computing the minimum bounding circle on a sphere using 3D convex hull.
+
+This algorithm:
+1. Converts points to unit sphere Cartesian coordinates
+2. Computes the 3D convex hull using Quickhull.jl
+3. For each convex hull face, computes the angular radius needed to contain all points
+4. Returns the SphericalCap with minimum angular radius
+
+This is often faster than Welzl's algorithm for large point sets and handles
+edge cases like points spanning more than a hemisphere correctly.
+
+## Example
+
+```julia
+import GeometryOps as GO
+
+points = [(rand()*360-180, rand()*180-90) for _ in 1:1000]  # random geographic points
+cap = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), points)
+```
+"""
+struct QuickhullSphericalMBC <: GeometryOpsCore.SingleManifoldAlgorithm{Spherical}
+    manifold::Spherical
+end
+
+QuickhullSphericalMBC() = QuickhullSphericalMBC(Spherical())
+
+GeometryOpsCore.manifold(alg::QuickhullSphericalMBC) = alg.manifold
 
 # Helper: check if point is inside or on circle (using squared distance)
 function _point_in_circle(::Planar, p, circle::PlanarCircle)
@@ -327,4 +358,124 @@ function _point_in_circle(m::Spherical, p::UnitSphericalPoint, c::SphericalCap)
     # Equivalently: cos(angular_distance) >= cos(radius)
     # Since p ⋅ center = cos(angular_distance) and radiuslike = cos(radius):
     return (p ⋅ c.point) >= c.radiuslike
+end
+
+import Quickhull
+
+function minimum_bounding_circle(alg::QuickhullSphericalMBC, geom)
+    # Extract all points as UnitSphericalPoints
+    points = collect(flatten(UnitSpherical.UnitSphereFromGeographic(), GI.PointTrait, geom))
+
+    # Handle edge cases
+    if isempty(points)
+        return SphericalCap(UnitSphericalPoint(NaN, NaN, NaN), NaN, NaN)
+    elseif length(points) == 1
+        T = typeof(points[1][1])
+        return SphericalCap{T}(points[1], zero(T), one(T))
+    elseif length(points) == 2
+        return _circle_from_two_points(Spherical(), points[1], points[2])
+    elseif length(points) == 3
+        # Quickhull needs at least 4 points in 3D, so use the circumcircle for 3 points
+        return _circle_from_three_points(Spherical(), points[1], points[2], points[3])
+    end
+
+    # Convert to matrix format for Quickhull (3 x N matrix)
+    T = eltype(points[1])
+    point_matrix = Matrix{T}(undef, 3, length(points))
+    for (i, p) in enumerate(points)
+        point_matrix[1, i] = p.x
+        point_matrix[2, i] = p.y
+        point_matrix[3, i] = p.z
+    end
+
+    # Compute 3D convex hull (use joggle=true to handle coplanar/nearly coplanar points)
+    hull = Quickhull.quickhull(point_matrix, Quickhull.Options(joggle=true))
+
+    # Find the minimum bounding cap by examining each face's normal
+    return _find_minimum_cap_from_hull(hull, point_matrix, points)
+end
+
+function _find_minimum_cap_from_hull(hull, point_matrix::Matrix, points::Vector{<:UnitSphericalPoint})
+    T = eltype(points[1])
+    best_cap = SphericalCap(UnitSphericalPoint(T(NaN), T(NaN), T(NaN)), T(Inf), T(-Inf))
+
+    # Iterate over each face of the convex hull
+    for face in Quickhull.facets(hull)
+        # Get the face normal (outward pointing)
+        normal = _compute_face_normal(face, point_matrix)
+
+        # Skip degenerate faces
+        if isnothing(normal) || !isfinite(normal[1])
+            continue
+        end
+
+        # For this direction, find the minimum cos(theta) among all points
+        # This gives us the angular radius needed
+        min_dot = one(T)
+        for p in points
+            dot_prod = p.x * normal.x + p.y * normal.y + p.z * normal.z
+            min_dot = min(min_dot, dot_prod)
+        end
+
+        # The angular radius is acos(min_dot)
+        # We want the cap with smallest radius
+        radius = acos(clamp(min_dot, -one(T), one(T)))
+
+        if radius < best_cap.radius
+            best_cap = SphericalCap(normal, radius)
+        end
+
+        # Also check the antipodal direction (for points spanning > hemisphere)
+        antipodal = UnitSphericalPoint(-normal.x, -normal.y, -normal.z)
+
+        min_dot = one(T)
+        for p in points
+            dot_prod = p.x * antipodal.x + p.y * antipodal.y + p.z * antipodal.z
+            min_dot = min(min_dot, dot_prod)
+        end
+
+        radius = acos(clamp(min_dot, -one(T), one(T)))
+
+        if radius < best_cap.radius
+            best_cap = SphericalCap(antipodal, radius)
+        end
+    end
+
+    return best_cap
+end
+
+function _compute_face_normal(face, point_matrix::Matrix{T}) where T
+    # face is a TriangleFace with 3 vertex indices accessible via face[1], face[2], face[3]
+    i1, i2, i3 = face[1], face[2], face[3]
+
+    # Get coordinates from the point matrix
+    v1 = (point_matrix[1, i1], point_matrix[2, i1], point_matrix[3, i1])
+    v2 = (point_matrix[1, i2], point_matrix[2, i2], point_matrix[3, i2])
+    v3 = (point_matrix[1, i3], point_matrix[2, i3], point_matrix[3, i3])
+
+    # Compute face normal via cross product
+    edge1 = (v2[1] - v1[1], v2[2] - v1[2], v2[3] - v1[3])
+    edge2 = (v3[1] - v1[1], v3[2] - v1[2], v3[3] - v1[3])
+
+    # Cross product
+    nx = edge1[2] * edge2[3] - edge1[3] * edge2[2]
+    ny = edge1[3] * edge2[1] - edge1[1] * edge2[3]
+    nz = edge1[1] * edge2[2] - edge1[2] * edge2[1]
+
+    # Normalize
+    len = sqrt(nx^2 + ny^2 + nz^2)
+    if len < eps(T)
+        return nothing
+    end
+
+    normal = UnitSphericalPoint(nx/len, ny/len, nz/len)
+
+    # Ensure the normal points outward (away from origin for convex hull on unit sphere)
+    # For unit sphere points, the centroid of any face is "inside" relative to the outward normal
+    centroid_dot = v1[1] * normal.x + v1[2] * normal.y + v1[3] * normal.z
+    if centroid_dot < 0
+        normal = UnitSphericalPoint(-normal.x, -normal.y, -normal.z)
+    end
+
+    return normal
 end
