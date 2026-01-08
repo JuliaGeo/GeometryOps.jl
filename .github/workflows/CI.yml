@@ -19,7 +19,7 @@ jobs:
       matrix:
         version:
           - '1.10'
-          - '1.12.2'
+          - '1'
           - 'nightly'
         os:
           - ubuntu-latest
@@ -27,10 +27,10 @@ jobs:
           - x64
         include:
           - os: windows-latest
-            version: '1.12.2'
+            version: '1'
             arch: x64
           - os: macos-latest
-            version: '1.12.2'
+            version: '1'
             arch: arm64
     steps:
       - uses: actions/checkout@v6
@@ -62,7 +62,7 @@ jobs:
       - uses: julia-actions/cache@v2
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.12.2'
+          version: '1'
       - name: Build and add versions
         run: julia --project=docs -e 'using Pkg; Pkg.instantiate();'
       - uses: julia-actions/julia-docdeploy@v1
@@ -83,7 +83,7 @@ jobs:
       - uses: julia-actions/cache@v2
       - uses: julia-actions/setup-julia@v2
         with:
-          version: '1.12.2'
+          version: '1'
       - name: Build and add versions
         run: julia --project=docs -e 'using Pkg; Pkg.instantiate(); Pkg.build()'
       - run: |
