@@ -98,6 +98,14 @@ point_type(::Spherical, ::Type{T}) where T = UnitSpherical.UnitSphericalPoint{T}
 _get_point_converter(::Planar, ::Type{T}) where T = identity  # tuples stay as-is
 _get_point_converter(::Spherical, ::Type{T}) where T = UnitSpherical.UnitSphereFromGeographic()
 
+# Tolerance for detecting near-vertex intersections (when α or β ≈ 0 or 1)
+# For spherical coordinates, use a larger tolerance because:
+# 1. Coordinate transformations introduce floating point errors
+# 2. Edge intersection calculations on the sphere have more numerical instability
+# A tolerance of 1e-5 corresponds to about 0.001% of an edge length
+_vertex_tolerance(::Type{T}, ::Planar) where T = T(1e-10)
+_vertex_tolerance(::Type{T}, ::Spherical) where T = T(1e-5)
+
 # Override _tuple_point to preserve UnitSphericalPoint type
 # The default _tuple_point extracts (x, y) which would lose the z-coordinate
 # and cause UnitSphereFromGeographic to misinterpret (x, y) as lon/lat degrees
@@ -500,11 +508,28 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     # Convert points to appropriate type for manifold
     convert_point = _get_point_converter(alg.manifold, T)
 
+    # Track the last point added to detect duplicates
+    last_point::Union{Nothing, PT} = nothing
+    # Track the edge index of the last vertex that was actually added
+    # This is used to prevent intersection code from modifying the wrong vertex
+    # when duplicate vertices are skipped
+    last_vertex_edge_idx::Int = 0
+
     function on_each_a(a_pt, i)
-        new_point = PolyNode{T, PT}(;point = convert_point(a_pt))
+        converted_pt = convert_point(a_pt)
+        # Skip duplicate consecutive vertices - these create zero-length edges
+        # that can cause infinite loops in the tracing algorithm.
+        # This commonly occurs at geographic poles where multiple coordinates
+        # (like (180, 90) and (180, 90)) map to the same physical location.
+        if !isnothing(last_point) && last_point == converted_pt
+            return nothing
+        end
+        new_point = PolyNode{T, PT}(;point = converted_pt)
         a_count += 1
         push!(a_list, new_point)
         prev_counter = a_count
+        last_point = converted_pt
+        last_vertex_edge_idx = i
         return nothing
     end
 
@@ -519,12 +544,20 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     end
 
     # Tolerance for detecting near-vertex intersections
-    # Use a larger tolerance than eps() since spherical distance calculations accumulate error
-    vertex_tol = T(1e-10)
+    # For spherical coordinates, use a larger tolerance because:
+    # 1. Coordinate transformations introduce floating point errors
+    # 2. Edge intersection calculations on the sphere have more numerical instability
+    # A tolerance of 1e-5 corresponds to about 0.001% of an edge length
+    vertex_tol = _vertex_tolerance(T, alg.manifold)
 
     function on_each_maybe_intersect(((a_pt1, a_pt2), i), ((b_pt1, b_pt2), j))
-        if (b_pt1 == b_pt2)  # don't repeat points
-            b_pt1 = b_pt2
+        # Skip zero-length edges (duplicate consecutive vertices)
+        # These can occur in input polygons, especially at geographic poles,
+        # and cause infinite loops in the tracing algorithm
+        if (a_pt1 == a_pt2)
+            return
+        end
+        if (b_pt1 == b_pt2)
             return
         end
         # Determine if edges intersect and how they intersect
@@ -551,6 +584,13 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                     return
                 elseif α < vertex_tol
                     # At START of A edge i - mark the vertex as intersection, not a crossing
+                    # BUT only if this edge's vertex was actually added (not skipped as duplicate)
+                    # The edge index `i` should match `last_vertex_edge_idx` if vertex was added
+                    if last_vertex_edge_idx != i
+                        # This edge's start vertex was skipped (duplicate of previous vertex)
+                        # The intersection was already handled when processing the previous edge
+                        return
+                    end
                     a_list[prev_counter] = PolyNode{T, PT}(;
                         point = convert_point(a_pt1), inter = true, neighbor = j,
                         fracs = (zero(T), β),
@@ -563,15 +603,21 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                     # This is a vertex touch on B, skip to avoid duplicate with next B edge
                     return
                 end
-                # Note: β ≈ 0 case (at START of B edge) is a valid crossing, keep it
+
+                # Snap β to zero if it's very close - this ensures the intersection point
+                # gets properly merged with the B vertex in _build_b_list
+                # This prevents near-duplicate points that confuse the tracing algorithm
+                β_snapped = β < vertex_tol ? zero(T) : β
 
                 # True interior crossing
                 new_intr = PolyNode{T, PT}(;
                     point = int_pt, inter = true, neighbor = j, # j is now equivalent to old j-1
-                    crossing = true, fracs = (α, β),
+                    crossing = true, fracs = (α, β_snapped),
                 )
                 a_count += 1
-                n_b_intrs += 1
+                # If β was snapped to zero, the intersection is at a B vertex
+                # so it won't add a new point to b_list
+                n_b_intrs += β_snapped == 0 ? 0 : 1
                 push!(a_list, new_intr)
                 push!(a_idx_list, a_count)
             else
