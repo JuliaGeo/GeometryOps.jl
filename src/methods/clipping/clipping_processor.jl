@@ -515,6 +515,12 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     # when duplicate vertices are skipped
     last_vertex_edge_idx::Int = 0
 
+    # Track pending intersection at α ≈ 1 (end of edge)
+    # When we detect an intersection at the END of an edge, the next vertex
+    # hasn't been added yet. We save the info here and apply it when the
+    # next vertex is added.
+    pending_end_vertex_inter::Union{Nothing, Tuple{Int, T}} = nothing  # (neighbor_j, β)
+
     function on_each_a(a_pt, i)
         converted_pt = convert_point(a_pt)
         # Skip duplicate consecutive vertices - these create zero-length edges
@@ -530,6 +536,20 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
         prev_counter = a_count
         last_point = converted_pt
         last_vertex_edge_idx = i
+
+        # Apply any pending intersection from previous edge's α ≈ 1 case
+        # This vertex is the END of the previous edge, which we couldn't mark
+        # as an intersection until now because it hadn't been added yet.
+        if !isnothing(pending_end_vertex_inter)
+            j, β = pending_end_vertex_inter
+            a_list[prev_counter] = PolyNode{T, PT}(;
+                point = converted_pt, inter = true, neighbor = j,
+                fracs = (zero(T), β),
+            )
+            n_b_intrs += β == 0 ? 0 : 1
+            push!(a_idx_list, prev_counter)
+            pending_end_vertex_inter = nothing
+        end
         return nothing
     end
 
@@ -580,7 +600,13 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                 # processing the adjacent edge, so we skip to avoid duplicates.
 
                 if α > 1 - vertex_tol
-                    # At END of A edge i - will be detected at START of A edge i+1
+                    # At END of A edge i - save for next vertex
+                    # We can't mark the end vertex as an intersection yet because
+                    # it hasn't been added to a_list. Save the info and apply it
+                    # when the next vertex is added in on_each_a.
+                    # Note: if there's already a pending intersection, this one
+                    # takes priority (shouldn't happen in valid polygons).
+                    pending_end_vertex_inter = (j, β)
                     return
                 elseif α < vertex_tol
                     # At START of A edge i - mark the vertex as intersection, not a crossing
@@ -676,6 +702,20 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     ```
     =#
     foreach_pair_of_maybe_intersecting_edges_in_order(alg, on_each_a, after_each_a, on_each_maybe_intersect, poly_a, poly_b, T)
+
+    # Handle wrap-around: if the last edge had α ≈ 1 intersection, it should
+    # be applied to vertex 1 (which is already in a_list at index 1).
+    # This happens when the closing edge ends at vertex 1.
+    if !isnothing(pending_end_vertex_inter) && !isempty(a_list)
+        j, β = pending_end_vertex_inter
+        vertex1 = a_list[1]
+        a_list[1] = PolyNode{T, PT}(;
+            point = vertex1.point, inter = true, neighbor = j,
+            fracs = (zero(T), β),
+        )
+        n_b_intrs += β == 0 ? 0 : 1
+        push!(a_idx_list, 1)
+    end
 
     return a_list, a_idx_list, n_b_intrs
 end
