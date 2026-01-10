@@ -39,6 +39,7 @@ function spherical_orient(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitS
         return 0
     end
     return dot_product > 0 ? 1 : -1
+    # return ExactPredicates.orient(a, b, UnitSphericalPoint((0., 0., 0.)), c)
 end
 
 # Convenience method for raw vectors
