@@ -16,7 +16,7 @@ This is meant to be the default value for [`applyreduce`](@ref)'s `init` keyword
 struct _InitialValue end
 
 # Helper to call mapreduce with or without init
-@inline function _mapreduce_maybe_init(f:F, op::O, iter::I, init::InitT) where {F, O, I, InitT}
+@inline function _mapreduce_maybe_init(f::F, op::O, iter::I, init::InitT) where {F, O, I, InitT}
     if init isa _InitialValue
         return mapreduce(f, op, iter)
     else
