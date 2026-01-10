@@ -325,3 +325,74 @@ end
     # 4. Inclusion-exclusion: area(A) + area(B) = area(A ∪ B) + area(A ∩ B)
     @test isapprox(area1 + area2, union_area + intersection_area, rtol=0.01)
 end
+
+@testset "Spherical intersection - vertex on edge cases" begin
+    # Test case where a vertex of polygon A lies ON an edge of polygon B
+    # (not at a vertex of B). This previously caused a BoundsError due to
+    # duplicate intersection nodes being created.
+
+    # Case 1: Vertex of A on meridian edge of B
+    # poly_a has a vertex at (70, -80) which lies on poly_b's edge from
+    # (70, -79.5) to (70, -80.5) - a meridian line at longitude 70
+    poly_a = GI.Polygon([[(70.0, -80.0), (70.0, -79.0), (71.0, -79.0), (71.0, -80.0), (70.0, -80.0)]])
+    poly_b = GI.Polygon([[(69.0, -80.5), (69.0, -79.5), (70.0, -79.5), (70.0, -80.5), (69.0, -80.5)]])
+
+    # This should not throw - previously threw BoundsError accessing index 0
+    result1 = @test_nowarn GO.intersection(GO.Spherical(), poly_a, poly_b; target=GI.PolygonTrait())
+    # The polygons share only a vertex touch, so intersection should be empty or a point
+    @test length(result1) == 0  # No area overlap, just vertex touch
+
+    # Case 2: Two rectangles with shared meridian edge
+    # poly_c and poly_d share an edge along longitude 70
+    poly_c = GI.Polygon([[(70.0, -80.0), (70.0, -79.0), (71.0, -79.0), (71.0, -80.0), (70.0, -80.0)]])
+    poly_d = GI.Polygon([[(69.0, -80.0), (69.0, -79.0), (70.0, -79.0), (70.0, -80.0), (69.0, -80.0)]])
+
+    # Should handle shared edge correctly
+    result2 = @test_nowarn GO.intersection(GO.Spherical(), poly_c, poly_d; target=GI.PolygonTrait())
+    # Shared edge but no area overlap
+    @test length(result2) == 0
+
+    # Case 3: Overlapping rectangles (should produce non-empty intersection)
+    poly_e = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    poly_f = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+
+    result3 = @test_nowarn GO.intersection(GO.Spherical(), poly_e, poly_f; target=GI.PolygonTrait())
+    @test length(result3) == 1  # Should have one intersection polygon
+
+    # Case 4: Polygons near poles (high latitude stress test)
+    # This tests numerical precision in spherical calculations
+    poly_g = GI.Polygon([[(160.0, 38.0), (160.0, 39.0), (161.0, 39.0), (161.0, 38.0), (160.0, 38.0)]])
+    poly_h = GI.Polygon([[(160.0, 38.24), (160.0, 39.19), (161.2, 39.19), (161.2, 38.24), (160.0, 38.24)]])
+
+    result4 = @test_nowarn GO.intersection(GO.Spherical(), poly_g, poly_h; target=GI.PolygonTrait())
+    @test length(result4) == 1  # Should have one intersection polygon
+end
+
+@testset "Spherical intersection - UnitSphericalPoint input" begin
+    # Test that intersection works correctly when polygons are already
+    # in UnitSphericalPoint coordinates (not lat/long).
+    # Previously this failed because _tuple_point extracted only (x, y) from
+    # 3D Cartesian coordinates, and UnitSphereFromGeographic then wrongly
+    # interpreted these as lat/long.
+
+    # Create overlapping lat/long polygons
+    poly_a_ll = GI.Polygon([[(69.0, -81.0), (69.0, -80.0), (70.0, -80.0), (70.0, -81.0), (69.0, -81.0)]])
+    poly_b_ll = GI.Polygon([[(69.0, -80.5), (69.0, -79.5), (70.0, -79.5), (70.0, -80.5), (69.0, -80.5)]])
+
+    # Convert to UnitSphericalPoint
+    transform = GO.UnitSpherical.UnitSphereFromGeographic()
+    poly_a_sph = GO.transform(transform, poly_a_ll)
+    poly_b_sph = GO.transform(transform, poly_b_ll)
+
+    # Both paths should give the same result
+    result_ll = GO.intersection(GO.Spherical(), poly_a_ll, poly_b_ll; target=GI.PolygonTrait())
+    result_sph = GO.intersection(GO.Spherical(), poly_a_sph, poly_b_sph; target=GI.PolygonTrait())
+
+    @test length(result_ll) == length(result_sph)
+    @test length(result_ll) == 1  # These polygons overlap
+
+    # Check that the intersection areas are approximately equal
+    area_ll = GO.area(GO.Spherical(), result_ll[1])
+    area_sph = GO.area(GO.Spherical(), result_sph[1])
+    @test isapprox(area_ll, area_sph, rtol=0.01)
+end

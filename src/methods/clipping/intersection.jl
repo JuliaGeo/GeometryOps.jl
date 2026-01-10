@@ -392,6 +392,39 @@ function _intersection_point(::Spherical, ::Type{T}, (a1, a2)::Edge, (b1, b2)::E
     end
 end
 
+# Overload for when edges are already UnitSphericalPoint tuples (no conversion needed)
+const UnitSphericalEdge{T} = Tuple{UnitSpherical.UnitSphericalPoint{T}, UnitSpherical.UnitSphericalPoint{T}}
+function _intersection_point(::Spherical, ::Type{T}, (a1, a2)::UnitSphericalEdge, (b1, b2)::UnitSphericalEdge; exact) where T
+    # Default answer for no intersection
+    line_orient = line_out
+    default_pt = UnitSpherical.UnitSphericalPoint{T}(zero(T), zero(T), zero(T))
+    intr1 = (default_pt, (zero(T), zero(T)))
+    intr2 = intr1
+    no_intr_result = (line_orient, intr1, intr2)
+
+    # Points are already on unit sphere, use directly
+    result = UnitSpherical.spherical_arc_intersection(a1, a2, b1, b2)
+
+    # Map result type to line orientation
+    if result.type == UnitSpherical.arc_disjoint
+        return no_intr_result
+    elseif result.type == UnitSpherical.arc_cross
+        α, β = result.fracs[1]
+        intr1 = (result.points[1], (T(α), T(β)))
+        return (line_cross, intr1, intr2)
+    elseif result.type == UnitSpherical.arc_hinge
+        α, β = result.fracs[1]
+        intr1 = (result.points[1], (T(α), T(β)))
+        return (line_hinge, intr1, intr2)
+    else  # arc_overlap
+        α1, β1 = result.fracs[1]
+        α2, β2 = result.fracs[2]
+        intr1 = (result.points[1], (T(α1), T(β1)))
+        intr2 = (result.points[2], (T(α2), T(β2)))
+        return (line_over, intr1, intr2)
+    end
+end
+
 #= If lines defined by (a1, a2) and (b1, b2) are collinear, find endpoints of overlapping
 region if they exist. This could result in three possibilities. First, there could be no
 overlapping region, in which case, the default 'no_intr_result' intersection information is
