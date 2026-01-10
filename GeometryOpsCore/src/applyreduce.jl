@@ -3,6 +3,7 @@
 =#
 
 export applyreduce
+public _InitialValue # has to be "public API" since users will have to use it as a default value to init sometimes.
 
 """
     _InitialValue()
