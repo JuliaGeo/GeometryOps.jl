@@ -396,3 +396,47 @@ end
     area_sph = GO.area(GO.Spherical(), result_sph[1])
     @test isapprox(area_ll, area_sph, rtol=0.01)
 end
+
+@testset "Spherical intersection - vertex on interior of edge (α≈1 case)" begin
+    # Test case where a vertex of polygon A lies ON an edge of polygon B,
+    # but NOT at an endpoint of that edge. This creates an intersection at
+    # α ≈ 1 (end of an A edge) that must be properly tracked and applied
+    # to the next vertex.
+    #
+    # Previously, intersections at α ≈ 1 were skipped, expecting them to be
+    # caught at α ≈ 0 of the next edge. But spherical_arc_intersection only
+    # returns the interior crossing, not the vertex-on-edge intersection.
+
+    using GeometryOps.UnitSpherical: UnitSphericalPoint
+
+    # Two overlapping quadrilaterals where vertices of A lie on edges of B
+    # (and vice versa), but not at endpoints
+    p1_pts = [
+        UnitSphericalPoint(0.3019858622586644, 0.8296993375502143, -0.46947156278589075),
+        UnitSphericalPoint(0.3047421791070115, 0.8372722558519103, -0.4539904997395468),
+        UnitSphericalPoint(0.29008334968929284, 0.8424632196002839, -0.4539904997395468),
+        UnitSphericalPoint(0.2874596182894698, 0.8348433503288182, -0.46947156278589075),
+        UnitSphericalPoint(0.3019858622586644, 0.8296993375502143, -0.46947156278589075)
+    ]
+
+    p2_pts = [
+        UnitSphericalPoint(0.30139703746681035, 0.8280815547305803, -0.47269521313549934),
+        UnitSphericalPoint(0.303920062408707, 0.8350135087871621, -0.4586774856131918),
+        UnitSphericalPoint(0.2895744973775592, 0.840098592125015, -0.45867304910807816),
+        UnitSphericalPoint(0.28716095284187626, 0.8331277227671596, -0.47269100342586656),
+        UnitSphericalPoint(0.30139703746681035, 0.8280815547305803, -0.47269521313549934)
+    ]
+
+    p1 = GI.Polygon([p1_pts])
+    p2 = GI.Polygon([p2_pts])
+
+    # This should not throw TracingError
+    result = @test_nowarn GO.intersection(GO.Spherical(), p1, p2; target=GI.PolygonTrait())
+
+    # Should produce non-empty intersection (polygons overlap)
+    @test !isempty(result)
+
+    # Verify the intersection has positive area
+    total_area = sum(p -> GO.area(GO.Spherical(), p), result)
+    @test total_area > 0
+end
