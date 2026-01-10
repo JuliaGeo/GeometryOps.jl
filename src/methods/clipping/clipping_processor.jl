@@ -782,7 +782,7 @@ function _classify_crossing!(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list
         i = next_idx
     end
     # if we started in the middle of overlapping chain, close chain
-    if unmatched_end_chain_edge != unknown
+    if unmatched_end_chain_edge != unknown && start_chain_edge != unknown
         crossing = unmatched_end_chain_edge != start_chain_edge
         # update end of chain with endpoint and crossing / bouncing tags
         end_chain_pt = a_list[unmatched_end_chain_idx]
