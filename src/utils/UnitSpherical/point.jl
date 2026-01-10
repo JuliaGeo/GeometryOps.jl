@@ -105,7 +105,7 @@ GI.is3d(::GI.PointTrait, ::UnitSphericalPoint) = true
 GI.ismeasured(::GI.PointTrait, ::UnitSphericalPoint) = false
 ## Accessors:
 GI.ncoord(::GI.PointTrait, ::UnitSphericalPoint) = 3
-GI.getcoord(::GI.PointTrait, p::UnitSphericalPoint) = p[i]
+GI.getcoord(::GI.PointTrait, p::UnitSphericalPoint, i::Int) = p[i]
 ## Metadata (CRS, extent, etc)
 GI.crs(::UnitSphericalPoint) = GFT.ProjString("+proj=cart +R=1 +type=crs") # TODO: make this a full WKT definition
 # TODO: extent is a little tricky - do we do a spherical cap or an Extents.Extent?
