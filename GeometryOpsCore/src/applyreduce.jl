@@ -10,6 +10,8 @@ public _InitialValue # has to be "public API" since users will have to use it as
 
 Sentinel value for "no init provided".  This is the same way Base `mapreduce` does this.
 It's a singleton struct so e.g. similar to `Nothing`.
+
+This is meant to be the default value for [`applyreduce`](@ref)'s `init` keyword argument.
 """
 struct _InitialValue end
 
