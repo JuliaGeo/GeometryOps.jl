@@ -98,6 +98,13 @@ point_type(::Spherical, ::Type{T}) where T = UnitSpherical.UnitSphericalPoint{T}
 _get_point_converter(::Planar, ::Type{T}) where T = identity  # tuples stay as-is
 _get_point_converter(::Spherical, ::Type{T}) where T = UnitSpherical.UnitSphereFromGeographic()
 
+# Override _tuple_point to preserve UnitSphericalPoint type
+# The default _tuple_point extracts (x, y) which would lose the z-coordinate
+# and cause UnitSphereFromGeographic to misinterpret (x, y) as lon/lat degrees
+_tuple_point(p::UnitSpherical.UnitSphericalPoint{T}, ::Type{T2}) where {T, T2} =
+    UnitSpherical.UnitSphericalPoint{T2}(T2(p.x), T2(p.y), T2(p.z))
+_tuple_point(p::UnitSpherical.UnitSphericalPoint) = p
+
 #= Create a new node with all of the same field values as the given PolyNode unless
 alternative values are provided, in which case those should be used. =#
 PolyNode(node::PolyNode{T,P};
@@ -511,6 +518,10 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
         return nothing
     end
 
+    # Tolerance for detecting near-vertex intersections
+    # Use a larger tolerance than eps() since spherical distance calculations accumulate error
+    vertex_tol = T(1e-10)
+
     function on_each_maybe_intersect(((a_pt1, a_pt2), i), ((b_pt1, b_pt2), j))
         if (b_pt1 == b_pt2)  # don't repeat points
             b_pt1 = b_pt2
@@ -520,10 +531,44 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
         line_orient, intr1, intr2 = _intersection_point(alg.manifold, T, (a_pt1, a_pt2), (b_pt1, b_pt2); exact)
         if line_orient != line_out  # edges intersect
             if line_orient == line_cross  # Intersection point that isn't a vertex
-                int_pt, fracs = intr1
+                int_pt, (α, β) = intr1
+                # Check if this is actually a near-vertex intersection
+                # These cases create duplicates that confuse the chain detection algorithm
+                #
+                # For α (position on A edge):
+                # - α ≈ 0: intersection at START of A edge i = vertex i of A
+                # - α ≈ 1: intersection at END of A edge i = vertex i+1 of A (start of edge i+1)
+                #
+                # For β (position on B edge):
+                # - β ≈ 0: intersection at START of B edge j = vertex j of B
+                # - β ≈ 1: intersection at END of B edge j = vertex j+1 of B (start of edge j+1)
+                #
+                # When any of these is true, the intersection will be detected again when
+                # processing the adjacent edge, so we skip to avoid duplicates.
+
+                if α > 1 - vertex_tol
+                    # At END of A edge i - will be detected at START of A edge i+1
+                    return
+                elseif α < vertex_tol
+                    # At START of A edge i - mark the vertex as intersection, not a crossing
+                    a_list[prev_counter] = PolyNode{T, PT}(;
+                        point = convert_point(a_pt1), inter = true, neighbor = j,
+                        fracs = (zero(T), β),
+                    )
+                    n_b_intrs += β == 0 ? 0 : 1
+                    push!(a_idx_list, prev_counter)
+                    return
+                elseif β > 1 - vertex_tol
+                    # At END of B edge j - will be detected at START of B edge j+1
+                    # This is a vertex touch on B, skip to avoid duplicate with next B edge
+                    return
+                end
+                # Note: β ≈ 0 case (at START of B edge) is a valid crossing, keep it
+
+                # True interior crossing
                 new_intr = PolyNode{T, PT}(;
                     point = int_pt, inter = true, neighbor = j, # j is now equivalent to old j-1
-                    crossing = true, fracs = fracs,
+                    crossing = true, fracs = (α, β),
                 )
                 a_count += 1
                 n_b_intrs += 1
@@ -691,12 +736,12 @@ function _classify_crossing!(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list
                 i, j, a_list, b_list; exact)
             # no sides overlap
             if !a_prev_is_b_prev && !a_prev_is_b_next && !a_next_is_b_prev && !a_next_is_b_next
-                if b_prev_side != b_next_side  # lines cross 
+                if b_prev_side != b_next_side  # lines cross
                     a_list[i] = PolyNode(curr_pt; crossing = true)
                     b_list[j] = PolyNode(b_list[j]; crossing = true)
                 end
             # end of overlapping chain
-            elseif !a_next_is_b_prev && !a_next_is_b_next 
+            elseif !a_next_is_b_prev && !a_next_is_b_next
                 b_side = a_prev_is_b_prev ? b_next_side : b_prev_side
                 if start_chain_edge == unknown  # start loop on overlapping chain
                     unmatched_end_chain_edge = b_side
@@ -776,6 +821,11 @@ function _midpoint(::Spherical, p1::Tuple{T, T}, p2::Tuple{T, T}) where T
     p2_sph = transform_to(p2)
     mid_sph = UnitSpherical.slerp(p1_sph, p2_sph, 0.5)
     return transform_from(mid_sph)
+end
+
+# Overload for UnitSphericalPoint - already on sphere, use slerp directly
+function _midpoint(::Spherical, p1::UnitSpherical.UnitSphericalPoint{T}, p2::UnitSpherical.UnitSphericalPoint{T}) where T
+    return UnitSpherical.slerp(p1, p2, T(0.5))
 end
 
 # Helper function to check if three points are collinear
