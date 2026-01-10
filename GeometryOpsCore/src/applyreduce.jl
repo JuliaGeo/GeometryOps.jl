@@ -4,13 +4,17 @@
 
 export applyreduce
 
-# Sentinel for "no init provided"
-struct _InitialValueType end
-const _InitialValue = _InitialValueType()
+"""
+    _InitialValue()
+
+Sentinel value for "no init provided".  This is the same way Base `mapreduce` does this.
+It's a singleton struct so e.g. similar to `Nothing`.
+"""
+struct _InitialValue end
 
 # Helper to call mapreduce with or without init
-@inline function _mapreduce_maybe_init(f, op, iter, init)
-    if init isa _InitialValueType
+@inline function _mapreduce_maybe_init(f:F, op::O, iter::I, init::InitT) where {F, O, I, InitT}
+    if init isa _InitialValue
         return mapreduce(f, op, iter)
     else
         return mapreduce(f, op, iter; init)
@@ -81,7 +85,7 @@ to provide `init`. For numeric reductions like `+`, you may want to
 provide `init=zero(T)` to ensure type stability.
 """
 @inline function applyreduce(
-    f::F, op::O, target, geom; threaded=false, init=_InitialValue
+    f::F, op::O, target, geom; threaded=false, init=_InitialValue()
 ) where {F, O}
     threaded = booltype(threaded)
     _applyreduce(f, op, TraitTarget(target), geom; threaded, init)
