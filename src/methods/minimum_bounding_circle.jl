@@ -250,14 +250,28 @@ Compute the minimum bounding circle of `geometry`.
 Returns a circle geometry containing all points of the input. For planar geometries,
 returns a `PlanarCircle`; for spherical geometries, returns a `SphericalCap`.
 
-!!! warning "Return type subject to change"
-    The concrete return type (currently `PlanarCircle` for planar manifold) may change
-    in future versions without a breaking release. However, the return type will always
-    implement GeoInterface, so code using GeoInterface methods (e.g., `GI.getexterior`,
-    `GI.getpoint`) will remain compatible.
+## Algorithms
+
+### Welzl (default)
+Uses Welzl's randomized algorithm with expected O(n) time complexity.
+Works on both planar and spherical manifolds.
+
+```julia
+circle = GO.minimum_bounding_circle(GO.Welzl(), points)
+circle = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), geo_points)
+```
+
+### QuickhullSphericalMBC (spherical only)
+Uses 3D convex hull to find the minimum bounding spherical cap.
+Often faster for large point sets and handles edge cases like points
+spanning more than a hemisphere correctly.
+
+```julia
+cap = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), geo_points)
+```
 
 ## Arguments
-- `algorithm`: The algorithm to use. Defaults to `Welzl()` which uses Welzl's expected O(n) algorithm.
+- `algorithm`: The algorithm to use. Defaults to `Welzl()`.
 - `geometry`: Any geometry compatible with GeoInterface, or a vector of point-like objects.
 
 ## Example
@@ -269,13 +283,16 @@ import GeometryOps as GO, GeoInterface as GI
 points = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (1.0, 1.0)]
 circle = GO.minimum_bounding_circle(points)
 
-# From any geometry
-polygon = GI.Polygon([[(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)]])
-circle = GO.minimum_bounding_circle(polygon)
-
-# Access via GeoInterface for forward compatibility
-ring = GI.getexterior(circle)
+# Spherical with QuickhullSphericalMBC
+geo_points = [(lon, lat) for lon in -180:30:180 for lat in -90:30:90]
+cap = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), geo_points)
 ```
+
+!!! warning "Return type subject to change"
+    The concrete return type (currently `PlanarCircle` for planar manifold) may change
+    in future versions without a breaking release. However, the return type will always
+    implement GeoInterface, so code using GeoInterface methods (e.g., `GI.getexterior`,
+    `GI.getpoint`) will remain compatible.
 """
 function minimum_bounding_circle end
 
@@ -359,8 +376,6 @@ function _point_in_circle(m::Spherical, p::UnitSphericalPoint, c::SphericalCap)
     # Since p ⋅ center = cos(angular_distance) and radiuslike = cos(radius):
     return (p ⋅ c.point) >= c.radiuslike
 end
-
-import Quickhull
 
 function minimum_bounding_circle(alg::QuickhullSphericalMBC, geom)
     # Extract all points as UnitSphericalPoints

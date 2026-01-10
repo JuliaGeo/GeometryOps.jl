@@ -302,3 +302,190 @@ end
         @test c.radius < 0.2  # Less than ~11 degrees
     end
 end
+
+@testset "QuickhullSphericalMBC quadtree subdivision" begin
+    # Create a full lat-long grid
+    lons = -180:10:180
+    lats = -90:10:90
+    full_grid = [(lon, lat) for lon in lons for lat in lats]
+    full_grid_matrix = reshape(full_grid, length(lons), length(lats))
+
+    # Split into 4 quadrants (like a quadtree)
+    mid_lon = length(lons) ÷ 2
+    mid_lat = length(lats) ÷ 2
+
+    quadrants = [
+        full_grid_matrix[1:mid_lon, 1:mid_lat][:],           # SW
+        full_grid_matrix[(mid_lon+1):end, 1:mid_lat][:],     # SE
+        full_grid_matrix[1:mid_lon, (mid_lat+1):end][:],     # NW
+        full_grid_matrix[(mid_lon+1):end, (mid_lat+1):end][:] # NE
+    ]
+
+    @testset "Each quadrant is bounded" begin
+        for (i, quadrant) in enumerate(quadrants)
+            c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), quadrant)
+
+            # All points in quadrant should be inside the cap
+            for pt in quadrant
+                p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+                d = GO.UnitSpherical.spherical_distance(p, c.point)
+                @test d <= c.radius * (1 + 1e-6)
+            end
+
+            # Each quadrant should have radius less than hemisphere
+            @test c.radius < π
+        end
+    end
+
+    @testset "Recursive subdivision" begin
+        # Take NE quadrant and subdivide again
+        ne_quadrant = full_grid_matrix[(mid_lon+1):end, (mid_lat+1):end]
+        sub_mid_lon = size(ne_quadrant, 1) ÷ 2
+        sub_mid_lat = size(ne_quadrant, 2) ÷ 2
+
+        sub_quadrants = [
+            ne_quadrant[1:sub_mid_lon, 1:sub_mid_lat][:],
+            ne_quadrant[(sub_mid_lon+1):end, 1:sub_mid_lat][:],
+            ne_quadrant[1:sub_mid_lon, (sub_mid_lat+1):end][:],
+            ne_quadrant[(sub_mid_lon+1):end, (sub_mid_lat+1):end][:]
+        ]
+
+        for (i, sub_q) in enumerate(sub_quadrants)
+            if !isempty(sub_q)
+                c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), sub_q)
+
+                # All points should be inside
+                for pt in sub_q
+                    p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+                    d = GO.UnitSpherical.spherical_distance(p, c.point)
+                    @test d <= c.radius * (1 + 1e-6)
+                end
+            end
+        end
+    end
+end
+
+@testset "QuickhullSphericalMBC edge cases" begin
+    @testset "Single point" begin
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), [(0.0, 0.0)])
+        @test c.radius == 0.0
+        @test c.radiuslike == 1.0
+    end
+
+    @testset "Two identical points" begin
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), [(45.0, 45.0), (45.0, 45.0)])
+        @test c.radius ≈ 0.0 atol=1e-10
+    end
+
+    @testset "Collinear points on great circle" begin
+        # Points along the equator
+        pts = [(0.0, 0.0), (30.0, 0.0), (60.0, 0.0), (90.0, 0.0)]
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+
+        # All points should be inside
+        for pt in pts
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-6)
+        end
+    end
+
+    @testset "Antipodal points" begin
+        # North and south poles
+        pts = [(0.0, 90.0), (0.0, -90.0)]
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+
+        # Should need a full hemisphere (radius = pi/2) for points on opposite sides
+        @test c.radius ≈ π/2 atol=1e-6
+    end
+
+    @testset "Empty input" begin
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), Tuple{Float64, Float64}[])
+        @test isnan(c.radius)
+    end
+
+    @testset "From polygon" begin
+        poly = GI.Polygon([[(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0), (-5.0, -5.0)]])
+        c = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), poly)
+
+        # Verify corners are on or inside the circle
+        corners = [(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)]
+        for pt in corners
+            p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+            d = GO.UnitSpherical.spherical_distance(p, c.point)
+            @test d <= c.radius * (1 + 1e-6)
+        end
+    end
+end
+
+@testset "QuickhullSphericalMBC vs Welzl comparison" begin
+    @testset "Small region comparison" begin
+        # Small region where both algorithms should agree closely
+        for _ in 1:10
+            pts = [(rand()*20 - 10, rand()*20 - 10) for _ in 1:20]  # -10 to +10 degrees
+
+            welzl_cap = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), pts)
+            qhull_cap = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+
+            # Both should contain all points in small regions
+            for pt in pts
+                p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+                d_welzl = GO.UnitSpherical.spherical_distance(p, welzl_cap.point)
+                d_qhull = GO.UnitSpherical.spherical_distance(p, qhull_cap.point)
+                @test d_welzl <= welzl_cap.radius * (1 + 1e-6)
+                @test d_qhull <= qhull_cap.radius * (1 + 1e-6)
+            end
+
+            # Radii should be approximately equal for small regions
+            # Use larger tolerance since they are different algorithms and may find
+            # slightly different minimum circles due to numerical precision
+            @test welzl_cap.radius ≈ qhull_cap.radius atol=5e-3
+        end
+    end
+
+    @testset "Medium region comparison" begin
+        # Medium region (hemisphere quadrant)
+        for _ in 1:5
+            pts = [(rand()*90, rand()*90) for _ in 1:30]  # 0 to 90 degrees
+
+            welzl_cap = GO.minimum_bounding_circle(GO.Welzl(; manifold=GO.Spherical()), pts)
+            qhull_cap = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+
+            # QuickhullSphericalMBC should always contain all points
+            for pt in pts
+                p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+                d_qhull = GO.UnitSpherical.spherical_distance(p, qhull_cap.point)
+                @test d_qhull <= qhull_cap.radius * (1 + 1e-6)
+            end
+
+            # Check if Welzl also contains all points (may not always work for medium regions)
+            welzl_valid = all(pts) do pt
+                p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+                d = GO.UnitSpherical.spherical_distance(p, welzl_cap.point)
+                d <= welzl_cap.radius * (1 + 1e-4)
+            end
+
+            # If both are valid, radii should be similar
+            if welzl_valid
+                @test welzl_cap.radius ≈ qhull_cap.radius atol=1e-2
+            end
+        end
+    end
+
+    @testset "QuickhullSphericalMBC robustness for large regions" begin
+        # Large region tests where Welzl may fail but Quickhull should work
+        for _ in 1:5
+            # Generate random geographic points across a large area
+            pts = [(rand()*180 - 90, rand()*120 - 60) for _ in 1:50]
+
+            qhull_cap = GO.minimum_bounding_circle(GO.QuickhullSphericalMBC(), pts)
+
+            # QuickhullSphericalMBC should always produce a valid bounding circle
+            for pt in pts
+                p = GO.UnitSpherical.UnitSphereFromGeographic()(pt)
+                d_qhull = GO.UnitSpherical.spherical_distance(p, qhull_cap.point)
+                @test d_qhull <= qhull_cap.radius * (1 + 1e-6)
+            end
+        end
+    end
+end

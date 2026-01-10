@@ -32,6 +32,7 @@ import Base.@kwdef
 import GeoInterface.Extents: Extents
 import SortTileRecursiveTree
 import SortTileRecursiveTree: STRtree
+import Quickhull
 
 const GI = GeoInterface
 const DelTri = DelaunayTriangulation
