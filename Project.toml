@@ -88,7 +88,7 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 test = ["ArchGDAL", "CoordinateTransformations", "DataFrames", "Distributions", "DimensionalData", "Downloads", "FlexiJoins", "GeoJSON", "GeometryBasics", "Proj", "JLD2", "LibGEOS", "Random", "Rasters", "NaturalEarth", "OffsetArrays", "Polylabel", "SafeTestsets", "Shapefile", "TGGeometry", "Test"]
 
 [sources]
-GeometryOpsCore = { path = "GeometryOpsCore" }
+GeometryOpsCore = { path = "./GeometryOpsCore" }
 
 [workspace]
 projects = ["GeometryOpsCore", "test", "docs"]
