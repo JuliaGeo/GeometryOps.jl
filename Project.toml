@@ -18,7 +18,7 @@ GeoFormatTypes = "68eda718-8dee-11e9-39e7-89f7f65f511f"
 GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
 GeometryOpsCore = "05efe853-fabf-41c8-927e-7063c8b9f013"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Quickhull = "baca2653-9c88-49d2-a488-12dbf25fc4fb"
+# Quickhull = "baca2653-9c88-49d2-a488-12dbf25fc4fb"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SortTileRecursiveTree = "746ee33f-1797-42c2-866d-db2fce69d14d"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
@@ -34,7 +34,7 @@ Proj = "c94c279d-25a6-4763-9509-64d165bea63e"
 TGGeometry = "d7e755d2-3c95-4bcf-9b3c-79ab1a78647b"
 
 [sources]
-GeometryOpsCore = {path = "GeometryOpsCore"}
+GeometryOpsCore = {path = "./GeometryOpsCore"}
 
 [extensions]
 GeometryOpsDataFramesExt = "DataFrames"
