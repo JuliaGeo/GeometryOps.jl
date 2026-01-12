@@ -28,3 +28,31 @@ end
 
 # Default constructor uses Planar
 ConvexConvexSutherlandHodgman() = ConvexConvexSutherlandHodgman(Planar())
+
+# Main entry point - algorithm dispatch
+function intersection(
+    alg::ConvexConvexSutherlandHodgman,
+    geom_a,
+    geom_b,
+    ::Type{T}=Float64;
+    kwargs...
+) where {T<:AbstractFloat}
+    return _intersection_sutherland_hodgman(
+        alg, T,
+        GI.trait(geom_a), geom_a,
+        GI.trait(geom_b), geom_b
+    )
+end
+
+# Fallback for unsupported geometry combinations
+function _intersection_sutherland_hodgman(
+    alg::ConvexConvexSutherlandHodgman,
+    ::Type{T},
+    trait_a, geom_a,
+    trait_b, geom_b
+) where {T}
+    throw(ArgumentError(
+        "ConvexConvexSutherlandHodgman only supports Polygon-Polygon intersection, " *
+        "got $(typeof(trait_a)) and $(typeof(trait_b))"
+    ))
+end
