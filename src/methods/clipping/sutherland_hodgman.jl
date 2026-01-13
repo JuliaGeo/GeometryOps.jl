@@ -11,6 +11,14 @@ Both input polygons MUST be convex. If either polygon is non-convex, results are
 This is simpler and faster than Foster-Hormann for small convex polygons, with O(n*m)
 complexity where n and m are vertex counts.
 
+## Spherical manifold
+
+For `Spherical()` manifold, input polygons must have **counter-clockwise winding** when
+viewed from outside the sphere (i.e., the interior is on the left when traversing edges).
+Polygons with clockwise winding will produce incorrect results (typically a degenerate
+polygon). Use `GO.fix(geom; corrections=[GO.ClosedRing(), GO.GeometryCorrection()])` or
+manually reverse the coordinates if your input has the wrong winding order.
+
 # Example
 
 ```julia
