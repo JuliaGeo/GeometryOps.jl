@@ -175,6 +175,44 @@ function _sh_spherical_intersection(
     return UnitSpherical.UnitSphericalPoint{T}(p1)  # Fallback
 end
 
+# Clip polygon against a single edge using Sutherland-Hodgman rules (spherical version)
+function _sh_clip_to_edge_spherical(
+    polygon_points::Vector{UnitSpherical.UnitSphericalPoint{T}},
+    edge_start::UnitSpherical.UnitSphericalPoint,
+    edge_end::UnitSpherical.UnitSphericalPoint,
+    ::Type{T}
+) where T
+    output = UnitSpherical.UnitSphericalPoint{T}[]
+    n = length(polygon_points)
+    n == 0 && return output
+
+    # Compute for first point, then carry forward (avoid duplicate computations)
+    current_inside = UnitSpherical.spherical_orient(edge_start, edge_end, polygon_points[1]) >= 0
+
+    for i in 1:n
+        current = polygon_points[i]
+        next_idx = mod1(i + 1, n)
+        next_pt = polygon_points[next_idx]
+
+        next_inside = UnitSpherical.spherical_orient(edge_start, edge_end, next_pt) >= 0
+
+        if current_inside
+            push!(output, current)
+            if !next_inside
+                intr_pt = _sh_spherical_intersection(current, next_pt, edge_start, edge_end, T)
+                push!(output, intr_pt)
+            end
+        elseif next_inside
+            intr_pt = _sh_spherical_intersection(current, next_pt, edge_start, edge_end, T)
+            push!(output, intr_pt)
+        end
+
+        current_inside = next_inside
+    end
+
+    return output
+end
+
 # Fallback for unsupported geometry combinations
 function _intersection_sutherland_hodgman(
     alg::ConvexConvexSutherlandHodgman,
