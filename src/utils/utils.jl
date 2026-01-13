@@ -110,6 +110,8 @@ end
 
 _tuple_point(p) = GI.x(p), GI.y(p)
 _tuple_point(p, ::Type{T}) where T = T(GI.x(p)), T(GI.y(p))
+_tuple_point(p::UnitSpherical.UnitSphericalPoint{T}, ::Type{T}) where T = p
+_tuple_point(p::UnitSpherical.UnitSphericalPoint, ::Type{T}) where T = UnitSpherical.UnitSphericalPoint{T}(p)
 
 function to_extent(edges::Vector{Edge})
     x, y = extrema(first, edges)
