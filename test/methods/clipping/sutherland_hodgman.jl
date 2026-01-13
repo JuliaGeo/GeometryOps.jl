@@ -180,4 +180,29 @@ import GeoInterface as GI
         @test GI.trait(result3) isa GI.PolygonTrait
         @test GO.area(result3) ≈ 0.0 atol=1e-10
     end
+
+    @testset "Spherical helpers" begin
+        using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
+
+        @testset "_point_in_convex_spherical_polygon" begin
+            transform = UnitSphereFromGeographic()
+
+            # CCW square near equator
+            square_pts = UnitSphericalPoint{Float64}[
+                transform((0.0, 0.0)),
+                transform((2.0, 0.0)),
+                transform((2.0, 2.0)),
+                transform((0.0, 2.0))
+            ]
+
+            inside_pt = transform((1.0, 1.0))
+            outside_pt = transform((5.0, 5.0))
+            edge_pt = transform((1.0, 0.0))  # On edge
+
+            @test GO._point_in_convex_spherical_polygon(inside_pt, square_pts) == true
+            @test GO._point_in_convex_spherical_polygon(outside_pt, square_pts) == false
+            # Edge point should be considered inside (>= 0 check)
+            @test GO._point_in_convex_spherical_polygon(edge_pt, square_pts) == true
+        end
+    end
 end

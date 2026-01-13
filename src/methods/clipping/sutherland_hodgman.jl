@@ -140,6 +140,22 @@ function _sh_line_intersection(p1::Tuple{T,T}, p2::Tuple{T,T}, p3::Tuple{T,T}, p
     return (T(x), T(y))
 end
 
+# Point in convex spherical polygon - true if point is on the left of all edges
+function _point_in_convex_spherical_polygon(
+    point::UnitSpherical.UnitSphericalPoint,
+    polygon_points::Vector{<:UnitSpherical.UnitSphericalPoint}
+)
+    n = length(polygon_points)
+    for i in 1:n
+        edge_start = polygon_points[i]
+        edge_end = polygon_points[mod1(i + 1, n)]
+        if UnitSpherical.spherical_orient(edge_start, edge_end, point) < 0
+            return false
+        end
+    end
+    return true
+end
+
 # Fallback for unsupported geometry combinations
 function _intersection_sutherland_hodgman(
     alg::ConvexConvexSutherlandHodgman,
