@@ -156,6 +156,25 @@ function _point_in_convex_spherical_polygon(
     return true
 end
 
+# Compute intersection point of two great circle arcs
+function _sh_spherical_intersection(
+    p1::UnitSpherical.UnitSphericalPoint,
+    p2::UnitSpherical.UnitSphericalPoint,
+    p3::UnitSpherical.UnitSphericalPoint,
+    p4::UnitSpherical.UnitSphericalPoint,
+    ::Type{T}
+) where T
+    result = UnitSpherical.spherical_arc_intersection(p1, p2, p3, p4)
+
+    # Simple extraction (option A)
+    # TODO: May need to handle arc_overlap/arc_hinge cases if edge cases arise
+    if !isempty(result.points)
+        return UnitSpherical.UnitSphericalPoint{T}(result.points[1])
+    end
+
+    return UnitSpherical.UnitSphericalPoint{T}(p1)  # Fallback
+end
+
 # Fallback for unsupported geometry combinations
 function _intersection_sutherland_hodgman(
     alg::ConvexConvexSutherlandHodgman,
