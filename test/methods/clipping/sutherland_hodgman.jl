@@ -205,4 +205,29 @@ import GeoInterface as GI
             @test GO._point_in_convex_spherical_polygon(edge_pt, square_pts) == true
         end
     end
+
+    @testset "Spherical ConvexConvexSutherlandHodgman" begin
+        using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
+
+        # Helper to create spherical polygon from lon/lat coordinates
+        function spherical_polygon(coords)
+            transform = UnitSphereFromGeographic()
+            points = [transform((lon, lat)) for (lon, lat) in coords]
+            push!(points, points[1])  # close ring
+            return GI.Polygon([points])
+        end
+
+        @testset "Basic intersection - small region" begin
+            # Two overlapping squares near equator
+            square1 = spherical_polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+            square2 = spherical_polygon([(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                square1, square2
+            )
+            @test GI.trait(result) isa GI.PolygonTrait
+            @test GO.area(GO.Spherical(), result) > 0
+        end
+    end
 end

@@ -213,6 +213,63 @@ function _sh_clip_to_edge_spherical(
     return output
 end
 
+# Spherical Polygon-Polygon intersection using Sutherland-Hodgman
+function _intersection_sutherland_hodgman(
+    alg::ConvexConvexSutherlandHodgman{Spherical{F}},
+    ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.PolygonTrait, poly_b
+) where {F, T}
+    ring_a = GI.getexterior(poly_a)
+    ring_b = GI.getexterior(poly_b)
+
+    # Validate input is UnitSphericalPoint
+    first_pt = GI.getpoint(ring_a, 1)
+    if !(first_pt isa UnitSpherical.UnitSphericalPoint)
+        throw(ArgumentError(
+            "Spherical ConvexConvexSutherlandHodgman requires UnitSphericalPoint coordinates, " *
+            "got $(typeof(first_pt))"
+        ))
+    end
+
+    # Collect clip polygon points (excluding closing point)
+    clip_points = UnitSpherical.UnitSphericalPoint{T}[]
+    for point in GI.getpoint(ring_b)
+        if !isempty(clip_points) && point ≈ clip_points[1]
+            continue
+        end
+        push!(clip_points, UnitSpherical.UnitSphericalPoint{T}(point))
+    end
+
+    # Build initial output list from poly_a (excluding closing point)
+    output = UnitSpherical.UnitSphericalPoint{T}[]
+    for point in GI.getpoint(ring_a)
+        if !isempty(output) && point ≈ output[1]
+            continue
+        end
+        push!(output, UnitSpherical.UnitSphericalPoint{T}(point))
+    end
+
+    # Clip against each edge of poly_b
+    n_clip = length(clip_points)
+    for i in 1:n_clip
+        isempty(output) && break
+        edge_start = clip_points[i]
+        edge_end = clip_points[mod1(i + 1, n_clip)]
+        output = _sh_clip_to_edge_spherical(output, edge_start, edge_end, T)
+    end
+
+    # Handle empty result - degenerate polygon at north pole
+    if isempty(output)
+        north_pole = UnitSpherical.UnitSphericalPoint{T}(0, 0, 1)
+        return GI.Polygon([[north_pole, north_pole, north_pole]])
+    end
+
+    # Close the ring and return
+    push!(output, output[1])
+    return GI.Polygon([output])
+end
+
 # Fallback for unsupported geometry combinations
 function _intersection_sutherland_hodgman(
     alg::ConvexConvexSutherlandHodgman,
