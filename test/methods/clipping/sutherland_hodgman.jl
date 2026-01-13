@@ -209,16 +209,16 @@ import GeoInterface as GI
     @testset "Spherical ConvexConvexSutherlandHodgman" begin
         using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
 
-        # Helper to create spherical polygon from lon/lat coordinates
         function spherical_polygon(coords)
             transform = UnitSphereFromGeographic()
             points = [transform((lon, lat)) for (lon, lat) in coords]
-            push!(points, points[1])  # close ring
+            push!(points, points[1])
             return GI.Polygon([points])
         end
 
+        spherical_area(poly) = GO.area(GO.Spherical(), poly)
+
         @testset "Basic intersection - small region" begin
-            # Two overlapping squares near equator
             square1 = spherical_polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
             square2 = spherical_polygon([(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
 
@@ -227,7 +227,68 @@ import GeoInterface as GI
                 square1, square2
             )
             @test GI.trait(result) isa GI.PolygonTrait
-            @test GO.area(GO.Spherical(), result) > 0
+            @test spherical_area(result) > 0
+        end
+
+        @testset "No intersection" begin
+            square1 = spherical_polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+            square2 = spherical_polygon([(10.0, 10.0), (11.0, 10.0), (11.0, 11.0), (10.0, 11.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                square1, square2
+            )
+            @test spherical_area(result) ≈ 0.0 atol=1e-10
+        end
+
+        @testset "Partial overlap" begin
+            # Two overlapping squares - not containment, just partial overlap
+            square1 = spherical_polygon([(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0)])
+            square2 = spherical_polygon([(1.5, 1.5), (4.5, 1.5), (4.5, 4.5), (1.5, 4.5)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                square1, square2
+            )
+            @test GI.trait(result) isa GI.PolygonTrait
+            @test spherical_area(result) > 0
+            # Intersection should be smaller than both inputs
+            @test spherical_area(result) < spherical_area(square1)
+            @test spherical_area(result) < spherical_area(square2)
+        end
+
+        @testset "Triangles" begin
+            # Two overlapping triangles - like the planar test
+            tri1 = spherical_polygon([(0.0, 0.0), (4.0, 0.0), (2.0, 4.0)])
+            tri2 = spherical_polygon([(0.0, 2.0), (2.0, -2.0), (4.0, 2.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                tri1, tri2
+            )
+            @test GI.trait(result) isa GI.PolygonTrait
+            @test spherical_area(result) > 0
+        end
+
+        @testset "Near pole" begin
+            tri1 = spherical_polygon([(0.0, 85.0), (120.0, 85.0), (240.0, 85.0)])
+            tri2 = spherical_polygon([(60.0, 85.0), (180.0, 85.0), (300.0, 85.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                tri1, tri2
+            )
+            @test GI.trait(result) isa GI.PolygonTrait
+            @test spherical_area(result) > 0
+        end
+
+        @testset "Input validation" begin
+            planar_poly = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+
+            @test_throws ArgumentError GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                planar_poly, planar_poly
+            )
         end
     end
 end
