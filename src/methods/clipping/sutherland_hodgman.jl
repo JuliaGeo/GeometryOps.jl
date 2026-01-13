@@ -244,7 +244,7 @@ function _intersection_sutherland_hodgman(
     # Build initial output list from poly_a (excluding closing point)
     output = UnitSpherical.UnitSphericalPoint{T}[]
     for point in GI.getpoint(ring_a)
-        if !isempty(output) && point ≈ output[1]
+        if !isempty(output) && point == output[1]
             continue
         end
         push!(output, UnitSpherical.UnitSphericalPoint{T}(point))
@@ -259,6 +259,8 @@ function _intersection_sutherland_hodgman(
         isempty(output) && break
         edge_start = clip_points[i]
         edge_end = clip_points[mod1(i + 1, n_clip)]
+        # Skip degenerate edges (duplicate vertices)
+        edge_start == edge_end && continue
         output = _sh_clip_to_edge_spherical(output, edge_start, edge_end, T)
     end
 
