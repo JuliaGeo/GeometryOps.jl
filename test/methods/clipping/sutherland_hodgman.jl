@@ -290,5 +290,17 @@ import GeoInterface as GI
                 planar_poly, planar_poly
             )
         end
+
+        @testset "One contains other" begin
+            large = spherical_polygon([(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)])
+            small = spherical_polygon([(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)])
+
+            # Both orderings should return the small polygon's area
+            result1 = GO.intersection(GO.ConvexConvexSutherlandHodgman(GO.Spherical()), large, small)
+            result2 = GO.intersection(GO.ConvexConvexSutherlandHodgman(GO.Spherical()), small, large)
+
+            @test spherical_area(result1) ≈ spherical_area(small) rtol=1e-3
+            @test spherical_area(result2) ≈ spherical_area(small) rtol=1e-3
+        end
     end
 end

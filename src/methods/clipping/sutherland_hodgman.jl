@@ -250,6 +250,9 @@ function _intersection_sutherland_hodgman(
         push!(output, UnitSpherical.UnitSphericalPoint{T}(point))
     end
 
+    # Save original subject for containment check
+    original_subject = copy(output)
+
     # Clip against each edge of poly_b
     n_clip = length(clip_points)
     for i in 1:n_clip
@@ -259,8 +262,16 @@ function _intersection_sutherland_hodgman(
         output = _sh_clip_to_edge_spherical(output, edge_start, edge_end, T)
     end
 
-    # Handle empty result - degenerate polygon at north pole
+    # Handle empty result
     if isempty(output)
+        # Check if clip polygon is fully inside the original subject polygon
+        if _point_in_convex_spherical_polygon(clip_points[1], original_subject)
+            # Subject contains clip - return clip polygon
+            result = copy(clip_points)
+            push!(result, result[1])
+            return GI.Polygon([result])
+        end
+        # Truly disjoint - return degenerate polygon
         north_pole = UnitSpherical.UnitSphericalPoint{T}(0, 0, 1)
         return GI.Polygon([[north_pole, north_pole, north_pole]])
     end
