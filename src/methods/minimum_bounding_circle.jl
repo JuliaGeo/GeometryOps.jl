@@ -360,7 +360,7 @@ function _point_in_circle(m::Spherical, p::UnitSphericalPoint, c::SphericalCap)
     return (p ⋅ c.point) >= c.radiuslike
 end
 
-import Quickhull
+# import Quickhull
 
 function minimum_bounding_circle(alg::QuickhullSphericalMBC, geom)
     # Extract all points as UnitSphericalPoints
