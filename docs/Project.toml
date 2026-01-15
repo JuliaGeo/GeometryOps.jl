@@ -54,4 +54,3 @@ GeometryOpsCore = {path = "../GeometryOpsCore"}
 
 [compat]
 DocumenterVitepress = ">=0.2.1"
-GeoInterface = "1.6"
