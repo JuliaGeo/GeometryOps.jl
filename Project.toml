@@ -68,8 +68,5 @@ TGGeometry = "0.1"
 Tables = "1"
 julia = "1.10"
 
-[sources]
-GeometryOpsCore = { path = "GeometryOpsCore" }
-
 [workspace]
 projects = ["GeometryOpsCore", "test", "docs"]
