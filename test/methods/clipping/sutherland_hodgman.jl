@@ -302,5 +302,60 @@ import GeoInterface as GI
             @test spherical_area(result1) ≈ spherical_area(small) rtol=1e-3
             @test spherical_area(result2) ≈ spherical_area(small) rtol=1e-3
         end
+
+        @testset "Adjacent cells with shared edge" begin
+            # Adjacent cells sharing an edge should have zero-area intersection
+            # This tests that points exactly on the clip edge (orient=0) are handled
+            # correctly without introducing numerical errors from intersection computation
+
+            # Small adjacent cells (1° x 1°)
+            cell1 = spherical_polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+            cell2 = spherical_polygon([(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                cell1, cell2
+            )
+            @test spherical_area(result) == 0.0
+
+            # Reverse order should also be zero
+            result_rev = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                cell2, cell1
+            )
+            @test spherical_area(result_rev) == 0.0
+
+            # Larger adjacent cells (10° x 10°)
+            rect1 = spherical_polygon([(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)])
+            rect2 = spherical_polygon([(10.0, 0.0), (20.0, 0.0), (20.0, 10.0), (10.0, 10.0)])
+
+            result_large = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                rect1, rect2
+            )
+            @test spherical_area(result_large) == 0.0
+
+            # Vertically adjacent cells
+            top = spherical_polygon([(0.0, 1.0), (1.0, 1.0), (1.0, 2.0), (0.0, 2.0)])
+            bottom = spherical_polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+
+            result_vert = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                top, bottom
+            )
+            @test spherical_area(result_vert) == 0.0
+        end
+
+        @testset "Cells touching at corner only" begin
+            # Cells that share only a corner point should have zero intersection
+            cell1 = spherical_polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+            cell2 = spherical_polygon([(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                cell1, cell2
+            )
+            @test spherical_area(result) == 0.0
+        end
     end
 end

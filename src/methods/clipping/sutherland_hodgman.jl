@@ -164,7 +164,12 @@ function _point_in_convex_spherical_polygon(
     return true
 end
 
-# Compute intersection point of two great circle arcs
+# Compute intersection of subject arc (p1, p2) with the GREAT CIRCLE through (p3, p4)
+#
+# Note: Sutherland-Hodgman clips against half-planes defined by clip edges. We need to find
+# where the subject arc crosses the great circle (infinite line) containing the clip edge,
+# NOT where two finite arcs intersect. This is critical because the subject arc may cross
+# the clip edge's great circle extension without intersecting the finite clip edge itself.
 function _sh_spherical_intersection(
     p1::UnitSpherical.UnitSphericalPoint,
     p2::UnitSpherical.UnitSphericalPoint,
@@ -172,15 +177,48 @@ function _sh_spherical_intersection(
     p4::UnitSpherical.UnitSphericalPoint,
     ::Type{T}
 ) where T
-    result = UnitSpherical.spherical_arc_intersection(p1, p2, p3, p4)
+    tol = eps(T) * 16
 
-    # Simple extraction (option A)
-    # TODO: May need to handle arc_overlap/arc_hinge cases if edge cases arise
-    if !isempty(result.points)
-        return UnitSpherical.UnitSphericalPoint{T}(result.points[1])
+    # Get great circle normals
+    n_subject = UnitSpherical.robust_cross_product(p1, p2)
+    n_clip = UnitSpherical.robust_cross_product(p3, p4)
+
+    n_subject_norm = norm(n_subject)
+    n_clip_norm = norm(n_clip)
+
+    # Handle degenerate cases
+    if n_subject_norm < tol || n_clip_norm < tol
+        return UnitSpherical.UnitSphericalPoint{T}(p1)
     end
 
-    return UnitSpherical.UnitSphericalPoint{T}(p1)  # Fallback
+    n_subject = n_subject / n_subject_norm
+    n_clip = n_clip / n_clip_norm
+
+    # Intersection direction is the cross product of the normals
+    intersection_dir = n_subject × n_clip
+    dir_norm = norm(intersection_dir)
+
+    # If normals are parallel, great circles are the same (collinear arcs)
+    if dir_norm < tol
+        # Return midpoint of subject arc as a reasonable fallback
+        return UnitSpherical.UnitSphericalPoint{T}(p1)
+    end
+
+    intersection_dir = intersection_dir / dir_norm
+
+    # Two candidate intersection points (antipodal)
+    cand1 = UnitSpherical.UnitSphericalPoint{T}(intersection_dir)
+    cand2 = UnitSpherical.UnitSphericalPoint{T}(-intersection_dir)
+
+    # Return the candidate that lies on the subject arc
+    if UnitSpherical.point_on_spherical_arc(cand1, p1, p2)
+        return cand1
+    elseif UnitSpherical.point_on_spherical_arc(cand2, p1, p2)
+        return cand2
+    end
+
+    # Fallback: neither candidate is on the arc (shouldn't happen if orient detected a crossing)
+    return UnitSpherical.UnitSphericalPoint{T}(p1)
 end
 
 # Clip polygon against a single edge using Sutherland-Hodgman rules (spherical version)
@@ -194,28 +232,40 @@ function _sh_clip_to_edge_spherical(
     n = length(polygon_points)
     n == 0 && return output
 
-    # Compute for first point, then carry forward (avoid duplicate computations)
-    current_inside = UnitSpherical.spherical_orient(edge_start, edge_end, polygon_points[1]) >= 0
+    # Track actual orient values to handle edge cases (orient=0 means exactly on the edge)
+    current_orient = UnitSpherical.spherical_orient(edge_start, edge_end, polygon_points[1])
 
     for i in 1:n
         current = polygon_points[i]
         next_idx = mod1(i + 1, n)
         next_pt = polygon_points[next_idx]
 
-        next_inside = UnitSpherical.spherical_orient(edge_start, edge_end, next_pt) >= 0
+        next_orient = UnitSpherical.spherical_orient(edge_start, edge_end, next_pt)
+        current_inside = current_orient >= 0
+        next_inside = next_orient >= 0
 
         if current_inside
             push!(output, current)
             if !next_inside
+                # Exiting: add intersection point
+                # If current is exactly on the edge (orient=0), it IS the intersection,
+                # and we've already added it above - so don't add again
+                if current_orient != 0
+                    intr_pt = _sh_spherical_intersection(current, next_pt, edge_start, edge_end, T)
+                    push!(output, intr_pt)
+                end
+            end
+        elseif next_inside
+            # Entering: add intersection point
+            # If next is exactly on the edge (orient=0), it IS the intersection,
+            # and it will be added in the next iteration - so don't add here
+            if next_orient != 0
                 intr_pt = _sh_spherical_intersection(current, next_pt, edge_start, edge_end, T)
                 push!(output, intr_pt)
             end
-        elseif next_inside
-            intr_pt = _sh_spherical_intersection(current, next_pt, edge_start, edge_end, T)
-            push!(output, intr_pt)
         end
 
-        current_inside = next_inside
+        current_orient = next_orient
     end
 
     return output
@@ -272,16 +322,22 @@ function _intersection_sutherland_hodgman(
         output = _sh_clip_to_edge_spherical(output, edge_start, edge_end, T)
     end
 
-    # Handle empty result
+    # Handle empty result - check if clip polygon is fully inside the original subject
     if isempty(output)
-        # Check if clip polygon is fully inside the original subject polygon
-        if _point_in_convex_spherical_polygon(clip_points[1], original_subject)
+        if !isempty(clip_points) && _point_in_convex_spherical_polygon(clip_points[1], original_subject)
             # Subject contains clip - return clip polygon
             result = copy(clip_points)
             push!(result, result[1])
             return GI.Polygon([result])
         end
-        # Truly disjoint - return degenerate polygon
+        # Truly disjoint - return degenerate polygon with zero area
+        north_pole = UnitSpherical.UnitSphericalPoint{T}(0, 0, 1)
+        return GI.Polygon([[north_pole, north_pole, north_pole]])
+    end
+
+    # Handle degenerate result (1-2 points can't form a valid ring)
+    # This happens for adjacent polygons that share only an edge or corner
+    if length(output) < 3
         north_pole = UnitSpherical.UnitSphericalPoint{T}(0, 0, 1)
         return GI.Polygon([[north_pole, north_pole, north_pole]])
     end
