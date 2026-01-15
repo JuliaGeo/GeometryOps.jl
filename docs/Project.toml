@@ -46,10 +46,5 @@ Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 SortTileRecursiveTree = "746ee33f-1797-42c2-866d-db2fce69d14d"
 TGGeometry = "d7e755d2-3c95-4bcf-9b3c-79ab1a78647b"
 
-[sources]
-GeometryOps = {path=".."}
-GeometryOpsCore = {path="../GeometryOpsCore"}
-
 [compat]
 DocumenterVitepress = ">=0.2.1"
-GeoInterface = "1.6"
