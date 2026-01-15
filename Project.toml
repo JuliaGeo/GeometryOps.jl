@@ -46,7 +46,6 @@ GeometryOpsTGGeometryExt = "TGGeometry"
 [compat]
 AbstractTrees = "0.4"
 AdaptivePredicates = "1.2"
-ArchGDAL = "0.10.10"
 CoordinateTransformations = "0.5, 0.6"
 DataAPI = "1"
 DataFrames = "1"
