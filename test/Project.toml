@@ -35,6 +35,10 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WellKnownGeometry = "0f680547-7be7-4555-8820-bb198eeb646b"
 XML = "72c71f33-b9b6-44de-8c94-c961784809e2"
 
+[sources]
+GeometryOpsCore = {path = "../GeometryOpsCore"}
+GeometryOps = {path = ".."}
+
 [compat]
 ArchGDAL = "0.10.10"
 GeometryBasics = "0.4.7, 0.5"
