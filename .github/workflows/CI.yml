@@ -42,7 +42,7 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
       - name: Dev local packages for Julia 1.10
         if: matrix.version == '1.10'
-        run: julia --project=test -e 'using Pkg; Pkg.develop([".", "./GeometryOpsCore"])'
+        run: julia --project=test -e 'using Pkg; Pkg.develop([PackageSpec(path = "."), PackageSpec(path = "./GeometryOpsCore")])'
         env: 
           JULIA_PKG_PRECOMPILE_AUTO: 0
       - uses: julia-actions/julia-runtest@v1
