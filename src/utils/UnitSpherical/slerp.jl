@@ -36,12 +36,18 @@ julia> slerp(UnitSphericalPoint(1, 0, 0), UnitSphericalPoint(0, 1, 0), 0.5)
 ```
 """
 function slerp(a::UnitSphericalPoint, b::UnitSphericalPoint, i01::Number)
+    if a == b
+        return a
+    end
     Ω = spherical_distance(a, b)
     sinΩ = sin(Ω)
     return (sin((1-i01)*Ω) / sinΩ) * a + (sin(i01*Ω)/sinΩ) * b
 end
 
 function slerp(a::UnitSphericalPoint, b::UnitSphericalPoint, i01s::AbstractVector{<: Number})
+    if a == b
+        return fill(a, i01s)
+    end
     Ω = spherical_distance(a, b)
     sinΩ = sin(Ω)
     return @. (sin((1 - i01s) * Ω) / sinΩ) * a + (sin(i01s * Ω) / sinΩ) * b

@@ -3,23 +3,24 @@
 module GeometryOps
 
 import GeometryOpsCore
-import GeometryOpsCore: 
+import GeometryOpsCore:
                 TraitTarget,
                 Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
                 manifold, best_manifold,
                 Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype, istrue,
-                TaskFunctors, 
+                TaskFunctors,
                 WithTrait,
                 WithXY, WithXYZ, WithXYM, WithXYZM,
-                apply, applyreduce, 
+                apply, applyreduce,
                 flatten, reconstruct, rebuild, unwrap, _linearring,
+                get_geometries,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
 
-export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap 
+export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap, get_geometries 
 
 using GeoInterface
-using LinearAlgebra, Statistics
+using LinearAlgebra, Statistics, Random
 
 using StaticArrays
 
@@ -33,6 +34,7 @@ import SortTileRecursiveTree
 import SortTileRecursiveTree: STRtree
 
 const GI = GeoInterface
+const DelTri = DelaunayTriangulation
 
 const TuplePoint{T} = Tuple{T, T} where T <: AbstractFloat
 const Edge{T} = Tuple{TuplePoint{T},TuplePoint{T}} where T
@@ -41,13 +43,14 @@ include("types.jl")
 include("primitives.jl")
 include("not_implemented_yet.jl")
 
-include("utils/utils.jl")
 include("utils/LoopStateMachine/LoopStateMachine.jl")
 include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
 include("utils/UnitSpherical/UnitSpherical.jl")
 
 # Load utility modules in
 using .LoopStateMachine, .SpatialTreeInterface, .UnitSpherical
+
+include("utils/utils.jl")
 
 include("utils/NaturalIndexing.jl")
 using .NaturalIndexing
@@ -72,6 +75,7 @@ include("methods/clipping/cut.jl")
 include("methods/clipping/intersection.jl")
 include("methods/clipping/difference.jl")
 include("methods/clipping/union.jl")
+include("methods/clipping/sutherland_hodgman.jl")
 include("methods/geom_relations/contains.jl")
 include("methods/geom_relations/coveredby.jl")
 include("methods/geom_relations/covers.jl")
@@ -82,8 +86,11 @@ include("methods/geom_relations/intersects.jl")
 include("methods/geom_relations/overlaps.jl")
 include("methods/geom_relations/touches.jl")
 include("methods/geom_relations/within.jl")
+include("methods/geom_relations/common.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
+include("methods/minimum_bounding_circle.jl")
+include("methods/voronoi.jl")
 
 include("transformations/extent.jl")
 include("transformations/flip.jl")

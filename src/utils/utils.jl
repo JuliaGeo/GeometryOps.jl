@@ -110,6 +110,8 @@ end
 
 _tuple_point(p) = GI.x(p), GI.y(p)
 _tuple_point(p, ::Type{T}) where T = T(GI.x(p)), T(GI.y(p))
+_tuple_point(p::UnitSpherical.UnitSphericalPoint{T}, ::Type{T}) where T = p
+_tuple_point(p::UnitSpherical.UnitSphericalPoint, ::Type{T}) where T = UnitSpherical.UnitSphericalPoint{T}(p)
 
 function to_extent(edges::Vector{Edge})
     x, y = extrema(first, edges)
@@ -287,7 +289,12 @@ function extent_to_polygon(ext::Extents.Extent{(:Y, :X)})
     return GI.Polygon(StaticArrays.@SVector[GI.LinearRing(StaticArrays.@SVector[(x1, y1), (x2, y1), (x2, y2), (x1, y2), (x1, y1)])])
 end
 
-
-
+# This will accept table rows etc
+# TODO can rows have metadata to detectg the geometry column name?
+function _geometry_or_error(g; geometrycolumn=:geometry)
+    hasproperty(g, geometrycolumn) || throw(ArgumentError("Objects that return no geometry or feature traits must at least have property matching `geometrycolumn: `:$geometrycolumn`"))
+    return getproperty(g, geometrycolumn)
+end
+_geometry_or_error(g::Extents.Extent; kw...) = g
 
 

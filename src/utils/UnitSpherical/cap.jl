@@ -55,13 +55,31 @@ cap = SphericalCap(p1, p2, p3)
 =#
 
 # Spherical cap implementation
+"""
+    SphericalCap{T}
+    SphericalCap(point::UnitSphericalPoint{T}, radius::T)
+
+A spherical cap represents a section of a unit sphere about some point, bounded by a radius.
+It is defined by a center point on the unit sphere and a radius (in radians).
+"""
 struct SphericalCap{T}
+    "The point at the center of the cap."
     point::UnitSphericalPoint{T}
+    "The radius of the cap (in radians). This is what should normally be used in any calculation or comparison."
     radius::T
-    # cartesian_radius::T # TODO: compute using cosine(radius)
+    """
+    A comparison-friendly value equal to `cos(radius)`. Used for efficient containment tests:
+    a point `p` is inside the cap if `p ⋅ center >= radiuslike`. Note that this value is
+    *inversely* related to cap size (radiuslike=1 for a point, radiuslike=0 for a hemisphere).
+    """
+    radiuslike::T
 end
 
-SphericalCap(point::UnitSphericalPoint{T}, radius::Number) where T = SphericalCap{T}(point, convert(T, radius))
+function SphericalCap(point::UnitSphericalPoint{T}, radius::Number) where T
+    radius = convert(T, radius)
+    return SphericalCap{T}(point, radius, cos(radius))
+end
+
 SphericalCap(point, radius::Number) = SphericalCap(GI.trait(point), point, radius)
 
 SphericalCap(geom) = SphericalCap(GI.trait(geom), geom)
@@ -112,11 +130,22 @@ function _merge(x::SphericalCap, y::SphericalCap)
 end
 
 function circumcenter_on_unit_sphere(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
-    LinearAlgebra.normalize(
-        LinearAlgebra.cross(a, b) + 
-        LinearAlgebra.cross(b, c) + 
-        LinearAlgebra.cross(c, a)
-    )
+    raw = LinearAlgebra.cross(a, b) +
+          LinearAlgebra.cross(b, c) +
+          LinearAlgebra.cross(c, a)
+    center = LinearAlgebra.normalize(raw)
+
+    # The formula can return either of two antipodal circumcenters depending on
+    # the winding order of the input points. We want the smaller circumcircle,
+    # which has its center on the same hemisphere as the input points.
+    # If dot(a, center) < 0, then center is on the opposite hemisphere from a,
+    # meaning we have the far circumcenter and need to negate it.
+    # TODO: the above logic might actually be wrong...
+    if LinearAlgebra.dot(a, center) < 0
+        center = -center
+    end
+
+    return center
 end
 
 "Get the circumcenter of the triangle (a, b, c) on the unit sphere.  Returns a normalized 3-vector."

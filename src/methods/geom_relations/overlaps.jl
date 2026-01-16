@@ -4,7 +4,6 @@ export overlaps
 
 #=
 ## What is overlaps?
-
 The overlaps function checks if two geometries overlap. Two geometries can only
 overlap if they have the same dimension, and if they overlap, but one is not
 contained, within, or equal to the other.
@@ -69,7 +68,7 @@ GO.overlaps(poly1, poly2)
 true
 ```
 """
-overlaps(geom1, geom2)::Bool = overlaps(
+overlaps(geom1, geom2)::Bool = _overlaps(
     GI.trait(geom1),
     geom1,
     GI.trait(geom2),
@@ -85,14 +84,14 @@ This is equivalent to `x -> overlaps(x, g1)`.
 overlaps(g1) = Base.Fix2(overlaps, g1)
 
 """
-    overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2)::Bool
+    _overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2)::Bool
 
 For any non-specified pair, all have non-matching dimensions, return false.
 """
-overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2) = false
+_overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2) = false
 
 """
-    overlaps(
+    _overlaps(
         ::GI.MultiPointTrait, points1,
         ::GI.MultiPointTrait, points2,
     )::Bool
@@ -100,7 +99,7 @@ overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2) = false
 If the multipoints overlap, meaning some, but not all, of the points within the
 multipoints are shared, return true.
 """
-function overlaps(
+function _overlaps(
     ::GI.MultiPointTrait, points1,
     ::GI.MultiPointTrait, points2,
 )
@@ -122,16 +121,19 @@ function overlaps(
 end
 
 """
-    overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line)::Bool
+    _overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line2)::Bool
 
 If the lines overlap, meaning that they are collinear but each have one endpoint
 outside of the other line, return true. Else false.
 """
-overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line) =
-    _overlaps((a1, a2), (b1, b2))
+function _overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line2)
+    a1, a2 = GI.getpoint(line1, 1), GI.getpoint(line1, 2)
+    b1, b2 = GI.getpoint(line2, 1), GI.getpoint(line2, 2)
+    return _overlaps((a1, a2), (b1, b2))
+end
 
 """
-    overlaps(
+    _overlaps(
         ::Union{GI.LineStringTrait, GI.LinearRing}, line1,
         ::Union{GI.LineStringTrait, GI.LinearRing}, line2,
     )::Bool
@@ -139,7 +141,7 @@ overlaps(::GI.LineTrait, line1, ::GI.LineTrait, line) =
 If the curves overlap, meaning that at least one edge of each curve overlaps,
 return true. Else false.
 """
-function overlaps(
+function _overlaps(
     ::Union{GI.LineStringTrait, GI.LinearRing}, line1,
     ::Union{GI.LineStringTrait, GI.LinearRing}, line2,
 )
@@ -153,7 +155,7 @@ function overlaps(
 end
 
 """
-    overlaps(
+    _overlaps(
         trait_a::GI.PolygonTrait, poly_a,
         trait_b::GI.PolygonTrait, poly_b,
     )::Bool
@@ -161,7 +163,7 @@ end
 If the two polygons intersect with one another, but are not equal, return true.
 Else false.
 """
-function overlaps(
+function _overlaps(
     trait_a::GI.PolygonTrait, poly_a,
     trait_b::GI.PolygonTrait, poly_b,
 )
@@ -171,7 +173,7 @@ function overlaps(
 end
 
 """
-    overlaps(
+    _overlaps(
         ::GI.PolygonTrait, poly1,
         ::GI.MultiPolygonTrait, polys2,
     )::Bool
@@ -179,7 +181,7 @@ end
 Return true if polygon overlaps with at least one of the polygons within the
 multipolygon. Else false.
 """
-function overlaps(
+function _overlaps(
     ::GI.PolygonTrait, poly1,
     ::GI.MultiPolygonTrait, polys2,
 )
@@ -190,7 +192,7 @@ function overlaps(
 end
 
 """
-    overlaps(
+    _overlaps(
         ::GI.MultiPolygonTrait, polys1,
         ::GI.PolygonTrait, poly2,
     )::Bool
@@ -198,11 +200,11 @@ end
 Return true if polygon overlaps with at least one of the polygons within the
 multipolygon. Else false.
 """
-overlaps(trait1::GI.MultiPolygonTrait, polys1, trait2::GI.PolygonTrait, poly2) = 
-    overlaps(trait2, poly2, trait1, polys1)
+_overlaps(trait1::GI.MultiPolygonTrait, polys1, trait2::GI.PolygonTrait, poly2) =
+    _overlaps(trait2, poly2, trait1, polys1)
 
 """
-    overlaps(
+    _overlaps(
         ::GI.MultiPolygonTrait, polys1,
         ::GI.MultiPolygonTrait, polys2,
     )::Bool
@@ -210,7 +212,7 @@ overlaps(trait1::GI.MultiPolygonTrait, polys1, trait2::GI.PolygonTrait, poly2) =
 Return true if at least one pair of polygons from multipolygons overlap. Else
 false.
 """
-function overlaps(
+function _overlaps(
     ::GI.MultiPolygonTrait, polys1,
     ::GI.MultiPolygonTrait, polys2,
 )
@@ -233,18 +235,6 @@ function _overlaps(
     a_fully_within = _point_on_seg(a1, b1, b2) && _point_on_seg(a2, b1, b2)
     b_fully_within = _point_on_seg(b1, a1, a2) && _point_on_seg(b2, a1, a2)
     return seg_val == line_over && (!a_fully_within && !b_fully_within)
-end
-
-# Extent forwarding
-
-function _overlaps(t1::GI.AbstractGeometryTrait, g1, t2, e::Extents.Extent)
-    return _overlaps(t1, g1, GI.PolygonTrait(), extent_to_polygon(e))
-end
-function _overlaps(t1, e1::Extents.Extent, t2, g2)
-    return _overlaps(GI.PolygonTrait(), extent_to_polygon(e1), t2, g2)
-end
-function _overlaps(t1, e1::Extents.Extent, t2, e2::Extents.Extent)
-    return Extents.overlaps(e1, e2)
 end
 
 #= TODO: Once overlaps is swapped over to use the geom relations workflow, can

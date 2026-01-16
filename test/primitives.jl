@@ -96,6 +96,17 @@ poly = GI.Polygon([lr1, lr2])
             @test_throws "but the table has columns" GO.transform(identity, tab; geometrycolumn = :somethingelse)
         end
     end
+
+    @testset "Apply with PointTrait on iterable of polygons works" begin
+        poly = GI.Polygon([GI.LinearRing([(0,0), (0,1), (1, 1), (0, 0)])])
+
+        poly_iterable = (poly, poly)
+
+        @test_nowarn GO.apply(GI.PointTrait(), poly_iterable) do point
+            (GI.x(point), GI.y(point))
+        end
+        
+    end
 end
 
 @testset "unwrap" begin
