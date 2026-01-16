@@ -140,6 +140,7 @@ function circumcenter_on_unit_sphere(a::UnitSphericalPoint, b::UnitSphericalPoin
     # which has its center on the same hemisphere as the input points.
     # If dot(a, center) < 0, then center is on the opposite hemisphere from a,
     # meaning we have the far circumcenter and need to negate it.
+    # TODO: the above logic might actually be wrong...
     if LinearAlgebra.dot(a, center) < 0
         center = -center
     end
