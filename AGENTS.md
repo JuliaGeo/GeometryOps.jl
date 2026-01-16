@@ -4,6 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Commands
 
+**IMPORTANT**: when running Julia, always run with `julia --project=docs` so that you have access to utility packages
+for loading geometry, etc. etc.
+
 ### Testing
 Run all tests:
 ```bash

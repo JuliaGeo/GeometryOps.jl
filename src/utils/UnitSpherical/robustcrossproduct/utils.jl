@@ -24,9 +24,18 @@ end
 Check if a vector has unit length within a small tolerance.
 
 Returns true if the vector's magnitude is approximately 1.0.
+
+The tolerance adapts to the element type of the vector to handle both
+Float64 (high precision) and Float32 (lower precision, e.g., from GeoJSON) inputs.
+Uses `16 * eps(T)` which provides adequate margin for unit vectors constructed
+from trigonometric functions while still being tight enough to catch errors.
 """
 function isUnitLength(v::AbstractVector)
-    return isapprox(sum(abs2, v), 1.0, rtol=1e-14)
+    T = eltype(v)
+    # Use type-appropriate tolerance: 16*eps gives good margin for trig-constructed vectors
+    # For Float64: ~3.5e-15, for Float32: ~1.9e-6
+    tol = 16 * eps(T <: Integer ? Float64 : T)
+    return isapprox(sum(abs2, v), 1.0, rtol=tol)
 end
 
 """

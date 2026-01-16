@@ -43,13 +43,14 @@ include("types.jl")
 include("primitives.jl")
 include("not_implemented_yet.jl")
 
-include("utils/utils.jl")
 include("utils/LoopStateMachine/LoopStateMachine.jl")
 include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
 include("utils/UnitSpherical/UnitSpherical.jl")
 
 # Load utility modules in
 using .LoopStateMachine, .SpatialTreeInterface, .UnitSpherical
+
+include("utils/utils.jl")
 
 include("utils/NaturalIndexing.jl")
 using .NaturalIndexing
