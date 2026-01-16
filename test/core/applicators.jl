@@ -195,3 +195,46 @@ end
         @test result == 24.0  # Sum of all x+y values
     end
 end
+
+# Regression test for issue #353
+@testset "applyreduce without init" begin
+    # Test that vcat works correctly without explicit init
+    mp = GI.MultiPolygon([
+        GI.Polygon([GI.LinearRing([(0,0), (1,0), (1,1), (0,0)])]),
+        GI.Polygon([GI.LinearRing([(2,2), (3,2), (3,3), (2,2)])])
+    ])
+
+    # This should NOT contain any `nothing` values
+    result = GO.applyreduce(vcat, GO.TraitTarget(GI.AbstractCurveTrait), mp) do geom
+        [GI.npoint(geom)]
+    end
+
+    @test result == [4, 4]
+    @test !any(x -> x === nothing, result)
+
+    # Also test with a single polygon (fewer nesting levels)
+    poly = GI.Polygon([GI.LinearRing([(0,0), (1,0), (1,1), (0,0)])])
+    result2 = GO.applyreduce(vcat, GO.TraitTarget(GI.AbstractCurveTrait), poly) do geom
+        [GI.npoint(geom)]
+    end
+    @test result2 == [4]
+    @test !any(x -> x === nothing, result2)
+
+    # Test with empty geometry (FeatureCollection since MultiPolygon cannot be empty)
+    empty_fc = GI.FeatureCollection(Any[])
+    @test_throws ArgumentError GO.applyreduce(vcat, GO.TraitTarget(GI.AbstractCurveTrait), empty_fc) do geom
+        [GI.npoint(geom)]
+    end
+
+    # Test with explicit init still works
+    result_with_init = GO.applyreduce(vcat, GO.TraitTarget(GI.AbstractCurveTrait), mp; init=Int[]) do geom
+        [GI.npoint(geom)]
+    end
+    @test result_with_init == [4, 4]
+
+    # Test numeric reduction without init
+    sum_result = GO.applyreduce(+, GO.TraitTarget(GI.AbstractCurveTrait), mp) do geom
+        GI.npoint(geom)
+    end
+    @test sum_result == 8
+end
