@@ -160,7 +160,7 @@ end
             # `collect` first so we can use threads
             _apply(f, target, collect(iterable); threaded, kw...)
         else
-            apply_to_iterable(x) = _apply(f, target, x; kw...)
+            apply_to_iterable(x) = _apply(f, target, x; threaded = False(), kw...)
             map(apply_to_iterable, iterable)
         end
     end
