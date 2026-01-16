@@ -95,6 +95,37 @@ poly = GI.Polygon([lr1, lr2])
             @test_throws "got a Float64" GO.transform(identity, tab; geometrycolumn = 1000.0)
             @test_throws "but the table has columns" GO.transform(identity, tab; geometrycolumn = :somethingelse)
         end
+        @testset "applyreduce with geometrycolumn kwarg" begin
+            # Create a table with multiple geometry columns
+            tab = Tables.dictcolumntable((; 
+                geom1 = [GI.Point(1.0, 2.0), GI.Point(3.0, 4.0), GI.Point(5.0, 6.0)],
+                geom2 = [GI.Point(10.0, 20.0), GI.Point(30.0, 40.0), GI.Point(50.0, 60.0)],
+                other = [1, 2, 3]
+            ))
+            
+            # Set metadata to indicate geom1 as the default geometry column
+            if DataAPI.metadatasupport(typeof(tab)).write
+                DataAPI.metadata!(tab, "GEOINTERFACE:geometrycolumns", (:geom1,); style = :note)
+            end
+            
+            # Test applyreduce with default geometry column
+            sum_x_default = GO.applyreduce(GI.x, +, GI.PointTrait(), tab; init=0.0)
+            @test sum_x_default == 1.0 + 3.0 + 5.0
+            
+            # Test applyreduce with explicit geometrycolumn kwarg for geom1
+            sum_x_geom1 = GO.applyreduce(GI.x, +, GI.PointTrait(), tab; geometrycolumn=:geom1, init=0.0)
+            @test sum_x_geom1 == 1.0 + 3.0 + 5.0
+            
+            # Test applyreduce with explicit geometrycolumn kwarg for geom2
+            sum_x_geom2 = GO.applyreduce(GI.x, +, GI.PointTrait(), tab; geometrycolumn=:geom2, init=0.0)
+            @test sum_x_geom2 == 10.0 + 30.0 + 50.0
+            
+            # Test error with invalid geometry column
+            @test_throws "must be a column name of the table" GO.applyreduce(GI.x, +, GI.PointTrait(), tab; geometrycolumn=:nonexistent, init=0.0)
+            
+            # Test error with wrong type for geometrycolumn
+            @test_throws "must be a Symbol or nothing" GO.applyreduce(GI.x, +, GI.PointTrait(), tab; geometrycolumn=123, init=0.0)
+        end
     end
 
     @testset "Apply with PointTrait on iterable of polygons works" begin
