@@ -31,21 +31,21 @@ If invoked as `getchild(node, i)`, return the `i`-th child of a node.
 """
 function getchild end 
 
-getchild(node) = AbstractTrees.children(node)
+getchild(node) = (getchild(node, i) for i in 1:nchild(node))
 
 """
     getchild(node, i)
 
 Return the `i`-th child of a node.
 """
-getchild(node, i) = getchild(node)[i]
+getchild(node, i) = error("getchild(node, i) is not implemented for node type $(typeof(node)), it must be implemented!")
 
 """
     nchild(node)
 
 Return the number of children of a node.
 """
-nchild(node) = length(getchild(node))
+nchild(node) = error("nchild is not implemented for node type $(typeof(node)), it must be implemented!")
 
 """
     isleaf(node)

@@ -180,4 +180,182 @@ import GeoInterface as GI
         @test GI.trait(result3) isa GI.PolygonTrait
         @test GO.area(result3) ≈ 0.0 atol=1e-10
     end
+
+    @testset "Spherical helpers" begin
+        using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
+
+        @testset "_point_in_convex_spherical_polygon" begin
+            transform = UnitSphereFromGeographic()
+
+            # CCW square near equator
+            square_pts = UnitSphericalPoint{Float64}[
+                transform((0.0, 0.0)),
+                transform((2.0, 0.0)),
+                transform((2.0, 2.0)),
+                transform((0.0, 2.0))
+            ]
+
+            inside_pt = transform((1.0, 1.0))
+            outside_pt = transform((5.0, 5.0))
+            edge_pt = transform((1.0, 0.0))  # On edge
+
+            @test GO._point_in_convex_spherical_polygon(inside_pt, square_pts) == true
+            @test GO._point_in_convex_spherical_polygon(outside_pt, square_pts) == false
+            # Edge point should be considered inside (>= 0 check)
+            @test GO._point_in_convex_spherical_polygon(edge_pt, square_pts) == true
+        end
+    end
+
+    @testset "Spherical ConvexConvexSutherlandHodgman" begin
+        using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
+
+        function spherical_polygon(coords)
+            transform = UnitSphereFromGeographic()
+            points = [transform((lon, lat)) for (lon, lat) in coords]
+            push!(points, points[1])
+            return GI.Polygon([points])
+        end
+
+        spherical_area(poly) = GO.area(GO.Spherical(), poly)
+
+        @testset "Basic intersection - small region" begin
+            square1 = spherical_polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+            square2 = spherical_polygon([(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                square1, square2
+            )
+            @test GI.trait(result) isa GI.PolygonTrait
+            @test spherical_area(result) > 0
+        end
+
+        @testset "No intersection" begin
+            square1 = spherical_polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+            square2 = spherical_polygon([(10.0, 10.0), (11.0, 10.0), (11.0, 11.0), (10.0, 11.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                square1, square2
+            )
+            @test spherical_area(result) ≈ 0.0 atol=1e-10
+        end
+
+        @testset "Partial overlap" begin
+            # Two overlapping squares - not containment, just partial overlap
+            square1 = spherical_polygon([(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0)])
+            square2 = spherical_polygon([(1.5, 1.5), (4.5, 1.5), (4.5, 4.5), (1.5, 4.5)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                square1, square2
+            )
+            @test GI.trait(result) isa GI.PolygonTrait
+            @test spherical_area(result) > 0
+            # Intersection should be smaller than both inputs
+            @test spherical_area(result) < spherical_area(square1)
+            @test spherical_area(result) < spherical_area(square2)
+        end
+
+        @testset "Triangles" begin
+            # Two overlapping triangles - like the planar test
+            tri1 = spherical_polygon([(0.0, 0.0), (4.0, 0.0), (2.0, 4.0)])
+            tri2 = spherical_polygon([(0.0, 2.0), (2.0, -2.0), (4.0, 2.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                tri1, tri2
+            )
+            @test GI.trait(result) isa GI.PolygonTrait
+            @test spherical_area(result) > 0
+        end
+
+        @testset "Near pole" begin
+            tri1 = spherical_polygon([(0.0, 85.0), (120.0, 85.0), (240.0, 85.0)])
+            tri2 = spherical_polygon([(60.0, 85.0), (180.0, 85.0), (300.0, 85.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                tri1, tri2
+            )
+            @test GI.trait(result) isa GI.PolygonTrait
+            @test spherical_area(result) > 0
+        end
+
+        @testset "Input validation" begin
+            planar_poly = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+
+            @test_throws ArgumentError GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                planar_poly, planar_poly
+            )
+        end
+
+        @testset "One contains other" begin
+            large = spherical_polygon([(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)])
+            small = spherical_polygon([(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)])
+
+            # Both orderings should return the small polygon's area
+            result1 = GO.intersection(GO.ConvexConvexSutherlandHodgman(GO.Spherical()), large, small)
+            result2 = GO.intersection(GO.ConvexConvexSutherlandHodgman(GO.Spherical()), small, large)
+
+            @test spherical_area(result1) ≈ spherical_area(small) rtol=1e-3
+            @test spherical_area(result2) ≈ spherical_area(small) rtol=1e-3
+        end
+
+        @testset "Adjacent cells with shared edge" begin
+            # Adjacent cells sharing an edge should have zero-area intersection
+            # This tests that points exactly on the clip edge (orient=0) are handled
+            # correctly without introducing numerical errors from intersection computation
+
+            # Small adjacent cells (1° x 1°)
+            cell1 = spherical_polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+            cell2 = spherical_polygon([(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                cell1, cell2
+            )
+            @test spherical_area(result) == 0.0
+
+            # Reverse order should also be zero
+            result_rev = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                cell2, cell1
+            )
+            @test spherical_area(result_rev) == 0.0
+
+            # Larger adjacent cells (10° x 10°)
+            rect1 = spherical_polygon([(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)])
+            rect2 = spherical_polygon([(10.0, 0.0), (20.0, 0.0), (20.0, 10.0), (10.0, 10.0)])
+
+            result_large = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                rect1, rect2
+            )
+            @test spherical_area(result_large) == 0.0
+
+            # Vertically adjacent cells
+            top = spherical_polygon([(0.0, 1.0), (1.0, 1.0), (1.0, 2.0), (0.0, 2.0)])
+            bottom = spherical_polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+
+            result_vert = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                top, bottom
+            )
+            @test spherical_area(result_vert) == 0.0
+        end
+
+        @testset "Cells touching at corner only" begin
+            # Cells that share only a corner point should have zero intersection
+            cell1 = spherical_polygon([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+            cell2 = spherical_polygon([(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)])
+
+            result = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                cell1, cell2
+            )
+            @test spherical_area(result) == 0.0
+        end
+    end
 end

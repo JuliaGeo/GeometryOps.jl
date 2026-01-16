@@ -3,6 +3,26 @@
 =#
 
 export applyreduce
+public _InitialValue # has to be "public API" since users will have to use it as a default value to init sometimes.
+
+"""
+    _InitialValue()
+
+Sentinel value for "no init provided".  This is the same way Base `mapreduce` does this.
+It's a singleton struct so e.g. similar to `Nothing`.
+
+This is meant to be the default value for [`applyreduce`](@ref GeometryOpsCore.applyreduce)'s `init` keyword argument.
+"""
+struct _InitialValue end
+
+# Helper to call mapreduce with or without init
+@inline function _mapreduce_maybe_init(f::F, op::O, iter::I, init::InitT) where {F, O, I, InitT}
+    if init isa _InitialValue
+        return mapreduce(f, op, iter)
+    else
+        return mapreduce(f, op, iter; init)
+    end
+end
 
 #=
 This file mainly defines the [`applyreduce`](@ref) function.  
@@ -54,17 +74,21 @@ Literate.jl source code is below.
     applyreduce(f, op, target::Union{TraitTarget, GI.AbstractTrait}, obj; threaded, init, kw...)
 
 Apply function `f` to all objects with the `target` trait,
-and reduce the result with an `op` like `+`. 
+and reduce the result with an `op` like `+`.
 
 The order and grouping of application of `op` is not guaranteed.
 
-If `threaded==true` threads will be used over arrays and iterables, 
+If `threaded==true` threads will be used over arrays and iterables,
 feature collections and nested geometries.
 
-`init` functions the same way as it does in base Julia functions like `reduce`.
+`init` specifies the initial value for the reduction. If not provided,
+the reduction uses the first result as the starting point (like `reduce`
+without `init`). For operations like `vcat`, you typically don't need
+to provide `init`. For numeric reductions like `+`, you may want to
+provide `init=zero(T)` to ensure type stability.
 """
 @inline function applyreduce(
-    f::F, op::O, target, geom; threaded=false, init=nothing
+    f::F, op::O, target, geom; threaded=false, init=_InitialValue()
 ) where {F, O}
     threaded = booltype(threaded)
     _applyreduce(f, op, TraitTarget(target), geom; threaded, init)
@@ -87,7 +111,7 @@ end
             _applyreduce(f, op, target, collect(iterable); threaded, init)
         else
             # Try to `mapreduce` the iterable as-is
-            mapreduce(applyreduce_iterable, op, iterable; init)
+            _mapreduce_maybe_init(applyreduce_iterable, op, iterable, init)
         end
     end
 end
@@ -177,14 +201,14 @@ import Base.Threads: nthreads, @threads, @spawn
         # Spawn a task to process this chunk
         StableTasks.@spawn begin
             # Where we map `f` over the chunk indices
-            mapreduce(f, op, chunk; init)
+            _mapreduce_maybe_init(f, op, chunk, init)
         end
     end
 
     # Finally we join the results into a new vector
-    return mapreduce(fetch, op, tasks; init)
+    return _mapreduce_maybe_init(fetch, op, tasks, init)
 end
 
 function _mapreducetasks(f::F, op, taskrange, threaded::False; init) where F
-    mapreduce(f, op, taskrange; init)
+    _mapreduce_maybe_init(f, op, taskrange, init)
 end
