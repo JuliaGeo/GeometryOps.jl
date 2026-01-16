@@ -37,6 +37,7 @@ XML = "72c71f33-b9b6-44de-8c94-c961784809e2"
 
 [sources]
 GeometryOpsCore = {path = "../GeometryOpsCore"}
+GeometryOps = {path = ".."}
 
 [compat]
 ArchGDAL = "0.10.10"
