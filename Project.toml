@@ -1,7 +1,7 @@
 name = "GeometryOps"
 uuid = "3251bfac-6a57-4b6d-aa61-ac1fef2975ab"
 authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "Rafael Schouten <rafaelschouten@gmail.com>", "Skylar Gering <skygering@gmail.com>", "and contributors"]
-version = "0.1.35"
+version = "0.1.36"
 
 [deps]
 AbstractTrees = "1520ce14-60c1-5f80-bbc7-55ef81b5835c"
@@ -52,7 +52,7 @@ Extents = "0.1.5"
 FlexiJoins = "0.1.30"
 GeoFormatTypes = "0.4"
 GeoInterface = "1.6"
-GeometryOpsCore = "=0.1.9"
+GeometryOpsCore = "=0.1.10"
 LibGEOS = "0.9.2"
 LinearAlgebra = "1"
 Proj = "1"
@@ -63,9 +63,6 @@ Statistics = "1"
 TGGeometry = "0.1"
 Tables = "1"
 julia = "1.10"
-
-[sources]
-GeometryOpsCore = {path = "GeometryOpsCore"}
 
 [workspace]
 projects = ["GeometryOpsCore", "GeometryOpsTestHelpers", "test", "docs"]
