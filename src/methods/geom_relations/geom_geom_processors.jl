@@ -492,6 +492,7 @@ passes through an odd number of edges, it is within the curve, else outside of
 of the curve if it didn't return 'on'.
 See paper for more information on cases denoted in comments.
 =#
+
 function _point_filled_curve_orientation(
     ::Planar, point, curve;
     in::T = point_in, on::T = point_on, out::T = point_out, exact,
@@ -526,6 +527,54 @@ function _point_filled_curve_orientation(
         p_start = p_end
     end
     return iseven(k) ? out : in
+end
+
+# Specialized implementation for NaturallyIndexedRing
+# This relies on multidispatch.
+# TODO: remove?
+function _point_filled_curve_orientation(
+    ::Planar, point, curve::NaturalIndexing.NaturallyIndexedRing;
+    in::T = point_in, on::T = point_on, out::T = point_out, exact,
+) where {T}
+    x, y = GI.x(GI.PointTrait(), point), GI.y(GI.PointTrait(), point)
+    k::Int = 0  # counter for ray crossings
+
+    tree = curve.index
+
+    function per_edge_function(i)
+        p_start = _tuple_point(GI.getpoint(curve, i))
+        p_end = _tuple_point(GI.getpoint(curve, i + 1))
+        v1 = GI.y(p_start) - y
+        v2 = GI.y(p_end) - y
+        if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
+            u1, u2 = GI.x(p_start) - x, GI.x(p_end) - x
+            f = Predicates.orient(p_start, p_end, (x, y); exact)
+            if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
+                f == 0 && return LSM.Action{T}(:full_return, on)         # Case 16 or 21
+                f > 0 && (k += 1)              # Case 3 or 9
+            elseif v1 > 0 && v2 ≤ 0            # Case 4, 10, 19, 20, 12, or 25
+                f == 0 && return LSM.Action{T}(:full_return, on)         # Case 19 or 20
+                f < 0 && (k += 1)              # Case 4 or 10
+            elseif v2 == 0 && v1 < 0           # Case 7, 14, or 17
+                f == 0 && return LSM.Action{T}(:full_return, on)         # Case 17
+            elseif v1 == 0 && v2 < 0           # Case 8, 15, or 18
+                f == 0 && return LSM.Action{T}(:full_return, on)         # Case 18
+            elseif v1 == 0 && v2 == 0          # Case 1, 2, 5, 6, 22, or 23
+                u2 ≤ 0 && u1 ≥ 0 && return LSM.Action{T}(:full_return, on)  # Case 1
+                u1 ≤ 0 && u2 ≥ 0 && return LSM.Action{T}(:full_return, on)  # Case 2
+            end
+            return LSM.Action(:continue, on)
+        end
+        p_start = p_end
+    end
+
+    result = SpatialTreeInterface.depth_first_search(per_edge_function,extent -> extent.Y[1] <= y <= extent.Y[2], tree)
+
+    if result isa LoopStateMachine.Action
+        return result.x
+    else
+        return iseven(k) ? out : in
+    end
 end
 _point_filled_curve_orientation(
     point, curve;
