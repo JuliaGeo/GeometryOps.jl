@@ -5,3 +5,6 @@
 .vscode/
 .claude/
 .DS_Store
+
+benchmarks/Manifest.toml
+.worktrees/
