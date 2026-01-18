@@ -362,17 +362,11 @@ end
 
 # Spherical Sutherland-Hodgman Tests
 @testset "ConvexConvexSutherlandHodgman - Spherical" begin
-    using GeometryOps: UnitSpherical
+    using GeometryOps.UnitSpherical: UnitSphereFromGeographic
 
-    # Helper to create UnitSphericalPoints from lon/lat
-    function lonlat_to_point(lon, lat)
-        lon_rad = deg2rad(lon)
-        lat_rad = deg2rad(lat)
-        x = cos(lat_rad) * cos(lon_rad)
-        y = cos(lat_rad) * sin(lon_rad)
-        z = sin(lat_rad)
-        return UnitSpherical.UnitSphericalPoint(x, y, z)
-    end
+    # Transform lon/lat to UnitSphericalPoint
+    _transform = UnitSphereFromGeographic()
+    lonlat_to_point(lon, lat) = _transform((lon, lat))
 
     alg = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
 
