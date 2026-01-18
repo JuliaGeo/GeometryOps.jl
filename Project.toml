@@ -55,6 +55,7 @@ GeoInterface = "1.6"
 GeometryOpsCore = "=0.1.10"
 LibGEOS = "0.9.2"
 LinearAlgebra = "1"
+Makie = "0.24.8"
 Proj = "1"
 Random = "1"
 SortTileRecursiveTree = "0.1.2"
@@ -63,6 +64,5 @@ Statistics = "1"
 TGGeometry = "0.1"
 Tables = "1"
 julia = "1.10"
-
 [workspace]
 projects = ["GeometryOpsCore", "test", "docs"]
