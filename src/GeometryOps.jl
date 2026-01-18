@@ -109,6 +109,10 @@ include("transformations/correction/intersecting_polygons.jl")
 for name in names(GeoInterface)
     @eval using GeoInterface: $name
 end
+using GeoInterface: crs, x, y, z
+for name in names(GeoInterface.Wrappers)
+    @eval using GeoInterface.Wrappers: $name
+end
 for name in names(Extents)
     @eval using GeoInterface.Extents: $name
 end

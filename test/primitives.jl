@@ -14,18 +14,18 @@ using ..TestHelpers
 
 pv1 = [(1, 2), (3, 4), (5, 6), (1, 2)]
 pv2 = [(3, 4), (5, 6), (6, 7), (3, 4)]
-lr1 = GI.LinearRing(pv1)
-lr2 =  GI.LinearRing(pv2)
-poly = GI.Polygon([lr1, lr2])
+lr1 = GO.LinearRing(pv1)
+lr2 =  GO.LinearRing(pv2)
+poly = GO.Polygon([lr1, lr2])
 
 @testset "apply" begin
 
     @testset_implementations "apply flip" begin
-        flipped_poly = GO.apply(GI.PointTrait, $poly) do p
-            (GI.y(p), GI.x(p))
+        flipped_poly = GO.apply(GO.PointTrait, $poly) do p
+            (GO.y(p), GO.x(p))
         end
-        @test flipped_poly == GI.Polygon([GI.LinearRing([(2, 1), (4, 3), (6, 5), (2, 1)]), 
-                                          GI.LinearRing([(4, 3), (6, 5), (7, 6), (4, 3)])])
+        @test flipped_poly == GO.Polygon([GO.LinearRing([(2, 1), (4, 3), (6, 5), (2, 1)]), 
+                                          GO.LinearRing([(4, 3), (6, 5), (7, 6), (4, 3)])])
     end
 
     @testset "Tables.jl support" begin
@@ -45,7 +45,7 @@ poly = GI.Polygon([lr1, lr2])
                 countries_table = Shapefile.Table("countries.shp")
                 # TODO: broken, nfeature not defined in shapefile.jl
                 # @testset "Shapefile" begin
-                #     centroid_table = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_table);
+                #     centroid_table = GO.apply(GO.centroid, GO.TraitTarget(GO.PolygonTrait(), GO.MultiPolygonTrait()), countries_table);
                 #     centroid_geometry = getproperty(centroid_table, :geometry)
                 #     # Test that the centroids are correct
                 #     @test all(centroid_geometry .== GO.centroid.(countries_table.geometry))
@@ -60,7 +60,7 @@ poly = GI.Polygon([lr1, lr2])
                 countries_df = DataFrames.DataFrame(countries_table)
                 GO.DataAPI.metadata!(countries_df, "note metadata", "note metadata value"; style = :note)
                 GO.DataAPI.metadata!(countries_df, "default metadata", "default metadata value"; style = :default)
-                centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GI.PolygonTrait(), GI.MultiPolygonTrait()), countries_df; crs = GFT.EPSG(3031));
+                centroid_df = GO.apply(GO.centroid, GO.TraitTarget(GO.PolygonTrait(), GO.MultiPolygonTrait()), countries_df; crs = GFT.EPSG(3031));
                 # Test that the Tables.jl materializer is used
                 @test centroid_df isa DataFrames.DataFrame
                 # Test that the centroids are correct
@@ -77,7 +77,7 @@ poly = GI.Polygon([lr1, lr2])
                     GI.DataAPI.metadata!(countries_df2, "GEOINTERFACE:geometrycolumns", (:geometry, :centroid); style = :note)
                     transformed = GO.transform(p -> p .+ 3, countries_df2)
                     @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:geometrycolumns") == (:geometry, :centroid)
-                    @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:crs") == GI.crs(countries_df2)
+                    @test GI.DataAPI.metadata(transformed, "GEOINTERFACE:crs") == GO.crs(countries_df2)
                     # Test that the transformation was actually applied to both geometry columns.
                     @test all(map(zip(countries_df2.geometry, transformed.geometry)) do (o, n)
                         GO.equals(GO.transform(p -> p .+ 3, o), n)
@@ -110,32 +110,32 @@ poly = GI.Polygon([lr1, lr2])
 end
 
 @testset "unwrap" begin
-    flipped_vectors = GO.unwrap(GI.PointTrait, poly) do p
-        (GI.y(p), GI.x(p))
+    flipped_vectors = GO.unwrap(GO.PointTrait, poly) do p
+        (GO.y(p), GI.x(p))
     end
 
     @test flipped_vectors == [[(2, 1), (4, 3), (6, 5), (2, 1)], [(4, 3), (6, 5), (7, 6), (4, 3)]]
 end
 
 @testset "flatten" begin
-    very_wrapped = [[GI.FeatureCollection([GI.Feature(poly; properties=(;))])]]
-    @test GO._tuple_point.(GO.flatten(GI.PointTrait, very_wrapped)) == vcat(pv1, pv2)
-    @test collect(GO.flatten(GI.AbstractCurveTrait, [poly])) == [lr1, lr2]
-    @test collect(GO.flatten(GI.x, GI.PointTrait, very_wrapped)) == first.(vcat(pv1, pv2))
+    very_wrapped = [[GO.FeatureCollection([GO.Feature(poly; properties=(;))])]]
+    @test GO._tuple_point.(GO.flatten(GO.PointTrait, very_wrapped)) == vcat(pv1, pv2)
+    @test collect(GO.flatten(GO.AbstractCurveTrait, [poly])) == [lr1, lr2]
+    @test collect(GO.flatten(GO.x, GO.PointTrait, very_wrapped)) == first.(vcat(pv1, pv2))
     @testset "flatten with tables" begin
         # Construct a simple table with a geometry column
-        geom_column = [GI.Point(1.0,1.0), GI.Point(2.0,2.0), GI.Point(3.0,3.0)]
+        geom_column = [GO.Point(1.0,1.0), GO.Point(2.0,2.0), GO.Point(3.0,3.0)]
         table = (geometry = geom_column, id = [1, 2, 3])
         
         # Test flatten on the table
-        flattened = collect(GO.flatten(GI.PointTrait, table))
+        flattened = collect(GO.flatten(GO.PointTrait, table))
         
         @test length(flattened) == 3
-        @test all(p isa GI.Point for p in flattened)
+        @test all(p isa GO.Point for p in flattened)
         @test flattened == geom_column
         
         # Test flatten with a function
-        flattened_coords = collect(GO.flatten(p -> (GI.x(p), GI.y(p)), GI.PointTrait, table))
+        flattened_coords = collect(GO.flatten(p -> (GO.x(p), GO.y(p)), GO.PointTrait, table))
         
         @test length(flattened_coords) == 3
         @test all(c isa Tuple{Float64,Float64} for c in flattened_coords)
@@ -144,23 +144,23 @@ end
 end
 
 @testset "reconstruct" begin
-    revlr1 =  GI.LinearRing(reverse(pv2))
-    revlr2 = GI.LinearRing(reverse(pv1))
-    revpoly = GI.Polygon([revlr1, revlr2])
-    points = collect(GO.flatten(GI.PointTrait, poly))
+    revlr1 =  GO.LinearRing(reverse(pv2))
+    revlr2 = GO.LinearRing(reverse(pv1))
+    revpoly = GO.Polygon([revlr1, revlr2])
+    points = collect(GO.flatten(GO.PointTrait, poly))
     reconstructed = GO.reconstruct(poly, reverse(points))
     @test reconstructed == revpoly
-    @test reconstructed isa GI.Polygon
+    @test reconstructed isa GO.Polygon
 
 
-    revlr1 = GI.LineString(GB.Point.(reverse(pv2)))
-    revlr2 = GI.LineString(GB.Point.(reverse(pv1)))
-    revpoly = GI.Polygon([revlr1, revlr2])
+    revlr1 = GO.LineString(GO.Point.(reverse(pv2)))
+    revlr2 = GO.LineString(GO.Point.(reverse(pv1)))
+    revpoly = GO.Polygon([revlr1, revlr2])
     gb_lr1 = GB.LineString(GB.Point.(pv1))
     gb_lr2 = GB.LineString(GB.Point.(pv2))
     gb_poly = GB.Polygon(gb_lr1, [gb_lr2])
-    gb_points = collect(GO.flatten(GI.PointTrait, gb_poly))
+    gb_points = collect(GO.flatten(GO.PointTrait, gb_poly))
     gb_reconstructed = GO.reconstruct(gb_poly, reverse(gb_points))
     @test gb_reconstructed == revpoly
-    @test gb_reconstructed isa GI.Polygon
+    @test gb_reconstructed isa GO.Polygon
 end
