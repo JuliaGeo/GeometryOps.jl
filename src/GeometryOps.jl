@@ -49,6 +49,8 @@ include("utils/UnitSpherical/UnitSpherical.jl")
 
 # Load utility modules in
 using .LoopStateMachine, .SpatialTreeInterface, .UnitSpherical
+const LSM = LoopStateMachine
+const STI = SpatialTreeInterface
 
 include("utils/utils.jl")
 
