@@ -1,6 +1,6 @@
 name = "GeometryOpsTestHelpers"
 uuid = "47ae2730-6264-4af1-919b-a18bc445f019"
-authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>"]
+authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "Rafael Schouten <rafaelschouten@gmail.com>"]
 version = "0.1.0"
 
 [deps]
