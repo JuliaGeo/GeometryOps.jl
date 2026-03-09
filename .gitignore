@@ -3,4 +3,8 @@
 /docs/build/
 /docs/src/source/
 .vscode/
+.claude/
 .DS_Store
+
+benchmarks/Manifest.toml
+.worktrees/

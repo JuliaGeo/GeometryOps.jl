@@ -359,3 +359,183 @@ import GeoInterface as GI
         end
     end
 end
+
+# Spherical Sutherland-Hodgman Tests
+@testset "ConvexConvexSutherlandHodgman - Spherical" begin
+    using GeometryOps.UnitSpherical: UnitSphereFromGeographic
+
+    # Transform lon/lat to UnitSphericalPoint
+    _transform = UnitSphereFromGeographic()
+    lonlat_to_point(lon, lat) = _transform((lon, lat))
+
+    alg = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
+
+    @testset "Basic spherical intersection" begin
+        # Two overlapping 2°×2° spherical cells
+        poly_a = GI.Polygon([[
+            lonlat_to_point(0.0, 0.0),
+            lonlat_to_point(2.0, 0.0),
+            lonlat_to_point(2.0, 2.0),
+            lonlat_to_point(0.0, 2.0),
+            lonlat_to_point(0.0, 0.0),
+        ]])
+
+        poly_b = GI.Polygon([[
+            lonlat_to_point(1.0, 1.0),
+            lonlat_to_point(3.0, 1.0),
+            lonlat_to_point(3.0, 3.0),
+            lonlat_to_point(1.0, 3.0),
+            lonlat_to_point(1.0, 1.0),
+        ]])
+
+        result = GO.intersection(alg, poly_a, poly_b; target=GI.PolygonTrait())
+        area = GO.area(GO.Spherical(), result)
+
+        # Should be approximately 1°×1° intersection area
+        @test area > 0
+        @test area < GO.area(GO.Spherical(), poly_a)
+    end
+
+    @testset "Adjacent polygons (shared edge) - THE FIX" begin
+        # Two 1°×1° cells sharing lon=126 edge
+        # This is the main bug that was reported
+        poly_a = GI.Polygon([[
+            lonlat_to_point(125.0, 53.0),
+            lonlat_to_point(126.0, 53.0),
+            lonlat_to_point(126.0, 54.0),
+            lonlat_to_point(125.0, 54.0),
+            lonlat_to_point(125.0, 53.0),
+        ]])
+
+        poly_b = GI.Polygon([[
+            lonlat_to_point(126.0, 53.0),
+            lonlat_to_point(127.0, 53.0),
+            lonlat_to_point(127.0, 54.0),
+            lonlat_to_point(126.0, 54.0),
+            lonlat_to_point(126.0, 53.0),
+        ]])
+
+        result_ab = GO.intersection(alg, poly_a, poly_b; target=GI.PolygonTrait())
+        result_ba = GO.intersection(alg, poly_b, poly_a; target=GI.PolygonTrait())
+
+        area_ab = GO.area(GO.Spherical(), result_ab)
+        area_ba = GO.area(GO.Spherical(), result_ba)
+
+        # Adjacent polygons should have zero/negligible intersection
+        @test area_ab < 1e-10
+        @test area_ba < 1e-10
+
+        # Operation should be symmetric
+        @test area_ab ≈ area_ba atol=1e-10
+    end
+
+    @testset "Vertex on edge (no overlap)" begin
+        # Subject polygon (lon 125-126, lat 53-54)
+        poly_a = GI.Polygon([[
+            lonlat_to_point(125.0, 53.0),
+            lonlat_to_point(126.0, 53.0),
+            lonlat_to_point(126.0, 54.0),
+            lonlat_to_point(125.0, 54.0),
+            lonlat_to_point(125.0, 53.0),
+        ]])
+
+        # Polygon with vertex at (126.0, 53.5) - ON poly_a's lon=126 edge but outside
+        poly_b = GI.Polygon([[
+            lonlat_to_point(126.0, 53.5),  # ON poly_a's lon=126 edge
+            lonlat_to_point(127.0, 53.0),
+            lonlat_to_point(127.0, 54.0),
+            lonlat_to_point(126.0, 53.5),
+        ]])
+
+        result = GO.intersection(alg, poly_a, poly_b; target=GI.PolygonTrait())
+        area = GO.area(GO.Spherical(), result)
+
+        # Should be zero, not the area of poly_b!
+        @test area < 1e-10
+    end
+
+    @testset "Overlapping spherical polygons" begin
+        poly_a = GI.Polygon([[
+            lonlat_to_point(125.0, 53.0),
+            lonlat_to_point(127.0, 53.0),
+            lonlat_to_point(127.0, 55.0),
+            lonlat_to_point(125.0, 55.0),
+            lonlat_to_point(125.0, 53.0),
+        ]])
+
+        poly_b = GI.Polygon([[
+            lonlat_to_point(126.0, 54.0),
+            lonlat_to_point(128.0, 54.0),
+            lonlat_to_point(128.0, 56.0),
+            lonlat_to_point(126.0, 56.0),
+            lonlat_to_point(126.0, 54.0),
+        ]])
+
+        result = GO.intersection(alg, poly_a, poly_b; target=GI.PolygonTrait())
+        area = GO.area(GO.Spherical(), result)
+
+        # Should be approximately 1°×1° = area of overlap region
+        expected_poly = GI.Polygon([[
+            lonlat_to_point(126.0, 54.0),
+            lonlat_to_point(127.0, 54.0),
+            lonlat_to_point(127.0, 55.0),
+            lonlat_to_point(126.0, 55.0),
+            lonlat_to_point(126.0, 54.0),
+        ]])
+        expected_area = GO.area(GO.Spherical(), expected_poly)
+
+        @test area ≈ expected_area rtol=0.05
+    end
+
+    @testset "Containment" begin
+        outer = GI.Polygon([[
+            lonlat_to_point(120.0, 50.0),
+            lonlat_to_point(130.0, 50.0),
+            lonlat_to_point(130.0, 60.0),
+            lonlat_to_point(120.0, 60.0),
+            lonlat_to_point(120.0, 50.0),
+        ]])
+
+        inner = GI.Polygon([[
+            lonlat_to_point(124.0, 54.0),
+            lonlat_to_point(126.0, 54.0),
+            lonlat_to_point(126.0, 56.0),
+            lonlat_to_point(124.0, 56.0),
+            lonlat_to_point(124.0, 54.0),
+        ]])
+
+        result = GO.intersection(alg, outer, inner; target=GI.PolygonTrait())
+        inner_area = GO.area(GO.Spherical(), inner)
+        result_area = GO.area(GO.Spherical(), result)
+
+        @test result_area ≈ inner_area rtol=0.01
+    end
+
+    @testset "Original bug report case" begin
+        # Subject polygon (lon 125-126, lat 53-54)
+        subject = GI.Polygon([[
+            lonlat_to_point(125.0, 53.0),
+            lonlat_to_point(126.0, 53.0),
+            lonlat_to_point(126.0, 54.0),
+            lonlat_to_point(125.0, 54.0),
+            lonlat_to_point(125.0, 53.0),
+        ]])
+
+        # Clip polygon - adjacent, with vertex at (126.0, 53.23) ON subject's edge
+        clip = GI.Polygon([[
+            lonlat_to_point(126.0, 53.23),   # ON subject's lon=126 edge!
+            lonlat_to_point(126.86, 52.32),
+            lonlat_to_point(127.86, 53.25),
+            lonlat_to_point(126.95, 54.15),
+            lonlat_to_point(126.0, 53.23),
+        ]])
+
+        result = GO.intersection(alg, subject, clip; target=GI.PolygonTrait())
+        result_area = GO.area(GO.Spherical(), result)
+        clip_area = GO.area(GO.Spherical(), clip)
+
+        # BUG FIX: result_area should be ~0, NOT clip_area
+        # The ratio should be ~0, not ~1
+        @test result_area < clip_area * 0.01  # Less than 1% of clip area
+    end
+end
