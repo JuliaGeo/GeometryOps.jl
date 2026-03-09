@@ -27,6 +27,7 @@ using StaticArrays
 import Tables, DataAPI
 import StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
+import StatsBase
 import ExactPredicates
 import Base.@kwdef
 import GeoInterface.Extents: Extents
@@ -87,6 +88,7 @@ include("methods/geom_relations/overlaps.jl")
 include("methods/geom_relations/touches.jl")
 include("methods/geom_relations/within.jl")
 include("methods/geom_relations/common.jl")
+include("methods/sample.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")
