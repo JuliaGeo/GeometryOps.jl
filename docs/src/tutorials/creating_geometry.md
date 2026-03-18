@@ -113,6 +113,40 @@ plot!(polygon1)
 fig
 ````
 
+We can also rotate a polygon with the same `transform` function. A `LinearMap`
+rotates around the origin.
+
+````@example creating_geometry
+theta = π / 4
+rotation = CoordinateTransformations.LinearMap([
+    cos(theta) -sin(theta)
+    sin(theta) cos(theta)
+]);
+polygon1_rotated_origin = GO.transform(rotation, polygon1);
+
+fig_rotation = Figure()
+ax_origin = Axis(fig_rotation[1, 1]; title = "Rotate around the origin", aspect = DataAspect())
+poly!(ax_origin, polygon1; color = (:steelblue, 0.5), strokecolor = :steelblue)
+poly!(ax_origin, polygon1_rotated_origin; color = (:orange, 0.35), strokecolor = :orange)
+fig_rotation
+````
+
+To rotate around a polygon's centroid instead, compose the rotation with
+translations before and after it.
+
+````@example creating_geometry
+polygon1_centroid = GO.centroid(polygon1)
+rotation_about_centroid = CoordinateTransformations.Translation(polygon1_centroid...) ∘
+    rotation ∘
+    CoordinateTransformations.Translation((-).(polygon1_centroid)...)
+polygon1_rotated_centroid = GO.transform(rotation_about_centroid, polygon1);
+
+ax_centroid = Axis(fig_rotation[1, 2]; title = "Rotate around the centroid", aspect = DataAspect())
+poly!(ax_centroid, polygon1; color = (:steelblue, 0.5), strokecolor = :steelblue)
+poly!(ax_centroid, polygon1_rotated_centroid; color = (:orange, 0.35), strokecolor = :orange)
+fig_rotation
+````
+
 Polygons can contain "holes". The first `LinearRing` in a polygon is the exterior, and all subsequent `LinearRing`s are treated as holes in the leading `LinearRing`.
 
 `GeoInterface` offers the `GI.getexterior(poly)` and `GI.gethole(poly)` methods to get the exterior ring and an iterable of holes, respectively.
