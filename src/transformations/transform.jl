@@ -26,9 +26,12 @@ This uses [`apply`](@ref), so will work with any geometry, vector of geometries,
 
 Apply a function `f` to all the points in `obj`.
 
-Points will be passed to `f` as an `SVector` to allow
-using CoordinateTransformations.jl and Rotations.jl 
-without hassle.
+Points are passed to `f` as an `SVector`, so `f` can be a plain function
+or a callable transform from CoordinateTransformations.jl, such as
+`Translation`, `LinearMap`, or a composition of transforms.
+
+Because this uses [`apply`](@ref) internally, it works with polygons,
+multipolygons, arrays of geometries, feature collections, and tables.
 
 `SVector` is also a valid GeoInterface.jl point, so will
 work in all GeoInterface.jl methods.
@@ -50,6 +53,37 @@ GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearR
 rRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}[GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}(StaticArraysCo
 re.SVector{2, Float64}[[4.5, 3.5], [6.5, 5.5], [8.5, 7.5], [4.5, 3.5]], nothing, nothing), GeoInterface.Wrappers.LinearRing{false, false, Vector{StaticArraysCore.SVector{2, Float64}}, Nothing, Nothing}(StaticA
 rraysCore.SVector{2, Float64}[[6.5, 5.5], [8.5, 7.5], [9.5, 8.5], [6.5, 5.5]], nothing, nothing)], nothing, nothing)
+```
+
+CoordinateTransformations.jl also works directly with callable transforms like
+`LinearMap`, which is handy for 2D rotation.
+
+```julia
+julia> rotation_geom = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0), (0.0, 0.0)]]);
+
+julia> rotation = CoordinateTransformations.LinearMap([0.0 -1.0; 1.0 0.0]);
+
+julia> rotated = GO.transform(rotation, rotation_geom);
+
+julia> Tuple.(GI.getpoint(GI.getexterior(rotated)))
+5-element Vector{Tuple{Float64, Float64}}:
+ (0.0, 0.0)
+ (0.0, 2.0)
+ (-1.0, 2.0)
+ (-1.0, 0.0)
+ (0.0, 0.0)
+
+julia> center = GO.centroid(rotation_geom);
+
+julia> rotated_centroid = GO.transform(
+           CoordinateTransformations.Translation(center...) ∘
+           rotation ∘
+           CoordinateTransformations.Translation((-).(center)...),
+           rotation_geom,
+       );
+
+julia> all(GO.centroid(rotated_centroid) .≈ center)
+true
 ```
 
 With Rotations.jl you need to actually multiply the Rotation
