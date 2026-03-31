@@ -17,6 +17,8 @@ p1, p2 = GI.Polygon([l1]), GI.Polygon([l2])
     # Three intersection points
     LG_l1_l2_mp = GI.MultiPoint(collect(GI.getpoint(LG.intersection($l1, $l2))))
     @test GO.equals(GI.MultiPoint(GO.intersection_points($l1, $l2)), LG_l1_l2_mp)
+    @test GO.equals(GI.MultiPoint(GO.intersection_points($l1, $l2; exact = false)), LG_l1_l2_mp)
+    @test GO.equals(GI.MultiPoint(GO.intersection($l1, $l2; target = GI.PointTrait(), exact = false)), LG_l1_l2_mp)
 
     # Four intersection points with large intersection
     LG_l3_l4_mp = GI.MultiPoint(collect(GI.getpoint(LG.intersection($l3, $l4))))

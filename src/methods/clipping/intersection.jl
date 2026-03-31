@@ -40,11 +40,11 @@ GI.coordinates.(inter_points)
 ```
 """
 function intersection(
-    alg::FosterHormannClipping, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
+    alg::FosterHormannClipping, geom_a, geom_b, ::Type{T}=Float64; target=nothing, exact = True(), kwargs...
 ) where {T<:AbstractFloat}
     return _intersection(
         alg, TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
-        exact = True(), kwargs...,
+        exact, kwargs...,
     )
 end
 # fallback definitions
@@ -64,8 +64,8 @@ _intersection(
     alg::FosterHormannClipping, ::TraitTarget{GI.PointTrait}, ::Type{T},
     trait_a::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_a,
     trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b;
-    kwargs...,
-) where T = _intersection_points(alg.manifold, alg.accelerator, T, trait_a, geom_a, trait_b, geom_b)
+    exact, kwargs...,
+) where T = _intersection_points(alg.manifold, alg.accelerator, T, trait_a, geom_a, trait_b, geom_b; exact)
 
 #= Polygon-Polygon Intersections with target Polygon
 The algorithm to determine the intersection was adapted from "Efficient clipping
@@ -200,10 +200,10 @@ function _intersection(
 end
 
 """
-    intersection_points(geom_a, geom_b, [T::Type])
+    intersection_points(geom_a, geom_b, [T::Type]; exact = True())
 
 Return a list of intersection tuple points between two geometries. If no intersection points
-exist, returns an empty list.
+exist, returns an empty list. Set `exact = false` to use the inexact predicate path.
 
 ## Example
 
@@ -218,13 +218,14 @@ inter_points = GO.intersection_points(line1, line2)
 1-element Vector{Tuple{Float64, Float64}}:
  (125.58375366067548, -14.83572303404496)
 """
-intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat = intersection_points(FosterHormannClipping(Planar()), geom_a, geom_b, T)
-function intersection_points(alg::FosterHormannClipping{M, A}, geom_a, geom_b, ::Type{T} = Float64) where {M, A, T <: AbstractFloat}
-    return _intersection_points(alg.manifold, alg.accelerator, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+intersection_points(geom_a, geom_b, ::Type{T} = Float64; exact = True()) where T <: AbstractFloat =
+    intersection_points(FosterHormannClipping(Planar()), geom_a, geom_b, T; exact)
+function intersection_points(alg::FosterHormannClipping{M, A}, geom_a, geom_b, ::Type{T} = Float64; exact = True()) where {M, A, T <: AbstractFloat}
+    return _intersection_points(alg.manifold, alg.accelerator, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; exact)
 end
 
-function intersection_points(m::Manifold, a::IntersectionAccelerator, geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat
-    return _intersection_points(m, a, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+function intersection_points(m::Manifold, a::IntersectionAccelerator, geom_a, geom_b, ::Type{T} = Float64; exact = True()) where T <: AbstractFloat
+    return _intersection_points(m, a, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; exact)
 end
 
 
