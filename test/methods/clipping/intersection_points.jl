@@ -12,6 +12,10 @@ l5 = GI.LineString([(19999.999, 25000.0), (19999.999, 29000.0), (39999.998999999
 l6 = GI.LineString([(0.0, 25000.0), (0.0, 29000.0), (20000.0, 29000.0), (20000.0, 25000.0), (0.0, 25000.0)])
 
 p1, p2 = GI.Polygon([l1]), GI.Polygon([l2])
+mp1 = GI.MultiPolygon([p1, GI.Polygon([l3])])
+
+struct TrackingExact end
+GO.GeometryOpsCore.booltype(::TrackingExact) = error("tracking exact forwarded")
 
 @testset_implementations begin
     # Three intersection points
@@ -33,4 +37,7 @@ p1, p2 = GI.Polygon([l1]), GI.Polygon([l2])
 
     # No intersection points between polygon and line
     @test isempty(GO.intersection_points($p1, $l6))
+
+    # Recursive polygon-multipolygon intersections should forward `exact`
+    @test_throws "tracking exact forwarded" GO.intersection($p1, $mp1; target = GI.PolygonTrait(), exact = TrackingExact())
 end

@@ -10,19 +10,23 @@ Enum for the orientation of a line with respect to a curve. A line can be
 @enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
 """
-    intersection(geom_a, geom_b, [T::Type]; target::Type, fix_multipoly = UnionIntersectingPolygons())
+    intersection(geom_a, geom_b, [T::Type];
+                 target::Type,
+                 exact = True(),
+                 fix_multipoly = UnionIntersectingPolygons())
 
 Return the intersection between two geometries as a list of geometries. Return an empty list
 if none are found. The type of the list will be constrained as much as possible given the
 input geometries. Furthermore, the user can provide a `target` type as a keyword argument and
 a list of target geometries found in the intersection will be returned. The user can also
-provide a float type that they would like the points of returned geometries to be. If the
-user is taking a intersection involving one or more multipolygons, and the multipolygon
-might be comprised of polygons that intersect, if `fix_multipoly` is set to an
-`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
-needed multipolygons will be fixed to be valid before performing the intersection to ensure
-a correct answer. Only set `fix_multipoly` to nothing if you know that the multipolygons are
-valid, as it will avoid unneeded computation. 
+provide a float type that they would like the points of returned geometries to be. Set
+`exact = false` (or `False()`) to use the inexact predicate path instead of the default
+exact one. If the user is taking a intersection involving one or more multipolygons, and
+the multipolygon might be comprised of polygons that intersect, if `fix_multipoly` is set
+to an `IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`),
+then the needed multipolygons will be fixed to be valid before performing the intersection
+to ensure a correct answer. Only set `fix_multipoly` to nothing if you know that the
+multipolygons are valid, as it will avoid unneeded computation. 
 
 ## Example
 
@@ -132,7 +136,7 @@ function _intersection(
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(alg, poly_a, poly_b; target))
+        append!(polys, intersection(alg, poly_a, poly_b; target, kwargs...))
     end
     return polys
 end
@@ -165,7 +169,7 @@ function _intersection(
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly))
+        append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly, kwargs...))
     end
     return polys
 end
