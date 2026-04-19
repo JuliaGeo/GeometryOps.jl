@@ -57,6 +57,9 @@ p10 = LG.Polygon([
     [[0.15, 0.55], [0.15, 0.95], [0.55, 0.95], [0.55, 0.55], [0.15, 0.55]]
 ])
 p11 = LG.Polygon(r3)
+# Polygon with interior notch sharing collinear edges with a rectangle (issue #396)
+p12 = LG.Polygon([[[0.0, 0.0], [0.0, 4.0], [8.0, 4.0], [8.0, 0.0], [0.0, 0.0]]])
+p13 = LG.Polygon([[[0.0, 0.0], [0.0, 2.0], [7.0, 1.0], [7.0, 3.0], [0.0, 3.0], [0.0, 4.0], [8.0, 4.0], [8.0, 0.0], [0.0, 0.0]]])
 
 mpt1 = LG.MultiPoint([pt1, pt2])
 mpt2 = LG.MultiPoint([pt2, pt3])
@@ -157,6 +160,8 @@ test_pairs = [
     (p6, p1, "p6", "p1", "Polygon inside of other polygon's hole"),
     (p7, p1, "p7", "p1", "Polygons overlap"),
     (p10, p1, "p10", "p1", "Polygon's with nested holes"),
+    (p12, p13, "p12", "p13", "Rectangle with polygon with collinear notch (#396)"),
+    (p13, p12, "p13", "p12", "Polygon with collinear notch inside rectangle (#396)"),
     # Multigeometries
     (mpt1, mpt1, "mpt1", "mpt1", "Same set of points for multipoints"),
     (mpt1, mpt2, "mpt1", "mpt2", "Some point matches, others are different"),

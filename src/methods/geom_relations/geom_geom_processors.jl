@@ -627,6 +627,7 @@ function _line_filled_curve_interactions(
                             elseif mid_val == point_out
                                 out_curve = true
                             end
+                            p_start = p_end
                         end
                         # already checked segment against whole filled curve
                         l_start = l_end
