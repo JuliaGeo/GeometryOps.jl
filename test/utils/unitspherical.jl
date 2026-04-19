@@ -5,6 +5,81 @@ using GeometryOps.UnitSpherical
 
 import GeoInterface as GI
 
+@testset "spherical_distance" begin
+    @testset "Basic correctness" begin
+        # Orthogonal axes → π/2
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(0.0, 1.0, 0.0)) ≈ π/2
+        # Identical points → 0
+        p = UnitSphericalPoint(1.0, 0.0, 0.0)
+        @test spherical_distance(p, p) == 0.0
+        # Antipodal → π
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(-1.0, 0.0, 0.0)) ≈ π
+        # Known π/4 separation
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(cos(π/4), sin(π/4), 0.0)) ≈ π/4
+        # Known π/3 separation
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(cos(π/3), sin(π/3), 0.0)) ≈ π/3
+    end
+
+    @testset "Near-identical points (atan2 stability vs acos)" begin
+        # For each ε, check that the atan2 form recovers ε with very small
+        # relative error. This is the case where `acos(clamp(x⋅y, -1, 1))`
+        # degrades — x⋅y = cos(ε) ≈ 1 - ε²/2, and double precision can't
+        # distinguish that from 1 once ε ≲ 1e-8.
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        for ε in (1e-4, 1e-6, 1e-8, 1e-10, 1e-12)
+            b = UnitSphericalPoint(cos(ε), sin(ε), 0.0)
+            d = spherical_distance(a, b)
+            @test d ≈ ε rtol=1e-12
+
+            # Contrast: the naive acos form collapses to 0 around ε ≈ 1e-8.
+            d_naive = acos(clamp(a ⋅ b, -1.0, 1.0))
+            if ε ≤ 1e-10
+                @test d_naive == 0.0 || abs(d_naive - ε) / ε > 1e-2
+            end
+        end
+    end
+
+    @testset "Near-antipodal points" begin
+        # Should return ≈ π - ε. The atan2 form stays well-conditioned here
+        # (cross norm ≈ sin(ε) ≈ ε, dot ≈ -1 + ε²/2).
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        for ε in (1e-2, 1e-4, 1e-6, 1e-8)
+            # Point at angle (π - ε) from a, rotated in the xy-plane
+            b = UnitSphericalPoint(cos(π - ε), sin(π - ε), 0.0)
+            @test spherical_distance(a, b) ≈ π - ε rtol=1e-10
+        end
+    end
+
+    # Ported from Google's S2 geometry library, TEST(S1Angle, ConstructorsThatMeasureAngles):
+    # https://github.com/google/s2geometry/blob/a4f0cf58a9cfc214585c39de6e3682384fac0917/src/s2/s1angle_test.cc#L144-L152
+    # S2's Vector3::Angle accepts non-unit vectors (the atan2 form is scale-invariant);
+    # UnitSphericalPoint is typed for unit vectors, so we normalize the (0,0,2) case.
+    @testset "s2geometry ConstructorsThatMeasureAngles" begin
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(0.0, 0.0, 1.0)) == π/2
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(1.0, 0.0, 0.0)) == 0.0
+    end
+
+    @testset "Symmetry and range" begin
+        using Random
+        Random.seed!(0xA7A7)
+        for _ in 1:50
+            a = UnitSphericalPoint(randn(), randn(), randn())
+            b = UnitSphericalPoint(randn(), randn(), randn())
+            a = a / norm(a); b = b / norm(b)
+            d_ab = spherical_distance(a, b)
+            d_ba = spherical_distance(b, a)
+            @test d_ab == d_ba
+            @test 0 ≤ d_ab ≤ π + 1e-12
+        end
+    end
+end
+
 @testset "Coordinate transforms" begin
     @testset "UnitSphereFromGeographic" begin
         # Test with GeoInterface Point
