@@ -233,21 +233,22 @@ end
         UnitSphericalPoint(0, 0, 1)
     )
     
-    # Very small perturbation - will use high-precision arithmetic
+    # Very small perturbation - will use high-precision arithmetic.
+    # Tightened to match S2 after fixing the subnormal-flush bug at
+    # src/utils/UnitSpherical/robustcrossproduct/utils.jl:102 and the
+    # IsZero/magnitude-threshold bug at RobustCrossProduct.jl:216.
     test_robust_cross_prod_result(
-        UnitSphericalPoint(5e-324, 1, 0), 
+        UnitSphericalPoint(5e-324, 1, 0),
         UnitSphericalPoint(0, 1, 0),
-        UnitSphericalPoint(1, 0, 0)
-        # UnitSphericalPoint(0, 0, 1) # this is what s2 has but we have it on the other axis, IDK why
+        UnitSphericalPoint(0, 0, 1)
     )
-    
-    # Extremely small differences that can't be represented in double precision
-    # In this case, our implementation may choose a different sign than S2's
+
+    # Extremely small differences that can't be represented in double precision.
+    # Tightened to match S2 (same bugs as above).
     test_robust_cross_prod_result(
-        UnitSphericalPoint(5e-324, 1, 0), 
+        UnitSphericalPoint(5e-324, 1, 0),
         UnitSphericalPoint(5e-324, 1 - DBL_ERR, 0),
-        # UnitSphericalPoint(0, 0, 1)  # We allow either sign in the test function
-        UnitSphericalPoint(1, 0, 0)
+        UnitSphericalPoint(0, 0, 1)
     )
     
     # Test requiring symbolic perturbation
@@ -471,23 +472,33 @@ end
 #
 # The S2 sign oracle is `s2pred::Sign(a, b, c)`, i.e. the sign of the 3x3
 # determinant of (a, b, c) with symbolic-perturbation fallback. We replace it
-# with `bigsign`: the sign of that determinant computed in BigFloat (default
-# 256-bit precision). BigFloat isn't literally exact, but at 256 bits it is
-# vastly more precise than Float64 and, crucially, is *not* `robust_cross_product`
+# with `bigsign`: the sign of that determinant computed in BigFloat at 1024-bit
+# precision. BigFloat isn't literally exact, but at 1024 bits it is vastly
+# more precise than Float64 and, crucially, is *not* `robust_cross_product`
 # or any predicate that wraps it. When `bigsign` returns 0, the case is
 # genuinely a symbolic one that BigFloat can't resolve; we skip the oracle
 # assertion in that iteration per the brief.
+#
+# Precision note: at the default 256 bits, the RobustCrossProdError loop
+# hit ~28 residual bigsign failures (a/b near-antipodal cases where the
+# determinant is mathematically zero but rounds to a definite sign in 256-bit
+# cross-multiplications). Bumping to 1024 bits makes the oracle strong enough
+# that `det(a, -a, c)` for Float64-derived inputs resolves to exactly 0 via
+# cancellation, eliminating those oracle-precision-artifact failures.
 
-# Independent sign oracle. Computes det(a, b, c) in BigFloat and returns its
-# sign (+1, -1, or 0). Never calls `robust_cross_product`.
+# Independent sign oracle. Computes det(a, b, c) in BigFloat at 1024-bit
+# precision and returns its sign (+1, -1, or 0). Never calls
+# `robust_cross_product`.
 function bigsign(a, b, c)
-    ab = (BigFloat(a[1]), BigFloat(a[2]), BigFloat(a[3]))
-    bb = (BigFloat(b[1]), BigFloat(b[2]), BigFloat(b[3]))
-    cb = (BigFloat(c[1]), BigFloat(c[2]), BigFloat(c[3]))
-    d = ab[1]*(bb[2]*cb[3] - bb[3]*cb[2]) -
-        ab[2]*(bb[1]*cb[3] - bb[3]*cb[1]) +
-        ab[3]*(bb[1]*cb[2] - bb[2]*cb[1])
-    return d > 0 ? 1 : (d < 0 ? -1 : 0)
+    setprecision(BigFloat, 1024) do
+        ab = (BigFloat(a[1]), BigFloat(a[2]), BigFloat(a[3]))
+        bb = (BigFloat(b[1]), BigFloat(b[2]), BigFloat(b[3]))
+        cb = (BigFloat(c[1]), BigFloat(c[2]), BigFloat(c[3]))
+        d = ab[1]*(bb[2]*cb[3] - bb[3]*cb[2]) -
+            ab[2]*(bb[1]*cb[3] - bb[3]*cb[1]) +
+            ab[3]*(bb[1]*cb[2] - bb[2]*cb[1])
+        return d > 0 ? 1 : (d < 0 ? -1 : 0)
+    end
 end
 
 # BigFloat version of s2pred::IsZero(cross(ToExact(a), ToExact(b))). Used to
@@ -703,34 +714,26 @@ end
             UnitSphericalPoint(0.0, 1.0, 0.0),
             UnitSphericalPoint(0.0, 0.0, 1.0), EXACT)
 
-        # S2 L217-L218: 5e-324 subnormal — EXACT; Julia tripwire.
+        # S2 L217-L218: 5e-324 subnormal — EXACT.
         #
-        # Julia-side bug (tripwire via @test_broken): the exact path drops
-        # to symbolic because of a magnitude threshold in place of S2's
-        # IsZero test. In Julia at
-        #   src/utils/UnitSpherical/robustcrossproduct/RobustCrossProduct.jl
-        # line 216 we have:
-        #   `if !all(<=(1e-300), abs.(result_xf)) return normalizableFromExact(...)`
-        # S2's corresponding code at s2edge_crossings.cc L352 is
-        #   `if (!s2pred::IsZero(result_xf)) return NormalizableFromExact(...)`
-        # — a literal IsZero, not a 1e-300 magnitude test. The BigFloat
-        # cross product here is (0, 0, 5e-324), which is non-zero but below
-        # 1e-300, so Julia falls through into the symbolic branch and
-        # (compounded by the sign-flip bug in symbolic_cross_product_sorted
-        # at line 327) returns a point on the wrong axis. Additionally,
-        # `normalizableFromExact` in
-        #   src/utils/UnitSpherical/robustcrossproduct/utils.jl line 104
-        # calls `Float64.(xf)` *before* scaling, underflowing subnormals to
-        # zero and making rescaling impossible.
-        @test_broken normalize(robust_cross_product(
+        # Previously @test_broken. Fixed by:
+        #   - src/utils/UnitSpherical/robustcrossproduct/RobustCrossProduct.jl:216
+        #     (replace 1e-300 magnitude threshold with literal IsZero check)
+        #   - src/utils/UnitSpherical/robustcrossproduct/utils.jl:102
+        #     (scale BigFloat components via ldexp *before* casting to
+        #     Float64, so subnormals aren't flushed to zero)
+        #   - src/utils/UnitSpherical/robustcrossproduct/RobustCrossProduct.jl:327
+        #     (symbolic sign-flip fix, not directly on this path but related)
+        @test normalize(robust_cross_product(
                         UnitSphericalPoint(5e-324, 1.0, 0.0),
                         UnitSphericalPoint(0.0, 1.0, 0.0))) ==
                      UnitSphericalPoint(0.0, 0.0, 1.0)
 
-        # S2 L221-L222: exact cross product underflows in double precision
-        # — Julia tripwire. Same two bugs as above; the BigFloat cross is
-        # (0, 0, ~-5.5e-340) which sits below the 1e-300 threshold.
-        @test_broken normalize(robust_cross_product(
+        # S2 L221-L222: exact cross product underflows in double precision.
+        # Previously @test_broken. Same fixes as above — the BigFloat cross
+        # is (0, 0, ~-5.5e-340), which now goes through the scaled exact
+        # path correctly.
+        @test normalize(robust_cross_product(
                         UnitSphericalPoint(5e-324, 1.0, 0.0),
                         UnitSphericalPoint(5e-324, 1 - DBL_ERR_LOCAL, 0.0))) ==
                      UnitSphericalPoint(0.0, 0.0, -1.0)
@@ -755,33 +758,19 @@ end
         # practice but are implemented for completeness. S2 asserts exact
         # equality on `SymbolicCrossProd(a,b)`.
         #
-        # S2 L234-L235 (Julia sign-flip tripwire). S2 at
-        #   s2edge_crossings.cc L251-L253
-        #       if (a[0] != 0 || a[1] != 0) { return Vector3_d(a[1], -a[0], 0); }
-        # Julia at
-        #   src/utils/UnitSpherical/robustcrossproduct/RobustCrossProduct.jl L327
-        #       return UnitSphericalPoint{T}(-a[2], a[1], 0)
-        # S2's `(a[1], -a[0], 0)` in 0-based = `(a[2], -a[1], 0)` in Julia
-        # 1-based; Julia has `(-a[2], a[1], 0)` — both components negated
-        # relative to S2.
-        #
-        # Trace for (-1,0,0) x (0,0,0): a < b lexicographically (-1 < 0),
-        # so symbolic_cross_product calls sorted(a,b). `b` has first two
-        # branches zero, `a`-fallback fires: S2 returns (0, 1, 0), Julia
-        # returns (0, -1, 0).
-        @test_broken RobustCrossProduct.symbolic_cross_product(
+        # S2 L234-L235. Previously @test_broken due to sign-flip bug at
+        # src/utils/UnitSpherical/robustcrossproduct/RobustCrossProduct.jl:327.
+        # Fix: return `(a[2], -a[1], 0)` (matching S2's 0-based
+        # `(a[1], -a[0], 0)`) instead of the previous `(-a[2], a[1], 0)`.
+        @test RobustCrossProduct.symbolic_cross_product(
                         UnitSphericalPoint(-1.0, 0.0, 0.0),
                         UnitSphericalPoint(0.0, 0.0, 0.0)) ==
                      UnitSphericalPoint(0.0, 1.0, 0.0)
 
-        # S2 L236-L237: same sign-flip bug routed through `b < a` path
-        # (a=(0,0,0) is not less than b=(0,-1,0): tie, tie, then 0 > -1).
-        # So SymbolicCrossProd returns -sorted(b, a). Inside sorted,
-        # arguments become (0,-1,0) and (0,0,0); the sorted-arg-`b` is
-        # all zero and `a[2] = -1 != 0` triggers the a-fallback.
-        # S2 returns -(a[2], -a[1], 0) = -(-1, 0, 0) = (1, 0, 0).
-        # Julia returns -(-a[2], a[1], 0) = -(1, 0, 0) = (-1, 0, 0).
-        @test_broken RobustCrossProduct.symbolic_cross_product(
+        # S2 L236-L237: same sign-flip path as above, routed through
+        # `b < a` so SymbolicCrossProd returns -sorted(b, a). Fixed by
+        # the same edit at RobustCrossProduct.jl:327.
+        @test RobustCrossProduct.symbolic_cross_product(
                         UnitSphericalPoint(0.0, 0.0, 0.0),
                         UnitSphericalPoint(0.0, -1.0, 0.0)) ==
                      UnitSphericalPoint(1.0, 0.0, 0.0)
@@ -852,24 +841,21 @@ end
         # individually EXPECTs every assertion; we aggregate for
         # readability and assert the aggregate here.
         #
-        # Currently broken: under the same bugs flagged with @test_broken
-        # in RobustCrossProdCoverage above (the 1e-300 magnitude threshold
-        # at RobustCrossProduct.jl line 216, the sign-flip in
-        # symbolic_cross_product_sorted at line 327, and the pre-scale
-        # truncation in normalizableFromExact in utils.jl line 104), the
-        # 5000-iteration loop routinely drops points whose exact cross
-        # product has magnitude below 1e-300 into the symbolic path and
-        # returns results on the wrong axis. Those results fail the
-        # sign agreement, identity-under-negation, and antisymmetry
-        # checks. Typical count under the current seed 0x5e4f5c4d is
-        # ~80 failures across ~45000 individual checks. `@test_broken`
-        # flips to a passing result (and the test suite fails loudly) as
-        # soon as those bugs are fixed.
+        # Previously @test_broken under the three bugs flagged in
+        # RobustCrossProdCoverage above. Fixed by:
+        #   - src/utils/UnitSpherical/robustcrossproduct/RobustCrossProduct.jl:216
+        #     (IsZero rather than 1e-300 magnitude threshold)
+        #   - src/utils/UnitSpherical/robustcrossproduct/RobustCrossProduct.jl:327
+        #     (sign-flip in symbolic_cross_product_sorted)
+        #   - src/utils/UnitSpherical/robustcrossproduct/utils.jl:102
+        #     (scale BigFloats before Float64 cast in normalizableFromExact)
         #
-        # The aggregate count is an asserted, visible quantity — not
-        # silently swallowed. The failing iterations are deterministic
-        # under this seed; `iters` and `counts` are both @test'ed.
-        @test_broken failures[] == 0
+        # Under seed 0x5e4f5c4d this now reaches zero after also bumping
+        # the `bigsign` BigFloat oracle to 1024 bits (see helper above);
+        # at the default 256 bits, ~28 near-antipodal cases still hit
+        # BigFloat-precision artifacts even with the cross-product bugs
+        # fixed.
+        @test failures[] == 0
         # Always print the count for diagnostics, whether passing or
         # failing — keeps the number a visible, tracked quantity.
         @info "RobustCrossProdError aggregate" failures=failures[] iters=iters counts=counts
