@@ -124,40 +124,37 @@ end
         end
     end
 
-    # The tests below document a known bug in the divide-by-sin(Ω) form:
-    # for near-antipodal inputs where a + b suffers cancellation, the
-    # midpoint drifts off the unit sphere. Flip `@test_broken` → `@test`
-    # when slerp is guarded against the Ω → π regime.
-    @testset "Cancellation-prone near-antipodal (currently broken)" begin
+    # Previously broken under the divide-by-sin(Ω) form; now pass via the
+    # tangent-vector form in src/utils/UnitSpherical/slerp.jl.
+    @testset "Cancellation-prone near-antipodal" begin
         a = UnitSphericalPoint(1.0, 0.0, 0.0)
         for ε in (1e-10, 1e-12, 1e-14, 1e-15, 1e-16)
             v = [-1.0, 0.0, ε]; v ./= norm(v)
             b = UnitSphericalPoint(v[1], v[2], v[3])
             m = slerp(a, b, 0.5)
-            @test_broken isapprox(norm(m), 1.0, atol=1e-10)
+            @test isapprox(norm(m), 1.0, atol=1e-10)
         end
     end
 
-    @testset "Exactly antipodal returns a unit vector (currently broken)" begin
+    @testset "Exactly antipodal returns a unit vector" begin
         a = UnitSphericalPoint(1.0, 0.0, 0.0)
         b = UnitSphericalPoint(-1.0, 0.0, 0.0)
         m = slerp(a, b, 0.5)
-        @test all(isfinite, m)          # finite, at least — currently (0,0,0)
-        @test_broken isapprox(norm(m), 1.0, atol=1e-10)
+        @test all(isfinite, m)
+        @test isapprox(norm(m), 1.0, atol=1e-10)
     end
 
     # Regression test for ConservativeRegridding.jl#83. A half-sphere
     # equatorial band has a truly antipodal diagonal between
-    # (0°, −15°) and (180°, +15°); slerp'ing that diagonal inside
-    # `cell_range_extent` produced a (0,0,0) midpoint that poisoned the
-    # SphericalCap radius.
-    @testset "ConservativeRegridding#83 antipodal diagonal (currently broken)" begin
+    # (0°, −15°) and (180°, +15°); under the old slerp this produced
+    # a (0,0,0) midpoint that poisoned the SphericalCap radius.
+    @testset "ConservativeRegridding#83 antipodal diagonal" begin
         to_sphere = UnitSphereFromGeographic()
         p1 = to_sphere((0.0, -15.0))
         p3 = to_sphere((180.0, +15.0))
         @test p1 ⋅ p3 ≈ -1.0
         m = slerp(p1, p3, 0.5)
-        @test_broken isapprox(norm(m), 1.0, atol=1e-10)
+        @test isapprox(norm(m), 1.0, atol=1e-10)
     end
 end
 
