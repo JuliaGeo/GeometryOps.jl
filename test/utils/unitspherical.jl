@@ -80,6 +80,87 @@ import GeoInterface as GI
     end
 end
 
+@testset "slerp" begin
+    @testset "Basic correctness" begin
+        # Quarter-turn along the equator
+        @test slerp(UnitSphericalPoint(1.0, 0.0, 0.0),
+                    UnitSphericalPoint(0.0, 1.0, 0.0), 0.5) ≈
+              UnitSphericalPoint(sqrt(2)/2, sqrt(2)/2, 0.0)
+        # Endpoints
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        b = UnitSphericalPoint(0.0, 1.0, 0.0)
+        @test slerp(a, b, 0.0) ≈ a
+        @test slerp(a, b, 1.0) ≈ b
+        # Identical inputs — fast path
+        @test slerp(a, a, 0.5) == a
+    end
+
+    @testset "Random well-separated points stay on the unit sphere" begin
+        using Random
+        Random.seed!(0x5E5E)
+        for _ in 1:50
+            va = randn(3); va ./= norm(va)
+            vb = randn(3); vb ./= norm(vb)
+            # Skip anything within 1° of antipodal — that's the degenerate regime
+            # covered by the dedicated testsets below.
+            (va ⋅ vb) < -0.9998 && continue
+            a = UnitSphericalPoint(va[1], va[2], va[3])
+            b = UnitSphericalPoint(vb[1], vb[2], vb[3])
+            for t in (0.0, 0.25, 0.5, 0.75, 1.0)
+                @test isapprox(norm(slerp(a, b, t)), 1.0, atol=1e-12)
+            end
+        end
+    end
+
+    @testset "Well-conditioned near-antipodal geometry" begin
+        # When the perpendicular direction is captured cleanly (b lives
+        # exactly in the xz-plane, a on the x-axis), slerp stays accurate
+        # right up against π.
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        for θ_deg in (179.0, 179.99, 179.9999, 179.99999999)
+            θ = deg2rad(θ_deg)
+            b = UnitSphericalPoint(cos(θ), 0.0, sin(θ))
+            @test isapprox(norm(slerp(a, b, 0.5)), 1.0, atol=1e-10)
+        end
+    end
+
+    # The tests below document a known bug in the divide-by-sin(Ω) form:
+    # for near-antipodal inputs where a + b suffers cancellation, the
+    # midpoint drifts off the unit sphere. Flip `@test_broken` → `@test`
+    # when slerp is guarded against the Ω → π regime.
+    @testset "Cancellation-prone near-antipodal (currently broken)" begin
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        for ε in (1e-10, 1e-12, 1e-14, 1e-15, 1e-16)
+            v = [-1.0, 0.0, ε]; v ./= norm(v)
+            b = UnitSphericalPoint(v[1], v[2], v[3])
+            m = slerp(a, b, 0.5)
+            @test_broken isapprox(norm(m), 1.0, atol=1e-10)
+        end
+    end
+
+    @testset "Exactly antipodal returns a unit vector (currently broken)" begin
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        b = UnitSphericalPoint(-1.0, 0.0, 0.0)
+        m = slerp(a, b, 0.5)
+        @test all(isfinite, m)          # finite, at least — currently (0,0,0)
+        @test_broken isapprox(norm(m), 1.0, atol=1e-10)
+    end
+
+    # Regression test for ConservativeRegridding.jl#83. A half-sphere
+    # equatorial band has a truly antipodal diagonal between
+    # (0°, −15°) and (180°, +15°); slerp'ing that diagonal inside
+    # `cell_range_extent` produced a (0,0,0) midpoint that poisoned the
+    # SphericalCap radius.
+    @testset "ConservativeRegridding#83 antipodal diagonal (currently broken)" begin
+        to_sphere = UnitSphereFromGeographic()
+        p1 = to_sphere((0.0, -15.0))
+        p3 = to_sphere((180.0, +15.0))
+        @test p1 ⋅ p3 ≈ -1.0
+        m = slerp(p1, p3, 0.5)
+        @test_broken isapprox(norm(m), 1.0, atol=1e-10)
+    end
+end
+
 @testset "Coordinate transforms" begin
     @testset "UnitSphereFromGeographic" begin
         # Test with GeoInterface Point
