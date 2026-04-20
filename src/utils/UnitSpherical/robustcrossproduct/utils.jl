@@ -100,27 +100,45 @@ loss of precision due to floating-point underflow.
 This matches S2's NormalizableFromExact function.
 """
 function normalizableFromExact(xf::AbstractVector{BigFloat})
-    # First try a simple conversion
+    # Mirrors S2's NormalizableFromExact at s2edge_crossings.cc:318-336.
+    #
+    # First try a simple conversion to Float64; if that already has a
+    # component >= 2^-242 it needs no rescaling. Otherwise we must rescale
+    # *in BigFloat* (or equivalently compute the shift from BigFloat
+    # exponents) — we cannot convert to Float64 first, because components
+    # like 5e-324 would flush to the subnormal range or zero, destroying
+    # the axis information before the scaling multiply can fix it.
+    # (Bug fixed at src/utils/UnitSpherical/robustcrossproduct/utils.jl:102.)
     x = Float64.(xf)
-    
+
     if isNormalizable(x)
         return x
     end
-    
-    # Find the largest exponent
-    max_exp = -1000000  # Very small initial value
+
+    # Find the largest BigFloat exponent among nonzero components.
+    found = false
+    max_exp = 0
     for i in 1:3
         if !iszero(xf[i])
-            max_exp = max(max_exp, exponent(xf[i]))
+            e = exponent(xf[i])
+            if !found || e > max_exp
+                max_exp = e
+                found = true
+            end
         end
     end
-    
-    if max_exp < -1000000  # No non-zero components
-        return zero(xf)
+
+    if !found
+        return zero(x)  # The exact result is (0, 0, 0).
     end
-    
-    # Scale to get components in a good range
-    return Float64.(ldexp.(Float64.(xf), -max_exp))
+
+    # Scale in BigFloat so the largest component is in [0.5, 1), then
+    # convert. This matches S2's `ldexp(xf[i], -exp)` inside ExactFloat.
+    return UnitSphericalPoint(
+        Float64(ldexp(xf[1], -max_exp)),
+        Float64(ldexp(xf[2], -max_exp)),
+        Float64(ldexp(xf[3], -max_exp)),
+    )
 end
 
 

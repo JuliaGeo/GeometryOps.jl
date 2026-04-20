@@ -211,9 +211,13 @@ function exact_cross_product(a::AbstractVector{T}, b::AbstractVector{T}) where T
     big_b = BigFloat.(b; precision=512)
     result_xf = cross(big_a, big_b)
     
-    # Check if we got a non-zero result
-    # This is equivalent to s2's `s2pred::IsZero`.
-    if !all(<=(1e-300), abs.(result_xf))
+    # Check if we got a non-zero result. Matches S2's s2pred::IsZero at
+    # s2predicates_internal.h:77-79, which is a literal sign == 0 test on
+    # each component (i.e., all three components exactly zero). We must NOT
+    # use a magnitude threshold here; any non-zero BigFloat result — even
+    # deeply subnormal by Float64 standards — should go through the exact
+    # rescaling path in `normalizableFromExact`.
+    if !(iszero(result_xf[1]) && iszero(result_xf[2]) && iszero(result_xf[3]))
         return normalizableFromExact(result_xf)
     end
     
@@ -322,9 +326,11 @@ function symbolic_cross_product_sorted(a::AbstractVector{T}, b::AbstractVector{T
     @assert b[1] == 0 && b[2] == 0 "Expected both b[1] and b[2] to be zero"
     
     if a[1] != 0 || a[2] != 0
-        # Fix: This needs to match C++ code which returns (-a[1], a[0], 0) in 0-based indexing
-        # In Julia's 1-based indexing, this is (-a[2], a[1], 0)
-        return UnitSphericalPoint{T}(-a[2], a[1], 0)
+        # S2's SymbolicCrossProdSorted at s2edge_crossings.cc:251-253 returns
+        # `Vector3_d(a[1], -a[0], 0)` in C++ 0-based indexing.
+        # In Julia's 1-based indexing, that's (a[2], -a[1], 0). Bug fixed at
+        # src/utils/UnitSpherical/robustcrossproduct/RobustCrossProduct.jl:327.
+        return UnitSphericalPoint{T}(a[2], -a[1], 0)
     end
     
     # This is always non-zero in the S2 implementation
