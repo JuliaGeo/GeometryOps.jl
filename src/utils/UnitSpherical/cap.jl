@@ -104,8 +104,10 @@ _disjoint(x::SphericalCap, y::SphericalCap) = !_intersects(x, y)
 
 function _contains(big::SphericalCap, small::SphericalCap)
     dist = spherical_distance(big.point, small.point)
-    # small circle fits in big circle
-    return dist + small.radius < big.radius 
+    # small circle fits in big circle; `<=` so internally-tangent small
+    # caps count as contained, matching the point overload below and
+    # S2's `S2Cap::Contains(const S2Cap&)` convention.
+    return dist + small.radius <= big.radius
 end
 function _contains(cap::SphericalCap, point::UnitSphericalPoint)
     spherical_distance(cap.point, point) <= cap.radius
