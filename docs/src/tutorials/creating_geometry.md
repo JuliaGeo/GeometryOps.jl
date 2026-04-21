@@ -80,7 +80,7 @@ This time we get a bit more fancy with point creation.
 ````@example creating_geometry
 r = 2;
 k = 10;
-ϴ = 0:0.01:2pi;
+ϴ = LinRange(0, 2pi, 629);
 x = r .* (k + 1) .* cos.(ϴ) .- r .* cos.((k + 1) .* ϴ);
 y = r .* (k + 1) .* sin.(ϴ) .- r .* sin.((k + 1) .* ϴ);
 lines = GI.LineString(GI.Point.(zip(x,y)));
@@ -94,7 +94,8 @@ A `LinearRing` is simply a `LineString` with the same beginning and endpoint, i.
 A `LinearRing` is composed of a series of points.
 
 ````@example creating_geometry
-ring1 = GI.LinearRing(GI.getpoint(lines));
+ring1_points = collect(GI.getpoint(lines))
+ring1 = GI.LinearRing(vcat(ring1_points, [first(ring1_points)]));
 ````
 
 Now, let's make the `LinearRing` into a `Polygon`.

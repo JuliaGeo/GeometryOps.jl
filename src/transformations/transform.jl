@@ -30,7 +30,7 @@ Points are passed to `f` as an `SVector`, so `f` can be a plain function
 or a callable transform from CoordinateTransformations.jl, such as
 `Translation`, `LinearMap`, or a composition of transforms.
 
-Because this uses [`apply`](@ref) internally, it works with polygons,
+Because this uses [`apply`](@ref Primitive-functions) internally, it works with polygons,
 multipolygons, arrays of geometries, feature collections, and tables.
 
 `SVector` is also a valid GeoInterface.jl point, so will
