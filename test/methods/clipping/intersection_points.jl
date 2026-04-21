@@ -22,6 +22,7 @@ GO.GeometryOpsCore.booltype(::TrackingExact) = error("tracking exact forwarded")
     LG_l1_l2_mp = GI.MultiPoint(collect(GI.getpoint(LG.intersection($l1, $l2))))
     @test GO.equals(GI.MultiPoint(GO.intersection_points($l1, $l2)), LG_l1_l2_mp)
     @test GO.equals(GI.MultiPoint(GO.intersection_points($l1, $l2; exact = false)), LG_l1_l2_mp)
+    @test GO.equals(GI.MultiPoint(GO.intersection_points(GO.Planar(), GO.NestedLoop(), $l1, $l2; exact = false)), LG_l1_l2_mp)
     @test GO.equals(GI.MultiPoint(GO.intersection($l1, $l2; target = GI.PointTrait(), exact = false)), LG_l1_l2_mp)
 
     # Four intersection points with large intersection
@@ -40,4 +41,5 @@ GO.GeometryOpsCore.booltype(::TrackingExact) = error("tracking exact forwarded")
 
     # Recursive polygon-multipolygon intersections should forward `exact`
     @test_throws "tracking exact forwarded" GO.intersection($p1, $mp1; target = GI.PolygonTrait(), exact = TrackingExact())
+    @test_throws "tracking exact forwarded" GO.intersection($mp1, $mp1; target = GI.PolygonTrait(), exact = TrackingExact(), fix_multipoly = nothing)
 end
