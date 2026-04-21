@@ -5,6 +5,159 @@ using GeometryOps.UnitSpherical
 
 import GeoInterface as GI
 
+@testset "spherical_distance" begin
+    @testset "Basic correctness" begin
+        # Orthogonal axes → π/2
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(0.0, 1.0, 0.0)) ≈ π/2
+        # Identical points → 0
+        p = UnitSphericalPoint(1.0, 0.0, 0.0)
+        @test spherical_distance(p, p) == 0.0
+        # Antipodal → π
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(-1.0, 0.0, 0.0)) ≈ π
+        # Known π/4 separation
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(cos(π/4), sin(π/4), 0.0)) ≈ π/4
+        # Known π/3 separation
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(cos(π/3), sin(π/3), 0.0)) ≈ π/3
+    end
+
+    @testset "Near-identical points (atan2 stability vs acos)" begin
+        # For each ε, check that the atan2 form recovers ε with very small
+        # relative error. This is the case where `acos(clamp(x⋅y, -1, 1))`
+        # degrades — x⋅y = cos(ε) ≈ 1 - ε²/2, and double precision can't
+        # distinguish that from 1 once ε ≲ 1e-8.
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        for ε in (1e-4, 1e-6, 1e-8, 1e-10, 1e-12)
+            b = UnitSphericalPoint(cos(ε), sin(ε), 0.0)
+            d = spherical_distance(a, b)
+            @test d ≈ ε rtol=1e-12
+
+            # Contrast: the naive acos form collapses to 0 around ε ≈ 1e-8.
+            d_naive = acos(clamp(a ⋅ b, -1.0, 1.0))
+            if ε ≤ 1e-10
+                @test d_naive == 0.0 || abs(d_naive - ε) / ε > 1e-2
+            end
+        end
+    end
+
+    @testset "Near-antipodal points" begin
+        # Should return ≈ π - ε. The atan2 form stays well-conditioned here
+        # (cross norm ≈ sin(ε) ≈ ε, dot ≈ -1 + ε²/2).
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        for ε in (1e-2, 1e-4, 1e-6, 1e-8)
+            # Point at angle (π - ε) from a, rotated in the xy-plane
+            b = UnitSphericalPoint(cos(π - ε), sin(π - ε), 0.0)
+            @test spherical_distance(a, b) ≈ π - ε rtol=1e-10
+        end
+    end
+
+    # Ported from Google's S2 geometry library, TEST(S1Angle, ConstructorsThatMeasureAngles):
+    # https://github.com/google/s2geometry/blob/a4f0cf58a9cfc214585c39de6e3682384fac0917/src/s2/s1angle_test.cc#L144-L152
+    # S2's Vector3::Angle accepts non-unit vectors (the atan2 form is scale-invariant);
+    # UnitSphericalPoint is typed for unit vectors, so we normalize the (0,0,2) case.
+    @testset "s2geometry ConstructorsThatMeasureAngles" begin
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(0.0, 0.0, 1.0)) == π/2
+        @test spherical_distance(UnitSphericalPoint(1.0, 0.0, 0.0),
+                                 UnitSphericalPoint(1.0, 0.0, 0.0)) == 0.0
+    end
+
+    @testset "Symmetry and range" begin
+        using Random
+        Random.seed!(0xA7A7)
+        for _ in 1:50
+            a = UnitSphericalPoint(randn(), randn(), randn())
+            b = UnitSphericalPoint(randn(), randn(), randn())
+            a = a / norm(a); b = b / norm(b)
+            d_ab = spherical_distance(a, b)
+            d_ba = spherical_distance(b, a)
+            @test d_ab == d_ba
+            @test 0 ≤ d_ab ≤ π + 1e-12
+        end
+    end
+end
+
+@testset "slerp" begin
+    @testset "Basic correctness" begin
+        # Quarter-turn along the equator
+        @test slerp(UnitSphericalPoint(1.0, 0.0, 0.0),
+                    UnitSphericalPoint(0.0, 1.0, 0.0), 0.5) ≈
+              UnitSphericalPoint(sqrt(2)/2, sqrt(2)/2, 0.0)
+        # Endpoints
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        b = UnitSphericalPoint(0.0, 1.0, 0.0)
+        @test slerp(a, b, 0.0) ≈ a
+        @test slerp(a, b, 1.0) ≈ b
+        # Identical inputs — fast path
+        @test slerp(a, a, 0.5) == a
+    end
+
+    @testset "Random well-separated points stay on the unit sphere" begin
+        using Random
+        Random.seed!(0x5E5E)
+        for _ in 1:50
+            va = randn(3); va ./= norm(va)
+            vb = randn(3); vb ./= norm(vb)
+            # Skip anything within 1° of antipodal — that's the degenerate regime
+            # covered by the dedicated testsets below.
+            (va ⋅ vb) < -0.9998 && continue
+            a = UnitSphericalPoint(va[1], va[2], va[3])
+            b = UnitSphericalPoint(vb[1], vb[2], vb[3])
+            for t in (0.0, 0.25, 0.5, 0.75, 1.0)
+                @test isapprox(norm(slerp(a, b, t)), 1.0, atol=1e-12)
+            end
+        end
+    end
+
+    @testset "Well-conditioned near-antipodal geometry" begin
+        # When the perpendicular direction is captured cleanly (b lives
+        # exactly in the xz-plane, a on the x-axis), slerp stays accurate
+        # right up against π.
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        for θ_deg in (179.0, 179.99, 179.9999, 179.99999999)
+            θ = deg2rad(θ_deg)
+            b = UnitSphericalPoint(cos(θ), 0.0, sin(θ))
+            @test isapprox(norm(slerp(a, b, 0.5)), 1.0, atol=1e-10)
+        end
+    end
+
+    # Previously broken under the divide-by-sin(Ω) form; now pass via the
+    # tangent-vector form in src/utils/UnitSpherical/slerp.jl.
+    @testset "Cancellation-prone near-antipodal" begin
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        for ε in (1e-10, 1e-12, 1e-14, 1e-15, 1e-16)
+            v = [-1.0, 0.0, ε]; v ./= norm(v)
+            b = UnitSphericalPoint(v[1], v[2], v[3])
+            m = slerp(a, b, 0.5)
+            @test isapprox(norm(m), 1.0, atol=1e-10)
+        end
+    end
+
+    @testset "Exactly antipodal returns a unit vector" begin
+        a = UnitSphericalPoint(1.0, 0.0, 0.0)
+        b = UnitSphericalPoint(-1.0, 0.0, 0.0)
+        m = slerp(a, b, 0.5)
+        @test all(isfinite, m)
+        @test isapprox(norm(m), 1.0, atol=1e-10)
+    end
+
+    # Regression test for ConservativeRegridding.jl#83. A half-sphere
+    # equatorial band has a truly antipodal diagonal between
+    # (0°, −15°) and (180°, +15°); under the old slerp this produced
+    # a (0,0,0) midpoint that poisoned the SphericalCap radius.
+    @testset "ConservativeRegridding#83 antipodal diagonal" begin
+        to_sphere = UnitSphereFromGeographic()
+        p1 = to_sphere((0.0, -15.0))
+        p3 = to_sphere((180.0, +15.0))
+        @test p1 ⋅ p3 ≈ -1.0
+        m = slerp(p1, p3, 0.5)
+        @test isapprox(norm(m), 1.0, atol=1e-10)
+    end
+end
+
 @testset "Coordinate transforms" begin
     @testset "UnitSphereFromGeographic" begin
         # Test with GeoInterface Point

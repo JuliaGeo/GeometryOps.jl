@@ -114,8 +114,14 @@ GI.crs(::UnitSphericalPoint) = GFT.ProjString("+proj=cart +R=1 +type=crs") # TOD
 """
     spherical_distance(x::UnitSphericalPoint, y::UnitSphericalPoint)
 
-Compute the spherical distance between two points on the unit sphere.  
-Returns a `Number`, usually Float64 but that depends on the input type.
+Compute the great-circle distance (central angle, in radians) between two
+points on the unit sphere.  Returns a `Number` whose type follows from the
+inputs.
+
+Uses the `atan2(‖x × y‖, x · y)` form, which is numerically stable across
+the full `[0, π]` range — unlike `acos(x · y)`, which loses precision for
+nearly-identical points.  Adapted from Google's S2 geometry library
+(see [`Vector3::Angle`](https://github.com/google/s2geometry/blob/a4f0cf58a9cfc214585c39de6e3682384fac0917/src/s2/util/math/vector.h#L492)).
 
 # Extended help
 
@@ -135,7 +141,7 @@ julia> spherical_distance(UnitSphericalPoint(1, 0, 0), UnitSphericalPoint(1, 0, 
 0.0
 ```
 """
-spherical_distance(x::UnitSphericalPoint, y::UnitSphericalPoint) = acos(clamp(x ⋅ y, -1.0, 1.0))
+spherical_distance(x::UnitSphericalPoint, y::UnitSphericalPoint) = atan(norm(cross(x, y)), x ⋅ y)
 
 # ## Random points
 Random.rand(rng::Random.AbstractRNG, ::Random.SamplerType{UnitSphericalPoint}) = rand(rng, UnitSphericalPoint{Float64})
