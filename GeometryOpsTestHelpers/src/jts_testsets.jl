@@ -12,6 +12,7 @@ export JTSOperation,
     JTSRawGeometry,
     JTSPrecisionModel,
     JTSFixtureRule,
+    JTS_CONFORMANCE_CATEGORIES,
     jts_wkt_to_geom,
     find_jts_test_files,
     load_test_set,
@@ -20,6 +21,10 @@ export JTSOperation,
     fixture_family,
     geometry_category,
     case_category,
+    primary_conformance_category,
+    conformance_categories,
+    conformance_inventory,
+    has_conformance_category,
     is_overlay_operation,
     is_relate_operation,
     is_runnable,
@@ -61,6 +66,40 @@ const _WKT_PREFIXES = (
     "MULTILINESTRING",
     "MULTIPOLYGON",
     "GEOMETRYCOLLECTION",
+)
+
+"""
+    JTS_CONFORMANCE_CATEGORIES
+
+Milestone tags used to partition JTS fixtures for the staged NG port.
+"""
+const JTS_CONFORMANCE_CATEGORIES = (
+    :point_point,
+    :point_line,
+    :point_area,
+    :line_line,
+    :line_area,
+    :area_area,
+    :empty,
+    :zero_length_line,
+    :repeated_coordinates,
+    :holes_and_touching_rings,
+    :relateng_collection,
+    :overlayng_collection,
+    :precision_snap,
+    :robust_failure,
+    :other,
+)
+
+const _DIMENSION_CATEGORY_RANK = Dict(:point => 1, :line => 2, :area => 3)
+
+const _PAIR_CONFORMANCE_CATEGORIES = Dict(
+    (:point, :point) => :point_point,
+    (:point, :line) => :point_line,
+    (:point, :area) => :point_area,
+    (:line, :line) => :line_line,
+    (:line, :area) => :line_area,
+    (:area, :area) => :area_area,
 )
 
 """
@@ -219,13 +258,14 @@ Load only the parsed case vector from a JTS XML fixture.
 load_test_cases(filepath::AbstractString; kwargs...) = load_test_set(filepath; kwargs...).cases
 
 """
-    load_test_set(filepath; operations = nothing, skip = (), broken = (), unimplemented = ())
+    load_test_set(filepath; operations = nothing, categories = nothing, skip = (), broken = (), unimplemented = ())
 
 Parse one JTS XML fixture file into a reusable `JTSTestSet`.
 """
 function load_test_set(
     filepath::AbstractString;
     operations = nothing,
+    categories = nothing,
     skip = (),
     broken = (),
     unimplemented = (),
@@ -248,7 +288,18 @@ function load_test_set(
             broken,
             unimplemented,
         )
-        isnothing(case) || push!(cases, case)
+        if !isnothing(case) &&
+           _conformance_categories_allowed(
+               conformance_categories(
+                   case;
+                   family = fixture_family(filepath),
+                   precision_model,
+                   filepath,
+               ),
+               categories,
+           )
+            push!(cases, case)
+        end
     end
     return JTSTestSet(String(filepath), description, precision_model, cases)
 end
@@ -450,6 +501,103 @@ function case_category(case::JTSCase)
     end
 end
 
+"""
+    primary_conformance_category(case; family = :other)
+    primary_conformance_category(test_set, case)
+
+Return the main staged-port milestone for a fixture case.  Collection cases are
+split by RelateNG versus OverlayNG semantics instead of sharing one bucket.
+"""
+function primary_conformance_category(case::JTSCase; family = :other)
+    a = geometry_category(case.geom_a)
+    b = geometry_category(case.geom_b)
+    effective_family = _effective_family(case, family)
+
+    if a == :empty || b == :empty
+        return :empty
+    elseif a == :collection || b == :collection
+        if effective_family == :overlay && !_has_simple_homogeneous_collections(case)
+            return :other
+        end
+        return _collection_conformance_category(effective_family)
+    else
+        return _dimension_pair_conformance_category(a, b)
+    end
+end
+
+primary_conformance_category(test_set::JTSTestSet, case::JTSCase) =
+    primary_conformance_category(case; family = fixture_family(test_set.filepath))
+
+"""
+    conformance_categories(case; family = :other, precision_model = nothing, filepath = "")
+    conformance_categories(test_set, case)
+
+Return all milestone tags for a fixture case, including special tags such as
+zero-length lines, repeated coordinates, holes, precision, and robust cases.
+"""
+function conformance_categories(
+    case::JTSCase;
+    family = :other,
+    precision_model = nothing,
+    filepath::AbstractString = "",
+)
+    categories = Symbol[primary_conformance_category(case; family)]
+    (_has_zero_length_line(case.geom_a) || _has_zero_length_line(case.geom_b)) &&
+        push!(categories, :zero_length_line)
+    (_has_repeated_coordinates(case.geom_a) || _has_repeated_coordinates(case.geom_b)) &&
+        push!(categories, :repeated_coordinates)
+    (_has_holes_or_touching_rings(case.geom_a) || _has_holes_or_touching_rings(case.geom_b)) &&
+        push!(categories, :holes_and_touching_rings)
+    _is_precision_snap_case(precision_model, filepath) && push!(categories, :precision_snap)
+    _is_robust_failure_case(filepath) && push!(categories, :robust_failure)
+    return _unique_categories(categories)
+end
+
+conformance_categories(test_set::JTSTestSet, case::JTSCase) =
+    conformance_categories(
+        case;
+        family = fixture_family(test_set.filepath),
+        precision_model = test_set.precision_model,
+        filepath = test_set.filepath,
+    )
+
+"""
+    has_conformance_category(case, category; kwargs...)
+
+Return true when `conformance_categories` includes the requested milestone tag.
+"""
+has_conformance_category(case::JTSCase, category; kwargs...) =
+    _conformance_categories_allowed(conformance_categories(case; kwargs...), category)
+
+has_conformance_category(test_set::JTSTestSet, case::JTSCase, category) =
+    _conformance_categories_allowed(conformance_categories(test_set, case), category)
+
+"""
+    conformance_inventory(test_set_or_sets)
+
+Count fixture cases by conformance category.  Cases with multiple special tags
+contribute to each tag so milestone coverage remains visible.
+"""
+function conformance_inventory(test_set::JTSTestSet)
+    counts = Dict{Symbol,Int}(category => 0 for category in JTS_CONFORMANCE_CATEGORIES)
+    for case in test_set.cases
+        for category in conformance_categories(test_set, case)
+            counts[category] = get(counts, category, 0) + 1
+        end
+    end
+    return counts
+end
+
+function conformance_inventory(test_sets::AbstractVector{<:JTSTestSet})
+    counts = Dict{Symbol,Int}(category => 0 for category in JTS_CONFORMANCE_CATEGORIES)
+    for test_set in test_sets
+        for (category, count) in conformance_inventory(test_set)
+            counts[category] = get(counts, category, 0) + count
+        end
+    end
+    return counts
+end
+
 function _argument_refs(attrs::Dict{String,String})
     arg_keys = filter(k -> occursin(r"^arg\d+$", k), collect(keys(attrs)))
     sort!(arg_keys, by = k -> parse(Int, k[4:end]))
@@ -571,6 +719,224 @@ end
 
 function _matcher_matches(matchers, value; exact_string = false)
     return any(matcher -> _matcher_matches(matcher, value; exact_string), matchers)
+end
+
+function _conformance_categories_allowed(_, ::Nothing)
+    return true
+end
+
+function _conformance_categories_allowed(::AbstractVector{Symbol}, ::Nothing)
+    return true
+end
+
+function _conformance_categories_allowed(categories::AbstractVector{Symbol}, category::Union{AbstractString,Symbol,Regex})
+    return _conformance_categories_allowed(categories, (category,))
+end
+
+function _conformance_categories_allowed(categories::AbstractVector{Symbol}, matchers)
+    return any(matchers) do matcher
+        any(category -> _matcher_matches(matcher, category; exact_string = true), categories)
+    end
+end
+
+function _effective_family(case::JTSCase, family)
+    family_symbol = isnothing(family) ? :other : Symbol(family)
+    family_symbol == :other || return family_symbol
+
+    has_overlay = any(is_overlay_operation, case.operations)
+    has_relate = any(is_relate_operation, case.operations)
+    has_relate && !has_overlay && return :relate
+    has_overlay && !has_relate && return :overlay
+    return :other
+end
+
+_collection_conformance_category(family) = _collection_conformance_category(Symbol(family))
+
+function _collection_conformance_category(family::Symbol)
+    family == :relate && return :relateng_collection
+    family == :overlay && return :overlayng_collection
+    return :other
+end
+
+function _dimension_pair_conformance_category(a::Symbol, b::Symbol)
+    a == :missing && b != :missing && return :other
+    b == :missing && a != :missing && return :other
+    haskey(_DIMENSION_CATEGORY_RANK, a) || return :other
+    haskey(_DIMENSION_CATEGORY_RANK, b) || return :other
+
+    ordered = _DIMENSION_CATEGORY_RANK[a] <= _DIMENSION_CATEGORY_RANK[b] ? (a, b) : (b, a)
+    return get(_PAIR_CONFORMANCE_CATEGORIES, ordered, :other)
+end
+
+function _has_simple_homogeneous_collections(case::JTSCase)
+    return _is_simple_homogeneous_collection(case.geom_a) &&
+           _is_simple_homogeneous_collection(case.geom_b)
+end
+
+_is_simple_homogeneous_collection(::Nothing) = true
+_is_simple_homogeneous_collection(::JTSEmptyGeometry) = true
+_is_simple_homogeneous_collection(geom::JTSRawGeometry) = geometry_category(geom) != :collection
+
+function _is_simple_homogeneous_collection(geom)
+    try
+        return _is_simple_homogeneous_collection(GI.trait(geom), geom)
+    catch
+        return false
+    end
+end
+
+_is_simple_homogeneous_collection(::GI.AbstractTrait, geom) = true
+
+function _is_simple_homogeneous_collection(::GI.GeometryCollectionTrait, geom)
+    dimensions = Set{Symbol}()
+    for child in GI.getgeom(geom)
+        child_category = geometry_category(child)
+        child_category == :collection && return false
+        child_category == :empty && continue
+        child_category in (:point, :line, :area) || return false
+        push!(dimensions, child_category)
+        length(dimensions) > 1 && return false
+    end
+    return true
+end
+
+function _unique_categories(categories::Vector{Symbol})
+    unique_categories = Symbol[]
+    for category in categories
+        category in unique_categories && continue
+        push!(unique_categories, category in JTS_CONFORMANCE_CATEGORIES ? category : :other)
+    end
+    return unique_categories
+end
+
+_has_zero_length_line(::Nothing) = false
+_has_zero_length_line(::JTSEmptyGeometry) = false
+_has_zero_length_line(::JTSRawGeometry) = false
+
+function _has_zero_length_line(geom)
+    try
+        return _has_zero_length_line(GI.trait(geom), geom)
+    catch
+        return false
+    end
+end
+
+_has_zero_length_line(::GI.AbstractCurveTrait, geom) = _curve_is_zero_length(geom)
+_has_zero_length_line(::GI.PointTrait, geom) = false
+_has_zero_length_line(::GI.MultiPointTrait, geom) = false
+_has_zero_length_line(::GI.PolygonTrait, geom) = false
+
+function _has_zero_length_line(::GI.AbstractGeometryTrait, geom)
+    return any(_has_zero_length_line, GI.getgeom(geom))
+end
+
+_has_repeated_coordinates(::Nothing) = false
+_has_repeated_coordinates(::JTSEmptyGeometry) = false
+_has_repeated_coordinates(::JTSRawGeometry) = false
+
+function _has_repeated_coordinates(geom)
+    try
+        return _has_repeated_coordinates(GI.trait(geom), geom)
+    catch
+        return false
+    end
+end
+
+function _has_repeated_coordinates(trait::GI.AbstractCurveTrait, geom)
+    return _curve_has_repeated_coordinates(
+        geom;
+        ignore_closure = trait isa GI.LinearRingTrait,
+    )
+end
+
+_has_repeated_coordinates(::GI.PointTrait, geom) = false
+
+function _has_repeated_coordinates(::GI.MultiPointTrait, geom)
+    return _point_sequence_has_duplicate(geom; ignore_closure = false)
+end
+
+function _has_repeated_coordinates(::GI.PolygonTrait, geom)
+    return any(GI.getring(geom)) do ring
+        _curve_has_repeated_coordinates(ring; ignore_closure = true)
+    end
+end
+
+function _has_repeated_coordinates(::GI.AbstractGeometryTrait, geom)
+    return any(_has_repeated_coordinates, GI.getgeom(geom))
+end
+
+_has_holes_or_touching_rings(::Nothing) = false
+_has_holes_or_touching_rings(::JTSEmptyGeometry) = false
+_has_holes_or_touching_rings(::JTSRawGeometry) = false
+
+function _has_holes_or_touching_rings(geom)
+    try
+        return _has_holes_or_touching_rings(GI.trait(geom), geom)
+    catch
+        return false
+    end
+end
+
+_has_holes_or_touching_rings(::GI.AbstractCurveTrait, geom) = false
+_has_holes_or_touching_rings(::GI.PointTrait, geom) = false
+_has_holes_or_touching_rings(::GI.MultiPointTrait, geom) = false
+
+function _has_holes_or_touching_rings(::GI.PolygonTrait, geom)
+    GI.nring(geom) > 1 && return true
+    return any(GI.getring(geom)) do ring
+        _ring_has_nonclosing_repeat(ring)
+    end
+end
+
+function _has_holes_or_touching_rings(::GI.AbstractGeometryTrait, geom)
+    return any(_has_holes_or_touching_rings, GI.getgeom(geom))
+end
+
+function _curve_is_zero_length(geom)
+    npoints = GI.npoint(geom)
+    npoints < 2 && return false
+    first_point = _point_key(GI.getpoint(geom, 1))
+    return all(i -> _point_key(GI.getpoint(geom, i)) == first_point, 2:npoints)
+end
+
+function _curve_has_repeated_coordinates(geom; ignore_closure::Bool)
+    return _point_sequence_has_duplicate(geom; ignore_closure)
+end
+
+function _point_sequence_has_duplicate(geom; ignore_closure::Bool)
+    npoints = GI.npoint(geom)
+    npoints < 2 && return false
+
+    last_index = npoints
+    if ignore_closure && _point_key(GI.getpoint(geom, 1)) == _point_key(GI.getpoint(geom, npoints))
+        last_index -= 1
+    end
+
+    seen = Set{Tuple{Any,Any}}()
+    for i in 1:last_index
+        key = _point_key(GI.getpoint(geom, i))
+        key in seen && return true
+        push!(seen, key)
+    end
+    return false
+end
+
+_ring_has_nonclosing_repeat(ring) = _point_sequence_has_duplicate(ring; ignore_closure = true)
+
+_point_key(point) = (GI.x(point), GI.y(point))
+
+function _is_precision_snap_case(precision_model, filepath::AbstractString)
+    if precision_model isa JTSPrecisionModel
+        uppercase(precision_model.model_type) != "FLOATING" && return true
+        !isnothing(precision_model.scale) && return true
+    end
+    return occursin(r"(Prec|Precision|Snap|Snapping|SR|FloatingNoder)"i, basename(filepath))
+end
+
+function _is_robust_failure_case(filepath::AbstractString)
+    normalized = replace(filepath, '\\' => '/')
+    return occursin(r"(^|/)(robust|failure)(/|$)"i, normalized) ||
+           occursin(r"(Robust|Failure|Fail)"i, basename(filepath))
 end
 
 function _fixture_family_allowed(filepath::AbstractString, family::Nothing)
