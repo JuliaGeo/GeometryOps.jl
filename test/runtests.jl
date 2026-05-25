@@ -30,6 +30,7 @@ end
 @safetestset "Convex Hull" begin include("methods/convex_hull.jl") end
 @safetestset "Voronoi" begin include("methods/voronoi.jl") end
 @safetestset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
+@safetestset "JTS NG common substrate" begin include("methods/jts_ng/common.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end
 @safetestset "Minimum Bounding Circle" begin include("methods/minimum_bounding_circle.jl") end
