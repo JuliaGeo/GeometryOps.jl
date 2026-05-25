@@ -60,7 +60,7 @@ jobs:
         with:
           version: '1'
       - name: Instantiate helper test environment
-        run: julia --project=GeometryOpsTestHelpers/test -e 'using Pkg; Pkg.resolve(); Pkg.instantiate()'
+        run: julia --project=GeometryOpsTestHelpers/test -e 'using Pkg; any(reg -> reg.name == "General", Pkg.Registry.reachable_registries()) || Pkg.Registry.add("General"); Pkg.resolve(); Pkg.instantiate()'
       - name: Run helper tests
         run: julia --project=GeometryOpsTestHelpers/test GeometryOpsTestHelpers/test/runtests.jl
   docs:
