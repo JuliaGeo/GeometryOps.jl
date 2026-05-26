@@ -28,7 +28,7 @@ function RelateGeometry(
     boundary_node_rule::BoundaryNodeRule = Mod2BoundaryNodeRule(),
 )
     dimension, has_points, has_lines, has_areas = _relate_analyze_dimensions(geom)
-    is_empty = GI.isempty(geom)
+    is_empty = _relate_is_empty(geom)
     all_linework_zero_length = dimension == dim_line && _relate_all_linework_zero_length(geom)
     extent = _relate_cached_extent(geom)
     return RelateGeometry(
@@ -51,6 +51,21 @@ end
 
 RelateGeometry(alg::RelateNG, geom) =
     RelateGeometry(geom; prepared = alg.prepared, boundary_node_rule = alg.boundary_node_rule)
+
+function _relate_is_empty(geom)
+    return _relate_is_empty(GI.trait(geom), geom)
+end
+
+_relate_is_empty(::GI.FeatureTrait, feature) =
+    _relate_is_empty(GI.geometry(feature))
+
+_relate_is_empty(::GI.FeatureCollectionTrait, fc) =
+    all(_relate_is_empty, GI.getfeature(fc))
+
+_relate_is_empty(::Nothing, iterable) =
+    all(_relate_is_empty, iterable)
+
+_relate_is_empty(::GI.AbstractGeometryTrait, geom) = GI.isempty(geom)
 
 function _relate_cached_extent(geom)
     try
@@ -173,6 +188,22 @@ relate_has_edges(relate_geometry::RelateGeometry) =
 relate_has_area_and_line(relate_geometry::RelateGeometry) =
     relate_geometry.has_areas && relate_geometry.has_lines
 
+"""
+    relate_has_boundary(relate_geometry)
+
+Return whether linear components have boundary endpoints under the node rule.
+"""
+function relate_has_boundary(relate_geometry::RelateGeometry)
+    relate_geometry.has_lines || return false
+    endpoint_counts = Dict{Tuple{Float64,Float64},Int}()
+    _relate_collect_line_endpoints!(
+        endpoint_counts,
+        GI.trait(relate_geometry.geom),
+        relate_geometry.geom,
+    )
+    return any(count -> is_in_boundary(relate_geometry.boundary_node_rule, count), values(endpoint_counts))
+end
+
 relate_is_polygonal(relate_geometry::RelateGeometry) =
     _relate_is_polygonal(GI.trait(relate_geometry.geom), relate_geometry.geom)
 
@@ -190,6 +221,29 @@ function _relate_direct_child_count(geom)
     trait = GI.trait(geom)
     trait isa GI.AbstractGeometryTrait || return 1
     return GI.ngeom(geom)
+end
+
+_relate_collect_line_endpoints!(counts, ::GI.PointTrait, geom) = counts
+_relate_collect_line_endpoints!(counts, ::GI.MultiPointTrait, geom) = counts
+_relate_collect_line_endpoints!(counts, ::GI.PolygonTrait, geom) = counts
+_relate_collect_line_endpoints!(counts, ::GI.MultiPolygonTrait, geom) = counts
+
+function _relate_collect_line_endpoints!(counts, ::GI.AbstractCurveTrait, curve)
+    GI.isempty(curve) && return counts
+    GI.npoint(curve) == 0 && return counts
+    first_point = _tuple_point(GI.getpoint(curve, 1), Float64)
+    last_point = _tuple_point(GI.getpoint(curve, GI.npoint(curve)), Float64)
+    counts[first_point] = get(counts, first_point, 0) + 1
+    counts[last_point] = get(counts, last_point, 0) + 1
+    return counts
+end
+
+function _relate_collect_line_endpoints!(counts, ::GI.AbstractGeometryTrait, geom)
+    GI.isempty(geom) && return counts
+    for child in GI.getgeom(geom)
+        _relate_collect_line_endpoints!(counts, GI.trait(child), child)
+    end
+    return counts
 end
 
 """

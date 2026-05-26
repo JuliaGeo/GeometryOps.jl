@@ -301,3 +301,221 @@ end
     )
     @test GO.predicate_matrix(matrix_pred)[GO.loc_interior, GO.loc_boundary] == GO.dim_line
 end
+
+@testset "RelateTopologyComputer exterior seeding" begin
+    point = GO.RelateGeometry(GI.Point(0.0, 0.0))
+    line = GO.RelateGeometry(GI.LineString([(0.0, 0.0), (1.0, 0.0)]))
+    area = GO.RelateGeometry(GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]]))
+    empty = GO.RelateGeometry(GI.FeatureCollection(Any[]))
+
+    point_line = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), point, line)
+    @test GO.predicate_matrix(point_line.predicate)[GO.loc_exterior, GO.loc_interior] ==
+        GO.dim_line
+
+    area_point = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), area, point)
+    area_point_matrix = GO.predicate_matrix(area_point.predicate)
+    @test area_point_matrix[GO.loc_interior, GO.loc_exterior] == GO.dim_area
+    @test area_point_matrix[GO.loc_boundary, GO.loc_exterior] == GO.dim_line
+
+    line_area = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), line, area)
+    @test GO.predicate_matrix(line_area.predicate)[GO.loc_exterior, GO.loc_interior] ==
+        GO.dim_area
+
+    line_empty = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), line, empty)
+    line_empty_matrix = GO.predicate_matrix(line_empty.predicate)
+    @test line_empty_matrix[GO.loc_boundary, GO.loc_exterior] == GO.dim_point
+    @test line_empty_matrix[GO.loc_interior, GO.loc_exterior] == GO.dim_line
+
+    area_empty = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), empty, area)
+    area_empty_matrix = GO.predicate_matrix(area_empty.predicate)
+    @test area_empty_matrix[GO.loc_exterior, GO.loc_boundary] == GO.dim_line
+    @test area_empty_matrix[GO.loc_exterior, GO.loc_interior] == GO.dim_area
+end
+
+@testset "RelateTopologyComputer events and short circuiting" begin
+    point = GO.RelateGeometry(GI.Point(1.0, 1.0))
+    area = GO.RelateGeometry(GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]]))
+    line = GO.RelateGeometry(GI.LineString([(-1.0, 1.0), (3.0, 1.0)]))
+
+    intersects_computer = GO.RelateTopologyComputer(
+        GO.relate_intersects_predicate(),
+        point,
+        GO.RelateGeometry(GI.Point(1.0, 1.0)),
+    )
+    @test !GO.relate_is_result_known(intersects_computer)
+    GO.relate_add_point_on_point_interior!(intersects_computer, (1.0, 1.0))
+    @test GO.relate_is_result_known(intersects_computer)
+    @test GO.relate_result(intersects_computer)
+
+    point_area = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), point, area)
+    GO.relate_add_point_on_geometry!(
+        point_area,
+        GO.input_a,
+        GO.DimensionLocation(GO.dim_area, GO.loc_interior),
+        (1.0, 1.0),
+    )
+    point_area_matrix = GO.predicate_matrix(point_area.predicate)
+    @test point_area_matrix[GO.loc_interior, GO.loc_interior] == GO.dim_point
+    @test point_area_matrix[GO.loc_exterior, GO.loc_boundary] == GO.dim_line
+
+    line_area = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), line, area)
+    GO.relate_add_line_end_on_geometry!(
+        line_area,
+        GO.input_a,
+        GO.loc_boundary,
+        GO.DimensionLocation(GO.dim_area, GO.loc_exterior),
+        (-1.0, 1.0),
+    )
+    line_area_matrix = GO.predicate_matrix(line_area.predicate)
+    @test line_area_matrix[GO.loc_boundary, GO.loc_exterior] == GO.dim_point
+    @test line_area_matrix[GO.loc_interior, GO.loc_exterior] == GO.dim_line
+    @test line_area_matrix[GO.loc_exterior, GO.loc_exterior] == GO.dim_area
+
+    area_point = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), area, point)
+    GO.relate_add_area_vertex!(
+        area_point,
+        GO.input_a,
+        GO.loc_boundary,
+        GO.DimensionLocation(GO.dim_point, GO.loc_interior),
+        (0.0, 0.0),
+    )
+    area_point_matrix = GO.predicate_matrix(area_point.predicate)
+    @test area_point_matrix[GO.loc_boundary, GO.loc_interior] == GO.dim_point
+    @test area_point_matrix[GO.loc_boundary, GO.loc_exterior] == GO.dim_line
+    @test area_point_matrix[GO.loc_exterior, GO.loc_exterior] == GO.dim_area
+end
+
+@testset "RelateTopologyComputer self-noding and node sections" begin
+    line_a_geom = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
+    line_b_geom = GI.LineString([(1.0, -1.0), (1.0, 1.0)])
+    line_a = GO.RelateGeometry(line_a_geom)
+    line_b = GO.RelateGeometry(line_b_geom)
+
+    matrix_computer = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), line_a, line_b)
+    @test GO.relate_is_self_noding_required(matrix_computer)
+
+    interaction_computer =
+        GO.RelateTopologyComputer(GO.relate_intersects_predicate(), line_a, line_b)
+    @test !GO.relate_is_self_noding_required(interaction_computer)
+
+    a_segment = only(GO.relate_segment_strings(line_a; input_side = GO.input_a))
+    b_segment = only(GO.relate_segment_strings(line_b; input_side = GO.input_b))
+    section_a = GO.RelateNodeSection(a_segment, 1, (1.0, 0.0))
+    section_b = GO.RelateNodeSection(b_segment, 1, (1.0, 0.0))
+
+    @test !section_a.is_node_at_vertex
+    @test section_a.previous_vertex == (0.0, 0.0)
+    @test section_a.next_vertex == (2.0, 0.0)
+
+    GO.relate_add_intersection!(matrix_computer, section_a, section_b)
+    @test length(GO.relate_node_sections(matrix_computer, (1.0, 0.0))) == 2
+    @test GO.predicate_matrix(matrix_computer.predicate)[GO.loc_interior, GO.loc_interior] ==
+        GO.dim_point
+
+    mixed_b = GO.RelateGeometry(GI.GeometryCollection([
+        line_b_geom,
+        GI.Polygon([[
+            (10.0, 10.0),
+            (11.0, 10.0),
+            (11.0, 11.0),
+            (10.0, 11.0),
+            (10.0, 10.0),
+        ]]),
+    ]))
+    mixed_computer = GO.RelateTopologyComputer(GO.relate_matrix_predicate(), GO.RelateGeometry(
+        GI.Polygon([[
+            (0.0, 0.0),
+            (1.0, 0.0),
+            (1.0, 1.0),
+            (0.0, 1.0),
+            (0.0, 0.0),
+        ]]),
+    ), mixed_b)
+    @test GO.relate_is_self_noding_required(mixed_computer)
+end
+
+@testset "RelateNG point path evaluation" begin
+    alg = GO.RelateNG()
+    point = GI.Point(1.0, 1.0)
+    same_point = GI.Point(1.0, 1.0)
+    other_point = GI.Point(2.0, 2.0)
+    line = GI.LineString([(0.0, 1.0), (2.0, 1.0)])
+    polygon = GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]])
+
+    @test GO.intersects(alg, point, same_point)
+    @test !GO.disjoint(alg, point, same_point)
+    @test GO.equals(alg, point, same_point)
+    @test GO.contains(alg, point, same_point)
+    @test GO.de9im_string(GO.relate_matrix(alg, point, same_point)) == "0FFFFFFF2"
+
+    @test GO.disjoint(alg, point, other_point)
+    @test !GO.intersects(alg, point, other_point)
+    @test !GO.equals(alg, point, other_point)
+    @test GO.de9im_string(GO.relate_matrix(alg, point, other_point)) == "FF0FFF0F2"
+
+    @test GO.within(alg, point, line)
+    @test GO.coveredby(alg, point, line)
+    @test GO.contains(alg, line, point)
+    @test GO.covers(alg, line, point)
+    @test GO.de9im_string(GO.relate_matrix(alg, point, line)) == "0FFFFF102"
+
+    line_endpoint = GI.Point(0.0, 1.0)
+    @test !GO.within(alg, line_endpoint, line)
+    @test GO.coveredby(alg, line_endpoint, line)
+    @test GO.touches(alg, line_endpoint, line)
+
+    @test GO.within(alg, point, polygon)
+    @test GO.coveredby(alg, point, polygon)
+    @test GO.contains(alg, polygon, point)
+    @test GO.covers(alg, polygon, point)
+    @test GO.relate(alg, point, polygon, "T*F**F***")
+
+    boundary_point = GI.Point(0.0, 1.0)
+    outside_point = GI.Point(3.0, 3.0)
+    @test !GO.within(alg, boundary_point, polygon)
+    @test GO.coveredby(alg, boundary_point, polygon)
+    @test GO.touches(alg, boundary_point, polygon)
+    @test GO.disjoint(alg, outside_point, polygon)
+    @test !GO.intersects(alg, outside_point, polygon)
+
+    multipoint_a = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0)])
+    multipoint_b = GI.MultiPoint([(1.0, 1.0), (2.0, 2.0)])
+    @test GO.overlaps(alg, multipoint_a, multipoint_b)
+    @test !GO.equals(alg, multipoint_a, multipoint_b)
+
+    crossing_points = GI.MultiPoint([(1.0, 1.0), (3.0, 3.0)])
+    @test GO.crosses(alg, crossing_points, line)
+
+    collection = GI.GeometryCollection([
+        GI.Point(1.0, 1.0),
+        GI.LineString([(0.0, 1.0), (2.0, 1.0)]),
+        polygon,
+    ])
+    @test GO.within(alg, point, collection)
+    @test GO.contains(alg, collection, point)
+end
+
+@testset "RelateNG point path unsupported edge cases" begin
+    crossing_line_a = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
+    crossing_line_b = GI.LineString([(0.0, 2.0), (2.0, 0.0)])
+
+    @test_throws ArgumentError GO.intersects(GO.RelateNG(), crossing_line_a, crossing_line_b)
+end

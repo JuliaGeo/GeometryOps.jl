@@ -7,3 +7,5 @@
 include("point_locator.jl")
 include("relate_geometry.jl")
 include("topology_predicates.jl")
+include("topology_computer.jl")
+include("relate_evaluate.jl")
