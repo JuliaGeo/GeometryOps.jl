@@ -650,13 +650,10 @@ end
 @testset "OverlayNG JTS XML smoke fixtures" begin
     alg = GO.OverlayNG()
     fixtures = (
-        ("TestNGOverlayP.xml", 1:5, nothing),
-        ("TestNGOverlayL.xml", 1:8, nothing),
-        ("TestNGOverlayA.xml", 1:17, nothing),
-        ("TestNGOverlayA.xml", 20:20, nothing),
-        ("TestNGOverlayEmpty.xml", 1:2, nothing),
-        ("TestNGOverlayEmpty.xml", 4:8, nothing),
-        ("TestNGOverlayEmpty.xml", 10:16, nothing),
+        ("TestNGOverlayP.xml", 1:12, nothing),
+        ("TestNGOverlayL.xml", 1:11, nothing),
+        ("TestNGOverlayA.xml", 1:20, nothing),
+        ("TestNGOverlayEmpty.xml", 1:16, nothing),
     )
 
     matched_operations = 0
@@ -672,5 +669,5 @@ end
             end
         end
     end
-    @test matched_operations == 214
+    @test matched_operations == 282
 end

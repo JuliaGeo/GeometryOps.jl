@@ -173,7 +173,9 @@ function jts_wkt_to_geom(wkt::AbstractString)
     _is_wkt(sanitized_wkt) ||
         return JTSRawGeometry(sanitized_wkt, "Unsupported non-WKT geometry payload.")
     _is_simple_empty_wkt(sanitized_wkt) && return JTSEmptyGeometry(sanitized_wkt)
-    geom = GFT.WellKnownText(GFT.Geom(), sanitized_wkt)
+    normalized_wkt = _strip_empty_wkt_collection_members(sanitized_wkt)
+    _is_simple_empty_wkt(normalized_wkt) && return JTSEmptyGeometry(sanitized_wkt)
+    geom = GFT.WellKnownText(GFT.Geom(), normalized_wkt)
     try
         return GO.tuples(geom)
     catch err
@@ -965,6 +967,65 @@ function _is_simple_empty_wkt(text::AbstractString)
         r"^(POINT|LINESTRING|LINEARRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION) EMPTY$"i,
         strip(text),
     )
+end
+
+function _strip_empty_wkt_collection_members(text::AbstractString)
+    prefix, body = _wkt_prefix_and_body(text)
+    isnothing(prefix) && return text
+
+    prefix_upper = uppercase(prefix)
+    if !(prefix_upper in ("MULTIPOINT", "MULTILINESTRING", "MULTIPOLYGON", "GEOMETRYCOLLECTION"))
+        return text
+    end
+
+    members = _split_wkt_members(body)
+    kept_members = String[]
+    changed = false
+    for member in members
+        stripped_member = strip(member)
+        normalized_member = _strip_empty_wkt_collection_members(stripped_member)
+        if _is_empty_wkt_member(normalized_member)
+            changed = true
+            continue
+        end
+        changed |= normalized_member != stripped_member
+        push!(kept_members, normalized_member)
+    end
+
+    changed || return text
+    isempty(kept_members) && return "$prefix EMPTY"
+    return "$prefix (" * join(kept_members, ",") * ")"
+end
+
+function _wkt_prefix_and_body(text::AbstractString)
+    match_result = match(r"^([A-Za-z]+)\s*\((.*)\)$", strip(text))
+    isnothing(match_result) && return nothing, nothing
+    return match_result.captures[1], match_result.captures[2]
+end
+
+function _split_wkt_members(text::AbstractString)
+    members = String[]
+    start_index = firstindex(text)
+    depth = 0
+    for index in eachindex(text)
+        char = text[index]
+        if char == '('
+            depth += 1
+        elseif char == ')'
+            depth -= 1
+        elseif char == ',' && depth == 0
+            push!(members, strip(text[start_index:prevind(text, index)]))
+            start_index = nextind(text, index)
+        end
+    end
+    push!(members, strip(text[start_index:lastindex(text)]))
+    return members
+end
+
+function _is_empty_wkt_member(text::AbstractString)
+    stripped = strip(text)
+    uppercase(stripped) == "EMPTY" && return true
+    return _is_simple_empty_wkt(stripped)
 end
 
 function _wkt_category(text::AbstractString)

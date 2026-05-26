@@ -179,11 +179,29 @@ end
     @test empty_point isa JTSEmptyGeometry
     @test geometry_category(empty_point) == :empty
 
-    raw_collection = jts_wkt_to_geom(
+    collection = jts_wkt_to_geom(
         "GEOMETRYCOLLECTION (POLYGON EMPTY, LINESTRING (0 0, 1 1))",
     )
-    @test raw_collection isa JTSRawGeometry
-    @test geometry_category(raw_collection) == :collection
+    @test GI.trait(collection) isa GI.GeometryCollectionTrait
+    @test GI.ngeom(collection) == 1
+    @test GI.trait(GI.getgeom(collection, 1)) isa GI.LineStringTrait
+    @test geometry_category(collection) == :collection
+
+    multiline = jts_wkt_to_geom("MULTILINESTRING ((0 0, 1 1), EMPTY)")
+    @test GI.trait(multiline) isa GI.MultiLineStringTrait
+    @test GI.ngeom(multiline) == 1
+
+    multipolygon = jts_wkt_to_geom(
+        "MULTIPOLYGON (((0 0, 1 0, 0 1, 0 0)), EMPTY)",
+    )
+    @test GI.trait(multipolygon) isa GI.MultiPolygonTrait
+    @test GI.ngeom(multipolygon) == 1
+
+    empty_collection = jts_wkt_to_geom(
+        "GEOMETRYCOLLECTION (POINT EMPTY, MULTIPOLYGON (EMPTY, EMPTY))",
+    )
+    @test empty_collection isa JTSEmptyGeometry
+    @test geometry_category(empty_collection) == :empty
 
     raw_wkb = jts_wkt_to_geom("0101000000000000000000F03F0000000000000040")
     @test raw_wkb isa JTSRawGeometry
