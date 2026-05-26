@@ -1,6 +1,7 @@
 using Test
 import GeometryOps as GO
 import GeoInterface as GI
+using GeometryOpsTestHelpers
 
 _overlay_tuples(geoms) = map(geom -> GO.tuples(geom), geoms)
 _ring_tuples(poly, i = 1) = [GO.tuples(point) for point in GI.getpoint(GI.getring(poly, i))]
@@ -9,6 +10,85 @@ _result_points(geoms) = [GO.tuples(geom) for geom in geoms if GI.trait(geom) isa
 _result_lines(geoms) = [
     [GO.tuples(point) for point in GI.getpoint(geom)] for geom in geoms if GI.trait(geom) isa GI.LineStringTrait
 ]
+
+const _JTS_OVERLAY_FIXTURE_DIR = normpath(joinpath(
+    @__DIR__,
+    "..",
+    "..",
+    "..",
+    "..",
+    "jts",
+    "modules",
+    "tests",
+    "src",
+    "test",
+    "resources",
+    "testxml",
+    "general",
+))
+
+function _overlayng_fixture_value(alg::GO.OverlayNG, op::JTSOperation)
+    name = lowercase(op.name)
+    a, b = op.arguments[1], op.arguments[2]
+    if name == "intersection" || name == "intersectionng"
+        return GO.intersection(alg, a, b)
+    elseif name == "union" || name == "unionng"
+        return GO.union(alg, a, b)
+    elseif name == "difference" || name == "differenceng"
+        return GO.difference(alg, a, b)
+    elseif name == "symdifference" || name == "symdifferenceng"
+        return GO.symdifference(alg, a, b)
+    end
+    error("Unsupported OverlayNG fixture operation: $(op.name)")
+end
+
+function _overlayng_flatten_components(value)
+    value isa AbstractVector && return reduce(vcat, map(_overlayng_flatten_components, value); init = Any[])
+    value isa JTSEmptyGeometry && return Any[]
+    isnothing(value) && return Any[]
+
+    trait = GI.trait(value)
+    if trait isa GI.GeometryCollectionTrait ||
+       trait isa GI.MultiPointTrait ||
+       trait isa GI.MultiLineStringTrait ||
+       trait isa GI.MultiPolygonTrait
+        return reduce(vcat, map(_overlayng_flatten_components, GI.getgeom(value)); init = Any[])
+    end
+    return Any[value]
+end
+
+function _overlayng_line_key(line)
+    points = [GO.tuples(point) for point in GI.getpoint(line)]
+    reversed_points = reverse(points)
+    return Tuple(min(points, reversed_points))
+end
+
+function _overlayng_fixture_summary(value)
+    points = Set{Any}()
+    lines = Set{Any}()
+    areas = Float64[]
+    ring_counts = Int[]
+    for geom in _overlayng_flatten_components(value)
+        trait = GI.trait(geom)
+        if trait isa GI.PointTrait
+            push!(points, GO.tuples(geom))
+        elseif trait isa GI.LineTrait ||
+               trait isa GI.LineStringTrait ||
+               trait isa GI.LinearRingTrait
+            push!(lines, _overlayng_line_key(geom))
+        elseif trait isa GI.PolygonTrait
+            push!(areas, round(GO.area(geom); digits = 8))
+            push!(ring_counts, GI.nring(geom))
+        else
+            error("Unsupported OverlayNG fixture result component: $(typeof(geom))")
+        end
+    end
+    return (; points, lines, areas = sort(areas), ring_counts = sort(ring_counts))
+end
+
+_overlayng_fixture_operation_allowed(::Nothing, op::JTSOperation) = true
+_overlayng_fixture_operation_allowed(operations, op::JTSOperation) =
+    lowercase(op.name) in operations
 
 @testset "OverlayNG input wrappers" begin
     alg = GO.OverlayNG()
@@ -423,6 +503,27 @@ end
     @test length(hole_result) == 1
     @test GI.nring(only(hole_result)) == 2
     @test _overlay_area(hole_result) ≈ 12.0
+
+    touch_line_point_a = GI.Polygon([[
+        (10.0, 10.0),
+        (10.0, 30.0),
+        (30.0, 30.0),
+        (30.0, 10.0),
+        (10.0, 10.0),
+    ]])
+    touch_line_point_b = GI.Polygon([[
+        (40.0, 25.0),
+        (30.0, 25.0),
+        (30.0, 20.0),
+        (35.0, 20.0),
+        (30.0, 15.0),
+        (40.0, 15.0),
+        (40.0, 25.0),
+    ]])
+    touch_intersection = GO.intersection(alg, touch_line_point_a, touch_line_point_b)
+    @test Set(_result_lines(touch_intersection)) == Set([[(30.0, 20.0), (30.0, 25.0)]])
+    @test _result_points(touch_intersection) == [(30.0, 15.0)]
+    @test _overlay_area(touch_intersection) == 0.0
 end
 
 @testset "OverlayNG line result extraction" begin
@@ -483,4 +584,29 @@ end
     touch_intersection = GO.intersection(alg, touch, square)
     @test _result_points(touch_intersection) == [(0.0, 0.0)]
     @test isempty(_result_lines(touch_intersection))
+end
+
+@testset "OverlayNG JTS XML smoke fixtures" begin
+    alg = GO.OverlayNG()
+    fixtures = (
+        ("TestNGOverlayP.xml", 1:5, nothing),
+        ("TestNGOverlayL.xml", 1:4, nothing),
+        ("TestNGOverlayA.xml", 1:4, nothing),
+        ("TestNGOverlayA.xml", 5:5, Set(["intersectionng", "differenceng"])),
+    )
+
+    matched_operations = 0
+    for (filename, case_indices, operations) in fixtures
+        test_set = load_test_set(joinpath(_JTS_OVERLAY_FIXTURE_DIR, filename))
+        for case_index in case_indices
+            case = test_set.cases[case_index]
+            for op in case.operations
+                _overlayng_fixture_operation_allowed(operations, op) || continue
+                matched_operations += 1
+                @test _overlayng_fixture_summary(_overlayng_fixture_value(alg, op)) ==
+                    _overlayng_fixture_summary(op.expected)
+            end
+        end
+    end
+    @test matched_operations == 63
 end
