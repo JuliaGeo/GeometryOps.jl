@@ -196,6 +196,36 @@ end
     @test missing_b_label.on_location == GO.loc_exterior
 end
 
+@testset "OverlayNG half-edge graph" begin
+    alg = GO.OverlayNG()
+    line_a = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
+    line_b = GI.LineString([(0.0, 2.0), (2.0, 0.0)])
+    edges = GO.overlay_merge_edges(alg, line_a, line_b)
+    graph = GO.overlay_graph(edges)
+
+    @test length(edges) == 4
+    @test length(graph.half_edges) == 8
+    @test all(half_edge -> half_edge.sym.sym === half_edge, graph.half_edges)
+    @test all(half_edge -> half_edge.label isa GO.OverlayLabel, graph.half_edges)
+    @test all(half_edge -> !half_edge.result_area && !half_edge.result_line, graph.half_edges)
+    @test all(half_edge -> !half_edge.visited && half_edge.ring_id == 0, graph.half_edges)
+
+    center_star = GO.overlay_node_star(graph, (1.0, 1.0))
+    @test length(center_star) == 4
+    @test getproperty.(center_star, :destination) == [
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+    ]
+    @test issorted(getproperty.(center_star, :angle))
+
+    corner_star = GO.overlay_node_star(graph, (0.0, 0.0))
+    @test length(corner_star) == 1
+    @test only(corner_star).destination == (1.0, 1.0)
+    @test isempty(GO.overlay_node_star(graph, (10.0, 10.0)))
+end
+
 @testset "OverlayNG point-point dispatch" begin
     alg = GO.OverlayNG()
     points_a = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0), (1.0, 1.0)])

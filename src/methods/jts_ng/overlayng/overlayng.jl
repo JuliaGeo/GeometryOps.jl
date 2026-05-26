@@ -136,6 +136,38 @@ struct OverlayLabel
     input_b::OverlayInputLabel
 end
 
+"""
+    OverlayHalfEdge
+
+Directed graph edge used by later OverlayNG node-star and ring phases.
+"""
+mutable struct OverlayHalfEdge{T,E,L}
+    origin::Tuple{T,T}
+    destination::Tuple{T,T}
+    edge::E
+    label::L
+    angle::Float64
+    sym::Any
+    next::Any
+    prev::Any
+    result_area::Bool
+    result_line::Bool
+    visited::Bool
+    ring_id::Int
+end
+
+"""
+    OverlayGraph
+
+Half-edge graph with angularly sorted node stars.
+"""
+mutable struct OverlayGraph
+    half_edges::Vector{Any}
+    node_stars::Dict{Any,Vector{Any}}
+end
+
+OverlayGraph() = OverlayGraph(Any[], Dict{Any,Vector{Any}}())
+
 function OverlayEdgeSourceInfo(segment::NGSegmentString)
     source = segment.source
     return OverlayEdgeSourceInfo(
@@ -340,6 +372,64 @@ end
 
 overlay_merge_collapse_role(a::OverlayCollapseRole, b::OverlayCollapseRole) =
     (a == overlay_collapsed || b == overlay_collapsed) ? overlay_collapsed : overlay_not_collapsed
+
+function OverlayHalfEdge(edge::OverlayEdge, origin, destination)
+    origin = _tuple_point(origin, eltype(first(edge.points)))
+    destination = _tuple_point(destination, eltype(first(edge.points)))
+    return OverlayHalfEdge(
+        origin,
+        destination,
+        edge,
+        overlay_label(edge),
+        overlay_half_edge_angle(origin, destination),
+        nothing,
+        nothing,
+        nothing,
+        false,
+        false,
+        false,
+        0,
+    )
+end
+
+overlay_half_edge_angle(origin, destination) =
+    atan(destination[2] - origin[2], destination[1] - origin[1])
+
+"""
+    overlay_graph(edges)
+
+Build a half-edge graph from merged OverlayNG edges.
+"""
+function overlay_graph(edges)
+    graph = OverlayGraph()
+    for edge in edges
+        overlay_add_edge_pair!(graph, edge)
+    end
+    return graph
+end
+
+function overlay_add_edge_pair!(graph::OverlayGraph, edge::OverlayEdge)
+    forward = OverlayHalfEdge(edge, first(edge.points), last(edge.points))
+    reverse = OverlayHalfEdge(edge, last(edge.points), first(edge.points))
+    forward.sym = reverse
+    reverse.sym = forward
+    push!(graph.half_edges, forward, reverse)
+    overlay_insert_half_edge!(graph, forward)
+    overlay_insert_half_edge!(graph, reverse)
+    return graph
+end
+
+function overlay_insert_half_edge!(graph::OverlayGraph, half_edge::OverlayHalfEdge)
+    star = get!(graph.node_stars, half_edge.origin) do
+        Any[]
+    end
+    push!(star, half_edge)
+    sort!(star, by = edge -> edge.angle)
+    return half_edge
+end
+
+overlay_node_star(graph::OverlayGraph, point) =
+    get(graph.node_stars, _tuple_point(point), Any[])
 
 """
     overlay_node_segment_strings(alg, a, b, [T])
