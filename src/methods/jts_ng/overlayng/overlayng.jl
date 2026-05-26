@@ -16,10 +16,11 @@ end
 
 OverlayNG input wrapper carrying dimension and point-location helpers.
 """
-struct OverlayInputGeometry{G,L}
+struct OverlayInputGeometry{G,L,C}
     geom::G
     dimension::TopologicalDimension
     locator::L
+    segment_strings_cache::C
 end
 
 function OverlayInputGeometry(alg::OverlayNG, geom)
@@ -27,7 +28,84 @@ function OverlayInputGeometry(alg::OverlayNG, geom)
     locator = dimension_value(dimension) > dimension_value(dim_point) ?
         RelatePointLocator(geom) :
         nothing
-    return OverlayInputGeometry(geom, dimension, locator)
+    return OverlayInputGeometry(geom, dimension, locator, Dict{Any,Any}())
+end
+
+"""
+    OverlayEdgeSourceInfo
+
+OverlayNG source metadata attached to an extracted edge string.
+"""
+struct OverlayEdgeSourceInfo{G,P}
+    input_side::NGInputSide
+    source_dimension::TopologicalDimension
+    element_id::Int
+    ring_id::Int
+    ring_role::NGRingRole
+    source_orientation::NGRingOrientation
+    depth_delta::Int8
+    coordinates_reversed::Bool
+    is_collapsed::Bool
+    geometry::G
+    parent_polygonal::P
+end
+
+"""
+    OverlaySegmentString
+
+OverlayNG edge coordinate sequence with overlay-specific source metadata.
+"""
+struct OverlaySegmentString{T,S}
+    points::Vector{Tuple{T,T}}
+    source::S
+    had_repeated_coordinates::Bool
+    is_zero_length::Bool
+end
+
+function OverlayEdgeSourceInfo(segment::NGSegmentString)
+    source = segment.source
+    return OverlayEdgeSourceInfo(
+        source.input_side,
+        source.source_dimension,
+        source.element_id,
+        source.ring_id,
+        source.ring_role,
+        source.source_orientation,
+        source.depth_delta,
+        source.coordinates_reversed,
+        source.source_dimension == dim_area && segment.is_zero_length,
+        source.geometry,
+        source.parent_polygonal,
+    )
+end
+
+function OverlaySegmentString(segment::NGSegmentString{T}) where {T}
+    return OverlaySegmentString(
+        segment.points,
+        OverlayEdgeSourceInfo(segment),
+        segment.had_repeated_coordinates,
+        segment.is_zero_length,
+    )
+end
+
+"""
+    overlay_segment_strings(input, [T]; input_side = input_a, extent = nothing)
+
+Extract and cache OverlayNG-oriented segment strings for graph overlay phases.
+"""
+function overlay_segment_strings(
+    input::OverlayInputGeometry,
+    ::Type{T} = Float64;
+    input_side::NGInputSide = input_a,
+    extent = nothing,
+) where {T}
+    key = (T, input_side, extent)
+    return get!(input.segment_strings_cache, key) do
+        map(
+            OverlaySegmentString,
+            extract_ng_segment_strings(input.geom, T; input_side, extent, orient_rings = :source),
+        )
+    end
 end
 
 overlay(alg::OverlayNG, op::OverlayOpCode, geom_a, geom_b, ::Type{T} = Float64; target = nothing) where {T <: AbstractFloat} =

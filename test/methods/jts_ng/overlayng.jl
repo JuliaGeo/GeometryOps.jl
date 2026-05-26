@@ -16,6 +16,45 @@ _overlay_tuples(geoms) = map(geom -> GO.tuples(geom), geoms)
     @test GO.overlay_has_point_dispatch(point_input, line_input)
 end
 
+@testset "OverlayNG edge source extraction" begin
+    alg = GO.OverlayNG()
+    line = GI.LineString([(0.0, 0.0), (1.0, 1.0)])
+    line_input = GO.OverlayInputGeometry(alg, line)
+    line_segments = GO.overlay_segment_strings(line_input; input_side = GO.input_b)
+
+    @test line_segments === GO.overlay_segment_strings(line_input; input_side = GO.input_b)
+    @test length(line_segments) == 1
+    line_segment = only(line_segments)
+    @test line_segment isa GO.OverlaySegmentString
+    @test line_segment.points == [(0.0, 0.0), (1.0, 1.0)]
+    @test line_segment.source isa GO.OverlayEdgeSourceInfo
+    @test line_segment.source.input_side == GO.input_b
+    @test line_segment.source.source_dimension == GO.dim_line
+    @test line_segment.source.ring_role == GO.ring_none
+    @test line_segment.source.depth_delta == 0
+    @test !line_segment.source.is_collapsed
+    @test line_segment.source.geometry === line
+
+    polygon = GI.Polygon([
+        [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)],
+        [(1.0, 1.0), (1.0, 3.0), (3.0, 3.0), (3.0, 1.0), (1.0, 1.0)],
+    ])
+    polygon_input = GO.OverlayInputGeometry(alg, polygon)
+    shell, hole = GO.overlay_segment_strings(polygon_input; input_side = GO.input_a)
+
+    @test shell.source.source_dimension == GO.dim_area
+    @test shell.source.ring_role == GO.ring_shell
+    @test hole.source.ring_role == GO.ring_hole
+    @test shell.source.source_orientation == GO.ring_counterclockwise
+    @test hole.source.source_orientation == GO.ring_clockwise
+    @test !shell.source.coordinates_reversed
+    @test !hole.source.coordinates_reversed
+    @test shell.source.depth_delta == -1
+    @test hole.source.depth_delta == -1
+    @test shell.source.parent_polygonal === polygon
+    @test hole.source.parent_polygonal === polygon
+end
+
 @testset "OverlayNG point-point dispatch" begin
     alg = GO.OverlayNG()
     points_a = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0), (1.0, 1.0)])
