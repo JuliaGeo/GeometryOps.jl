@@ -137,6 +137,17 @@ struct OverlayLabel
 end
 
 """
+    OverlayResultRing
+
+Closed result-area ring built from marked OverlayNG half-edges.
+"""
+mutable struct OverlayResultRing{T}
+    points::Vector{Tuple{T,T}}
+    is_hole::Bool
+    holes::Vector{Any}
+end
+
+"""
     OverlayHalfEdge
 
 Directed graph edge used by later OverlayNG node-star and ring phases.
@@ -533,6 +544,167 @@ function overlay_mark_result_line_edges!(graph::OverlayGraph, op::OverlayOpCode)
     return graph
 end
 
+function overlay_label_disconnected_edges!(
+    graph::OverlayGraph,
+    input_a::OverlayInputGeometry,
+    input_b::OverlayInputGeometry,
+)
+    for half_edge in graph.half_edges
+        half_edge.origin == first(half_edge.edge.points) || continue
+        label = overlay_label_disconnected_inputs(half_edge, input_a, input_b)
+        half_edge.label = label
+        half_edge.sym.label = label
+    end
+    return graph
+end
+
+function overlay_label_disconnected_inputs(
+    half_edge::OverlayHalfEdge,
+    input_a::OverlayInputGeometry,
+    input_b::OverlayInputGeometry,
+)
+    label = half_edge.label
+    return OverlayLabel(
+        overlay_label_disconnected_input(label.input_a, half_edge, input_a),
+        overlay_label_disconnected_input(label.input_b, half_edge, input_b),
+    )
+end
+
+function overlay_label_disconnected_input(
+    label::OverlayInputLabel,
+    half_edge::OverlayHalfEdge,
+    input::OverlayInputGeometry,
+)
+    label.dimension != dim_false && return label
+    location = overlay_disconnected_edge_location(half_edge, input)
+    return OverlayInputLabel(
+        label.dimension,
+        location,
+        location,
+        location,
+        label.line_state,
+        label.collapse_role,
+    )
+end
+
+function overlay_disconnected_edge_location(half_edge::OverlayHalfEdge, input::OverlayInputGeometry)
+    input.dimension == dim_area || return loc_exterior
+    origin_location = relate_locate_with_dim(input.locator, half_edge.origin).location
+    destination_location = relate_locate_with_dim(input.locator, half_edge.destination).location
+    return origin_location != loc_exterior && destination_location != loc_exterior ?
+        loc_interior :
+        loc_exterior
+end
+
+function overlay_result_area_half_edges(graph::OverlayGraph)
+    return [half_edge for half_edge in graph.half_edges if half_edge.result_area]
+end
+
+"""
+    overlay_extract_result_polygons(graph)
+
+Build polygon geometries from marked result-area half-edges.
+"""
+function overlay_extract_result_polygons(graph::OverlayGraph)
+    overlay_link_result_area_edges!(graph)
+    rings = overlay_result_area_rings!(graph)
+    return overlay_result_ring_polygons(rings)
+end
+
+function overlay_link_result_area_edges!(graph::OverlayGraph)
+    for half_edge in graph.half_edges
+        half_edge.next = nothing
+        half_edge.prev = nothing
+        half_edge.visited = false
+        half_edge.ring_id = 0
+    end
+
+    for half_edge in overlay_result_area_half_edges(graph)
+        next_edge = overlay_next_result_area_edge(graph, half_edge)
+        half_edge.next = next_edge
+        next_edge.prev = half_edge
+    end
+    return graph
+end
+
+function overlay_next_result_area_edge(graph::OverlayGraph, half_edge::OverlayHalfEdge)
+    star = overlay_node_star(graph, half_edge.destination)
+    sym_index = findfirst(candidate -> candidate === half_edge.sym, star)
+    isnothing(sym_index) && throw(ArgumentError("OverlayNG graph is missing a symmetric half-edge at a result node."))
+
+    for offset in 1:length(star)
+        candidate = star[mod1(sym_index + offset, length(star))]
+        candidate.result_area && return candidate
+    end
+    throw(ArgumentError("OverlayNG result area edge has no outgoing continuation."))
+end
+
+function overlay_result_area_rings!(graph::OverlayGraph)
+    rings = OverlayResultRing[]
+    ring_id = 0
+    for half_edge in overlay_result_area_half_edges(graph)
+        half_edge.visited && continue
+        ring_id += 1
+        ring = overlay_result_area_ring!(half_edge, ring_id)
+        length(ring.points) >= 4 && _ng_orientation_sum(ring.points) != 0.0 && push!(rings, ring)
+    end
+    return rings
+end
+
+function overlay_result_area_ring!(start_edge::OverlayHalfEdge, ring_id::Integer)
+    points = typeof(start_edge.origin)[]
+    half_edge = start_edge
+    while true
+        half_edge.visited && throw(ArgumentError("OverlayNG result ring visited an edge twice."))
+        half_edge.visited = true
+        half_edge.ring_id = ring_id
+        push!(points, half_edge.origin)
+
+        half_edge = half_edge.next
+        isnothing(half_edge) && throw(ArgumentError("OverlayNG result ring has an unlinked edge."))
+        half_edge === start_edge && break
+    end
+    push!(points, first(points))
+    return OverlayResultRing(points, !ng_is_clockwise(points), Any[])
+end
+
+function overlay_result_ring_polygons(rings)
+    shells = [ring for ring in rings if !ring.is_hole]
+    holes = [ring for ring in rings if ring.is_hole]
+
+    for hole in holes
+        shell = overlay_find_containing_shell(hole, shells)
+        isnothing(shell) && throw(ArgumentError("OverlayNG polygon extraction found a hole with no containing shell."))
+        push!(shell.holes, hole)
+    end
+
+    return Any[GI.Polygon(Any[shell.points, getproperty.(shell.holes, :points)...]) for shell in shells]
+end
+
+function overlay_find_containing_shell(hole::OverlayResultRing, shells)
+    containing_shell = nothing
+    containing_area = Inf
+    for shell in shells
+        overlay_ring_contains_ring(shell, hole) || continue
+        shell_area = abs(_ng_orientation_sum(shell.points))
+        if shell_area < containing_area
+            containing_shell = shell
+            containing_area = shell_area
+        end
+    end
+    return containing_shell
+end
+
+function overlay_ring_contains_ring(shell::OverlayResultRing, hole::OverlayResultRing)
+    locator = RelatePointLocator(GI.Polygon([shell.points]))
+    for point in Iterators.drop(hole.points, 1)
+        location = relate_locate_with_dim(locator, point).location
+        location == loc_interior && return true
+        location == loc_exterior && return false
+    end
+    return false
+end
+
 """
     overlay_node_segment_strings(alg, a, b, [T])
 
@@ -753,6 +925,8 @@ function overlay(
 ) where {T <: AbstractFloat}
     if overlay_has_point_dispatch(input_a, input_b)
         return overlay_compute_point_dispatch(alg, op, input_a, input_b, T; target)
+    elseif input_a.dimension == dim_area && input_b.dimension == dim_area
+        return overlay_compute_area_area(alg, op, input_a, input_b, T; target)
     end
     throw(ArgumentError("OverlayNG edge overlay is not implemented yet."))
 end
@@ -790,6 +964,21 @@ function overlay_compute_point_dispatch(
     else
         return overlay_compute_point_nonpoint(alg, op, input_b, input_a, false, T; target)
     end
+end
+
+function overlay_compute_area_area(
+    alg::OverlayNG,
+    op::OverlayOpCode,
+    input_a::OverlayInputGeometry,
+    input_b::OverlayInputGeometry,
+    ::Type{T};
+    target = nothing,
+) where {T}
+    noded = overlay_node_segment_strings(alg, input_a, input_b, T)
+    graph = overlay_graph(overlay_merge_edges(noded))
+    overlay_label_disconnected_edges!(graph, input_a, input_b)
+    overlay_mark_result_edges!(graph, op)
+    return overlay_filter_results(alg, target, overlay_extract_result_polygons(graph))
 end
 
 function overlay_compute_point_point(

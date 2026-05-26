@@ -3,6 +3,8 @@ import GeometryOps as GO
 import GeoInterface as GI
 
 _overlay_tuples(geoms) = map(geom -> GO.tuples(geom), geoms)
+_ring_tuples(poly, i = 1) = [GO.tuples(point) for point in GI.getpoint(GI.getring(poly, i))]
+_overlay_area(geoms) = sum(geom -> GO.area(geom), geoms; init = 0.0)
 
 @testset "OverlayNG input wrappers" begin
     alg = GO.OverlayNG()
@@ -350,6 +352,73 @@ end
 
     area_only_union = GO.union(GO.OverlayNG(; area_result_only = true), polygon, points)
     @test area_only_union == Any[polygon]
+end
+
+@testset "OverlayNG area-area dispatch" begin
+    alg = GO.OverlayNG()
+    square_a = GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]])
+    square_b = GI.Polygon([[
+        (1.0, 1.0),
+        (3.0, 1.0),
+        (3.0, 3.0),
+        (1.0, 3.0),
+        (1.0, 1.0),
+    ]])
+
+    intersection_result = GO.intersection(alg, square_a, square_b)
+    @test length(intersection_result) == 1
+    @test GI.nring(only(intersection_result)) == 1
+    @test _overlay_area(intersection_result) ≈ 1.0
+    @test Set(_ring_tuples(only(intersection_result))) == Set([
+        (1.0, 1.0),
+        (2.0, 1.0),
+        (2.0, 2.0),
+        (1.0, 2.0),
+    ])
+
+    adjacent_a = GI.Polygon([[
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (1.0, 1.0),
+        (0.0, 1.0),
+        (0.0, 0.0),
+    ]])
+    adjacent_b = GI.Polygon([[
+        (1.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 1.0),
+        (1.0, 1.0),
+        (1.0, 0.0),
+    ]])
+    union_result = GO.union(alg, adjacent_a, adjacent_b)
+    @test length(union_result) == 1
+    @test GI.nring(only(union_result)) == 1
+    @test _overlay_area(union_result) ≈ 2.0
+
+    outer = GI.Polygon([[
+        (0.0, 0.0),
+        (4.0, 0.0),
+        (4.0, 4.0),
+        (0.0, 4.0),
+        (0.0, 0.0),
+    ]])
+    inner = GI.Polygon([[
+        (1.0, 1.0),
+        (3.0, 1.0),
+        (3.0, 3.0),
+        (1.0, 3.0),
+        (1.0, 1.0),
+    ]])
+    hole_result = GO.difference(alg, outer, inner)
+    @test length(hole_result) == 1
+    @test GI.nring(only(hole_result)) == 2
+    @test _overlay_area(hole_result) ≈ 12.0
 end
 
 @testset "OverlayNG unsupported edge overlay" begin
