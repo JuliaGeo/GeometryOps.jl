@@ -447,6 +447,67 @@ end
     @test GO.relate_is_self_noding_required(mixed_computer)
 end
 
+@testset "RelateNG polygon node section conversion" begin
+    node_point = (0.0, 0.0)
+    shell = GO.RelateNodeSection(
+        GO.input_a,
+        GO.dim_area,
+        7,
+        0,
+        nothing,
+        true,
+        node_point,
+        (-1.0, 0.0),
+        (0.0, 1.0),
+    )
+    hole = GO.RelateNodeSection(
+        GO.input_a,
+        GO.dim_area,
+        7,
+        1,
+        nothing,
+        true,
+        node_point,
+        (1.0, 0.0),
+        (0.0, -1.0),
+    )
+
+    converted = GO.relate_convert_polygon_sections([shell, hole])
+    @test length(converted) == 2
+    @test all(section -> section.ring_id == 0, converted)
+    @test getproperty.(converted, :previous_vertex) == [(-1.0, 0.0), (1.0, 0.0)]
+    @test getproperty.(converted, :next_vertex) == [(0.0, -1.0), (0.0, 1.0)]
+
+    hole_a = GO.RelateNodeSection(
+        GO.input_a,
+        GO.dim_area,
+        8,
+        1,
+        nothing,
+        true,
+        node_point,
+        (1.0, 0.0),
+        (0.0, 1.0),
+    )
+    hole_b = GO.RelateNodeSection(
+        GO.input_a,
+        GO.dim_area,
+        8,
+        2,
+        nothing,
+        true,
+        node_point,
+        (-1.0, 0.0),
+        (0.0, -1.0),
+    )
+
+    converted_holes = GO.relate_convert_polygon_sections([hole_a, hole_b])
+    @test length(converted_holes) == 2
+    @test all(section -> section.ring_id == 0, converted_holes)
+    @test getproperty.(converted_holes, :previous_vertex) == [(1.0, 0.0), (-1.0, 0.0)]
+    @test getproperty.(converted_holes, :next_vertex) == [(0.0, -1.0), (0.0, 1.0)]
+end
+
 @testset "RelateNG point path evaluation" begin
     alg = GO.RelateNG()
     point = GI.Point(1.0, 1.0)

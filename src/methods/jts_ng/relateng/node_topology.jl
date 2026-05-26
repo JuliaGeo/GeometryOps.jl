@@ -61,6 +61,11 @@ end
 _relate_point_sort_key(::Nothing) = (-Inf, -Inf)
 _relate_point_sort_key(point::Tuple) = point
 
+relate_is_area(section::RelateNodeSection) = section.dimension == dim_area
+relate_is_shell(section::RelateNodeSection) = section.ring_id == 0
+relate_is_same_polygon(a::RelateNodeSection, b::RelateNodeSection) =
+    a.input_side == b.input_side && a.element_id == b.element_id
+
 """
     RelateNode
 
@@ -414,11 +419,153 @@ end
 
 function relate_create_node(node_sections::RelateNodeSections)
     node = RelateNode(node_sections.point)
-    for section in relate_prepare_sections(node_sections)
-        relate_add_edges!(node, section)
+    sections = relate_prepare_sections(node_sections)
+    i = firstindex(sections)
+    while i <= lastindex(sections)
+        section = sections[i]
+        if relate_is_area(section) && _relate_has_multiple_polygon_sections(sections, i)
+            polygon_sections, next_index = _relate_collect_polygon_sections(sections, i)
+            for converted_section in relate_convert_polygon_sections(polygon_sections)
+                relate_add_edges!(node, converted_section)
+            end
+            i = next_index
+        else
+            relate_add_edges!(node, section)
+            i += 1
+        end
     end
     return node
 end
+
+function _relate_has_multiple_polygon_sections(sections, index::Integer)
+    index < lastindex(sections) || return false
+    return relate_is_same_polygon(sections[index], sections[index + 1])
+end
+
+function _relate_collect_polygon_sections(sections, index::Integer)
+    polygon_sections = Any[]
+    first_section = sections[index]
+    while index <= lastindex(sections) && relate_is_same_polygon(first_section, sections[index])
+        push!(polygon_sections, sections[index])
+        index += 1
+    end
+    return polygon_sections, index
+end
+
+"""
+    relate_convert_polygon_sections(sections)
+
+Convert same-polygon ring sections at a node from minimal-ring to maximal-ring form.
+"""
+function relate_convert_polygon_sections(poly_sections)
+    sections = relate_extract_unique_sections(
+        sort(
+            collect(poly_sections);
+            by = section -> _relate_section_angle(section.previous_vertex, section.node_point),
+        ),
+    )
+    length(sections) == 1 && return sections
+
+    shell_index = findfirst(relate_is_shell, sections)
+    isnothing(shell_index) && return relate_convert_hole_sections(sections)
+
+    converted_sections = Any[]
+    next_shell_index = shell_index
+    while true
+        next_shell_index = relate_convert_shell_and_holes!(
+            converted_sections,
+            sections,
+            next_shell_index,
+        )
+        next_shell_index == shell_index && break
+    end
+    return converted_sections
+end
+
+function relate_convert_shell_and_holes!(converted_sections, sections, shell_index::Integer)
+    shell_section = sections[shell_index]
+    in_vertex = shell_section.previous_vertex
+    i = _relate_next_wrapped_index(sections, shell_index)
+
+    while !relate_is_shell(sections[i])
+        hole_section = sections[i]
+        push!(
+            converted_sections,
+            relate_create_section(shell_section, in_vertex, hole_section.next_vertex),
+        )
+        in_vertex = hole_section.previous_vertex
+        i = _relate_next_wrapped_index(sections, i)
+    end
+
+    push!(
+        converted_sections,
+        relate_create_section(shell_section, in_vertex, shell_section.next_vertex),
+    )
+    return i
+end
+
+function relate_convert_hole_sections(sections)
+    converted_sections = Any[]
+    copy_section = first(sections)
+    for i in eachindex(sections)
+        next_index = _relate_next_wrapped_index(sections, i)
+        push!(
+            converted_sections,
+            relate_create_section(
+                copy_section,
+                sections[i].previous_vertex,
+                sections[next_index].next_vertex,
+            ),
+        )
+    end
+    return converted_sections
+end
+
+function relate_create_section(section::RelateNodeSection, previous_vertex, next_vertex)
+    return RelateNodeSection(
+        section.input_side,
+        dim_area,
+        section.element_id,
+        0,
+        section.parent_polygonal,
+        section.is_node_at_vertex,
+        section.node_point,
+        previous_vertex,
+        next_vertex,
+    )
+end
+
+function relate_extract_unique_sections(sections)
+    isempty(sections) && return sections
+    unique_sections = Any[first(sections)]
+    last_unique = first(sections)
+    for section in Iterators.drop(sections, 1)
+        _relate_section_key(section) == _relate_section_key(last_unique) && continue
+        push!(unique_sections, section)
+        last_unique = section
+    end
+    return unique_sections
+end
+
+function _relate_section_key(section::RelateNodeSection)
+    return (
+        section.input_side,
+        section.dimension,
+        section.element_id,
+        section.ring_id,
+        section.previous_vertex,
+        section.node_point,
+        section.next_vertex,
+    )
+end
+
+function _relate_section_angle(previous_vertex, node_point)
+    isnothing(previous_vertex) && return -Inf
+    return _relate_angle(node_point, previous_vertex)
+end
+
+_relate_next_wrapped_index(list, index::Integer) =
+    index == lastindex(list) ? firstindex(list) : index + 1
 
 function relate_evaluate_node_edges!(computer::RelateTopologyComputer, node::RelateNode)
     for edge in node.edges
