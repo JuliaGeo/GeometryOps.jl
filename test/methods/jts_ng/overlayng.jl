@@ -98,6 +98,49 @@ end
     @test any(segment -> segment.had_repeated_coordinates, repeated_noded)
 end
 
+@testset "OverlayNG edge merger" begin
+    alg = GO.OverlayNG()
+    line_a = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
+    line_b = GI.LineString([(2.0, 0.0), (0.0, 0.0)])
+
+    merged_line_edges = GO.overlay_merge_edges(alg, line_a, line_b)
+    @test length(merged_line_edges) == 1
+    line_edge = only(merged_line_edges)
+    @test line_edge.key == GO.OverlayEdgeKey((0.0, 0.0), (2.0, 0.0))
+    @test line_edge.points == [(0.0, 0.0), (2.0, 0.0)]
+    @test length(line_edge.sources) == 2
+    @test line_edge.source_directions == [true, false]
+    @test line_edge.depth_delta == 0
+    @test GO.overlay_is_line_edge(line_edge)
+    @test !GO.overlay_is_boundary_edge(line_edge)
+    @test GO.overlay_primary_ring_role(line_edge) == GO.ring_none
+
+    left = GI.Polygon([[
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (1.0, 1.0),
+        (0.0, 1.0),
+        (0.0, 0.0),
+    ]])
+    right = GI.Polygon([[
+        (1.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 1.0),
+        (1.0, 1.0),
+        (1.0, 0.0),
+    ]])
+    merged_area_edges = GO.overlay_merge_edges(alg, left, right)
+    shared_key = GO.OverlayEdgeKey((1.0, 0.0), (1.0, 1.0))
+    shared_edge = only(filter(edge -> edge.key == shared_key, merged_area_edges))
+
+    @test length(shared_edge.sources) == 2
+    @test shared_edge.source_directions == [true, false]
+    @test shared_edge.depth_delta == 0
+    @test GO.overlay_is_boundary_edge(shared_edge)
+    @test !GO.overlay_is_line_edge(shared_edge)
+    @test GO.overlay_primary_ring_role(shared_edge) == GO.ring_shell
+end
+
 @testset "OverlayNG point-point dispatch" begin
     alg = GO.OverlayNG()
     points_a = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0), (1.0, 1.0)])

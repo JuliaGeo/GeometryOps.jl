@@ -70,6 +70,37 @@ struct OverlaySegmentRecord{S,E,X}
     extent::X
 end
 
+"""
+    OverlayEdgeKey
+
+Direction-independent key for a noded OverlayNG edge.
+"""
+struct OverlayEdgeKey{T}
+    p1::Tuple{T,T}
+    p2::Tuple{T,T}
+end
+
+function OverlayEdgeKey(p1, p2, ::Type{T} = Float64) where {T}
+    p1 = _tuple_point(p1, T)
+    p2 = _tuple_point(p2, T)
+    p1 <= p2 && return OverlayEdgeKey(p1, p2)
+    return OverlayEdgeKey(p2, p1)
+end
+
+"""
+    OverlayEdge
+
+Merged noded edge with all coincident source contributions.
+"""
+mutable struct OverlayEdge{T,K}
+    key::K
+    points::Vector{Tuple{T,T}}
+    sources::Vector{Any}
+    source_directions::Vector{Bool}
+    depth_delta::Int
+    is_collapsed::Bool
+end
+
 function OverlayEdgeSourceInfo(segment::NGSegmentString)
     source = segment.source
     return OverlayEdgeSourceInfo(
@@ -114,6 +145,77 @@ function overlay_segment_strings(
             extract_ng_segment_strings(input.geom, T; input_side, extent, orient_rings = :source),
         )
     end
+end
+
+function OverlayEdge(segment::OverlaySegmentString{T}) where {T}
+    key = OverlayEdgeKey(first(segment.points), last(segment.points), T)
+    is_forward = overlay_key_direction(key, segment)
+    points = is_forward ? copy(segment.points) : reverse(segment.points)
+    source = segment.source
+    return OverlayEdge{T,typeof(key)}(
+        key,
+        points,
+        Any[source],
+        Bool[is_forward],
+        overlay_depth_delta(source, is_forward),
+        source.is_collapsed,
+    )
+end
+
+function overlay_key_direction(key::OverlayEdgeKey, segment::OverlaySegmentString)
+    return _tuple_point(first(segment.points), eltype(key.p1)) == key.p1 &&
+        _tuple_point(last(segment.points), eltype(key.p2)) == key.p2
+end
+
+overlay_depth_delta(source::OverlayEdgeSourceInfo, is_forward::Bool) =
+    is_forward ? Int(source.depth_delta) : -Int(source.depth_delta)
+
+function overlay_add_source!(edge::OverlayEdge, segment::OverlaySegmentString)
+    is_forward = overlay_key_direction(edge.key, segment)
+    source = segment.source
+    push!(edge.sources, source)
+    push!(edge.source_directions, is_forward)
+    edge.depth_delta += overlay_depth_delta(source, is_forward)
+    edge.is_collapsed |= source.is_collapsed
+    return edge
+end
+
+"""
+    overlay_merge_edges(segments)
+
+Merge coincident noded segment strings by direction-independent edge key.
+"""
+function overlay_merge_edges(segments)
+    edges = OverlayEdge[]
+    edge_indices = Dict{Any,Int}()
+    for segment in segments
+        length(segment.points) == 2 || throw(ArgumentError("Overlay edge merging requires noded two-point segment strings."))
+        key = OverlayEdgeKey(first(segment.points), last(segment.points), eltype(first(segment.points)))
+        edge_index = get(edge_indices, key, nothing)
+        if isnothing(edge_index)
+            push!(edges, OverlayEdge(segment))
+            edge_indices[key] = length(edges)
+        else
+            overlay_add_source!(edges[edge_index], segment)
+        end
+    end
+    return edges
+end
+
+function overlay_merge_edges(alg::OverlayNG, geom_a, geom_b, ::Type{T} = Float64; exact = True()) where {T}
+    return overlay_merge_edges(overlay_node_segment_strings(alg, geom_a, geom_b, T; exact))
+end
+
+overlay_is_line_edge(edge::OverlayEdge) =
+    any(source -> source.source_dimension == dim_line || source.is_collapsed, edge.sources)
+
+overlay_is_boundary_edge(edge::OverlayEdge) =
+    any(source -> source.source_dimension == dim_area && !source.is_collapsed, edge.sources)
+
+function overlay_primary_ring_role(edge::OverlayEdge)
+    any(source -> source.ring_role == ring_shell, edge.sources) && return ring_shell
+    any(source -> source.ring_role == ring_hole, edge.sources) && return ring_hole
+    return ring_none
 end
 
 """
