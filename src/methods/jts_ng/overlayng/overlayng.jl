@@ -481,6 +481,7 @@ Mark local result area and line half-edges from existing OverlayNG labels.
 function overlay_mark_result_edges!(graph::OverlayGraph, op::OverlayOpCode)
     overlay_clear_result_marks!(graph)
     overlay_mark_result_area_edges!(graph, op)
+    overlay_unmark_duplicate_result_area_edges!(graph)
     overlay_mark_result_line_edges!(graph, op)
     return graph
 end
@@ -497,17 +498,21 @@ function overlay_mark_result_area_edges!(graph::OverlayGraph, op::OverlayOpCode)
     for half_edge in graph.half_edges
         overlay_is_boundary_edge(half_edge.edge) || continue
         label = overlay_directed_label(half_edge)
-        left_in_result = overlay_result_location(
-            op,
-            label.input_a.left_location,
-            label.input_b.left_location,
-        )
-        right_in_result = overlay_result_location(
+        half_edge.result_area = overlay_result_location(
             op,
             label.input_a.right_location,
             label.input_b.right_location,
         )
-        half_edge.result_area = right_in_result && !left_in_result
+    end
+    return graph
+end
+
+function overlay_unmark_duplicate_result_area_edges!(graph::OverlayGraph)
+    for half_edge in graph.half_edges
+        if half_edge.result_area && half_edge.sym.result_area
+            half_edge.result_area = false
+            half_edge.sym.result_area = false
+        end
     end
     return graph
 end

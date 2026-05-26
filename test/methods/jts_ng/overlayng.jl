@@ -246,6 +246,16 @@ end
     shared_key = GO.OverlayEdgeKey((1.0, 0.0), (1.0, 1.0))
     shared_half_edges = filter(half_edge -> half_edge.edge.key == shared_key, graph.half_edges)
 
+    duplicate_graph = GO.overlay_graph(GO.overlay_merge_edges(alg, left, right))
+    duplicate_shared_half_edges = filter(
+        half_edge -> half_edge.edge.key == shared_key,
+        duplicate_graph.half_edges,
+    )
+    GO.overlay_mark_result_area_edges!(duplicate_graph, GO.overlay_union)
+    @test all(half_edge -> half_edge.result_area, duplicate_shared_half_edges)
+    GO.overlay_unmark_duplicate_result_area_edges!(duplicate_graph)
+    @test all(half_edge -> !half_edge.result_area, duplicate_shared_half_edges)
+
     GO.overlay_mark_result_edges!(graph, GO.overlay_union)
     @test count(half_edge -> half_edge.result_area, graph.half_edges) == 6
     @test all(half_edge -> !half_edge.result_area, shared_half_edges)
