@@ -141,6 +141,61 @@ end
     @test GO.overlay_primary_ring_role(shared_edge) == GO.ring_shell
 end
 
+@testset "OverlayNG edge labels" begin
+    alg = GO.OverlayNG()
+    line_a = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
+    line_b = GI.LineString([(2.0, 0.0), (0.0, 0.0)])
+    line_edge = only(GO.overlay_merge_edges(alg, line_a, line_b))
+    line_label = GO.overlay_label(line_edge)
+
+    @test line_label.input_a.dimension == GO.dim_line
+    @test line_label.input_a.on_location == GO.loc_interior
+    @test line_label.input_a.left_location == GO.loc_exterior
+    @test line_label.input_a.right_location == GO.loc_exterior
+    @test line_label.input_a.line_state == GO.overlay_line_part
+    @test line_label.input_a.collapse_role == GO.overlay_not_collapsed
+    @test line_label.input_b.line_state == GO.overlay_line_part
+
+    left = GI.Polygon([[
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (1.0, 1.0),
+        (0.0, 1.0),
+        (0.0, 0.0),
+    ]])
+    right = GI.Polygon([[
+        (1.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 1.0),
+        (1.0, 1.0),
+        (1.0, 0.0),
+    ]])
+    shared_key = GO.OverlayEdgeKey((1.0, 0.0), (1.0, 1.0))
+    shared_edge = only(filter(edge -> edge.key == shared_key, GO.overlay_merge_edges(alg, left, right)))
+    label = GO.overlay_label(shared_edge)
+
+    @test label.input_a.dimension == GO.dim_area
+    @test label.input_a.on_location == GO.loc_interior
+    @test label.input_a.left_location == GO.loc_interior
+    @test label.input_a.right_location == GO.loc_exterior
+    @test label.input_a.line_state == GO.overlay_boundary_part
+    @test label.input_a.collapse_role == GO.overlay_not_collapsed
+
+    @test label.input_b.dimension == GO.dim_area
+    @test label.input_b.on_location == GO.loc_interior
+    @test label.input_b.left_location == GO.loc_exterior
+    @test label.input_b.right_location == GO.loc_interior
+    @test label.input_b.line_state == GO.overlay_boundary_part
+
+    single_line_edge = only(GO.overlay_merge_edges(
+        GO.overlay_node_segment_strings(alg, line_a, GI.MultiPoint([(10.0, 10.0)])),
+    ))
+    missing_b_label = GO.overlay_input_label(single_line_edge, GO.input_b)
+    @test missing_b_label.dimension == GO.dim_false
+    @test missing_b_label.line_state == GO.overlay_not_part
+    @test missing_b_label.on_location == GO.loc_exterior
+end
+
 @testset "OverlayNG point-point dispatch" begin
     alg = GO.OverlayNG()
     points_a = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0), (1.0, 1.0)])

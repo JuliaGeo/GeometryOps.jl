@@ -11,6 +11,17 @@
     overlay_symdifference = 4
 end
 
+@enum OverlayLineState::Int8 begin
+    overlay_not_part = 0
+    overlay_line_part = 1
+    overlay_boundary_part = 2
+end
+
+@enum OverlayCollapseRole::Int8 begin
+    overlay_not_collapsed = 0
+    overlay_collapsed = 1
+end
+
 """
     OverlayInputGeometry(alg, geom)
 
@@ -99,6 +110,30 @@ mutable struct OverlayEdge{T,K}
     source_directions::Vector{Bool}
     depth_delta::Int
     is_collapsed::Bool
+end
+
+"""
+    OverlayInputLabel
+
+Per-input OverlayNG label state for one merged edge.
+"""
+struct OverlayInputLabel
+    dimension::TopologicalDimension
+    on_location::TopologicalLocation
+    left_location::TopologicalLocation
+    right_location::TopologicalLocation
+    line_state::OverlayLineState
+    collapse_role::OverlayCollapseRole
+end
+
+"""
+    OverlayLabel
+
+Overlay-specific per-input label pair, kept separate from RelateNG topology.
+"""
+struct OverlayLabel
+    input_a::OverlayInputLabel
+    input_b::OverlayInputLabel
 end
 
 function OverlayEdgeSourceInfo(segment::NGSegmentString)
@@ -217,6 +252,94 @@ function overlay_primary_ring_role(edge::OverlayEdge)
     any(source -> source.ring_role == ring_hole, edge.sources) && return ring_hole
     return ring_none
 end
+
+"""
+    overlay_label(edge)
+
+Build the local OverlayNG label pair implied by an edge's coincident sources.
+"""
+function overlay_label(edge::OverlayEdge)
+    return OverlayLabel(
+        overlay_input_label(edge, input_a),
+        overlay_input_label(edge, input_b),
+    )
+end
+
+function overlay_input_label(edge::OverlayEdge, input_side::NGInputSide)
+    label = overlay_empty_input_label()
+    for (source, is_forward) in zip(edge.sources, edge.source_directions)
+        source.input_side == input_side || continue
+        label = overlay_merge_input_label(label, overlay_source_label(source, is_forward))
+    end
+    return label
+end
+
+overlay_empty_input_label() = OverlayInputLabel(
+    dim_false,
+    loc_exterior,
+    loc_exterior,
+    loc_exterior,
+    overlay_not_part,
+    overlay_not_collapsed,
+)
+
+function overlay_source_label(source::OverlayEdgeSourceInfo, is_forward::Bool)
+    collapse_role = source.is_collapsed ? overlay_collapsed : overlay_not_collapsed
+    if source.source_dimension == dim_area && !source.is_collapsed
+        left_location, right_location = overlay_boundary_locations(source, is_forward)
+        return OverlayInputLabel(
+            dim_area,
+            loc_interior,
+            left_location,
+            right_location,
+            overlay_boundary_part,
+            collapse_role,
+        )
+    elseif source.source_dimension == dim_line || source.is_collapsed
+        return OverlayInputLabel(
+            dim_line,
+            loc_interior,
+            loc_exterior,
+            loc_exterior,
+            overlay_line_part,
+            collapse_role,
+        )
+    end
+    return overlay_empty_input_label()
+end
+
+function overlay_boundary_locations(source::OverlayEdgeSourceInfo, is_forward::Bool)
+    delta = overlay_depth_delta(source, is_forward)
+    delta < 0 && return loc_interior, loc_exterior
+    delta > 0 && return loc_exterior, loc_interior
+    return loc_exterior, loc_exterior
+end
+
+function overlay_merge_input_label(a::OverlayInputLabel, b::OverlayInputLabel)
+    return OverlayInputLabel(
+        max_dimension(a.dimension, b.dimension),
+        overlay_merge_location(a.on_location, b.on_location),
+        overlay_merge_location(a.left_location, b.left_location),
+        overlay_merge_location(a.right_location, b.right_location),
+        overlay_merge_line_state(a.line_state, b.line_state),
+        overlay_merge_collapse_role(a.collapse_role, b.collapse_role),
+    )
+end
+
+function overlay_merge_location(a::TopologicalLocation, b::TopologicalLocation)
+    (a == loc_interior || b == loc_interior) && return loc_interior
+    (a == loc_boundary || b == loc_boundary) && return loc_boundary
+    return loc_exterior
+end
+
+function overlay_merge_line_state(a::OverlayLineState, b::OverlayLineState)
+    (a == overlay_boundary_part || b == overlay_boundary_part) && return overlay_boundary_part
+    (a == overlay_line_part || b == overlay_line_part) && return overlay_line_part
+    return overlay_not_part
+end
+
+overlay_merge_collapse_role(a::OverlayCollapseRole, b::OverlayCollapseRole) =
+    (a == overlay_collapsed || b == overlay_collapsed) ? overlay_collapsed : overlay_not_collapsed
 
 """
     overlay_node_segment_strings(alg, a, b, [T])
