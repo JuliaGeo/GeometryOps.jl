@@ -35,7 +35,7 @@ RelateNG(::Planar; kwargs...) = RelateNG(; kwargs...)
 
 Placeholder precision model for full-precision OverlayNG operation.
 """
-struct NoPrecisionModel end
+struct NoPrecisionModel <: NGPrecisionModel end
 
 """
     OverlayNG(; strict = false, area_result_only = false, optimized = true,

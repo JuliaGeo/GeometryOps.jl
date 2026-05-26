@@ -6,6 +6,8 @@
 
 include("common/topology.jl")
 include("common/intersection_matrix.jl")
+include("common/extraction.jl")
+include("common/segment_primitives.jl")
 include("common/algorithms.jl")
 
 include("relateng/relateng.jl")
