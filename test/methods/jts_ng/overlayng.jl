@@ -29,7 +29,8 @@ const _JTS_OVERLAY_FIXTURE_DIR = normpath(joinpath(
 
 function _overlayng_fixture_value(alg::GO.OverlayNG, op::JTSOperation)
     name = lowercase(op.name)
-    a, b = op.arguments[1], op.arguments[2]
+    a = _overlayng_fixture_argument(op.arguments[1])
+    b = _overlayng_fixture_argument(op.arguments[2])
     if name == "intersection" || name == "intersectionng"
         return GO.intersection(alg, a, b)
     elseif name == "union" || name == "unionng"
@@ -41,6 +42,9 @@ function _overlayng_fixture_value(alg::GO.OverlayNG, op::JTSOperation)
     end
     error("Unsupported OverlayNG fixture operation: $(op.name)")
 end
+
+_overlayng_fixture_argument(geom) = geom
+_overlayng_fixture_argument(::JTSEmptyGeometry) = GI.FeatureCollection(Any[])
 
 function _overlayng_flatten_components(value)
     value isa AbstractVector && return reduce(vcat, map(_overlayng_flatten_components, value); init = Any[])
@@ -444,6 +448,32 @@ end
     @test area_only_union == Any[polygon]
 end
 
+@testset "OverlayNG empty input dispatch" begin
+    alg = GO.OverlayNG()
+    empty = GI.FeatureCollection(Any[])
+    polygon = GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]])
+    line = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
+    point = GI.Point(1.0, 1.0)
+
+    @test isempty(GO.intersection(alg, polygon, empty))
+    @test GO.union(alg, polygon, empty) == Any[polygon]
+    @test GO.difference(alg, polygon, empty) == Any[polygon]
+    @test isempty(GO.difference(alg, empty, polygon))
+    @test GO.symdifference(alg, empty, polygon) == Any[polygon]
+
+    @test GO.union(alg, empty, line) == Any[line]
+    @test GO.difference(alg, line, empty) == Any[line]
+    @test isempty(GO.intersection(alg, empty, point))
+    @test GO.symdifference(alg, empty, point) == Any[point]
+    @test isempty(GO.union(alg, empty, empty))
+end
+
 @testset "OverlayNG area-area dispatch" begin
     alg = GO.OverlayNG()
     square_a = GI.Polygon([[
@@ -624,6 +654,9 @@ end
         ("TestNGOverlayL.xml", 1:8, nothing),
         ("TestNGOverlayA.xml", 1:17, nothing),
         ("TestNGOverlayA.xml", 20:20, nothing),
+        ("TestNGOverlayEmpty.xml", 1:2, nothing),
+        ("TestNGOverlayEmpty.xml", 4:8, nothing),
+        ("TestNGOverlayEmpty.xml", 10:16, nothing),
     )
 
     matched_operations = 0
@@ -639,5 +672,5 @@ end
             end
         end
     end
-    @test matched_operations == 144
+    @test matched_operations == 214
 end
