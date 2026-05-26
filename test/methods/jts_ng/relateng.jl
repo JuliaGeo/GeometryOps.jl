@@ -2,6 +2,37 @@ using Test
 import GeometryOps as GO
 import GeoInterface as GI
 import GeoInterface.Extents: Extents
+using GeometryOpsTestHelpers
+
+function _relateng_fixture_value(alg::GO.RelateNG, op::JTSOperation)
+    name = lowercase(op.name)
+    a = op.arguments[1]
+    b = op.arguments[2]
+    if name == "relate"
+        return GO.relate(alg, a, b, op.arguments[3])
+    elseif name == "intersects"
+        return GO.intersects(alg, a, b)
+    elseif name == "contains"
+        return GO.contains(alg, a, b)
+    elseif name == "covers"
+        return GO.covers(alg, a, b)
+    elseif name == "coveredby"
+        return GO.coveredby(alg, a, b)
+    elseif name == "within"
+        return GO.within(alg, a, b)
+    elseif name == "touches"
+        return GO.touches(alg, a, b)
+    elseif name == "crosses"
+        return GO.crosses(alg, a, b)
+    elseif name == "overlaps"
+        return GO.overlaps(alg, a, b)
+    elseif name == "disjoint"
+        return GO.disjoint(alg, a, b)
+    elseif name == "equalstopo"
+        return GO.equals(alg, a, b)
+    end
+    error("Unsupported RelateNG fixture operation: $(op.name)")
+end
 
 @testset "RelatePointLocator point and line locations" begin
     point_locator = GO.RelatePointLocator(GI.Point(1.0, 1.0))
@@ -237,6 +268,99 @@ end
     endpoint_alg = GO.RelateNG(; boundary_node_rule = GO.EndpointBoundaryNodeRule())
     endpoint_prepared = GO.relate_prepare(endpoint_alg, polygon)
     @test_throws ArgumentError GO.intersects(alg, endpoint_prepared, interior_line)
+end
+
+@testset "RelateNG JTS XML conformance smoke" begin
+    xml = """
+    <run>
+      <desc>RelateNG staged conformance smoke</desc>
+      <case>
+        <desc>PP equal</desc>
+        <a>POINT (0 0)</a>
+        <b>POINT (0 0)</b>
+        <test><op name="relate" arg1="A" arg2="B" arg3="0FFFFFFF2">true</op></test>
+        <test><op name="intersects" arg1="A" arg2="B">true</op></test>
+        <test><op name="disjoint" arg1="A" arg2="B">false</op></test>
+        <test><op name="equalsTopo" arg1="A" arg2="B">true</op></test>
+      </case>
+      <case>
+        <desc>PL endpoint</desc>
+        <a>POINT (0 0)</a>
+        <b>LINESTRING (0 0, 2 0)</b>
+        <test><op name="intersects" arg1="A" arg2="B">true</op></test>
+        <test><op name="touches" arg1="A" arg2="B">true</op></test>
+        <test><op name="within" arg1="A" arg2="B">false</op></test>
+        <test><op name="coveredBy" arg1="A" arg2="B">true</op></test>
+      </case>
+      <case>
+        <desc>PA interior</desc>
+        <a>POINT (1 1)</a>
+        <b>POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0))</b>
+        <test><op name="intersects" arg1="A" arg2="B">true</op></test>
+        <test><op name="within" arg1="A" arg2="B">true</op></test>
+        <test><op name="coveredBy" arg1="A" arg2="B">true</op></test>
+        <test><op name="touches" arg1="A" arg2="B">false</op></test>
+      </case>
+      <case>
+        <desc>LL crossing</desc>
+        <a>LINESTRING (0 0, 2 2)</a>
+        <b>LINESTRING (0 2, 2 0)</b>
+        <test><op name="intersects" arg1="A" arg2="B">true</op></test>
+        <test><op name="crosses" arg1="A" arg2="B">true</op></test>
+        <test><op name="touches" arg1="A" arg2="B">false</op></test>
+        <test><op name="overlaps" arg1="A" arg2="B">false</op></test>
+      </case>
+      <case>
+        <desc>LA boundary line</desc>
+        <a>LINESTRING (0 0, 2 0)</a>
+        <b>POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))</b>
+        <test><op name="intersects" arg1="A" arg2="B">true</op></test>
+        <test><op name="touches" arg1="A" arg2="B">true</op></test>
+        <test><op name="within" arg1="A" arg2="B">false</op></test>
+        <test><op name="coveredBy" arg1="A" arg2="B">true</op></test>
+      </case>
+      <case>
+        <desc>AA overlap</desc>
+        <a>POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))</a>
+        <b>POLYGON ((1 0, 3 0, 3 2, 1 2, 1 0))</b>
+        <test><op name="intersects" arg1="A" arg2="B">true</op></test>
+        <test><op name="overlaps" arg1="A" arg2="B">true</op></test>
+        <test><op name="touches" arg1="A" arg2="B">false</op></test>
+      </case>
+      <case>
+        <desc>AA adjacent</desc>
+        <a>POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))</a>
+        <b>POLYGON ((2 0, 4 0, 4 2, 2 2, 2 0))</b>
+        <test><op name="intersects" arg1="A" arg2="B">true</op></test>
+        <test><op name="touches" arg1="A" arg2="B">true</op></test>
+        <test><op name="overlaps" arg1="A" arg2="B">false</op></test>
+      </case>
+    </run>
+    """
+
+    mktemp() do path, io
+        write(io, xml)
+        close(io)
+
+        test_set = load_test_set(path)
+        inventory = conformance_inventory(test_set)
+        @test inventory[:point_point] == 1
+        @test inventory[:point_line] == 1
+        @test inventory[:point_area] == 1
+        @test inventory[:line_line] == 1
+        @test inventory[:line_area] == 1
+        @test inventory[:area_area] == 2
+
+        for alg in (GO.RelateNG(), GO.RelateNG(; prepared = true))
+            for case in test_set.cases
+                for op in case.operations
+                    @test is_relate_operation(op)
+                    @test is_runnable(op)
+                    @test _relateng_fixture_value(alg, op) === op.expected
+                end
+            end
+        end
+    end
 end
 
 @testset "Relate topology interaction predicates" begin
