@@ -5,6 +5,10 @@ import GeoInterface as GI
 _overlay_tuples(geoms) = map(geom -> GO.tuples(geom), geoms)
 _ring_tuples(poly, i = 1) = [GO.tuples(point) for point in GI.getpoint(GI.getring(poly, i))]
 _overlay_area(geoms) = sum(geom -> GO.area(geom), geoms; init = 0.0)
+_result_points(geoms) = [GO.tuples(geom) for geom in geoms if GI.trait(geom) isa GI.PointTrait]
+_result_lines(geoms) = [
+    [GO.tuples(point) for point in GI.getpoint(geom)] for geom in geoms if GI.trait(geom) isa GI.LineStringTrait
+]
 
 @testset "OverlayNG input wrappers" begin
     alg = GO.OverlayNG()
@@ -274,7 +278,7 @@ end
     line_graph = GO.overlay_graph(GO.overlay_merge_edges(alg, line_a, line_b))
 
     GO.overlay_mark_result_edges!(line_graph, GO.overlay_intersection)
-    @test count(half_edge -> half_edge.result_line, line_graph.half_edges) == 1
+    @test count(half_edge -> half_edge.result_line, line_graph.half_edges) == 2
 
     GO.overlay_mark_result_edges!(line_graph, GO.overlay_difference)
     @test count(half_edge -> half_edge.result_line, line_graph.half_edges) == 0
@@ -284,7 +288,7 @@ end
     ))
 
     GO.overlay_mark_result_edges!(single_line_graph, GO.overlay_difference)
-    @test count(half_edge -> half_edge.result_line, single_line_graph.half_edges) == 1
+    @test count(half_edge -> half_edge.result_line, single_line_graph.half_edges) == 2
 
     GO.overlay_mark_result_edges!(single_line_graph, GO.overlay_intersection)
     @test count(half_edge -> half_edge.result_line, single_line_graph.half_edges) == 0
@@ -421,10 +425,52 @@ end
     @test _overlay_area(hole_result) ≈ 12.0
 end
 
-@testset "OverlayNG unsupported edge overlay" begin
+@testset "OverlayNG line result extraction" begin
     alg = GO.OverlayNG()
-    line_a = GI.LineString([(0.0, 0.0), (1.0, 1.0)])
-    line_b = GI.LineString([(0.0, 1.0), (1.0, 0.0)])
+    line_a = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
+    line_b = GI.LineString([(1.0, 0.0), (3.0, 0.0)])
 
-    @test_throws ArgumentError GO.intersection(alg, line_a, line_b)
+    @test Set(_result_lines(GO.intersection(alg, line_a, line_b))) ==
+        Set([[(1.0, 0.0), (2.0, 0.0)]])
+    @test Set(_result_lines(GO.union(alg, line_a, line_b))) == Set([
+        [(0.0, 0.0), (1.0, 0.0)],
+        [(1.0, 0.0), (2.0, 0.0)],
+        [(2.0, 0.0), (3.0, 0.0)],
+    ])
+    @test Set(_result_lines(GO.difference(alg, line_a, line_b))) ==
+        Set([[(0.0, 0.0), (1.0, 0.0)]])
+    @test Set(_result_lines(GO.symdifference(alg, line_a, line_b))) == Set([
+        [(0.0, 0.0), (1.0, 0.0)],
+        [(2.0, 0.0), (3.0, 0.0)],
+    ])
+
+    crossing_a = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
+    crossing_b = GI.LineString([(0.0, 2.0), (2.0, 0.0)])
+    crossing_intersection = GO.intersection(alg, crossing_a, crossing_b)
+    @test _result_points(crossing_intersection) == [(1.0, 1.0)]
+    @test isempty(_result_lines(crossing_intersection))
+end
+
+@testset "OverlayNG line-area extraction" begin
+    alg = GO.OverlayNG()
+    square = GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]])
+    crossing = GI.LineString([(-1.0, 1.0), (3.0, 1.0)])
+
+    @test Set(_result_lines(GO.intersection(alg, crossing, square))) ==
+        Set([[(0.0, 1.0), (2.0, 1.0)]])
+    @test Set(_result_lines(GO.difference(alg, crossing, square))) == Set([
+        [(-1.0, 1.0), (0.0, 1.0)],
+        [(2.0, 1.0), (3.0, 1.0)],
+    ])
+
+    touch = GI.LineString([(-1.0, -1.0), (0.0, 0.0)])
+    touch_intersection = GO.intersection(alg, touch, square)
+    @test _result_points(touch_intersection) == [(0.0, 0.0)]
+    @test isempty(_result_lines(touch_intersection))
 end
