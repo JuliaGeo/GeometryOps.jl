@@ -331,7 +331,15 @@ function relate_segment_strings(
     end
 end
 
-struct RelatePreparedEdgeIndex{L,I}
+struct RelateSegmentRecord{S,E,X}
+    segment::S
+    segment_index::Int
+    edge::E
+    extent::X
+end
+
+struct RelatePreparedEdgeIndex{R,L,I}
+    records::R
     lines::L
     index::I
 end
@@ -344,10 +352,29 @@ Return a cached NaturalIndex over A-side segment extents, or `nothing`.
 function relate_prepared_edge_index(relate_geometry::RelateGeometry, ::Type{T} = Float64) where {T}
     return get!(relate_geometry.prepared_edge_index_cache, T) do
         segments = relate_segment_strings(relate_geometry, T; input_side = input_a)
-        lines = _relate_segment_lines(segments, T)
-        isempty(lines) && return nothing
-        RelatePreparedEdgeIndex(lines, NaturalIndexing.NaturalIndex(lines))
+        records, lines, extents = _relate_segment_records(segments, T)
+        isempty(records) && return nothing
+        RelatePreparedEdgeIndex(records, lines, NaturalIndexing.NaturalIndex(extents))
     end
+end
+
+function _relate_segment_records(segments, ::Type{T}) where {T}
+    records = Any[]
+    lines = Any[]
+    extents = Extents.Extent[]
+    for segment in segments
+        length(segment.points) < 2 && continue
+        for i in 1:(length(segment.points) - 1)
+            p1, p2 = segment.points[i], segment.points[i + 1]
+            p1 == p2 && continue
+            edge = (p1, p2)
+            extent = ng_segment_extent(edge, T)
+            push!(records, RelateSegmentRecord(segment, i, edge, extent))
+            push!(lines, _lineedge(edge, T))
+            push!(extents, extent)
+        end
+    end
+    return records, lines, extents
 end
 
 function _relate_segment_lines(segments, ::Type{T}) where {T}

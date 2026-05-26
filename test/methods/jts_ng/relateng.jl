@@ -195,6 +195,7 @@ end
     prepared_index = GO.relate_prepared_edge_index(relate)
     @test prepared_index === GO.relate_prepared_edge_index(relate)
     @test !isnothing(prepared_index)
+    @test length(prepared_index.records) == 8
     @test length(prepared_index.lines) == 8
     @test Extents.intersects(Extents.extent(prepared_index.index), GI.extent(prepared_index.lines[1]))
 end
@@ -523,7 +524,8 @@ end
         (0.0, 0.0),
     ]])
 
-    @test_throws ArgumentError GO.intersects(GO.RelateNG(), crossing_line_a, polygon)
+    @test_throws ArgumentError GO.relate_matrix(GO.RelateNG(), crossing_line_a, polygon)
+    @test_throws ArgumentError GO.contains(GO.RelateNG(), polygon, crossing_line_a)
 end
 
 @testset "RelateNG mutual line edge events" begin
@@ -536,6 +538,14 @@ end
     @test !GO.touches(alg, crossing_line_a, crossing_line_b)
     @test GO.de9im_string(GO.relate_matrix(alg, crossing_line_a, crossing_line_b)) ==
         "0F1FF0102"
+
+    prepared_alg = GO.RelateNG(; prepared = true)
+    @test GO.de9im_string(GO.relate_matrix(prepared_alg, crossing_line_a, crossing_line_b)) ==
+        GO.de9im_string(GO.relate_matrix(alg, crossing_line_a, crossing_line_b))
+    prepared_a = GO.RelateGeometry(crossing_line_a; prepared = true)
+    prepared_index = GO.relate_prepared_edge_index(prepared_a)
+    @test prepared_index === GO.relate_prepared_edge_index(prepared_a)
+    @test length(prepared_index.records) == 1
 
     touching_line = GI.LineString([(2.0, 2.0), (3.0, 2.0)])
     @test GO.intersects(alg, crossing_line_a, touching_line)
@@ -557,4 +567,56 @@ end
     @test GO.covers(alg, crossing_line_a, equal_line)
     @test GO.de9im_string(GO.relate_matrix(alg, crossing_line_a, equal_line)) ==
         "1FFF0FFF2"
+
+    self_crossing_line = GI.LineString([
+        (0.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (2.0, 0.0),
+    ])
+    crossing_query = GI.LineString([(0.0, 1.0), (2.0, 1.0)])
+    @test GO.crosses(alg, self_crossing_line, crossing_query)
+    @test GO.de9im_string(GO.relate_matrix(alg, self_crossing_line, crossing_query)) ==
+        "0F1FF0102"
+    @test GO.de9im_string(GO.relate_matrix(prepared_alg, self_crossing_line, crossing_query)) ==
+        "0F1FF0102"
+end
+
+@testset "RelateNG interaction predicates with area edges" begin
+    alg = GO.RelateNG()
+    polygon = GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]])
+    crossing_line = GI.LineString([(-1.0, 1.0), (3.0, 1.0)])
+    interior_line = GI.LineString([(0.5, 1.0), (1.5, 1.0)])
+    exterior_line = GI.LineString([(3.0, 3.0), (4.0, 4.0)])
+
+    @test GO.intersects(alg, crossing_line, polygon)
+    @test !GO.disjoint(alg, crossing_line, polygon)
+    @test GO.intersects(alg, interior_line, polygon)
+    @test GO.disjoint(alg, exterior_line, polygon)
+
+    overlapping_polygon = GI.Polygon([[
+        (1.0, 1.0),
+        (3.0, 1.0),
+        (3.0, 3.0),
+        (1.0, 3.0),
+        (1.0, 1.0),
+    ]])
+    exterior_polygon = GI.Polygon([[
+        (3.0, 3.0),
+        (4.0, 3.0),
+        (4.0, 4.0),
+        (3.0, 4.0),
+        (3.0, 3.0),
+    ]])
+
+    @test GO.intersects(alg, polygon, overlapping_polygon)
+    @test !GO.disjoint(alg, polygon, overlapping_polygon)
+    @test !GO.intersects(alg, polygon, exterior_polygon)
+    @test GO.disjoint(alg, polygon, exterior_polygon)
 end

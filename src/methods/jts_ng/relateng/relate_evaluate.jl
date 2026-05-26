@@ -47,6 +47,7 @@ function _relate_can_evaluate_current_paths(computer::RelateTopologyComputer)
     dim_b == dim_false && return true
     dim_a == dim_point && return true
     dim_b == dim_point && return true
+    computer.predicate isa RelateInteractionPredicate && return true
     !computer.geom_a.has_areas && !computer.geom_b.has_areas && return true
     return false
 end
