@@ -1145,15 +1145,29 @@ function overlay_compute_edge_overlay(
         input_area_side = overlay_input_area_side(input_a, input_b),
     )
 
-    results = overlay_extract_result_polygons(graph)
+    polygons = overlay_extract_result_polygons(graph)
+    results = copy(polygons)
     if !alg.area_result_only
-        append!(results, overlay_extract_result_lines(graph))
-        if op == overlay_intersection
+        lines = Any[]
+        if overlay_allows_result_lines(op, alg.strict, !isempty(polygons))
+            lines = overlay_extract_result_lines(graph)
+            append!(results, lines)
+        end
+
+        has_result_components = !isempty(polygons) || !isempty(lines)
+        if op == overlay_intersection &&
+           overlay_allows_result_intersection_points(alg.strict, has_result_components)
             append!(results, overlay_extract_intersection_points(graph; strict = alg.strict))
         end
     end
     return overlay_filter_results(alg, target, results)
 end
+
+overlay_allows_result_lines(op::OverlayOpCode, strict::Bool, has_result_area::Bool) =
+    !has_result_area || !strict || op == overlay_symdifference || op == overlay_union
+
+overlay_allows_result_intersection_points(strict::Bool, has_result_components::Bool) =
+    !has_result_components || !strict
 
 function overlay_input_area_side(a_input::OverlayInputGeometry, b_input::OverlayInputGeometry)
     a_input.dimension == dim_area && return input_a

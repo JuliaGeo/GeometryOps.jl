@@ -449,6 +449,16 @@ end
     crossing_intersection = GO.intersection(alg, crossing_a, crossing_b)
     @test _result_points(crossing_intersection) == [(1.0, 1.0)]
     @test isempty(_result_lines(crossing_intersection))
+
+    mixed_a = GI.LineString([(0.0, 0.0), (2.0, 0.0), (3.0, 1.0), (3.0, -1.0)])
+    mixed_b = GI.LineString([(1.0, 0.0), (4.0, 0.0)])
+    mixed_intersection = GO.intersection(alg, mixed_a, mixed_b)
+    @test Set(_result_lines(mixed_intersection)) == Set([[(1.0, 0.0), (2.0, 0.0)]])
+    @test _result_points(mixed_intersection) == [(3.0, 0.0)]
+
+    strict_intersection = GO.intersection(GO.OverlayNG(; strict = true), mixed_a, mixed_b)
+    @test Set(_result_lines(strict_intersection)) == Set([[(1.0, 0.0), (2.0, 0.0)]])
+    @test isempty(_result_points(strict_intersection))
 end
 
 @testset "OverlayNG line-area extraction" begin
