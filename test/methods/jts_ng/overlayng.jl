@@ -57,15 +57,21 @@ function _overlayng_flatten_components(value)
     return Any[value]
 end
 
-function _overlayng_line_key(line)
+_overlayng_segment_key(a, b) = min((a, b), (b, a))
+
+function _overlayng_line_segments(line)
     points = [GO.tuples(point) for point in GI.getpoint(line)]
-    reversed_points = reverse(points)
-    return Tuple(min(points, reversed_points))
+    segments = Tuple[]
+    for index in 1:(length(points) - 1)
+        points[index] == points[index + 1] && continue
+        push!(segments, _overlayng_segment_key(points[index], points[index + 1]))
+    end
+    return segments
 end
 
 function _overlayng_fixture_summary(value)
     points = Set{Any}()
-    lines = Set{Any}()
+    line_segments = Set{Any}()
     areas = Float64[]
     ring_counts = Int[]
     for geom in _overlayng_flatten_components(value)
@@ -75,7 +81,7 @@ function _overlayng_fixture_summary(value)
         elseif trait isa GI.LineTrait ||
                trait isa GI.LineStringTrait ||
                trait isa GI.LinearRingTrait
-            push!(lines, _overlayng_line_key(geom))
+            union!(line_segments, _overlayng_line_segments(geom))
         elseif trait isa GI.PolygonTrait
             push!(areas, round(GO.area(geom); digits = 8))
             push!(ring_counts, GI.nring(geom))
@@ -83,7 +89,7 @@ function _overlayng_fixture_summary(value)
             error("Unsupported OverlayNG fixture result component: $(typeof(geom))")
         end
     end
-    return (; points, lines, areas = sort(areas), ring_counts = sort(ring_counts))
+    return (; points, line_segments, areas = sort(areas), ring_counts = sort(ring_counts))
 end
 
 _overlayng_fixture_operation_allowed(::Nothing, op::JTSOperation) = true
@@ -590,9 +596,11 @@ end
     alg = GO.OverlayNG()
     fixtures = (
         ("TestNGOverlayP.xml", 1:5, nothing),
-        ("TestNGOverlayL.xml", 1:4, nothing),
+        ("TestNGOverlayL.xml", 1:8, nothing),
         ("TestNGOverlayA.xml", 1:4, nothing),
         ("TestNGOverlayA.xml", 5:5, Set(["intersectionng", "differenceng"])),
+        ("TestNGOverlayA.xml", 6:6, Set(["intersectionng", "unionng", "differenceng"])),
+        ("TestNGOverlayA.xml", 7:8, nothing),
     )
 
     matched_operations = 0
@@ -608,5 +616,5 @@ end
             end
         end
     end
-    @test matched_operations == 63
+    @test matched_operations == 95
 end
