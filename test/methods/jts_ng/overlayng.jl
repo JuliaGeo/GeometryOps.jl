@@ -530,6 +530,31 @@ end
     @test Set(_result_lines(touch_intersection)) == Set([[(30.0, 20.0), (30.0, 25.0)]])
     @test _result_points(touch_intersection) == [(30.0, 15.0)]
     @test _overlay_area(touch_intersection) == 0.0
+
+    touch_union = GO.union(alg, touch_line_point_a, touch_line_point_b)
+    @test length(touch_union) == 1
+    @test GI.nring(only(touch_union)) == 2
+    @test _overlay_area(touch_union) ≈ 487.5
+
+    touch_symdifference = GO.symdifference(alg, touch_line_point_a, touch_line_point_b)
+    @test length(touch_symdifference) == 1
+    @test GI.nring(only(touch_symdifference)) == 2
+    @test _overlay_area(touch_symdifference) ≈ 487.5
+
+    overlap_touch_a = touch_line_point_a
+    overlap_touch_b = GI.Polygon([[
+        (40.0, 25.0),
+        (25.0, 25.0),
+        (35.0, 15.0),
+        (30.0, 15.0),
+        (30.0, 10.0),
+        (40.0, 10.0),
+        (40.0, 25.0),
+    ]])
+    overlap_touch_symdifference = GO.symdifference(alg, overlap_touch_a, overlap_touch_b)
+    @test length(overlap_touch_symdifference) == 1
+    @test GI.nring(only(overlap_touch_symdifference)) == 3
+    @test _overlay_area(overlap_touch_symdifference) ≈ 525.0
 end
 
 @testset "OverlayNG line result extraction" begin
@@ -597,10 +622,8 @@ end
     fixtures = (
         ("TestNGOverlayP.xml", 1:5, nothing),
         ("TestNGOverlayL.xml", 1:8, nothing),
-        ("TestNGOverlayA.xml", 1:4, nothing),
-        ("TestNGOverlayA.xml", 5:5, Set(["intersectionng", "differenceng"])),
-        ("TestNGOverlayA.xml", 6:6, Set(["intersectionng", "unionng", "differenceng"])),
-        ("TestNGOverlayA.xml", 7:8, nothing),
+        ("TestNGOverlayA.xml", 1:17, nothing),
+        ("TestNGOverlayA.xml", 20:20, nothing),
     )
 
     matched_operations = 0
@@ -616,5 +639,5 @@ end
             end
         end
     end
-    @test matched_operations == 95
+    @test matched_operations == 144
 end

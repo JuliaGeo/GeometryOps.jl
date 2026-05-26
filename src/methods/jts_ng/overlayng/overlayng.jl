@@ -760,7 +760,7 @@ function overlay_result_area_rings!(graph::OverlayGraph)
         half_edge.visited && continue
         ring_id += 1
         ring = overlay_result_area_ring!(half_edge, ring_id)
-        length(ring.points) >= 4 && _ng_orientation_sum(ring.points) != 0.0 && push!(rings, ring)
+        append!(rings, overlay_minimal_result_rings(ring.points))
     end
     return rings
 end
@@ -780,6 +780,51 @@ function overlay_result_area_ring!(start_edge::OverlayHalfEdge, ring_id::Integer
     end
     push!(points, first(points))
     return OverlayResultRing(points, !ng_is_clockwise(points), Any[])
+end
+
+function overlay_minimal_result_rings(points)
+    rings = OverlayResultRing[]
+    length(points) < 4 && return rings
+
+    open_points = collect(points[1:(end - 1)])
+    extracted_loops = Any[]
+    while true
+        loop_range = overlay_repeated_vertex_loop_range(open_points)
+        isnothing(loop_range) && break
+
+        start_index, end_index = loop_range
+        loop_points = collect(open_points[start_index:end_index])
+        push!(extracted_loops, loop_points)
+        open_points = vcat(open_points[1:start_index], open_points[(end_index + 1):end])
+    end
+
+    for loop_points in extracted_loops
+        overlay_push_result_ring!(rings, loop_points)
+    end
+    overlay_push_result_ring!(rings, open_points)
+    return rings
+end
+
+function overlay_repeated_vertex_loop_range(points)
+    seen = Dict{Any,Int}()
+    for (index, point) in enumerate(points)
+        previous_index = get(seen, point, nothing)
+        if !isnothing(previous_index) && index > previous_index + 1
+            return previous_index, index
+        end
+        seen[point] = index
+    end
+    return nothing
+end
+
+function overlay_push_result_ring!(rings, open_points)
+    length(open_points) >= 3 || return rings
+    closed_points = collect(open_points)
+    first(closed_points) == last(closed_points) || push!(closed_points, first(closed_points))
+    length(closed_points) >= 4 || return rings
+    _ng_orientation_sum(closed_points) == 0.0 && return rings
+    push!(rings, OverlayResultRing(closed_points, !ng_is_clockwise(closed_points), Any[]))
+    return rings
 end
 
 function overlay_result_ring_polygons(rings)
