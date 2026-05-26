@@ -41,17 +41,22 @@ function RelateTopologyComputer(
 end
 
 function RelateTopologyComputer(alg::RelateNG, predicate::TopologyPredicate, a, b)
-    geom_a = RelateGeometry(
-        a;
-        prepared = alg.prepared,
-        boundary_node_rule = alg.boundary_node_rule,
-    )
-    geom_b = RelateGeometry(
-        b;
-        prepared = false,
-        boundary_node_rule = alg.boundary_node_rule,
-    )
+    geom_a = _relate_query_geometry(alg, a, input_a)
+    geom_b = _relate_query_geometry(alg, b, input_b)
     return RelateTopologyComputer(predicate, geom_a, geom_b)
+end
+
+function _relate_query_geometry(alg::RelateNG, geom, input_side::NGInputSide)
+    return RelateGeometry(
+        geom;
+        prepared = input_side == input_a && alg.prepared,
+        boundary_node_rule = alg.boundary_node_rule,
+    )
+end
+
+function _relate_query_geometry(alg::RelateNG, geom::RelateGeometry, ::NGInputSide)
+    _relate_check_boundary_node_rule(alg, geom)
+    return geom
 end
 
 relate_geometry(computer::RelateTopologyComputer, input_side::NGInputSide) =

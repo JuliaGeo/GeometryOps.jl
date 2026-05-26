@@ -200,6 +200,45 @@ end
     @test Extents.intersects(Extents.extent(prepared_index.index), GI.extent(prepared_index.lines[1]))
 end
 
+@testset "RelateNG prepared geometry queries" begin
+    alg = GO.RelateNG(; prepared = true)
+    polygon = GI.Polygon([[
+        (0.0, 0.0),
+        (4.0, 0.0),
+        (4.0, 4.0),
+        (0.0, 4.0),
+        (0.0, 0.0),
+    ]])
+    prepared_polygon = GO.relate_prepare(alg, polygon)
+
+    @test prepared_polygon.prepared
+    @test GO.relate_prepare(alg, prepared_polygon) === prepared_polygon
+
+    unprepared_polygon = GO.RelateGeometry(polygon)
+    @test GO.relate_prepare(unprepared_polygon) === unprepared_polygon
+    @test unprepared_polygon.prepared
+
+    locator = GO.relate_point_locator(prepared_polygon)
+    segments = GO.relate_segment_strings(prepared_polygon; input_side = GO.input_a)
+    edge_index = GO.relate_prepared_edge_index(prepared_polygon)
+
+    crossing_line = GI.LineString([(-1.0, 2.0), (5.0, 2.0)])
+    interior_line = GI.LineString([(1.0, 1.0), (3.0, 1.0)])
+
+    @test GO.intersects(alg, prepared_polygon, crossing_line)
+    @test GO.crosses(alg, prepared_polygon, crossing_line)
+    @test GO.contains(alg, prepared_polygon, interior_line)
+    @test GO.covers(alg, prepared_polygon, interior_line)
+
+    @test GO.relate_point_locator(prepared_polygon) === locator
+    @test GO.relate_segment_strings(prepared_polygon; input_side = GO.input_a) === segments
+    @test GO.relate_prepared_edge_index(prepared_polygon) === edge_index
+
+    endpoint_alg = GO.RelateNG(; boundary_node_rule = GO.EndpointBoundaryNodeRule())
+    endpoint_prepared = GO.relate_prepare(endpoint_alg, polygon)
+    @test_throws ArgumentError GO.intersects(alg, endpoint_prepared, interior_line)
+end
+
 @testset "Relate topology interaction predicates" begin
     a = Extents.Extent(X = (0.0, 1.0), Y = (0.0, 1.0))
     b = Extents.Extent(X = (2.0, 3.0), Y = (2.0, 3.0))

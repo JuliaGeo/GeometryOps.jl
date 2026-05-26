@@ -52,6 +52,46 @@ end
 RelateGeometry(alg::RelateNG, geom) =
     RelateGeometry(geom; prepared = alg.prepared, boundary_node_rule = alg.boundary_node_rule)
 
+"""
+    relate_prepare(alg, geom)
+    relate_prepare(geom; boundary_node_rule = Mod2BoundaryNodeRule())
+
+Wrap a geometry for repeated A-side RelateNG queries, preserving lazy caches.
+"""
+relate_prepare(alg::RelateNG, geom) =
+    RelateGeometry(geom; prepared = true, boundary_node_rule = alg.boundary_node_rule)
+
+relate_prepare(geom; boundary_node_rule::BoundaryNodeRule = Mod2BoundaryNodeRule()) =
+    RelateGeometry(geom; prepared = true, boundary_node_rule)
+
+function relate_prepare(alg::RelateNG, geom::RelateGeometry)
+    _relate_check_boundary_node_rule(alg, geom)
+    return relate_prepare(geom; boundary_node_rule = alg.boundary_node_rule)
+end
+
+function relate_prepare(
+    geom::RelateGeometry;
+    boundary_node_rule::BoundaryNodeRule = geom.boundary_node_rule,
+)
+    _relate_check_boundary_node_rule(boundary_node_rule, geom)
+    geom.prepared && return geom
+    geom.prepared = true
+    geom.locator_cache = nothing
+    return geom
+end
+
+function _relate_check_boundary_node_rule(alg::RelateNG, relate_geometry::RelateGeometry)
+    _relate_check_boundary_node_rule(alg.boundary_node_rule, relate_geometry)
+end
+
+function _relate_check_boundary_node_rule(
+    boundary_node_rule::BoundaryNodeRule,
+    relate_geometry::RelateGeometry,
+)
+    typeof(boundary_node_rule) == typeof(relate_geometry.boundary_node_rule) && return nothing
+    throw(ArgumentError("RelateGeometry boundary node rule does not match the RelateNG algorithm."))
+end
+
 function _relate_is_empty(geom)
     return _relate_is_empty(GI.trait(geom), geom)
 end
