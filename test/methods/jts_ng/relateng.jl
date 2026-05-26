@@ -515,7 +515,46 @@ end
 
 @testset "RelateNG point path unsupported edge cases" begin
     crossing_line_a = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
+    polygon = GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]])
+
+    @test_throws ArgumentError GO.intersects(GO.RelateNG(), crossing_line_a, polygon)
+end
+
+@testset "RelateNG mutual line edge events" begin
+    alg = GO.RelateNG()
+    crossing_line_a = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
     crossing_line_b = GI.LineString([(0.0, 2.0), (2.0, 0.0)])
 
-    @test_throws ArgumentError GO.intersects(GO.RelateNG(), crossing_line_a, crossing_line_b)
+    @test GO.intersects(alg, crossing_line_a, crossing_line_b)
+    @test GO.crosses(alg, crossing_line_a, crossing_line_b)
+    @test !GO.touches(alg, crossing_line_a, crossing_line_b)
+    @test GO.de9im_string(GO.relate_matrix(alg, crossing_line_a, crossing_line_b)) ==
+        "0F1FF0102"
+
+    touching_line = GI.LineString([(2.0, 2.0), (3.0, 2.0)])
+    @test GO.intersects(alg, crossing_line_a, touching_line)
+    @test GO.touches(alg, crossing_line_a, touching_line)
+    @test !GO.crosses(alg, crossing_line_a, touching_line)
+    @test GO.de9im_string(GO.relate_matrix(alg, crossing_line_a, touching_line)) ==
+        "FF1F00102"
+
+    overlapping_line = GI.LineString([(1.0, 1.0), (3.0, 3.0)])
+    @test GO.intersects(alg, crossing_line_a, overlapping_line)
+    @test GO.overlaps(alg, crossing_line_a, overlapping_line)
+    @test !GO.equals(alg, crossing_line_a, overlapping_line)
+    @test GO.de9im_string(GO.relate_matrix(alg, crossing_line_a, overlapping_line)) ==
+        "1010F0102"
+
+    equal_line = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
+    @test GO.equals(alg, crossing_line_a, equal_line)
+    @test GO.contains(alg, crossing_line_a, equal_line)
+    @test GO.covers(alg, crossing_line_a, equal_line)
+    @test GO.de9im_string(GO.relate_matrix(alg, crossing_line_a, equal_line)) ==
+        "1FFF0FFF2"
 end
