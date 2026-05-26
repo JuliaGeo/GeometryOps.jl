@@ -26,7 +26,7 @@ mutable struct RelateTopologyComputer{P,A,B}
     predicate::P
     geom_a::A
     geom_b::B
-    node_sections::Dict{Any,Vector{Any}}
+    node_sections::Dict{Any,Any}
 end
 
 function RelateTopologyComputer(
@@ -35,7 +35,7 @@ function RelateTopologyComputer(
     geom_b::RelateGeometry,
 )
     relate_init_predicate!(predicate, geom_a, geom_b)
-    computer = RelateTopologyComputer(predicate, geom_a, geom_b, Dict{Any,Vector{Any}}())
+    computer = RelateTopologyComputer(predicate, geom_a, geom_b, Dict{Any,Any}())
     relate_init_exterior_dimensions!(computer)
     return computer
 end
@@ -461,7 +461,9 @@ relate_is_proper(a::RelateNodeSection, b::RelateNodeSection) =
     relate_is_proper(a) && relate_is_proper(b)
 
 function relate_node_sections(computer::RelateTopologyComputer, point)
-    return get(computer.node_sections, _tuple_point(point), Any[])
+    node_sections = get(computer.node_sections, _tuple_point(point), nothing)
+    isnothing(node_sections) && return Any[]
+    return node_sections.sections
 end
 
 """
@@ -531,19 +533,37 @@ function relate_add_node_sections!(
     a::RelateNodeSection,
     b::RelateNodeSection,
 )
-    sections = get!(computer.node_sections, a.node_point) do
-        Any[]
+    node_sections = get!(computer.node_sections, a.node_point) do
+        RelateNodeSections(a.node_point)
     end
-    push!(sections, a)
-    push!(sections, b)
+    relate_add_node_section!(node_sections, a)
+    relate_add_node_section!(node_sections, b)
     return computer
 end
 
 """
     relate_evaluate_nodes!(computer)
 
-Placeholder for full RelateNode edge-ring evaluation once node edges are ported.
+Evaluate accumulated node sections and update side/on topology dimensions.
 """
 function relate_evaluate_nodes!(computer::RelateTopologyComputer)
+    for node_sections in values(computer.node_sections)
+        relate_has_interaction_ab(node_sections) || continue
+        node = relate_create_node(node_sections)
+        point = node_sections.point
+        is_area_interior_a = relate_is_node_in_area(
+            computer.geom_a,
+            point,
+            relate_get_polygonal(node_sections, input_a),
+        )
+        is_area_interior_b = relate_is_node_in_area(
+            computer.geom_b,
+            point,
+            relate_get_polygonal(node_sections, input_b),
+        )
+        relate_finish_node!(node, is_area_interior_a, is_area_interior_b)
+        relate_evaluate_node_edges!(computer, node)
+        relate_is_result_known(computer) && return computer
+    end
     return computer
 end

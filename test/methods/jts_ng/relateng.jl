@@ -516,6 +516,16 @@ end
 
 @testset "RelateNG point path unsupported edge cases" begin
     crossing_line_a = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
+    mixed_collection = GI.GeometryCollection([
+        crossing_line_a,
+        GI.Polygon([[
+            (0.0, 0.0),
+            (2.0, 0.0),
+            (2.0, 2.0),
+            (0.0, 2.0),
+            (0.0, 0.0),
+        ]]),
+    ])
     polygon = GI.Polygon([[
         (0.0, 0.0),
         (2.0, 0.0),
@@ -524,8 +534,8 @@ end
         (0.0, 0.0),
     ]])
 
-    @test_throws ArgumentError GO.relate_matrix(GO.RelateNG(), crossing_line_a, polygon)
-    @test_throws ArgumentError GO.contains(GO.RelateNG(), polygon, crossing_line_a)
+    @test_throws ArgumentError GO.relate_matrix(GO.RelateNG(), mixed_collection, polygon)
+    @test_throws ArgumentError GO.contains(GO.RelateNG(), polygon, mixed_collection)
 end
 
 @testset "RelateNG mutual line edge events" begin
@@ -580,6 +590,55 @@ end
         "0F1FF0102"
     @test GO.de9im_string(GO.relate_matrix(prepared_alg, self_crossing_line, crossing_query)) ==
         "0F1FF0102"
+end
+
+@testset "RelateNG local node topology for line and area edges" begin
+    alg = GO.RelateNG()
+    polygon = GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]])
+    crossing_line = GI.LineString([(-1.0, 1.0), (3.0, 1.0)])
+    interior_line = GI.LineString([(0.5, 1.0), (1.5, 1.0)])
+    boundary_line = GI.LineString([(2.0, 0.0), (2.0, 1.0)])
+
+    @test GO.de9im_string(GO.relate_matrix(alg, crossing_line, polygon)) == "101FF0212"
+    @test GO.crosses(alg, crossing_line, polygon)
+    @test !GO.within(alg, crossing_line, polygon)
+
+    @test GO.de9im_string(GO.relate_matrix(alg, interior_line, polygon)) == "1FF0FF212"
+    @test GO.within(alg, interior_line, polygon)
+    @test GO.contains(alg, polygon, interior_line)
+
+    @test GO.de9im_string(GO.relate_matrix(alg, boundary_line, polygon)) == "F1FF0F212"
+    @test GO.touches(alg, boundary_line, polygon)
+    @test GO.coveredby(alg, boundary_line, polygon)
+
+    overlapping_polygon = GI.Polygon([[
+        (1.0, 1.0),
+        (3.0, 1.0),
+        (3.0, 3.0),
+        (1.0, 3.0),
+        (1.0, 1.0),
+    ]])
+    adjacent_polygon = GI.Polygon([[
+        (2.0, 0.0),
+        (3.0, 0.0),
+        (3.0, 1.0),
+        (2.0, 1.0),
+        (2.0, 0.0),
+    ]])
+
+    @test GO.de9im_string(GO.relate_matrix(alg, polygon, overlapping_polygon)) == "212101212"
+    @test GO.overlaps(alg, polygon, overlapping_polygon)
+    @test !GO.touches(alg, polygon, overlapping_polygon)
+
+    @test GO.de9im_string(GO.relate_matrix(alg, polygon, adjacent_polygon)) == "FF2F11212"
+    @test GO.touches(alg, polygon, adjacent_polygon)
+    @test !GO.overlaps(alg, polygon, adjacent_polygon)
 end
 
 @testset "RelateNG interaction predicates with area edges" begin

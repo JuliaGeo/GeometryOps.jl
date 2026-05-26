@@ -1,9 +1,9 @@
-# # Executable RelateNG point paths
+# # Executable RelateNG paths
 
 """
     relate_evaluate_predicate(alg, a, b, predicate)
 
-Evaluate a RelateNG predicate for the currently ported point-only paths.
+Evaluate a RelateNG predicate for the currently ported RelateNG paths.
 """
 function relate_evaluate_predicate(alg::RelateNG, a, b, predicate::TopologyPredicate)
     computer = RelateTopologyComputer(alg, predicate, a, b)
@@ -48,7 +48,8 @@ function _relate_can_evaluate_current_paths(computer::RelateTopologyComputer)
     dim_a == dim_point && return true
     dim_b == dim_point && return true
     computer.predicate isa RelateInteractionPredicate && return true
-    !computer.geom_a.has_areas && !computer.geom_b.has_areas && return true
+    !(relate_has_area_and_line(computer.geom_a) || relate_has_area_and_line(computer.geom_b)) &&
+        return true
     return false
 end
 

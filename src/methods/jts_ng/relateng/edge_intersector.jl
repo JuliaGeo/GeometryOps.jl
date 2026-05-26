@@ -220,10 +220,6 @@ function relate_process_segment_intersection!(
     intersection = ng_segment_intersection(edge_a, edge_b, T; exact)
     ng_has_intersection(intersection) || return computer
 
-    if intersection.orientation == line_over
-        relate_update_dimension!(computer, loc_interior, loc_interior, dim_line)
-    end
-
     is_proper = intersection.orientation == line_cross
     for point in ng_intersection_points(intersection)
         if is_proper ||
