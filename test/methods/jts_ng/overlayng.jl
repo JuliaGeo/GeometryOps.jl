@@ -226,6 +226,58 @@ end
     @test isempty(GO.overlay_node_star(graph, (10.0, 10.0)))
 end
 
+@testset "OverlayNG result edge marking" begin
+    alg = GO.OverlayNG()
+    left = GI.Polygon([[
+        (0.0, 0.0),
+        (1.0, 0.0),
+        (1.0, 1.0),
+        (0.0, 1.0),
+        (0.0, 0.0),
+    ]])
+    right = GI.Polygon([[
+        (1.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 1.0),
+        (1.0, 1.0),
+        (1.0, 0.0),
+    ]])
+    graph = GO.overlay_graph(GO.overlay_merge_edges(alg, left, right))
+    shared_key = GO.OverlayEdgeKey((1.0, 0.0), (1.0, 1.0))
+    shared_half_edges = filter(half_edge -> half_edge.edge.key == shared_key, graph.half_edges)
+
+    GO.overlay_mark_result_edges!(graph, GO.overlay_union)
+    @test count(half_edge -> half_edge.result_area, graph.half_edges) == 6
+    @test all(half_edge -> !half_edge.result_area, shared_half_edges)
+
+    GO.overlay_mark_result_edges!(graph, GO.overlay_intersection)
+    @test count(half_edge -> half_edge.result_area, graph.half_edges) == 0
+
+    GO.overlay_mark_result_edges!(graph, GO.overlay_difference)
+    @test count(half_edge -> half_edge.result_area, graph.half_edges) == 4
+    @test count(half_edge -> half_edge.result_area, shared_half_edges) == 1
+
+    line_a = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
+    line_b = GI.LineString([(2.0, 0.0), (0.0, 0.0)])
+    line_graph = GO.overlay_graph(GO.overlay_merge_edges(alg, line_a, line_b))
+
+    GO.overlay_mark_result_edges!(line_graph, GO.overlay_intersection)
+    @test count(half_edge -> half_edge.result_line, line_graph.half_edges) == 1
+
+    GO.overlay_mark_result_edges!(line_graph, GO.overlay_difference)
+    @test count(half_edge -> half_edge.result_line, line_graph.half_edges) == 0
+
+    single_line_graph = GO.overlay_graph(GO.overlay_merge_edges(
+        GO.overlay_node_segment_strings(alg, line_a, GI.MultiPoint([(10.0, 10.0)])),
+    ))
+
+    GO.overlay_mark_result_edges!(single_line_graph, GO.overlay_difference)
+    @test count(half_edge -> half_edge.result_line, single_line_graph.half_edges) == 1
+
+    GO.overlay_mark_result_edges!(single_line_graph, GO.overlay_intersection)
+    @test count(half_edge -> half_edge.result_line, single_line_graph.half_edges) == 0
+end
+
 @testset "OverlayNG point-point dispatch" begin
     alg = GO.OverlayNG()
     points_a = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0), (1.0, 1.0)])

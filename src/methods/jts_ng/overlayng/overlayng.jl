@@ -431,6 +431,103 @@ end
 overlay_node_star(graph::OverlayGraph, point) =
     get(graph.node_stars, _tuple_point(point), Any[])
 
+overlay_input_label(label::OverlayLabel, input_side::NGInputSide) =
+    input_side == input_a ? label.input_a : label.input_b
+
+function overlay_reverse_input_label(label::OverlayInputLabel)
+    return OverlayInputLabel(
+        label.dimension,
+        label.on_location,
+        label.right_location,
+        label.left_location,
+        label.line_state,
+        label.collapse_role,
+    )
+end
+
+function overlay_directed_label(half_edge::OverlayHalfEdge)
+    is_forward = half_edge.origin == first(half_edge.edge.points)
+    is_forward && return half_edge.label
+    return OverlayLabel(
+        overlay_reverse_input_label(half_edge.label.input_a),
+        overlay_reverse_input_label(half_edge.label.input_b),
+    )
+end
+
+function overlay_result_location(
+    op::OverlayOpCode,
+    location_a::TopologicalLocation,
+    location_b::TopologicalLocation,
+)
+    in_a = location_a == loc_interior
+    in_b = location_b == loc_interior
+    if op == overlay_intersection
+        return in_a && in_b
+    elseif op == overlay_union
+        return in_a || in_b
+    elseif op == overlay_difference
+        return in_a && !in_b
+    elseif op == overlay_symdifference
+        return xor(in_a, in_b)
+    end
+    throw(ArgumentError("Unknown OverlayNG operation code: $op"))
+end
+
+"""
+    overlay_mark_result_edges!(graph, op)
+
+Mark local result area and line half-edges from existing OverlayNG labels.
+"""
+function overlay_mark_result_edges!(graph::OverlayGraph, op::OverlayOpCode)
+    overlay_clear_result_marks!(graph)
+    overlay_mark_result_area_edges!(graph, op)
+    overlay_mark_result_line_edges!(graph, op)
+    return graph
+end
+
+function overlay_clear_result_marks!(graph::OverlayGraph)
+    for half_edge in graph.half_edges
+        half_edge.result_area = false
+        half_edge.result_line = false
+    end
+    return graph
+end
+
+function overlay_mark_result_area_edges!(graph::OverlayGraph, op::OverlayOpCode)
+    for half_edge in graph.half_edges
+        overlay_is_boundary_edge(half_edge.edge) || continue
+        label = overlay_directed_label(half_edge)
+        left_in_result = overlay_result_location(
+            op,
+            label.input_a.left_location,
+            label.input_b.left_location,
+        )
+        right_in_result = overlay_result_location(
+            op,
+            label.input_a.right_location,
+            label.input_b.right_location,
+        )
+        half_edge.result_area = right_in_result && !left_in_result
+    end
+    return graph
+end
+
+function overlay_mark_result_line_edges!(graph::OverlayGraph, op::OverlayOpCode)
+    for half_edge in graph.half_edges
+        half_edge.origin == first(half_edge.edge.points) || continue
+        overlay_is_line_edge(half_edge.edge) || continue
+        overlay_is_boundary_edge(half_edge.edge) && continue
+
+        label = overlay_directed_label(half_edge)
+        half_edge.result_line = overlay_result_location(
+            op,
+            label.input_a.on_location,
+            label.input_b.on_location,
+        )
+    end
+    return graph
+end
+
 """
     overlay_node_segment_strings(alg, a, b, [T])
 
