@@ -1,0 +1,89 @@
+using Test
+import GeometryOps as GO
+import GeoInterface as GI
+
+_overlay_tuples(geoms) = map(geom -> GO.tuples(geom), geoms)
+
+@testset "OverlayNG input wrappers" begin
+    alg = GO.OverlayNG()
+    point_input = GO.OverlayInputGeometry(alg, GI.MultiPoint([(0.0, 0.0), (1.0, 1.0)]))
+    line_input = GO.OverlayInputGeometry(alg, GI.LineString([(0.0, 0.0), (1.0, 1.0)]))
+
+    @test point_input.dimension == GO.dim_point
+    @test isnothing(point_input.locator)
+    @test line_input.dimension == GO.dim_line
+    @test line_input.locator isa GO.RelatePointLocator
+    @test GO.overlay_has_point_dispatch(point_input, line_input)
+end
+
+@testset "OverlayNG point-point dispatch" begin
+    alg = GO.OverlayNG()
+    points_a = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0), (1.0, 1.0)])
+    points_b = GI.MultiPoint([(1.0, 1.0), (2.0, 2.0)])
+
+    @test _overlay_tuples(GO.intersection(alg, points_a, points_b)) == [(1.0, 1.0)]
+    @test _overlay_tuples(GO.union(alg, points_a, points_b)) ==
+        [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)]
+    @test _overlay_tuples(GO.difference(alg, points_a, points_b)) == [(0.0, 0.0)]
+    @test _overlay_tuples(GO.symdifference(alg, points_a, points_b)) ==
+        [(0.0, 0.0), (2.0, 2.0)]
+end
+
+@testset "OverlayNG point-line dispatch" begin
+    alg = GO.OverlayNG()
+    points = GI.MultiPoint([(0.0, 0.0), (1.0, 0.0), (3.0, 0.0)])
+    line = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
+
+    @test _overlay_tuples(GO.intersection(alg, points, line)) ==
+        [(0.0, 0.0), (1.0, 0.0)]
+    @test _overlay_tuples(GO.difference(alg, points, line)) == [(3.0, 0.0)]
+
+    line_minus_points = GO.difference(alg, line, points)
+    @test length(line_minus_points) == 1
+    @test line_minus_points[1] === line
+
+    point_union = GO.union(alg, points, line)
+    @test length(point_union) == 2
+    @test point_union[1] === line
+    @test GO.tuples(point_union[2]) == (3.0, 0.0)
+
+    point_target_union = GO.union(alg, points, line; target = GI.PointTrait())
+    @test _overlay_tuples(point_target_union) == [(3.0, 0.0)]
+
+    point_symdiff = GO.symdifference(alg, points, line)
+    @test length(point_symdiff) == 2
+    @test point_symdiff[1] === line
+    @test GO.tuples(point_symdiff[2]) == (3.0, 0.0)
+end
+
+@testset "OverlayNG point-area dispatch" begin
+    alg = GO.OverlayNG()
+    polygon = GI.Polygon([[
+        (0.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 2.0),
+        (0.0, 2.0),
+        (0.0, 0.0),
+    ]])
+    points = GI.MultiPoint([(1.0, 1.0), (0.0, 1.0), (3.0, 3.0)])
+
+    @test _overlay_tuples(GO.intersection(alg, points, polygon)) ==
+        [(1.0, 1.0), (0.0, 1.0)]
+    @test _overlay_tuples(GO.difference(alg, points, polygon)) == [(3.0, 3.0)]
+
+    union_result = GO.union(alg, polygon, points)
+    @test length(union_result) == 2
+    @test union_result[1] === polygon
+    @test GO.tuples(union_result[2]) == (3.0, 3.0)
+
+    area_only_union = GO.union(GO.OverlayNG(; area_result_only = true), polygon, points)
+    @test area_only_union == Any[polygon]
+end
+
+@testset "OverlayNG unsupported edge overlay" begin
+    alg = GO.OverlayNG()
+    line_a = GI.LineString([(0.0, 0.0), (1.0, 1.0)])
+    line_b = GI.LineString([(0.0, 1.0), (1.0, 0.0)])
+
+    @test_throws ArgumentError GO.intersection(alg, line_a, line_b)
+end
