@@ -62,6 +62,14 @@ struct OverlaySegmentString{T,S}
     is_zero_length::Bool
 end
 
+struct OverlaySegmentRecord{S,E,X}
+    segment::S
+    segment_index::Int
+    edge_index::Int
+    edge::E
+    extent::X
+end
+
 function OverlayEdgeSourceInfo(segment::NGSegmentString)
     source = segment.source
     return OverlayEdgeSourceInfo(
@@ -106,6 +114,213 @@ function overlay_segment_strings(
             extract_ng_segment_strings(input.geom, T; input_side, extent, orient_rings = :source),
         )
     end
+end
+
+"""
+    overlay_node_segment_strings(alg, a, b, [T])
+
+Split OverlayNG segment strings at all mutual and self intersections.
+"""
+function overlay_node_segment_strings(alg::OverlayNG, geom_a, geom_b, ::Type{T} = Float64; exact = True()) where {T}
+    return overlay_node_segment_strings(
+        alg,
+        OverlayInputGeometry(alg, geom_a),
+        OverlayInputGeometry(alg, geom_b),
+        T;
+        exact,
+    )
+end
+
+function overlay_node_segment_strings(
+    alg::OverlayNG,
+    geom_a_input::OverlayInputGeometry,
+    geom_b_input::OverlayInputGeometry,
+    ::Type{T} = Float64;
+    exact = True(),
+) where {T}
+    segments = Any[]
+    append!(segments, overlay_segment_strings(geom_a_input, T; input_side = input_a))
+    append!(segments, overlay_segment_strings(geom_b_input, T; input_side = input_b))
+    return overlay_node_segment_strings(alg, segments, T; exact)
+end
+
+function overlay_node_segment_strings(
+    alg::OverlayNG,
+    segments,
+    ::Type{T} = Float64;
+    exact = True(),
+) where {T}
+    records = overlay_segment_records(segments, T)
+    isempty(records) && return OverlaySegmentString[]
+
+    split_points = _overlay_initial_split_points(records)
+    overlay_add_intersection_split_points!(
+        split_points,
+        records,
+        T;
+        exact,
+        precision_model = alg.precision_model,
+    )
+
+    noded = overlay_split_records(records, split_points, T)
+    overlay_validate_fully_noded!(
+        noded,
+        T;
+        exact,
+        precision_model = alg.precision_model,
+    )
+    return noded
+end
+
+function overlay_segment_records(segments, ::Type{T} = Float64) where {T}
+    records = OverlaySegmentRecord[]
+    for (segment_index, segment) in enumerate(segments)
+        segment.source.is_collapsed && continue
+        length(segment.points) < 2 && continue
+        for edge_index in 1:(length(segment.points) - 1)
+            p1, p2 = segment.points[edge_index], segment.points[edge_index + 1]
+            p1 == p2 && continue
+            edge = (p1, p2)
+            push!(
+                records,
+                OverlaySegmentRecord(
+                    segment,
+                    segment_index,
+                    edge_index,
+                    edge,
+                    ng_segment_extent(edge, T),
+                ),
+            )
+        end
+    end
+    return records
+end
+
+_overlay_initial_split_points(records) =
+    [Any[record.edge[1], record.edge[2]] for record in records]
+
+function overlay_add_intersection_split_points!(
+    split_points,
+    records,
+    ::Type{T};
+    exact,
+    precision_model = nothing,
+) where {T}
+    extents = getproperty.(records, :extent)
+    index = NaturalIndexing.NaturalIndex(extents)
+    for (i, record_a) in enumerate(records)
+        candidate_indices = SpatialTreeInterface.query(index, record_a.extent)
+        for j in candidate_indices
+            j <= i && continue
+            record_b = records[j]
+            ng_segments_maybe_intersect(record_a.edge, record_b.edge, T) || continue
+            intersection = ng_segment_intersection(
+                record_a.edge,
+                record_b.edge,
+                T;
+                exact,
+                precision_model,
+            )
+            ng_has_intersection(intersection) || continue
+            for point in ng_intersection_points(intersection)
+                push!(split_points[i], point)
+                push!(split_points[j], point)
+            end
+        end
+    end
+    return split_points
+end
+
+function overlay_split_records(records, split_points, ::Type{T} = Float64) where {T}
+    noded = OverlaySegmentString[]
+    for (record, points) in zip(records, split_points)
+        ordered_points = overlay_unique_ordered_split_points(record.edge, points)
+        for i in 1:(length(ordered_points) - 1)
+            p1, p2 = ordered_points[i], ordered_points[i + 1]
+            p1 == p2 && continue
+            push!(
+                noded,
+                OverlaySegmentString(
+                    Tuple{T,T}[_tuple_point(p1, T), _tuple_point(p2, T)],
+                    record.segment.source,
+                    record.segment.had_repeated_coordinates,
+                    false,
+                ),
+            )
+        end
+    end
+    return noded
+end
+
+function overlay_unique_ordered_split_points(edge, points)
+    sorted_points = sort(collect(points); by = point -> overlay_segment_fraction(edge, point))
+    unique_points = Any[]
+    for point in sorted_points
+        point in unique_points && continue
+        push!(unique_points, point)
+    end
+    return unique_points
+end
+
+function overlay_segment_fraction((p1, p2), point)
+    dx = p2[1] - p1[1]
+    dy = p2[2] - p1[2]
+    if abs(dx) >= abs(dy)
+        dx == 0 && return zero(dx)
+        return (point[1] - p1[1]) / dx
+    else
+        dy == 0 && return zero(dy)
+        return (point[2] - p1[2]) / dy
+    end
+end
+
+function overlay_validate_fully_noded!(
+    segments,
+    ::Type{T} = Float64;
+    exact = True(),
+    precision_model = nothing,
+) where {T}
+    overlay_is_fully_noded(segments, T; exact, precision_model) && return segments
+    throw(ArgumentError("OverlayNG noder produced linework that is not fully noded."))
+end
+
+function overlay_is_fully_noded(
+    segments,
+    ::Type{T} = Float64;
+    exact = True(),
+    precision_model = nothing,
+) where {T}
+    records = overlay_segment_records(segments, T)
+    length(records) <= 1 && return true
+
+    extents = getproperty.(records, :extent)
+    index = NaturalIndexing.NaturalIndex(extents)
+    for (i, record_a) in enumerate(records)
+        candidate_indices = SpatialTreeInterface.query(index, record_a.extent)
+        for j in candidate_indices
+            j <= i && continue
+            record_b = records[j]
+            ng_segments_maybe_intersect(record_a.edge, record_b.edge, T) || continue
+            intersection = ng_segment_intersection(
+                record_a.edge,
+                record_b.edge,
+                T;
+                exact,
+                precision_model,
+            )
+            ng_has_intersection(intersection) || continue
+            for point in ng_intersection_points(intersection)
+                (_overlay_is_edge_endpoint(record_a.edge, point, T) &&
+                 _overlay_is_edge_endpoint(record_b.edge, point, T)) || return false
+            end
+        end
+    end
+    return true
+end
+
+function _overlay_is_edge_endpoint((p1, p2), point, ::Type{T}) where {T}
+    point = _tuple_point(point, T)
+    return point == _tuple_point(p1, T) || point == _tuple_point(p2, T)
 end
 
 overlay(alg::OverlayNG, op::OverlayOpCode, geom_a, geom_b, ::Type{T} = Float64; target = nothing) where {T <: AbstractFloat} =

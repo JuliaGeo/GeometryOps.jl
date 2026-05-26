@@ -55,6 +55,49 @@ end
     @test hole.source.parent_polygonal === polygon
 end
 
+@testset "OverlayNG simple noder" begin
+    alg = GO.OverlayNG()
+    crossing_a = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
+    crossing_b = GI.LineString([(0.0, 2.0), (2.0, 0.0)])
+
+    raw_input_a = GO.OverlayInputGeometry(alg, crossing_a)
+    raw_input_b = GO.OverlayInputGeometry(alg, crossing_b)
+    raw_segments = Any[
+        GO.overlay_segment_strings(raw_input_a; input_side = GO.input_a)...,
+        GO.overlay_segment_strings(raw_input_b; input_side = GO.input_b)...,
+    ]
+    @test !GO.overlay_is_fully_noded(raw_segments)
+
+    noded = GO.overlay_node_segment_strings(alg, raw_input_a, raw_input_b)
+    @test length(noded) == 4
+    @test GO.overlay_is_fully_noded(noded)
+    @test getproperty.(noded, :points) == [
+        [(0.0, 0.0), (1.0, 1.0)],
+        [(1.0, 1.0), (2.0, 2.0)],
+        [(0.0, 2.0), (1.0, 1.0)],
+        [(1.0, 1.0), (2.0, 0.0)],
+    ]
+    @test count(segment -> segment.source.input_side == GO.input_a, noded) == 2
+    @test count(segment -> segment.source.input_side == GO.input_b, noded) == 2
+
+    overlap_a = GI.LineString([(0.0, 0.0), (3.0, 0.0)])
+    overlap_b = GI.LineString([(1.0, 0.0), (2.0, 0.0)])
+    overlap_noded = GO.overlay_node_segment_strings(alg, overlap_a, overlap_b)
+    @test GO.overlay_is_fully_noded(overlap_noded)
+    @test getproperty.(overlap_noded, :points) == [
+        [(0.0, 0.0), (1.0, 0.0)],
+        [(1.0, 0.0), (2.0, 0.0)],
+        [(2.0, 0.0), (3.0, 0.0)],
+        [(1.0, 0.0), (2.0, 0.0)],
+    ]
+
+    repeated = GI.LineString([(0.0, 0.0), (1.0, 0.0), (1.0, 0.0), (2.0, 0.0)])
+    crossing = GI.LineString([(1.0, -1.0), (1.0, 1.0)])
+    repeated_noded = GO.overlay_node_segment_strings(alg, repeated, crossing)
+    @test all(segment -> !segment.is_zero_length, repeated_noded)
+    @test any(segment -> segment.had_repeated_coordinates, repeated_noded)
+end
+
 @testset "OverlayNG point-point dispatch" begin
     alg = GO.OverlayNG()
     points_a = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0), (1.0, 1.0)])
