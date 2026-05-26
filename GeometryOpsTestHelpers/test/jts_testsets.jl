@@ -207,9 +207,10 @@ end
     @test raw_wkb isa JTSRawGeometry
     @test geometry_category(raw_wkb) == :unknown
 
-    raw_linearring = jts_wkt_to_geom("LINEARRING (0 0, 1 0, 1 1, 0 0)")
-    @test raw_linearring isa JTSRawGeometry
-    @test geometry_category(raw_linearring) == :line
+    linearring = jts_wkt_to_geom("LINEARRING (0 0, 1 0, 1 1, 0 0)")
+    @test GI.trait(linearring) isa GI.LinearRingTrait
+    @test GI.npoint(linearring) == 4
+    @test geometry_category(linearring) == :line
 end
 
 @testset "JTS XML fixture discovery and batch loading" begin

@@ -173,6 +173,8 @@ function jts_wkt_to_geom(wkt::AbstractString)
     _is_wkt(sanitized_wkt) ||
         return JTSRawGeometry(sanitized_wkt, "Unsupported non-WKT geometry payload.")
     _is_simple_empty_wkt(sanitized_wkt) && return JTSEmptyGeometry(sanitized_wkt)
+    linearring = _parse_linearring_wkt(sanitized_wkt)
+    isnothing(linearring) || return linearring
     normalized_wkt = _strip_empty_wkt_collection_members(sanitized_wkt)
     _is_simple_empty_wkt(normalized_wkt) && return JTSEmptyGeometry(sanitized_wkt)
     geom = GFT.WellKnownText(GFT.Geom(), normalized_wkt)
@@ -967,6 +969,29 @@ function _is_simple_empty_wkt(text::AbstractString)
         r"^(POINT|LINESTRING|LINEARRING|POLYGON|MULTIPOINT|MULTILINESTRING|MULTIPOLYGON|GEOMETRYCOLLECTION) EMPTY$"i,
         strip(text),
     )
+end
+
+function _parse_linearring_wkt(text::AbstractString)
+    match_result = match(r"^LINEARRING\s*\((.*)\)$"i, strip(text))
+    isnothing(match_result) && return nothing
+    try
+        return GI.LinearRing(_parse_wkt_coordinate_sequence(match_result.captures[1]))
+    catch err
+        return JTSRawGeometry(text, sprint(showerror, err))
+    end
+end
+
+function _parse_wkt_coordinate_sequence(text::AbstractString)
+    points = Tuple{Float64,Float64}[]
+    for point_text in split(text, ",")
+        ordinates = split(strip(point_text))
+        length(ordinates) >= 2 ||
+            throw(ArgumentError("Expected at least two coordinates in WKT point: $point_text"))
+        x = parse(Float64, ordinates[1])
+        y = parse(Float64, ordinates[2])
+        push!(points, (x, y))
+    end
+    return points
 end
 
 function _strip_empty_wkt_collection_members(text::AbstractString)

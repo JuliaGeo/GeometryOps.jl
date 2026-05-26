@@ -654,6 +654,13 @@ end
         ("TestNGOverlayL.xml", 1:11, nothing),
         ("TestNGOverlayA.xml", 1:20, nothing),
         ("TestNGOverlayEmpty.xml", 1:16, nothing),
+        ("TestNGOverlayGC.xml", 1:4, nothing),
+        ("TestOverlayPP.xml", 1:8, nothing),
+        ("TestOverlayPA.xml", 1:3, nothing),
+        ("TestOverlayLL.xml", 1:7, nothing),
+        ("TestOverlayLA.xml", 1:4, nothing),
+        ("TestOverlayAA.xml", 1:13, nothing),
+        ("TestOverlayEmpty.xml", 1:144, nothing),
     )
 
     matched_operations = 0
@@ -669,5 +676,5 @@ end
             end
         end
     end
-    @test matched_operations == 282
+    @test matched_operations == 715
 end
