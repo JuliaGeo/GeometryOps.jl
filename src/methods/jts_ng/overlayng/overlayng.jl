@@ -309,7 +309,7 @@ function overlay_label(edge::OverlayEdge)
 end
 
 function overlay_input_label(edge::OverlayEdge, input_side::NGInputSide)
-    if overlay_is_same_ring_area_collapse(edge, input_side)
+    if overlay_is_area_collapse(edge, input_side)
         return overlay_area_collapse_line_label()
     end
 
@@ -319,6 +319,18 @@ function overlay_input_label(edge::OverlayEdge, input_side::NGInputSide)
         label = overlay_merge_input_label(label, overlay_source_label(source, is_forward))
     end
     return label
+end
+
+function overlay_is_area_collapse(edge::OverlayEdge, input_side::NGInputSide)
+    has_area_source = false
+    depth_delta = 0
+    for (source, is_forward) in zip(edge.sources, edge.source_directions)
+        source.input_side == input_side || continue
+        source.source_dimension == dim_area || continue
+        has_area_source = true
+        depth_delta += overlay_depth_delta(source, is_forward)
+    end
+    return has_area_source && depth_delta == 0
 end
 
 function overlay_is_same_ring_area_collapse(edge::OverlayEdge, input_side::NGInputSide)
