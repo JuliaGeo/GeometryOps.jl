@@ -10,7 +10,8 @@ abstract type NGPrecisionModel end
 """
     FixedPrecisionModel(scale; offset = (0, 0))
 
-Round coordinates to a fixed precision grid before NG primitive decisions.
+Round coordinates to a JTS-style fixed precision grid before NG primitive decisions.
+Negative scales are treated as exact grid sizes, matching JTS `PrecisionModel`.
 """
 struct FixedPrecisionModel{T} <: NGPrecisionModel
     scale::T
@@ -18,9 +19,10 @@ struct FixedPrecisionModel{T} <: NGPrecisionModel
 end
 
 function FixedPrecisionModel(scale::Real; offset = (0, 0))
-    scale > 0 || throw(ArgumentError("FixedPrecisionModel scale must be positive."))
+    iszero(scale) && throw(ArgumentError("FixedPrecisionModel scale must be non-zero."))
     T = promote_type(typeof(scale), Float64)
-    return FixedPrecisionModel(T(scale), (T(offset[1]), T(offset[2])))
+    jts_scale = scale < 0 ? inv(abs(T(scale))) : abs(T(scale))
+    return FixedPrecisionModel(jts_scale, (T(offset[1]), T(offset[2])))
 end
 
 """
@@ -86,10 +88,14 @@ Apply an NG precision policy to a point.  The default policy only converts type.
 apply_ng_precision(model, point, ::Type{T} = Float64) where {T} = _tuple_point(point, T)
 
 function apply_ng_precision(model::FixedPrecisionModel, point, ::Type{T} = Float64) where {T}
-    x = round((T(GI.x(point)) - T(model.offset[1])) * T(model.scale)) / T(model.scale) + T(model.offset[1])
-    y = round((T(GI.y(point)) - T(model.offset[2])) * T(model.scale)) / T(model.scale) + T(model.offset[2])
+    x = _jts_precision_round((T(GI.x(point)) - T(model.offset[1])) * T(model.scale)) / T(model.scale) +
+        T(model.offset[1])
+    y = _jts_precision_round((T(GI.y(point)) - T(model.offset[2])) * T(model.scale)) / T(model.scale) +
+        T(model.offset[2])
     return (x, y)
 end
+
+_jts_precision_round(value) = floor(value + one(value) / 2)
 
 function _apply_ng_precision_segment(model, segment::Tuple{<:Any,<:Any}, ::Type{T}) where {T}
     return (

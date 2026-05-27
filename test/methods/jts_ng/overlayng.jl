@@ -31,6 +31,11 @@ function _overlayng_fixture_value(alg::GO.OverlayNG, op::JTSOperation)
     name = lowercase(op.name)
     a = _overlayng_fixture_argument(op.arguments[1])
     b = _overlayng_fixture_argument(op.arguments[2])
+    if endswith(name, "sr")
+        scale = Float64(op.arguments[3])
+        alg = GO.OverlayNG(; precision_model = GO.FixedPrecisionModel(scale))
+        name = name[1:(end - 2)]
+    end
     if name == "intersection" || name == "intersectionng"
         return GO.intersection(alg, a, b)
     elseif name == "union" || name == "unionng"
@@ -110,8 +115,7 @@ function _overlayng_fixture_precision_model(model::JTSPrecisionModel)
         return GO.NoPrecisionModel()
     end
     scale = isnothing(model.scale) ? 1.0 : model.scale
-    offset = (something(model.offsetx, 0.0), something(model.offsety, 0.0))
-    return GO.FixedPrecisionModel(scale; offset)
+    return GO.FixedPrecisionModel(scale)
 end
 
 @testset "OverlayNG input wrappers" begin
@@ -741,6 +745,7 @@ end
         ("TestNGOverlayP.xml", 1:12, nothing),
         ("TestNGOverlayL.xml", 1:11, nothing),
         ("TestNGOverlayA.xml", 1:20, nothing),
+        ("TestNGOverlayPPrec.xml", 1:4, nothing),
         ("TestNGOverlayEmpty.xml", 1:16, nothing),
         ("TestNGOverlayGC.xml", 1:4, nothing),
         ("TestOverlayPP.xml", 1:8, nothing),
@@ -774,5 +779,5 @@ end
             end
         end
     end
-    @test matched_operations == 817
+    @test matched_operations == 837
 end

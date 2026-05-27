@@ -209,6 +209,14 @@ end
 end
 
 @testset "NG precision hooks and half-closed ownership" begin
+    jts_fixed = GO.FixedPrecisionModel(1.0)
+    @test GO.apply_ng_precision(jts_fixed, (10.5, 10.49)) == (11.0, 10.0)
+    @test GO.apply_ng_precision(jts_fixed, (-0.5, -1.5)) == (0.0, -1.0)
+
+    grid_size = GO.FixedPrecisionModel(-0.5)
+    @test grid_size.scale == 2.0
+    @test GO.apply_ng_precision(grid_size, (1.26, 1.24)) == (1.5, 1.0)
+
     snapped = GO.ng_segment_intersection(
         ((0.1, 0.1), (1.9, 1.9)),
         ((0.1, 1.9), (1.9, 0.1));

@@ -1476,8 +1476,8 @@ function overlay_compute_point_point(
     ::Type{T};
     target = nothing,
 ) where {T}
-    points_a = overlay_unique_points(input_a, T)
-    points_b = overlay_unique_points(input_b, T)
+    points_a = overlay_unique_points(input_a, T; precision_model = alg.precision_model)
+    points_b = overlay_unique_points(input_b, T; precision_model = alg.precision_model)
     set_a = Set(points_a)
     set_b = Set(points_b)
 
@@ -1507,12 +1507,22 @@ function overlay_compute_point_nonpoint(
     ::Type{T};
     target = nothing,
 ) where {T}
-    covered_points, exterior_points = overlay_partition_points(point_input, nonpoint_input, T)
-
     if op == overlay_intersection
+        covered_points, _ = overlay_partition_points(
+            point_input,
+            nonpoint_input,
+            T;
+            precision_model = alg.precision_model,
+        )
         return overlay_filter_results(alg, target, overlay_point_geometries(covered_points))
     elseif op == overlay_union || op == overlay_symdifference
         nonpoint_geometries = overlay_point_dispatch_nonpoint_geometries(alg, nonpoint_input, T)
+        _, exterior_points = overlay_partition_points_against_geometry(
+            point_input,
+            overlay_components_geometry(nonpoint_geometries),
+            T;
+            precision_model = alg.precision_model,
+        )
         return overlay_filter_results(
             alg,
             target,
@@ -1520,6 +1530,12 @@ function overlay_compute_point_nonpoint(
         )
     elseif op == overlay_difference
         if point_is_a
+            _, exterior_points = overlay_partition_points(
+                point_input,
+                nonpoint_input,
+                T;
+                precision_model = alg.precision_model,
+            )
             return overlay_filter_results(alg, target, overlay_point_geometries(exterior_points))
         else
             return overlay_filter_results(
@@ -1537,6 +1553,10 @@ function overlay_point_dispatch_nonpoint_geometries(
     input::OverlayInputGeometry,
     ::Type{T},
 ) where {T}
+    if overlay_has_fixed_precision(alg.precision_model)
+        return overlay_precision_geometries(input.geom, alg.precision_model, T)
+    end
+
     input.dimension == dim_line || return Any[input.geom]
 
     raw_segments = overlay_segment_strings(input, T; input_side = input_a)
@@ -1557,6 +1577,9 @@ function overlay_point_dispatch_nonpoint_geometries(
     end
     return geometries
 end
+
+overlay_has_fixed_precision(model) = false
+overlay_has_fixed_precision(::FixedPrecisionModel) = true
 
 function overlay_record_segment_keys(records, ::Type{T}) where {T}
     keys = Set{Any}()
@@ -1580,11 +1603,44 @@ function overlay_segment_key((p1, p2), ::Type{T}) where {T}
     return min(edge, (edge[2], edge[1]))
 end
 
-function overlay_partition_points(point_input::OverlayInputGeometry, nonpoint_input::OverlayInputGeometry, ::Type{T}) where {T}
+function overlay_partition_points(
+    point_input::OverlayInputGeometry,
+    nonpoint_input::OverlayInputGeometry,
+    ::Type{T};
+    precision_model = nothing,
+) where {T}
+    return overlay_partition_points_with_locator(
+        point_input,
+        nonpoint_input.locator,
+        T;
+        precision_model,
+    )
+end
+
+function overlay_partition_points_against_geometry(
+    point_input::OverlayInputGeometry,
+    nonpoint_geom,
+    ::Type{T};
+    precision_model = nothing,
+) where {T}
+    return overlay_partition_points_with_locator(
+        point_input,
+        RelatePointLocator(nonpoint_geom),
+        T;
+        precision_model,
+    )
+end
+
+function overlay_partition_points_with_locator(
+    point_input::OverlayInputGeometry,
+    locator::RelatePointLocator,
+    ::Type{T};
+    precision_model = nothing,
+) where {T}
     covered_points = Any[]
     exterior_points = Any[]
-    for point in overlay_unique_points(point_input, T)
-        target_location = relate_locate_with_dim(nonpoint_input.locator, point)
+    for point in overlay_unique_points(point_input, T; precision_model)
+        target_location = relate_locate_with_dim(locator, point)
         if target_location.location == loc_exterior
             push!(exterior_points, point)
         else
@@ -1594,11 +1650,18 @@ function overlay_partition_points(point_input::OverlayInputGeometry, nonpoint_in
     return covered_points, exterior_points
 end
 
-function overlay_unique_points(input::OverlayInputGeometry, ::Type{T}) where {T}
+overlay_components_geometry(geometries) =
+    length(geometries) == 1 ? only(geometries) : GI.GeometryCollection(geometries)
+
+function overlay_unique_points(
+    input::OverlayInputGeometry,
+    ::Type{T};
+    precision_model = nothing,
+) where {T}
     seen = Set{Any}()
     points = Any[]
     for extracted in extract_ng_points(input.geom, T)
-        point = extracted.point
+        point = apply_ng_precision(precision_model, extracted.point, T)
         point in seen && continue
         push!(seen, point)
         push!(points, point)
@@ -1618,6 +1681,68 @@ function overlay_union_points(points_a, points_b)
 end
 
 overlay_point_geometries(points) = Any[GI.Point(point[1], point[2]) for point in points]
+
+function overlay_precision_geometries(geom, precision_model, ::Type{T}) where {T}
+    return overlay_precision_geometries(GI.trait(geom), geom, precision_model, T)
+end
+
+function overlay_precision_geometries(::GI.PointTrait, geom, precision_model, ::Type{T}) where {T}
+    GI.isempty(geom) && return Any[]
+    point = apply_ng_precision(precision_model, tuples(geom), T)
+    return Any[GI.Point(point[1], point[2])]
+end
+
+function overlay_precision_geometries(::GI.LineStringTrait, geom, precision_model, ::Type{T}) where {T}
+    points = overlay_precision_curve_points(geom, precision_model, T)
+    length(points) < 2 && return Any[]
+    return Any[GI.LineString(points)]
+end
+
+function overlay_precision_geometries(::GI.LinearRingTrait, geom, precision_model, ::Type{T}) where {T}
+    points = overlay_precision_curve_points(geom, precision_model, T)
+    length(points) < 2 && return Any[]
+    return Any[GI.LineString(points)]
+end
+
+function overlay_precision_geometries(::GI.PolygonTrait, geom, precision_model, ::Type{T}) where {T}
+    rings = Any[]
+    for ring in GI.getring(geom)
+        points = overlay_precision_ring_points(ring, precision_model, T)
+        length(points) >= 4 || continue
+        push!(rings, points)
+    end
+    isempty(rings) && return Any[]
+    return Any[GI.Polygon(rings)]
+end
+
+function overlay_precision_geometries(trait::GI.AbstractGeometryTrait, geom, precision_model, ::Type{T}) where {T}
+    if trait isa GI.MultiPointTrait ||
+       trait isa GI.MultiLineStringTrait ||
+       trait isa GI.MultiPolygonTrait ||
+       trait isa GI.GeometryCollectionTrait
+        return reduce(
+            vcat,
+            (overlay_precision_geometries(child, precision_model, T) for child in GI.getgeom(geom));
+            init = Any[],
+        )
+    end
+    return Any[geom]
+end
+
+function overlay_precision_curve_points(curve, precision_model, ::Type{T}) where {T}
+    points = [apply_ng_precision(precision_model, tuples(point), T) for point in GI.getpoint(curve)]
+    cleaned, _ = remove_repeated_ng_points(points)
+    return cleaned
+end
+
+function overlay_precision_ring_points(ring, precision_model, ::Type{T}) where {T}
+    points = overlay_precision_curve_points(ring, precision_model, T)
+    isempty(points) && return points
+    first(points) == last(points) || push!(points, first(points))
+    cleaned, _ = remove_repeated_ng_points(points)
+    first(cleaned) == last(cleaned) || push!(cleaned, first(cleaned))
+    return cleaned
+end
 
 function overlay_filter_results(alg::OverlayNG, target, geometries)
     target_trait = isnothing(target) ? nothing : TraitTarget(target)
