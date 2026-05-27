@@ -543,11 +543,11 @@ end
 
     line_minus_points = GO.difference(alg, line, points)
     @test length(line_minus_points) == 1
-    @test line_minus_points[1] === line
+    @test _result_lines(line_minus_points) == [[(0.0, 0.0), (2.0, 0.0)]]
 
     point_union = GO.union(alg, points, line)
     @test length(point_union) == 2
-    @test point_union[1] === line
+    @test _result_lines(point_union) == [[(0.0, 0.0), (2.0, 0.0)]]
     @test GO.tuples(point_union[2]) == (3.0, 0.0)
 
     point_target_union = GO.union(alg, points, line; target = GI.PointTrait())
@@ -555,7 +555,7 @@ end
 
     point_symdiff = GO.symdifference(alg, points, line)
     @test length(point_symdiff) == 2
-    @test point_symdiff[1] === line
+    @test _result_lines(point_symdiff) == [[(0.0, 0.0), (2.0, 0.0)]]
     @test GO.tuples(point_symdiff[2]) == (3.0, 0.0)
 
     self_crossing_line = GI.LineString([
@@ -568,12 +568,20 @@ end
     self_crossing_points = GI.MultiPoint([(40.0, 90.0), (20.0, 20.0), (70.0, 70.0)])
     self_crossing_union = GO.union(alg, self_crossing_points, self_crossing_line)
     @test _result_points(self_crossing_union) == [(40.0, 90.0)]
-    @test Set(_overlayng_segment_key(first(line), last(line)) for line in _result_lines(self_crossing_union)) == Set([
-        _overlayng_segment_key((20.0, 20.0), (70.0, 70.0)),
-        _overlayng_segment_key((70.0, 70.0), (110.0, 110.0)),
-        _overlayng_segment_key((110.0, 110.0), (170.0, 50.0)),
-        _overlayng_segment_key((170.0, 50.0), (130.0, 10.0)),
-        _overlayng_segment_key((130.0, 10.0), (70.0, 70.0)),
+    @test Set(_result_lines(self_crossing_union)) == Set([
+        [(20.0, 20.0), (70.0, 70.0)],
+        [(70.0, 70.0), (110.0, 110.0), (170.0, 50.0), (130.0, 10.0), (70.0, 70.0)],
+    ])
+
+    fixed_self_crossing_union = GO.union(
+        GO.OverlayNG(; precision_model = GO.FixedPrecisionModel(1.0)),
+        self_crossing_points,
+        self_crossing_line,
+    )
+    @test _result_points(fixed_self_crossing_union) == [(40.0, 90.0)]
+    @test Set(_result_lines(fixed_self_crossing_union)) == Set([
+        [(20.0, 20.0), (70.0, 70.0)],
+        [(70.0, 70.0), (110.0, 110.0), (170.0, 50.0), (130.0, 10.0), (70.0, 70.0)],
     ])
 end
 
@@ -594,11 +602,31 @@ end
 
     union_result = GO.union(alg, polygon, points)
     @test length(union_result) == 2
-    @test union_result[1] === polygon
+    @test _overlay_area(union_result) ≈ 4.0
     @test GO.tuples(union_result[2]) == (3.0, 3.0)
 
     area_only_union = GO.union(GO.OverlayNG(; area_result_only = true), polygon, points)
-    @test area_only_union == Any[polygon]
+    @test length(area_only_union) == 1
+    @test _overlay_area(area_only_union) ≈ 4.0
+
+    fixed_alg = GO.OverlayNG(; precision_model = GO.FixedPrecisionModel(1.0))
+    fixed_point = GI.Point(3.2, 1.5)
+    fixed_polygon = GI.Polygon([[
+        (1.0, 4.0),
+        (1.0, 1.0),
+        (3.0, 1.0),
+        (3.6, 3.6),
+        (1.0, 4.0),
+    ]])
+    fixed_union = GO.union(fixed_alg, fixed_point, fixed_polygon)
+    @test isempty(_result_points(fixed_union))
+    @test length(fixed_union) == 1
+    @test Set(_ring_tuples(only(fixed_union))) == Set([
+        (1.0, 1.0),
+        (1.0, 4.0),
+        (4.0, 4.0),
+        (3.0, 1.0),
+    ])
 end
 
 @testset "OverlayNG empty input dispatch" begin
@@ -615,10 +643,10 @@ end
     point = GI.Point(1.0, 1.0)
 
     @test isempty(GO.intersection(alg, polygon, empty))
-    @test GO.union(alg, polygon, empty) == Any[polygon]
-    @test GO.difference(alg, polygon, empty) == Any[polygon]
+    @test _overlay_area(GO.union(alg, polygon, empty)) ≈ 4.0
+    @test _overlay_area(GO.difference(alg, polygon, empty)) ≈ 4.0
     @test isempty(GO.difference(alg, empty, polygon))
-    @test GO.symdifference(alg, empty, polygon) == Any[polygon]
+    @test _overlay_area(GO.symdifference(alg, empty, polygon)) ≈ 4.0
 
     @test GO.union(alg, empty, line) == Any[line]
     @test GO.difference(alg, line, empty) == Any[line]

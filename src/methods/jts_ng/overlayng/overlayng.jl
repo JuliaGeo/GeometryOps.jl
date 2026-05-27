@@ -2229,29 +2229,131 @@ function overlay_point_dispatch_nonpoint_geometries(
     input::OverlayInputGeometry,
     ::Type{T},
 ) where {T}
-    if overlay_has_fixed_precision(alg.precision_model)
-        return overlay_precision_geometries(input.geom, alg.precision_model, T)
+    if input.dimension == dim_line
+        return overlay_point_dispatch_line_geometries(alg, input, T)
+    elseif input.dimension == dim_area
+        return overlay_point_dispatch_area_geometries(alg, input, T)
     end
 
-    input.dimension == dim_line || return Any[input.geom]
+    overlay_has_fixed_precision(alg.precision_model) &&
+        return overlay_precision_geometries(input.geom, alg.precision_model, T)
 
+    return Any[input.geom]
+end
+
+"""
+    overlay_point_dispatch_line_geometries(alg, input, T)
+
+Prepare linework for `OverlayMixedPoints` output using the OverlayNG noder.
+JTS nodes and rounds the nonpoint input whenever it appears in the result.
+"""
+function overlay_point_dispatch_line_geometries(
+    alg::OverlayNG,
+    input::OverlayInputGeometry,
+    ::Type{T},
+) where {T}
     raw_segments = overlay_segment_strings(input, T; input_side = input_a)
-    raw_keys = overlay_record_segment_keys(overlay_segment_records(raw_segments, T), T)
-    noded_segments = overlay_node_segment_strings(alg, raw_segments, T)
-    noded_keys = overlay_segment_string_keys(noded_segments, T)
-    raw_keys == noded_keys && return Any[input.geom]
+    noded_segments = overlay_node_line_strings_for_output(alg, raw_segments, T)
 
     geometries = Any[]
     seen = Set{Any}()
     for segment in noded_segments
         length(segment.points) < 2 && continue
-        edge = (first(segment.points), last(segment.points))
-        key = overlay_segment_key(edge, T)
+        key = overlay_segment_string_geometry_key(segment.points, T)
         key in seen && continue
         push!(seen, key)
         push!(geometries, GI.LineString(copy(segment.points)))
     end
     return geometries
+end
+
+"""
+    overlay_point_dispatch_area_geometries(alg, input, T)
+
+Prepare area input for `OverlayMixedPoints` output using unary OverlayNG union.
+"""
+function overlay_point_dispatch_area_geometries(
+    alg::OverlayNG,
+    input::OverlayInputGeometry,
+    ::Type{T},
+) where {T}
+    empty_input = OverlayInputGeometry(alg, GI.FeatureCollection(Any[]))
+    return overlay_compute_edge_overlay(alg, overlay_union, input, empty_input, T)
+end
+
+function overlay_node_line_strings_for_output(
+    alg::OverlayNG,
+    segments,
+    ::Type{T},
+) where {T}
+    overlay_has_fixed_precision(alg.precision_model) &&
+        return overlay_node_segment_strings(alg, segments, T)
+
+    snap_strings = Any[
+        OverlaySnapSegmentString(segment) for segment in segments if !segment.source.is_collapsed
+    ]
+    isempty(snap_strings) && return OverlaySegmentString[]
+
+    overlay_add_full_precision_path_nodes!(snap_strings, alg.precision_model, T)
+    noded = OverlaySegmentString[]
+    for snap_string in snap_strings
+        append!(noded, overlay_snap_noded_substrings(snap_string, T))
+    end
+    overlay_validate_fully_noded!(noded, T; precision_model = alg.precision_model)
+    return noded
+end
+
+function overlay_add_full_precision_path_nodes!(
+    snap_strings,
+    precision_model,
+    ::Type{T};
+    exact = True(),
+) where {T}
+    records = overlay_snap_segment_records(snap_strings, T)
+    length(records) <= 1 && return snap_strings
+
+    extents = getproperty.(records, :extent)
+    index = NaturalIndexing.NaturalIndex(extents)
+    for (i, record_a) in enumerate(records)
+        candidate_indices = SpatialTreeInterface.query(index, record_a.extent)
+        for j in candidate_indices
+            j <= i && continue
+            record_b = records[j]
+            ng_segments_maybe_intersect(record_a.edge, record_b.edge, T) || continue
+            intersection = ng_segment_intersection(
+                record_a.edge,
+                record_b.edge,
+                T;
+                exact,
+                precision_model,
+            )
+            ng_has_intersection(intersection) || continue
+            overlay_is_adjacent_endpoint_touch(record_a, record_b, intersection, T) && continue
+            for point in ng_intersection_points(intersection)
+                overlay_snap_add_intersection!(record_a.segment, point, record_a.edge_index)
+                overlay_snap_add_intersection!(record_b.segment, point, record_b.edge_index)
+            end
+        end
+    end
+    return snap_strings
+end
+
+function overlay_is_adjacent_endpoint_touch(record_a, record_b, intersection, ::Type{T}) where {T}
+    record_a.segment === record_b.segment || return false
+    abs(record_a.edge_index - record_b.edge_index) == 1 || return false
+    shared = if record_a.edge_index < record_b.edge_index
+        record_a.edge[2]
+    else
+        record_b.edge[2]
+    end
+    shared = _tuple_point(shared, T)
+    return all(point -> _tuple_point(point, T) == shared, ng_intersection_points(intersection))
+end
+
+function overlay_segment_string_geometry_key(points, ::Type{T}) where {T}
+    forward = Tuple(_tuple_point(point, T) for point in points)
+    backward = reverse(forward)
+    return min(forward, backward)
 end
 
 overlay_has_fixed_precision(model) = false
