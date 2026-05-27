@@ -27,6 +27,9 @@ const _JTS_OVERLAY_FIXTURE_DIR = normpath(joinpath(
     "general",
 ))
 
+_overlayng_jts_fixtures_available() =
+    isfile(joinpath(_JTS_OVERLAY_FIXTURE_DIR, "TestNGOverlayP.xml"))
+
 function _overlayng_fixture_value(alg::GO.OverlayNG, op::JTSOperation)
     name = lowercase(op.name)
     a = _overlayng_fixture_argument(op.arguments[1])
@@ -740,44 +743,48 @@ end
 end
 
 @testset "OverlayNG JTS XML smoke fixtures" begin
-    alg = GO.OverlayNG()
-    fixtures = (
-        ("TestNGOverlayP.xml", 1:12, nothing),
-        ("TestNGOverlayL.xml", 1:11, nothing),
-        ("TestNGOverlayA.xml", 1:20, nothing),
-        ("TestNGOverlayPPrec.xml", 1:4, nothing),
-        ("TestNGOverlayEmpty.xml", 1:16, nothing),
-        ("TestNGOverlayGC.xml", 1:4, nothing),
-        ("TestOverlayPP.xml", 1:8, nothing),
-        ("TestOverlayPL.xml", 1:5, nothing),
-        ("TestOverlayPA.xml", 1:3, nothing),
-        ("TestOverlayLL.xml", 1:7, nothing),
-        ("TestOverlayLA.xml", 1:4, nothing),
-        ("TestOverlayAA.xml", 1:13, nothing),
-        ("TestOverlayEmpty.xml", 1:144, nothing),
-        ("TestOverlayLLPrec.xml", 1:2, nothing),
-        ("TestOverlayLAPrec.xml", 1:4, nothing),
-        ("TestOverlayAAPrec.xml", 1:4, nothing),
-        ("TestOverlayAAPrec.xml", 5:5, ("union", "difference", "symdifference")),
-        ("TestOverlayAAPrec.xml", 6:13, nothing),
-        ("TestOverlayAAPrec.xml", 14:14, ("union", "difference", "symdifference")),
-        ("TestOverlayAAPrec.xml", 15:16, nothing),
-        ("TestOverlayAAPrec.xml", 17:18, nothing),
-    )
+    if !_overlayng_jts_fixtures_available()
+        @test_skip _overlayng_jts_fixtures_available()
+    else
+        alg = GO.OverlayNG()
+        fixtures = (
+            ("TestNGOverlayP.xml", 1:12, nothing),
+            ("TestNGOverlayL.xml", 1:11, nothing),
+            ("TestNGOverlayA.xml", 1:20, nothing),
+            ("TestNGOverlayPPrec.xml", 1:4, nothing),
+            ("TestNGOverlayEmpty.xml", 1:16, nothing),
+            ("TestNGOverlayGC.xml", 1:4, nothing),
+            ("TestOverlayPP.xml", 1:8, nothing),
+            ("TestOverlayPL.xml", 1:5, nothing),
+            ("TestOverlayPA.xml", 1:3, nothing),
+            ("TestOverlayLL.xml", 1:7, nothing),
+            ("TestOverlayLA.xml", 1:4, nothing),
+            ("TestOverlayAA.xml", 1:13, nothing),
+            ("TestOverlayEmpty.xml", 1:144, nothing),
+            ("TestOverlayLLPrec.xml", 1:2, nothing),
+            ("TestOverlayLAPrec.xml", 1:4, nothing),
+            ("TestOverlayAAPrec.xml", 1:4, nothing),
+            ("TestOverlayAAPrec.xml", 5:5, ("union", "difference", "symdifference")),
+            ("TestOverlayAAPrec.xml", 6:13, nothing),
+            ("TestOverlayAAPrec.xml", 14:14, ("union", "difference", "symdifference")),
+            ("TestOverlayAAPrec.xml", 15:16, nothing),
+            ("TestOverlayAAPrec.xml", 17:18, nothing),
+        )
 
-    matched_operations = 0
-    for (filename, case_indices, operations) in fixtures
-        test_set = load_test_set(joinpath(_JTS_OVERLAY_FIXTURE_DIR, filename))
-        alg = _overlayng_fixture_algorithm(test_set)
-        for case_index in case_indices
-            case = test_set.cases[case_index]
-            for op in case.operations
-                _overlayng_fixture_operation_allowed(operations, op) || continue
-                matched_operations += 1
-                @test _overlayng_fixture_summary(_overlayng_fixture_value(alg, op)) ==
-                    _overlayng_fixture_summary(op.expected)
+        matched_operations = 0
+        for (filename, case_indices, operations) in fixtures
+            test_set = load_test_set(joinpath(_JTS_OVERLAY_FIXTURE_DIR, filename))
+            alg = _overlayng_fixture_algorithm(test_set)
+            for case_index in case_indices
+                case = test_set.cases[case_index]
+                for op in case.operations
+                    _overlayng_fixture_operation_allowed(operations, op) || continue
+                    matched_operations += 1
+                    @test _overlayng_fixture_summary(_overlayng_fixture_value(alg, op)) ==
+                        _overlayng_fixture_summary(op.expected)
+                end
             end
         end
+        @test matched_operations == 837
     end
-    @test matched_operations == 837
 end
