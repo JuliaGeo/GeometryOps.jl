@@ -358,6 +358,46 @@ end
     @test label.input_b.right_location == GO.loc_interior
     @test label.input_b.line_state == GO.overlay_boundary_part
 
+    interleaved_a = GI.Polygon([[
+        (0.0, 1.0),
+        (1.8, 1.0),
+        (0.1, 1.1),
+        (4.0, 1.1),
+        (0.2, 1.2),
+        (4.0, 1.2),
+        (0.3, 1.3),
+        (4.0, 1.5),
+        (4.0, 4.0),
+        (0.0, 4.0),
+        (0.0, 1.0),
+    ]])
+    interleaved_b = GI.Polygon([[
+        (5.0, 0.0),
+        (2.0, 0.0),
+        (2.0, 3.0),
+        (2.1, 0.1),
+        (2.1, 3.0),
+        (2.2, 0.3),
+        (2.2, 3.0),
+        (2.3, 0.5),
+        (2.3, 3.0),
+        (5.0, 3.0),
+        (5.0, 0.0),
+    ]])
+    interleaved_alg = GO.OverlayNG(; precision_model = GO.FixedPrecisionModel(1.0))
+    interleaved_edges = GO.overlay_merge_edges(
+        GO.overlay_node_segment_strings(interleaved_alg, interleaved_a, interleaved_b),
+    )
+    interleaved_edge = only(filter(
+        edge -> edge.key == GO.OverlayEdgeKey((2.0, 1.0), (4.0, 1.0)),
+        interleaved_edges,
+    ))
+    interleaved_label = GO.overlay_label(interleaved_edge)
+    @test interleaved_edge.depth_delta == -1
+    @test interleaved_label.input_a.dimension == GO.dim_area
+    @test interleaved_label.input_a.left_location == GO.loc_interior
+    @test interleaved_label.input_a.right_location == GO.loc_exterior
+
     single_line_edge = only(GO.overlay_merge_edges(
         GO.overlay_node_segment_strings(alg, line_a, GI.MultiPoint([(10.0, 10.0)])),
     ))
@@ -798,6 +838,8 @@ end
             ("TestNGOverlayL.xml", 1:11, nothing),
             ("TestNGOverlayA.xml", 1:20, nothing),
             ("TestNGOverlayPPrec.xml", 1:4, nothing),
+            ("TestNGOverlayLPrec.xml", 1:4, nothing),
+            ("TestNGOverlayAPrec.xml", 1:12, nothing),
             ("TestNGOverlayEmpty.xml", 1:16, nothing),
             ("TestNGOverlayGC.xml", 1:4, nothing),
             ("TestOverlayPP.xml", 1:8, nothing),
@@ -810,6 +852,10 @@ end
             ("TestOverlayLLPrec.xml", 1:2, nothing),
             ("TestOverlayLAPrec.xml", 1:4, nothing),
             ("TestOverlayAAPrec.xml", 1:4, nothing),
+            # `TestOverlayAAPrec` is a legacy `Geometry.intersection` fixture.
+            # Direct OverlayNG precision expectations are covered above by
+            # `TestNGOverlayAPrec`; these two legacy intersections differ in
+            # collapse-line output, so they stay out of the NG conformance rail.
             ("TestOverlayAAPrec.xml", 5:5, ("union", "difference", "symdifference")),
             ("TestOverlayAAPrec.xml", 6:13, nothing),
             ("TestOverlayAAPrec.xml", 14:14, ("union", "difference", "symdifference")),
@@ -831,6 +877,6 @@ end
                 end
             end
         end
-        @test matched_operations == 837
+        @test matched_operations == 917
     end
 end

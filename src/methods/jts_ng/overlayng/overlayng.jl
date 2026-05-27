@@ -384,16 +384,36 @@ function overlay_label(edge::OverlayEdge)
 end
 
 function overlay_input_label(edge::OverlayEdge, input_side::NGInputSide)
-    if overlay_is_area_collapse(edge, input_side)
-        return overlay_area_collapse_line_label(overlay_primary_ring_role(edge, input_side))
+    dimension = overlay_input_dimension(edge, input_side)
+    dimension == dim_false && return overlay_empty_input_label()
+
+    depth_delta = overlay_input_depth_delta(edge, input_side)
+    if dimension == dim_area
+        ring_role = overlay_primary_ring_role(edge, input_side)
+        iszero(depth_delta) && return overlay_area_collapse_line_label(ring_role)
+        return overlay_area_boundary_label(depth_delta, ring_role)
     end
 
-    label = overlay_empty_input_label()
+    return overlay_line_label()
+end
+
+function overlay_input_dimension(edge::OverlayEdge, input_side::NGInputSide)
+    dimension = dim_false
+    for source in edge.sources
+        source.input_side == input_side || continue
+        dimension = max_dimension(dimension, source.source_dimension)
+    end
+    return dimension
+end
+
+function overlay_input_depth_delta(edge::OverlayEdge, input_side::NGInputSide)
+    depth_delta = 0
     for (source, is_forward) in zip(edge.sources, edge.source_directions)
         source.input_side == input_side || continue
-        label = overlay_merge_input_label(label, overlay_source_label(source, is_forward))
+        source.source_dimension == dim_area || continue
+        depth_delta += overlay_depth_delta(source, is_forward)
     end
-    return label
+    return depth_delta
 end
 
 function overlay_is_area_collapse(edge::OverlayEdge, input_side::NGInputSide)
@@ -424,6 +444,29 @@ overlay_area_collapse_line_label(ring_role::NGRingRole) = OverlayInputLabel(
     ring_role,
 )
 
+function overlay_area_boundary_label(depth_delta::Integer, ring_role::NGRingRole)
+    left_location, right_location = overlay_boundary_locations(depth_delta)
+    return OverlayInputLabel(
+        dim_area,
+        loc_interior,
+        left_location,
+        right_location,
+        overlay_boundary_part,
+        overlay_not_collapsed,
+        ring_role,
+    )
+end
+
+overlay_line_label() = OverlayInputLabel(
+    dim_line,
+    nothing,
+    nothing,
+    nothing,
+    overlay_line_part,
+    overlay_not_collapsed,
+    ring_none,
+)
+
 overlay_empty_input_label() = OverlayInputLabel(
     dim_false,
     nothing,
@@ -434,75 +477,10 @@ overlay_empty_input_label() = OverlayInputLabel(
     ring_none,
 )
 
-function overlay_source_label(source::OverlayEdgeSourceInfo, is_forward::Bool)
-    collapse_role = source.is_collapsed ? overlay_collapsed : overlay_not_collapsed
-    if source.source_dimension == dim_area && !source.is_collapsed
-        left_location, right_location = overlay_boundary_locations(source, is_forward)
-        return OverlayInputLabel(
-            dim_area,
-            loc_interior,
-            left_location,
-            right_location,
-            overlay_boundary_part,
-            collapse_role,
-            source.ring_role,
-        )
-    elseif source.source_dimension == dim_line || source.is_collapsed
-        return OverlayInputLabel(
-            dim_line,
-            nothing,
-            nothing,
-            nothing,
-            overlay_line_part,
-            collapse_role,
-            source.is_collapsed ? source.ring_role : ring_none,
-        )
-    end
-    return overlay_empty_input_label()
-end
-
-function overlay_boundary_locations(source::OverlayEdgeSourceInfo, is_forward::Bool)
-    delta = overlay_depth_delta(source, is_forward)
+function overlay_boundary_locations(delta::Integer)
     delta < 0 && return loc_interior, loc_exterior
     delta > 0 && return loc_exterior, loc_interior
     return loc_exterior, loc_exterior
-end
-
-function overlay_merge_input_label(a::OverlayInputLabel, b::OverlayInputLabel)
-    return OverlayInputLabel(
-        max_dimension(a.dimension, b.dimension),
-        overlay_merge_location(a.on_location, b.on_location),
-        overlay_merge_location(a.left_location, b.left_location),
-        overlay_merge_location(a.right_location, b.right_location),
-        overlay_merge_line_state(a.line_state, b.line_state),
-        overlay_merge_collapse_role(a.collapse_role, b.collapse_role),
-        overlay_merge_ring_role(a.ring_role, b.ring_role),
-    )
-end
-
-overlay_merge_location(::Nothing, ::Nothing) = nothing
-overlay_merge_location(::Nothing, b::Union{Nothing,TopologicalLocation}) = b
-overlay_merge_location(a::Union{Nothing,TopologicalLocation}, ::Nothing) = a
-
-function overlay_merge_location(a::TopologicalLocation, b::TopologicalLocation)
-    (a == loc_interior || b == loc_interior) && return loc_interior
-    (a == loc_boundary || b == loc_boundary) && return loc_boundary
-    return loc_exterior
-end
-
-function overlay_merge_line_state(a::OverlayLineState, b::OverlayLineState)
-    (a == overlay_boundary_part || b == overlay_boundary_part) && return overlay_boundary_part
-    (a == overlay_line_part || b == overlay_line_part) && return overlay_line_part
-    return overlay_not_part
-end
-
-overlay_merge_collapse_role(a::OverlayCollapseRole, b::OverlayCollapseRole) =
-    (a == overlay_collapsed || b == overlay_collapsed) ? overlay_collapsed : overlay_not_collapsed
-
-function overlay_merge_ring_role(a::NGRingRole, b::NGRingRole)
-    (a == ring_shell || b == ring_shell) && return ring_shell
-    (a == ring_hole || b == ring_hole) && return ring_hole
-    return ring_none
 end
 
 function OverlayHalfEdge(edge::OverlayEdge, origin, destination)
