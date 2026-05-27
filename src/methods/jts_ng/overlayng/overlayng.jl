@@ -309,6 +309,10 @@ function overlay_label(edge::OverlayEdge)
 end
 
 function overlay_input_label(edge::OverlayEdge, input_side::NGInputSide)
+    if overlay_is_same_ring_area_collapse(edge, input_side)
+        return overlay_area_collapse_line_label()
+    end
+
     label = overlay_empty_input_label()
     for (source, is_forward) in zip(edge.sources, edge.source_directions)
         source.input_side == input_side || continue
@@ -316,6 +320,31 @@ function overlay_input_label(edge::OverlayEdge, input_side::NGInputSide)
     end
     return label
 end
+
+function overlay_is_same_ring_area_collapse(edge::OverlayEdge, input_side::NGInputSide)
+    sources = Any[]
+    directions = Bool[]
+    for (source, is_forward) in zip(edge.sources, edge.source_directions)
+        source.input_side == input_side || continue
+        push!(sources, source)
+        push!(directions, is_forward)
+    end
+
+    length(sources) >= 2 || return false
+    all(source -> source.source_dimension == dim_area && !source.is_collapsed, sources) || return false
+    length(unique(getproperty.(sources, :element_id))) == 1 || return false
+    length(unique(getproperty.(sources, :ring_id))) == 1 || return false
+    return any(directions) && any(!, directions)
+end
+
+overlay_area_collapse_line_label() = OverlayInputLabel(
+    dim_line,
+    loc_boundary,
+    loc_exterior,
+    loc_exterior,
+    overlay_line_part,
+    overlay_not_collapsed,
+)
 
 overlay_empty_input_label() = OverlayInputLabel(
     dim_false,

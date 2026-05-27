@@ -692,6 +692,17 @@ end
     @test Set(_overlayng_segment_key(first(line), last(line)) for line in _result_lines(
         GO.difference(fixed_alg, line, triangle),
     )) == Set([_overlayng_segment_key((240.0, 190.0), (177.0, 153.0))])
+
+    sliver = GI.Polygon([[
+        (95.0, 9.0),
+        (81.0, 414.0),
+        (87.0, 414.0),
+        (95.0, 9.0),
+    ]])
+    sliver_line = GI.LineString([(93.0, 13.0), (96.0, 13.0)])
+    @test Set(_overlayng_segment_key(first(line), last(line)) for line in _result_lines(
+        GO.difference(fixed_alg, sliver, sliver_line),
+    )) == Set([_overlayng_segment_key((95.0, 9.0), (95.0, 13.0))])
 end
 
 @testset "OverlayNG JTS XML smoke fixtures" begin
@@ -710,8 +721,7 @@ end
         ("TestOverlayAA.xml", 1:13, nothing),
         ("TestOverlayEmpty.xml", 1:144, nothing),
         ("TestOverlayLLPrec.xml", 1:2, nothing),
-        ("TestOverlayLAPrec.xml", 1:1, ("intersection",)),
-        ("TestOverlayLAPrec.xml", 2:4, nothing),
+        ("TestOverlayLAPrec.xml", 1:4, nothing),
     )
 
     matched_operations = 0
@@ -728,5 +738,5 @@ end
             end
         end
     end
-    @test matched_operations == 754
+    @test matched_operations == 757
 end
