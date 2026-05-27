@@ -215,6 +215,51 @@ end
     @test any(segment -> segment.had_repeated_coordinates, repeated_noded)
 end
 
+@testset "OverlayNG snap-rounding noder" begin
+    precision_model = GO.FixedPrecisionModel(1.0)
+    alg = GO.OverlayNG(; precision_model)
+
+    pixel = GO.OverlayHotPixel((0.0, 0.0), 1.0)
+    @test GO.overlay_hot_pixel_intersects(pixel, (-0.5, 0.0))
+    @test GO.overlay_hot_pixel_intersects(pixel, (0.0, -0.5))
+    @test !GO.overlay_hot_pixel_intersects(pixel, (0.5, 0.0))
+    @test !GO.overlay_hot_pixel_intersects(pixel, (0.0, 0.5))
+
+    pixel_index = GO.OverlayHotPixelIndex(precision_model)
+    first_pixel = GO.overlay_hot_pixel_index_add!(pixel_index, (0.1, 0.1))
+    @test !first_pixel.is_node
+    duplicate_pixel = GO.overlay_hot_pixel_index_add!(pixel_index, (0.2, 0.2))
+    @test duplicate_pixel === first_pixel
+    @test duplicate_pixel.is_node
+
+    # This segment touches the top-left corner of the hot pixel.  JTS excludes
+    # top/right boundaries, so the pixel must not become a snap node.
+    corner_pixel = GO.OverlayHotPixel((6.0, 2.0), 1.0)
+    @test !GO.overlay_hot_pixel_intersects(
+        corner_pixel,
+        (5.0, 2.4545454545454546),
+        (6.0, 2.545454545454545),
+    )
+
+    box = GI.Polygon([[
+        (5.0, 4.0),
+        (5.0, 1.0),
+        (6.0, 1.0),
+        (6.0, 4.0),
+        (5.0, 4.0),
+    ]])
+    sliver = GI.Polygon([[
+        (0.0, 2.0),
+        (11.0, 3.0),
+        (11.0, 2.0),
+        (0.0, 2.0),
+    ]])
+    noded = GO.overlay_node_segment_strings(alg, box, sliver)
+    sliver_segments = [segment.points for segment in noded if segment.source.input_side == GO.input_b]
+    @test [(5.0, 2.0), (6.0, 3.0)] in sliver_segments
+    @test !([(5.0, 2.0), (6.0, 2.0)] in sliver_segments)
+end
+
 @testset "OverlayNG edge merger" begin
     alg = GO.OverlayNG()
     line_a = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
@@ -737,9 +782,10 @@ end
         (95.0, 9.0),
     ]])
     sliver_line = GI.LineString([(93.0, 13.0), (96.0, 13.0)])
-    @test Set(_overlayng_segment_key(first(line), last(line)) for line in _result_lines(
-        GO.difference(fixed_alg, sliver, sliver_line),
-    )) == Set([_overlayng_segment_key((95.0, 9.0), (95.0, 13.0))])
+    sliver_difference = GO.difference(fixed_alg, sliver, sliver_line)
+    @test Set(_overlayng_segment_key(first(line), last(line)) for line in _result_lines(sliver_difference)) ==
+        Set([_overlayng_segment_key((95.0, 9.0), (95.0, 13.0))])
+    @test _overlayng_fixture_summary(sliver_difference).areas == [1203.0]
 end
 
 @testset "OverlayNG JTS XML smoke fixtures" begin

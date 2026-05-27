@@ -82,6 +82,55 @@ struct OverlaySegmentRecord{S,E,X}
 end
 
 """
+    OverlaySnapNode
+
+JTS-style node location on a snap-rounding segment string.
+"""
+mutable struct OverlaySnapNode{T}
+    point::Tuple{T,T}
+    segment_index::Int
+end
+
+"""
+    OverlaySnapSegmentString
+
+Mutable noding wrapper used by the fixed-precision snap-rounding path.
+"""
+mutable struct OverlaySnapSegmentString{T,S}
+    points::Vector{Tuple{T,T}}
+    source::S
+    had_repeated_coordinates::Bool
+    nodes::Vector{OverlaySnapNode{T}}
+end
+
+"""
+    OverlayHotPixel
+
+Partially-open snap-rounding pixel centered on a rounded grid coordinate.
+"""
+mutable struct OverlayHotPixel{T}
+    coordinate::Tuple{T,T}
+    scale::T
+    hpx::T
+    hpy::T
+    is_node::Bool
+end
+
+"""
+    OverlayHotPixelIndex
+
+Unique hot-pixel registry with JTS node/non-node pixel state.
+"""
+mutable struct OverlayHotPixelIndex{T,P}
+    precision_model::P
+    scale::T
+    pixels::Vector{OverlayHotPixel{T}}
+    pixel_indices::Dict{Tuple{T,T},Int}
+end
+
+Base.copy(node::OverlaySnapNode) = OverlaySnapNode(node.point, node.segment_index)
+
+"""
     OverlayEdgeKey
 
 Direction-independent key for a noded OverlayNG edge.
@@ -96,6 +145,14 @@ function OverlayEdgeKey(p1, p2, ::Type{T} = Float64) where {T}
     p2 = _tuple_point(p2, T)
     p1 <= p2 && return OverlayEdgeKey(p1, p2)
     return OverlayEdgeKey(p2, p1)
+end
+
+function OverlayEdgeKey(points::AbstractVector{<:Tuple}, ::Type{T} = Float64) where {T}
+    length(points) >= 2 || throw(ArgumentError("Overlay edge keys require at least two points."))
+    if overlay_edge_direction(points)
+        return OverlayEdgeKey(_tuple_point(points[1], T), _tuple_point(points[2], T))
+    end
+    return OverlayEdgeKey(_tuple_point(points[end], T), _tuple_point(points[end - 1], T))
 end
 
 """
@@ -159,6 +216,7 @@ mutable struct OverlayHalfEdge{T,E,L}
     edge::E
     label::L
     angle::Float64
+    is_forward::Bool
     sym::Any
     next::Any
     prev::Any
@@ -228,7 +286,7 @@ function overlay_segment_strings(
 end
 
 function OverlayEdge(segment::OverlaySegmentString{T}) where {T}
-    key = OverlayEdgeKey(first(segment.points), last(segment.points), T)
+    key = OverlayEdgeKey(segment.points, T)
     source = segment.source
     return OverlayEdge{T,typeof(key)}(
         key,
@@ -242,7 +300,7 @@ end
 
 function overlay_key_direction(key::OverlayEdgeKey, segment::OverlaySegmentString)
     return _tuple_point(first(segment.points), eltype(key.p1)) == key.p1 &&
-        _tuple_point(last(segment.points), eltype(key.p2)) == key.p2
+        _tuple_point(segment.points[2], eltype(key.p2)) == key.p2
 end
 
 overlay_depth_delta(source::OverlayEdgeSourceInfo, is_forward::Bool) =
@@ -259,8 +317,20 @@ function overlay_add_source!(edge::OverlayEdge, segment::OverlaySegmentString)
 end
 
 function overlay_relative_direction(edge::OverlayEdge, segment::OverlaySegmentString)
-    return _tuple_point(first(segment.points), eltype(first(edge.points))) == first(edge.points) &&
-        _tuple_point(last(segment.points), eltype(last(edge.points))) == last(edge.points)
+    length(edge.points) == length(segment.points) ||
+        throw(ArgumentError("OverlayNG cannot merge differently noded coincident edges."))
+    return _tuple_point(segment.points[1], eltype(first(edge.points))) == edge.points[1] &&
+        _tuple_point(segment.points[2], eltype(first(edge.points))) == edge.points[2]
+end
+
+function overlay_edge_direction(points::AbstractVector)
+    length(points) >= 2 || throw(ArgumentError("OverlayNG edge direction requires at least two points."))
+    cmp = points[1] == points[end] ? 0 : (points[1] < points[end] ? -1 : 1)
+    if cmp == 0
+        cmp = points[2] == points[end - 1] ? 0 : (points[2] < points[end - 1] ? -1 : 1)
+    end
+    cmp == 0 && throw(ArgumentError("OverlayNG edge direction cannot be determined because endpoints are equal."))
+    return cmp == -1
 end
 
 """
@@ -272,8 +342,8 @@ function overlay_merge_edges(segments)
     edges = OverlayEdge[]
     edge_indices = Dict{Any,Int}()
     for segment in segments
-        length(segment.points) == 2 || throw(ArgumentError("Overlay edge merging requires noded two-point segment strings."))
-        key = OverlayEdgeKey(first(segment.points), last(segment.points), eltype(first(segment.points)))
+        length(segment.points) >= 2 || continue
+        key = OverlayEdgeKey(segment.points, eltype(first(segment.points)))
         edge_index = get(edge_indices, key, nothing)
         if isnothing(edge_index)
             push!(edges, OverlayEdge(segment))
@@ -436,14 +506,22 @@ function overlay_merge_ring_role(a::NGRingRole, b::NGRingRole)
 end
 
 function OverlayHalfEdge(edge::OverlayEdge, origin, destination)
+    is_forward = origin == first(edge.points) && origin != last(edge.points)
+    direction_point = is_forward ? edge.points[2] : edge.points[end - 1]
+    return OverlayHalfEdge(edge, origin, destination, direction_point, is_forward)
+end
+
+function OverlayHalfEdge(edge::OverlayEdge, origin, destination, direction_point, is_forward::Bool)
     origin = _tuple_point(origin, eltype(first(edge.points)))
     destination = _tuple_point(destination, eltype(first(edge.points)))
+    direction_point = _tuple_point(direction_point, eltype(first(edge.points)))
     return OverlayHalfEdge(
         origin,
         destination,
         edge,
         overlay_label(edge),
-        overlay_half_edge_angle(origin, destination),
+        overlay_half_edge_angle(origin, direction_point),
+        is_forward,
         nothing,
         nothing,
         nothing,
@@ -471,8 +549,8 @@ function overlay_graph(edges)
 end
 
 function overlay_add_edge_pair!(graph::OverlayGraph, edge::OverlayEdge)
-    forward = OverlayHalfEdge(edge, first(edge.points), last(edge.points))
-    reverse = OverlayHalfEdge(edge, last(edge.points), first(edge.points))
+    forward = OverlayHalfEdge(edge, first(edge.points), last(edge.points), edge.points[2], true)
+    reverse = OverlayHalfEdge(edge, last(edge.points), first(edge.points), edge.points[end - 1], false)
     forward.sym = reverse
     reverse.sym = forward
     push!(graph.half_edges, forward, reverse)
@@ -515,8 +593,7 @@ function overlay_reverse_input_label(label::OverlayInputLabel)
 end
 
 function overlay_directed_label(half_edge::OverlayHalfEdge)
-    is_forward = half_edge.origin == first(half_edge.edge.points)
-    is_forward && return half_edge.label
+    half_edge.is_forward && return half_edge.label
     return OverlayLabel(
         overlay_reverse_input_label(half_edge.label.input_a),
         overlay_reverse_input_label(half_edge.label.input_b),
@@ -616,7 +693,7 @@ function overlay_mark_result_line_edges!(
     input_area_side = nothing,
 )
     for half_edge in graph.half_edges
-        half_edge.origin == first(half_edge.edge.points) || continue
+        half_edge.is_forward || continue
         overlay_half_edge_in_result_either(half_edge) && continue
 
         label = overlay_directed_label(half_edge)
@@ -848,7 +925,7 @@ overlay_is_line_location_unknown(label::OverlayInputLabel) =
 
 function overlay_label_collapsed_edges!(graph::OverlayGraph)
     for half_edge in graph.half_edges
-        half_edge.origin == first(half_edge.edge.points) || continue
+        half_edge.is_forward || continue
         overlay_label_collapsed_edge!(half_edge, input_a)
         overlay_label_collapsed_edge!(half_edge, input_b)
     end
@@ -918,7 +995,7 @@ function overlay_label_disconnected_edges!(
     input_b_geom::OverlayInputGeometry,
 )
     for half_edge in graph.half_edges
-        half_edge.origin == first(half_edge.edge.points) || continue
+        half_edge.is_forward || continue
         overlay_label_disconnected_input!(half_edge, input_a, input_a_geom)
         overlay_label_disconnected_input!(half_edge, input_b, input_b_geom)
     end
@@ -1012,13 +1089,13 @@ function overlay_result_area_ring!(start_edge::OverlayHalfEdge, ring_id::Integer
         half_edge.visited && throw(ArgumentError("OverlayNG result ring visited an edge twice."))
         half_edge.visited = true
         half_edge.ring_id = ring_id
-        push!(points, half_edge.origin)
+        overlay_add_coordinate_list!(points, overlay_half_edge_points(half_edge))
 
         half_edge = half_edge.next
         isnothing(half_edge) && throw(ArgumentError("OverlayNG result ring has an unlinked edge."))
         half_edge === start_edge && break
     end
-    push!(points, first(points))
+    last(points) == first(points) || push!(points, first(points))
     return OverlayResultRing(points, !ng_is_clockwise(points), Any[])
 end
 
@@ -1122,7 +1199,7 @@ function overlay_extract_result_lines(graph::OverlayGraph)
 end
 
 function overlay_half_edge_points(half_edge::OverlayHalfEdge)
-    if half_edge.origin == first(half_edge.edge.points)
+    if half_edge.is_forward
         return copy(half_edge.edge.points)
     end
     return reverse(half_edge.edge.points)
@@ -1195,6 +1272,10 @@ function overlay_node_segment_strings(
     ::Type{T} = Float64;
     exact = True(),
 ) where {T}
+    if alg.precision_model isa FixedPrecisionModel
+        return overlay_snapround_node_segment_strings(alg.precision_model, segments, T; exact)
+    end
+
     records = overlay_segment_records(segments, T)
     isempty(records) && return OverlaySegmentString[]
 
@@ -1239,6 +1320,623 @@ function overlay_segment_records(segments, ::Type{T} = Float64) where {T}
         end
     end
     return records
+end
+
+const OVERLAY_SNAPROUNDING_NEARNESS_FACTOR = 100
+
+function OverlaySnapSegmentString(segment::OverlaySegmentString{T}) where {T}
+    return OverlaySnapSegmentString(
+        copy(segment.points),
+        segment.source,
+        segment.had_repeated_coordinates,
+        OverlaySnapNode{T}[],
+    )
+end
+
+function OverlayHotPixel(point, scale::T) where {T}
+    point = _tuple_point(point, T)
+    hpx = scale == one(T) ? point[1] : _jts_precision_round(point[1] * scale)
+    hpy = scale == one(T) ? point[2] : _jts_precision_round(point[2] * scale)
+    return OverlayHotPixel(point, scale, hpx, hpy, false)
+end
+
+function OverlayHotPixelIndex(precision_model::FixedPrecisionModel, ::Type{T} = Float64) where {T}
+    scale = T(precision_model.scale)
+    return OverlayHotPixelIndex(precision_model, scale, OverlayHotPixel{T}[], Dict{Tuple{T,T},Int}())
+end
+
+"""
+    overlay_snapround_node_segment_strings(model, segments, [T])
+
+Fixed-precision OverlayNG noder following JTS `SnapRoundingNoder` phase order.
+"""
+function overlay_snapround_node_segment_strings(
+    precision_model::FixedPrecisionModel,
+    segments,
+    ::Type{T} = Float64;
+    exact = True(),
+) where {T}
+    snap_strings = Any[
+        OverlaySnapSegmentString(segment) for segment in segments if !segment.source.is_collapsed
+    ]
+    isempty(snap_strings) && return OverlaySegmentString[]
+
+    pixel_index = OverlayHotPixelIndex(precision_model, T)
+    overlay_snapround_add_intersection_pixels!(pixel_index, snap_strings, T; exact)
+    overlay_snapround_add_vertex_pixels!(pixel_index, snap_strings)
+    snapped = overlay_snapround_compute_snaps(pixel_index, precision_model, snap_strings, T; exact)
+
+    noded = OverlaySegmentString[]
+    for snap_string in snapped
+        append!(noded, overlay_snap_noded_substrings(snap_string, T))
+    end
+    overlay_validate_fully_noded!(noded, T; exact, precision_model = nothing)
+    return noded
+end
+
+function overlay_snapround_add_intersection_pixels!(
+    pixel_index::OverlayHotPixelIndex,
+    snap_strings,
+    ::Type{T};
+    exact,
+) where {T}
+    records = overlay_snap_segment_records(snap_strings, T)
+    isempty(records) && return pixel_index
+
+    nearness_tol = inv(T(pixel_index.scale)) / T(OVERLAY_SNAPROUNDING_NEARNESS_FACTOR)
+    extents = getproperty.(records, :extent)
+    index = NaturalIndexing.NaturalIndex(extents)
+    intersection_points = Tuple{T,T}[]
+    for (i, record_a) in enumerate(records)
+        query_extent = overlay_expand_extent(record_a.extent, nearness_tol)
+        candidate_indices = SpatialTreeInterface.query(index, query_extent)
+        for j in candidate_indices
+            j <= i && continue
+            record_b = records[j]
+            Extents.intersects(query_extent, record_b.extent) || continue
+            overlay_process_snaprounding_intersections!(
+                intersection_points,
+                records,
+                i,
+                j,
+                T;
+                exact,
+                nearness_tol,
+            )
+        end
+    end
+    overlay_hot_pixel_index_add_nodes!(pixel_index, intersection_points)
+    return pixel_index
+end
+
+function overlay_snap_segment_records(snap_strings, ::Type{T}) where {T}
+    records = OverlaySegmentRecord[]
+    for (segment_index, snap_string) in enumerate(snap_strings)
+        length(snap_string.points) < 2 && continue
+        for edge_index in 1:(length(snap_string.points) - 1)
+            p1, p2 = snap_string.points[edge_index], snap_string.points[edge_index + 1]
+            p1 == p2 && continue
+            edge = (p1, p2)
+            push!(
+                records,
+                OverlaySegmentRecord(
+                    snap_string,
+                    segment_index,
+                    edge_index,
+                    edge,
+                    ng_segment_extent(edge, T),
+                ),
+            )
+        end
+    end
+    return records
+end
+
+function overlay_expand_extent(extent::Extents.Extent, amount)
+    return Extents.Extent(
+        X = (extent.X[1] - amount, extent.X[2] + amount),
+        Y = (extent.Y[1] - amount, extent.Y[2] + amount),
+    )
+end
+
+function overlay_process_snaprounding_intersections!(
+    intersection_points,
+    records,
+    i::Integer,
+    j::Integer,
+    ::Type{T};
+    exact,
+    nearness_tol,
+) where {T}
+    record_a = records[i]
+    record_b = records[j]
+    if record_a.segment === record_b.segment && record_a.edge_index == record_b.edge_index
+        return intersection_points
+    end
+
+    intersection = ng_segment_intersection(record_a.edge, record_b.edge, T; exact, precision_model = nothing)
+    if overlay_snap_has_interior_intersection(intersection)
+        for point in ng_intersection_points(intersection)
+            point = _tuple_point(point, T)
+            push!(intersection_points, point)
+            overlay_snap_add_intersection!(record_a.segment, point, record_a.edge_index)
+            overlay_snap_add_intersection!(record_b.segment, point, record_b.edge_index)
+        end
+        return intersection_points
+    end
+
+    overlay_snap_process_near_vertex!(intersection_points, record_a.edge[1], record_b, nearness_tol, T)
+    overlay_snap_process_near_vertex!(intersection_points, record_a.edge[2], record_b, nearness_tol, T)
+    overlay_snap_process_near_vertex!(intersection_points, record_b.edge[1], record_a, nearness_tol, T)
+    overlay_snap_process_near_vertex!(intersection_points, record_b.edge[2], record_a, nearness_tol, T)
+    return intersection_points
+end
+
+overlay_snap_has_interior_intersection(intersection::NGSegmentIntersection) =
+    intersection.orientation == line_cross || intersection.orientation == line_over
+
+function overlay_snap_process_near_vertex!(
+    intersection_points,
+    point,
+    record,
+    nearness_tol,
+    ::Type{T},
+) where {T}
+    p0, p1 = record.edge
+    overlay_point_distance(point, p0, T) < nearness_tol && return intersection_points
+    overlay_point_distance(point, p1, T) < nearness_tol && return intersection_points
+    overlay_point_segment_distance(point, p0, p1, T) < nearness_tol || return intersection_points
+
+    point = _tuple_point(point, T)
+    push!(intersection_points, point)
+    overlay_snap_add_intersection!(record.segment, point, record.edge_index)
+    return intersection_points
+end
+
+function overlay_point_distance(a, b, ::Type{T}) where {T}
+    a = _tuple_point(a, T)
+    b = _tuple_point(b, T)
+    return hypot(a[1] - b[1], a[2] - b[2])
+end
+
+function overlay_point_segment_distance(point, p0, p1, ::Type{T}) where {T}
+    point = _tuple_point(point, T)
+    p0 = _tuple_point(p0, T)
+    p1 = _tuple_point(p1, T)
+    dx = p1[1] - p0[1]
+    dy = p1[2] - p0[2]
+    len2 = dx * dx + dy * dy
+    iszero(len2) && return overlay_point_distance(point, p0, T)
+    frac = clamp(((point[1] - p0[1]) * dx + (point[2] - p0[2]) * dy) / len2, zero(T), one(T))
+    closest = (p0[1] + frac * dx, p0[2] + frac * dy)
+    return overlay_point_distance(point, closest, T)
+end
+
+function overlay_snapround_add_vertex_pixels!(pixel_index::OverlayHotPixelIndex, snap_strings)
+    for snap_string in snap_strings
+        for point in snap_string.points
+            overlay_hot_pixel_index_add!(pixel_index, point)
+        end
+    end
+    return pixel_index
+end
+
+function overlay_snapround_compute_snaps(
+    pixel_index::OverlayHotPixelIndex,
+    precision_model::FixedPrecisionModel,
+    snap_strings,
+    ::Type{T};
+    exact,
+) where {T}
+    snapped = Any[]
+    for snap_string in snap_strings
+        snapped_string = overlay_snapround_compute_segment_snaps(
+            pixel_index,
+            precision_model,
+            snap_string,
+            T;
+            exact,
+        )
+        isnothing(snapped_string) || push!(snapped, snapped_string)
+    end
+    for snap_string in snapped
+        overlay_snapround_add_vertex_node_snaps!(pixel_index, snap_string)
+    end
+    return snapped
+end
+
+function overlay_snapround_compute_segment_snaps(
+    pixel_index::OverlayHotPixelIndex,
+    precision_model::FixedPrecisionModel,
+    snap_string::OverlaySnapSegmentString,
+    ::Type{T};
+    exact,
+) where {T}
+    noded_points = overlay_snap_noded_coordinates(snap_string, T)
+    rounded_points = overlay_round_coordinate_list(precision_model, noded_points, T)
+    length(rounded_points) <= 1 && return nothing
+
+    snapped_string = OverlaySnapSegmentString(
+        rounded_points,
+        snap_string.source,
+        snap_string.had_repeated_coordinates,
+        OverlaySnapNode{T}[],
+    )
+    snapped_index = 1
+    for i in 1:(length(noded_points) - 1)
+        current_snap = snapped_string.points[snapped_index]
+        next_round = apply_ng_precision(precision_model, noded_points[i + 1], T)
+        if next_round == current_snap
+            continue
+        end
+        overlay_snapround_snap_segment!(
+            pixel_index,
+            snapped_string,
+            noded_points[i],
+            noded_points[i + 1],
+            snapped_index;
+            exact,
+        )
+        snapped_index += 1
+    end
+    return snapped_string
+end
+
+function overlay_round_coordinate_list(precision_model::FixedPrecisionModel, points, ::Type{T}) where {T}
+    rounded = Tuple{T,T}[]
+    for point in points
+        rounded_point = apply_ng_precision(precision_model, point, T)
+        if isempty(rounded) || rounded_point != last(rounded)
+            push!(rounded, rounded_point)
+        end
+    end
+    return rounded
+end
+
+function overlay_snapround_snap_segment!(
+    pixel_index::OverlayHotPixelIndex,
+    snap_string::OverlaySnapSegmentString,
+    p0,
+    p1,
+    segment_index::Integer;
+    exact,
+)
+    overlay_hot_pixel_index_query(pixel_index, p0, p1) do hot_pixel
+        if !hot_pixel.is_node
+            (overlay_hot_pixel_intersects(hot_pixel, p0) || overlay_hot_pixel_intersects(hot_pixel, p1)) && return
+        end
+        if overlay_hot_pixel_intersects(hot_pixel, p0, p1; exact)
+            overlay_snap_add_intersection!(snap_string, hot_pixel.coordinate, segment_index)
+            hot_pixel.is_node = true
+        end
+    end
+    return snap_string
+end
+
+function overlay_snapround_add_vertex_node_snaps!(
+    pixel_index::OverlayHotPixelIndex,
+    snap_string::OverlaySnapSegmentString,
+)
+    length(snap_string.points) <= 2 && return snap_string
+    for coordinate_index in 2:(length(snap_string.points) - 1)
+        point = snap_string.points[coordinate_index]
+        overlay_hot_pixel_index_query(pixel_index, point, point) do hot_pixel
+            if hot_pixel.is_node && hot_pixel.coordinate == point
+                overlay_snap_add_intersection!(snap_string, point, coordinate_index)
+            end
+        end
+    end
+    return snap_string
+end
+
+function overlay_snap_add_intersection!(
+    snap_string::OverlaySnapSegmentString{T},
+    point,
+    segment_index::Integer,
+) where {T}
+    point = _tuple_point(point, T)
+    normalized_index = Int(segment_index)
+    next_index = normalized_index + 1
+    if next_index <= length(snap_string.points) && point == snap_string.points[next_index]
+        normalized_index = next_index
+    end
+    any(node -> node.segment_index == normalized_index && node.point == point, snap_string.nodes) &&
+        return snap_string
+    push!(snap_string.nodes, OverlaySnapNode(point, normalized_index))
+    return snap_string
+end
+
+function overlay_snap_noded_coordinates(snap_string::OverlaySnapSegmentString{T}, ::Type{T}) where {T}
+    nodes = overlay_snap_sorted_nodes(snap_string; add_collapsed_nodes = false)
+    coordinates = Tuple{T,T}[]
+    for i in 1:(length(nodes) - 1)
+        overlay_add_coordinate_list!(coordinates, overlay_snap_split_edge_points(snap_string, nodes[i], nodes[i + 1]))
+    end
+    return coordinates
+end
+
+function overlay_snap_noded_substrings(snap_string::OverlaySnapSegmentString{T}, ::Type{T}) where {T}
+    nodes = overlay_snap_sorted_nodes(snap_string; add_collapsed_nodes = true)
+    substrings = OverlaySegmentString[]
+    for i in 1:(length(nodes) - 1)
+        points = overlay_snap_split_edge_points(snap_string, nodes[i], nodes[i + 1])
+        overlay_edge_points_collapsed(points) && continue
+        push!(
+            substrings,
+            OverlaySegmentString(
+                Tuple{T,T}[_tuple_point(point, T) for point in points],
+                snap_string.source,
+                snap_string.had_repeated_coordinates,
+                false,
+            ),
+        )
+    end
+    return substrings
+end
+
+function overlay_snap_sorted_nodes(
+    snap_string::OverlaySnapSegmentString{T};
+    add_collapsed_nodes::Bool,
+) where {T}
+    nodes = OverlaySnapNode{T}[copy(node) for node in snap_string.nodes]
+    push!(nodes, OverlaySnapNode(first(snap_string.points), 1))
+    push!(nodes, OverlaySnapNode(last(snap_string.points), length(snap_string.points)))
+    if add_collapsed_nodes
+        overlay_snap_add_collapsed_nodes!(nodes, snap_string)
+    end
+    sort!(nodes; lt = (a, b) -> overlay_snap_compare_nodes(snap_string, a, b) < 0)
+    return overlay_snap_unique_nodes(snap_string, nodes)
+end
+
+function overlay_snap_add_collapsed_nodes!(nodes, snap_string::OverlaySnapSegmentString{T}) where {T}
+    sorted_nodes = overlay_snap_unique_nodes(
+        snap_string,
+        sort!(
+            OverlaySnapNode{T}[copy(node) for node in nodes];
+            lt = (a, b) -> overlay_snap_compare_nodes(snap_string, a, b) < 0,
+        ),
+    )
+    for i in 1:(length(sorted_nodes) - 1)
+        collapse_index = overlay_snap_inserted_collapse_index(snap_string, sorted_nodes[i], sorted_nodes[i + 1])
+        isnothing(collapse_index) || push!(nodes, OverlaySnapNode(snap_string.points[collapse_index], collapse_index))
+    end
+    for i in 1:(length(snap_string.points) - 2)
+        snap_string.points[i] == snap_string.points[i + 2] &&
+            push!(nodes, OverlaySnapNode(snap_string.points[i + 1], i + 1))
+    end
+    return nodes
+end
+
+function overlay_snap_inserted_collapse_index(snap_string, node_a::OverlaySnapNode, node_b::OverlaySnapNode)
+    node_a.point == node_b.point || return nothing
+    vertices_between = node_b.segment_index - node_a.segment_index
+    overlay_snap_node_is_interior(snap_string, node_b) || (vertices_between -= 1)
+    vertices_between == 1 && return node_a.segment_index + 1
+    return nothing
+end
+
+function overlay_snap_unique_nodes(snap_string, nodes)
+    unique_nodes = typeof(nodes)()
+    for node in nodes
+        if isempty(unique_nodes) || overlay_snap_compare_nodes(snap_string, last(unique_nodes), node) != 0
+            push!(unique_nodes, node)
+        end
+    end
+    return unique_nodes
+end
+
+function overlay_snap_compare_nodes(snap_string, a::OverlaySnapNode, b::OverlaySnapNode)
+    a.segment_index < b.segment_index && return -1
+    a.segment_index > b.segment_index && return 1
+    a.point == b.point && return 0
+
+    a_interior = overlay_snap_node_is_interior(snap_string, a)
+    b_interior = overlay_snap_node_is_interior(snap_string, b)
+    !a_interior && return -1
+    !b_interior && return 1
+    return overlay_segment_point_compare(overlay_segment_octant(snap_string.points, a.segment_index), a.point, b.point)
+end
+
+function overlay_snap_node_is_interior(snap_string, node::OverlaySnapNode)
+    node.segment_index <= length(snap_string.points) || return true
+    return node.point != snap_string.points[node.segment_index]
+end
+
+function overlay_segment_octant(points, segment_index::Integer)
+    segment_index >= length(points) && return -1
+    p0, p1 = points[segment_index], points[segment_index + 1]
+    dx = p1[1] - p0[1]
+    dy = p1[2] - p0[2]
+    dx == 0 && dy == 0 && return 0
+    abs_dx = abs(dx)
+    abs_dy = abs(dy)
+    if dx >= 0
+        return dy >= 0 ? (abs_dx >= abs_dy ? 0 : 1) : (abs_dx >= abs_dy ? 7 : 6)
+    end
+    return dy >= 0 ? (abs_dx >= abs_dy ? 3 : 2) : (abs_dx >= abs_dy ? 4 : 5)
+end
+
+function overlay_segment_point_compare(octant::Integer, p0, p1)
+    p0 == p1 && return 0
+    x_sign = overlay_relative_sign(p0[1], p1[1])
+    y_sign = overlay_relative_sign(p0[2], p1[2])
+    if octant == 0
+        return overlay_compare_signs(x_sign, y_sign)
+    elseif octant == 1
+        return overlay_compare_signs(y_sign, x_sign)
+    elseif octant == 2
+        return overlay_compare_signs(y_sign, -x_sign)
+    elseif octant == 3
+        return overlay_compare_signs(-x_sign, y_sign)
+    elseif octant == 4
+        return overlay_compare_signs(-x_sign, -y_sign)
+    elseif octant == 5
+        return overlay_compare_signs(-y_sign, -x_sign)
+    elseif octant == 6
+        return overlay_compare_signs(-y_sign, x_sign)
+    elseif octant == 7
+        return overlay_compare_signs(x_sign, -y_sign)
+    end
+    return 0
+end
+
+overlay_relative_sign(a, b) = a < b ? -1 : (a > b ? 1 : 0)
+
+function overlay_compare_signs(primary::Integer, secondary::Integer)
+    primary != 0 && return primary
+    return secondary
+end
+
+function overlay_snap_split_edge_points(snap_string, node_a::OverlaySnapNode, node_b::OverlaySnapNode)
+    npoints = node_b.segment_index - node_a.segment_index + 2
+    npoints == 2 && return [node_a.point, node_b.point]
+
+    last_segment_start = snap_string.points[node_b.segment_index]
+    use_end_node = overlay_snap_node_is_interior(snap_string, node_b) || node_b.point != last_segment_start
+    points = Any[node_a.point]
+    for point_index in (node_a.segment_index + 1):node_b.segment_index
+        push!(points, snap_string.points[point_index])
+    end
+    use_end_node && push!(points, node_b.point)
+    return points
+end
+
+function overlay_add_coordinate_list!(coordinates, points)
+    for point in points
+        if isempty(coordinates) || point != last(coordinates)
+            push!(coordinates, point)
+        end
+    end
+    return coordinates
+end
+
+function overlay_edge_points_collapsed(points)
+    length(points) < 2 && return true
+    points[1] == points[2] && return true
+    length(points) > 2 && points[end] == points[end - 1] && return true
+    return false
+end
+
+function overlay_hot_pixel_index_add_nodes!(index::OverlayHotPixelIndex, points)
+    for point in points
+        overlay_hot_pixel_index_add!(index, point).is_node = true
+    end
+    return index
+end
+
+function overlay_hot_pixel_index_add!(index::OverlayHotPixelIndex{T}, point) where {T}
+    rounded_point = apply_ng_precision(index.precision_model, point, T)
+    pixel_index = get(index.pixel_indices, rounded_point, nothing)
+    if !isnothing(pixel_index)
+        pixel = index.pixels[pixel_index]
+        pixel.is_node = true
+        return pixel
+    end
+
+    pixel = OverlayHotPixel(rounded_point, index.scale)
+    push!(index.pixels, pixel)
+    index.pixel_indices[rounded_point] = length(index.pixels)
+    return pixel
+end
+
+function overlay_hot_pixel_index_query(visitor, index::OverlayHotPixelIndex, p0, p1)
+    width = inv(index.scale)
+    extent = overlay_expand_extent(ng_segment_extent((p0, p1), typeof(index.scale)), width)
+    for pixel in index.pixels
+        overlay_point_in_extent(pixel.coordinate, extent) && visitor(pixel)
+    end
+    return nothing
+end
+
+function overlay_point_in_extent(point, extent::Extents.Extent)
+    return extent.X[1] <= point[1] <= extent.X[2] &&
+        extent.Y[1] <= point[2] <= extent.Y[2]
+end
+
+function overlay_hot_pixel_intersects(pixel::OverlayHotPixel{T}, point) where {T}
+    x = T(GI.x(point)) * pixel.scale
+    y = T(GI.y(point)) * pixel.scale
+    tolerance = one(T) / 2
+    x >= pixel.hpx + tolerance && return false
+    x < pixel.hpx - tolerance && return false
+    y >= pixel.hpy + tolerance && return false
+    y < pixel.hpy - tolerance && return false
+    return true
+end
+
+function overlay_hot_pixel_intersects(pixel::OverlayHotPixel{T}, p0, p1; exact = True()) where {T}
+    return overlay_hot_pixel_intersects_scaled(
+        pixel,
+        T(GI.x(p0)) * pixel.scale,
+        T(GI.y(p0)) * pixel.scale,
+        T(GI.x(p1)) * pixel.scale,
+        T(GI.y(p1)) * pixel.scale;
+        exact,
+    )
+end
+
+function overlay_hot_pixel_intersects_scaled(
+    pixel::OverlayHotPixel{T},
+    p0x,
+    p0y,
+    p1x,
+    p1y;
+    exact,
+) where {T}
+    px, py, qx, qy = p0x, p0y, p1x, p1y
+    if px > qx
+        px, py, qx, qy = p1x, p1y, p0x, p0y
+    end
+
+    tolerance = one(T) / 2
+    maxx = pixel.hpx + tolerance
+    min(px, qx) >= maxx && return false
+    minx = pixel.hpx - tolerance
+    max(px, qx) < minx && return false
+    maxy = pixel.hpy + tolerance
+    min(py, qy) >= maxy && return false
+    miny = pixel.hpy - tolerance
+    max(py, qy) < miny && return false
+
+    px == qx && return true
+    py == qy && return true
+
+    orient_ul = overlay_hot_pixel_orientation(px, py, qx, qy, minx, maxy; exact)
+    if orient_ul == 0
+        py < qy && return false
+        return true
+    end
+
+    orient_ur = overlay_hot_pixel_orientation(px, py, qx, qy, maxx, maxy; exact)
+    if orient_ur == 0
+        py > qy && return false
+        return true
+    end
+    orient_ul != orient_ur && return true
+
+    orient_ll = overlay_hot_pixel_orientation(px, py, qx, qy, minx, miny; exact)
+    orient_ll == 0 && return true
+    orient_ll != orient_ul && return true
+
+    orient_lr = overlay_hot_pixel_orientation(px, py, qx, qy, maxx, miny; exact)
+    if orient_lr == 0
+        py < qy && return false
+        return true
+    end
+    orient_ll != orient_lr && return true
+    orient_lr != orient_ur && return true
+    return false
+end
+
+function overlay_hot_pixel_orientation(px, py, qx, qy, x, y; exact)
+    # JTS evaluates exact corner hits against computed noding coordinates.  The
+    # local line intersector can leave those coordinates a few ulps off the
+    # corner, so normalize near-zero determinants back to the intended corner hit.
+    det = (qx - px) * (y - py) - (qy - py) * (x - px)
+    scale = max(abs(qx - px), abs(qy - py), abs(x - px), abs(y - py), 1)
+    abs(det) <= 16 * eps(typeof(det)) * scale * scale && return 0
+    orientation = ng_orientation((px, py), (qx, qy), (x, y); exact)
+    return orientation < 0 ? -1 : (orientation > 0 ? 1 : 0)
 end
 
 _overlay_initial_split_points(records) =
