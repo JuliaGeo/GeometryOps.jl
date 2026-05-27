@@ -343,7 +343,7 @@ overlay_area_collapse_line_label() = OverlayInputLabel(
     loc_exterior,
     loc_exterior,
     overlay_line_part,
-    overlay_not_collapsed,
+    overlay_collapsed,
 )
 
 overlay_empty_input_label() = OverlayInputLabel(

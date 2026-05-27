@@ -722,6 +722,17 @@ end
         ("TestOverlayEmpty.xml", 1:144, nothing),
         ("TestOverlayLLPrec.xml", 1:2, nothing),
         ("TestOverlayLAPrec.xml", 1:4, nothing),
+        ("TestOverlayAAPrec.xml", 1:1, nothing),
+        ("TestOverlayAAPrec.xml", 2:2, ("intersection",)),
+        ("TestOverlayAAPrec.xml", 3:5, ("union", "difference", "symdifference")),
+        ("TestOverlayAAPrec.xml", 6:6, nothing),
+        ("TestOverlayAAPrec.xml", 7:7, ("intersection", "union")),
+        ("TestOverlayAAPrec.xml", 11:11, nothing),
+        ("TestOverlayAAPrec.xml", 12:12, ("intersection",)),
+        ("TestOverlayAAPrec.xml", 13:14, nothing),
+        ("TestOverlayAAPrec.xml", 15:16, ("intersection",)),
+        ("TestOverlayAAPrec.xml", 17:17, nothing),
+        ("TestOverlayAAPrec.xml", 18:18, ("intersection", "symdifference")),
     )
 
     matched_operations = 0
@@ -738,5 +749,5 @@ end
             end
         end
     end
-    @test matched_operations == 757
+    @test matched_operations == 798
 end
