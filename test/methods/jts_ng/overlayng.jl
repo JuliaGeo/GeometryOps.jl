@@ -225,6 +225,15 @@ end
     @test !GO.overlay_is_boundary_edge(line_edge)
     @test GO.overlay_primary_ring_role(line_edge) == GO.ring_none
 
+    reversed_first = only(GO.overlay_merge_edges(
+        alg,
+        GI.LineString([(2.0, 0.0), (0.0, 0.0)]),
+        GI.LineString([(0.0, 0.0), (2.0, 0.0)]),
+    ))
+    @test reversed_first.key == GO.OverlayEdgeKey((0.0, 0.0), (2.0, 0.0))
+    @test reversed_first.points == [(2.0, 0.0), (0.0, 0.0)]
+    @test reversed_first.source_directions == [true, false]
+
     left = GI.Polygon([[
         (0.0, 0.0),
         (1.0, 0.0),
@@ -609,7 +618,8 @@ end
         (40.0, 25.0),
     ]])
     touch_intersection = GO.intersection(alg, touch_line_point_a, touch_line_point_b)
-    @test Set(_result_lines(touch_intersection)) == Set([[(30.0, 20.0), (30.0, 25.0)]])
+    @test Set(_overlayng_segment_key(first(line), last(line)) for line in _result_lines(touch_intersection)) ==
+        Set([_overlayng_segment_key((30.0, 20.0), (30.0, 25.0))])
     @test _result_points(touch_intersection) == [(30.0, 15.0)]
     @test _overlay_area(touch_intersection) == 0.0
 

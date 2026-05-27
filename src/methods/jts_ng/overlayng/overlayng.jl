@@ -229,15 +229,13 @@ end
 
 function OverlayEdge(segment::OverlaySegmentString{T}) where {T}
     key = OverlayEdgeKey(first(segment.points), last(segment.points), T)
-    is_forward = overlay_key_direction(key, segment)
-    points = is_forward ? copy(segment.points) : reverse(segment.points)
     source = segment.source
     return OverlayEdge{T,typeof(key)}(
         key,
-        points,
+        copy(segment.points),
         Any[source],
-        Bool[is_forward],
-        overlay_depth_delta(source, is_forward),
+        Bool[true],
+        overlay_depth_delta(source, true),
         source.is_collapsed,
     )
 end
@@ -251,13 +249,18 @@ overlay_depth_delta(source::OverlayEdgeSourceInfo, is_forward::Bool) =
     is_forward ? Int(source.depth_delta) : -Int(source.depth_delta)
 
 function overlay_add_source!(edge::OverlayEdge, segment::OverlaySegmentString)
-    is_forward = overlay_key_direction(edge.key, segment)
+    is_forward = overlay_relative_direction(edge, segment)
     source = segment.source
     push!(edge.sources, source)
     push!(edge.source_directions, is_forward)
     edge.depth_delta += overlay_depth_delta(source, is_forward)
     edge.is_collapsed |= source.is_collapsed
     return edge
+end
+
+function overlay_relative_direction(edge::OverlayEdge, segment::OverlaySegmentString)
+    return _tuple_point(first(segment.points), eltype(first(edge.points))) == first(edge.points) &&
+        _tuple_point(last(segment.points), eltype(last(edge.points))) == last(edge.points)
 end
 
 """
