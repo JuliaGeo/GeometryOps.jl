@@ -100,6 +100,20 @@ _overlayng_fixture_operation_allowed(::Nothing, op::JTSOperation) = true
 _overlayng_fixture_operation_allowed(operations, op::JTSOperation) =
     lowercase(op.name) in operations
 
+_overlayng_fixture_algorithm(test_set::JTSTestSet) =
+    GO.OverlayNG(; precision_model = _overlayng_fixture_precision_model(test_set.precision_model))
+
+_overlayng_fixture_precision_model(::Nothing) = GO.NoPrecisionModel()
+
+function _overlayng_fixture_precision_model(model::JTSPrecisionModel)
+    if uppercase(model.model_type) == "FLOATING" && isnothing(model.scale)
+        return GO.NoPrecisionModel()
+    end
+    scale = isnothing(model.scale) ? 1.0 : model.scale
+    offset = (something(model.offsetx, 0.0), something(model.offsety, 0.0))
+    return GO.FixedPrecisionModel(scale; offset)
+end
+
 @testset "OverlayNG input wrappers" begin
     alg = GO.OverlayNG()
     point_input = GO.OverlayInputGeometry(alg, GI.MultiPoint([(0.0, 0.0), (1.0, 1.0)]))
@@ -680,11 +694,13 @@ end
         ("TestOverlayLA.xml", 1:4, nothing),
         ("TestOverlayAA.xml", 1:13, nothing),
         ("TestOverlayEmpty.xml", 1:144, nothing),
+        ("TestOverlayLLPrec.xml", 1:2, nothing),
     )
 
     matched_operations = 0
     for (filename, case_indices, operations) in fixtures
         test_set = load_test_set(joinpath(_JTS_OVERLAY_FIXTURE_DIR, filename))
+        alg = _overlayng_fixture_algorithm(test_set)
         for case_index in case_indices
             case = test_set.cases[case_index]
             for op in case.operations
@@ -695,5 +711,5 @@ end
             end
         end
     end
-    @test matched_operations == 735
+    @test matched_operations == 741
 end

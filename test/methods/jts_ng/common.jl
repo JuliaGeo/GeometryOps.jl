@@ -11,6 +11,7 @@ end
 @testset "Algorithm markers" begin
     relate = GO.RelateNG()
     overlay = GO.OverlayNG()
+    fixed_overlay = GO.OverlayNG(; precision_model = GO.FixedPrecisionModel(10))
 
     @test GO.manifold(relate) isa GO.Planar
     @test GO.manifold(overlay) isa GO.Planar
@@ -22,6 +23,8 @@ end
     @test !overlay.area_result_only
     @test overlay.optimized
     @test overlay.precision_model isa GO.NoPrecisionModel
+    @test fixed_overlay.precision_model isa GO.FixedPrecisionModel
+    @test fixed_overlay.precision_model.scale == 10.0
 end
 
 @testset "Topology vocabulary" begin
@@ -213,6 +216,14 @@ end
     )
     @test snapped.orientation == GO.line_cross
     @test snapped.point1 == (1.0, 1.0)
+
+    fixed = GO.ng_segment_intersection(
+        ((0.0, 11.0), (620.0, 10.0)),
+        ((400.0, 60.0), (400.0, 10.0));
+        precision_model = GO.FixedPrecisionModel(1.0),
+    )
+    @test fixed.orientation == GO.line_cross
+    @test fixed.point1 == (400.0, 10.0)
 
     open_string = only(GO.extract_ng_segment_strings(
         GI.LineString([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0)]),

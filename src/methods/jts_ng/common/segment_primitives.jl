@@ -8,6 +8,22 @@ Dispatch hook for coordinate precision policies used by NG primitives.
 abstract type NGPrecisionModel end
 
 """
+    FixedPrecisionModel(scale; offset = (0, 0))
+
+Round coordinates to a fixed precision grid before NG primitive decisions.
+"""
+struct FixedPrecisionModel{T} <: NGPrecisionModel
+    scale::T
+    offset::Tuple{T,T}
+end
+
+function FixedPrecisionModel(scale::Real; offset = (0, 0))
+    scale > 0 || throw(ArgumentError("FixedPrecisionModel scale must be positive."))
+    T = promote_type(typeof(scale), Float64)
+    return FixedPrecisionModel(T(scale), (T(offset[1]), T(offset[2])))
+end
+
+"""
     NGSegmentIntersection
 
 Stable wrapper for segment-intersection kind, points, and segment fractions.
@@ -69,11 +85,22 @@ Apply an NG precision policy to a point.  The default policy only converts type.
 """
 apply_ng_precision(model, point, ::Type{T} = Float64) where {T} = _tuple_point(point, T)
 
+function apply_ng_precision(model::FixedPrecisionModel, point, ::Type{T} = Float64) where {T}
+    x = round((T(GI.x(point)) - T(model.offset[1])) * T(model.scale)) / T(model.scale) + T(model.offset[1])
+    y = round((T(GI.y(point)) - T(model.offset[2])) * T(model.scale)) / T(model.scale) + T(model.offset[2])
+    return (x, y)
+end
+
 function _apply_ng_precision_segment(model, segment::Tuple{<:Any,<:Any}, ::Type{T}) where {T}
     return (
         apply_ng_precision(model, segment[1], T),
         apply_ng_precision(model, segment[2], T),
     )
+end
+
+function _apply_ng_precision_intr(model, intr::Tuple, ::Type{T}) where {T}
+    point, fraction = intr
+    return apply_ng_precision(model, point, T), fraction
 end
 
 """
@@ -132,6 +159,10 @@ function ng_segment_intersection(
     orientation, intr1, intr2 = _intersection_point(manifold, T, segment_a, segment_b; exact)
     if orientation == line_over
         intr1, intr2 = _ng_order_overlap_intrs(intr1, intr2)
+    end
+    if orientation != line_out
+        intr1 = _apply_ng_precision_intr(precision_model, intr1, T)
+        intr2 = _apply_ng_precision_intr(precision_model, intr2, T)
     end
     return NGSegmentIntersection(orientation, intr1, intr2, false, false)
 end
