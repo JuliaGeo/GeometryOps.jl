@@ -1272,19 +1272,72 @@ function overlay_compute_point_nonpoint(
     if op == overlay_intersection
         return overlay_filter_results(alg, target, overlay_point_geometries(covered_points))
     elseif op == overlay_union || op == overlay_symdifference
+        nonpoint_geometries = overlay_point_dispatch_nonpoint_geometries(alg, nonpoint_input, T)
         return overlay_filter_results(
             alg,
             target,
-            Any[nonpoint_input.geom, overlay_point_geometries(exterior_points)...],
+            Any[nonpoint_geometries..., overlay_point_geometries(exterior_points)...],
         )
     elseif op == overlay_difference
         if point_is_a
             return overlay_filter_results(alg, target, overlay_point_geometries(exterior_points))
         else
-            return overlay_filter_results(alg, target, Any[nonpoint_input.geom])
+            return overlay_filter_results(
+                alg,
+                target,
+                overlay_point_dispatch_nonpoint_geometries(alg, nonpoint_input, T),
+            )
         end
     end
     throw(ArgumentError("Unknown OverlayNG operation code: $op"))
+end
+
+function overlay_point_dispatch_nonpoint_geometries(
+    alg::OverlayNG,
+    input::OverlayInputGeometry,
+    ::Type{T},
+) where {T}
+    input.dimension == dim_line || return Any[input.geom]
+
+    raw_segments = overlay_segment_strings(input, T; input_side = input_a)
+    raw_keys = overlay_record_segment_keys(overlay_segment_records(raw_segments, T), T)
+    noded_segments = overlay_node_segment_strings(alg, raw_segments, T)
+    noded_keys = overlay_segment_string_keys(noded_segments, T)
+    raw_keys == noded_keys && return Any[input.geom]
+
+    geometries = Any[]
+    seen = Set{Any}()
+    for segment in noded_segments
+        length(segment.points) < 2 && continue
+        edge = (first(segment.points), last(segment.points))
+        key = overlay_segment_key(edge, T)
+        key in seen && continue
+        push!(seen, key)
+        push!(geometries, GI.LineString(copy(segment.points)))
+    end
+    return geometries
+end
+
+function overlay_record_segment_keys(records, ::Type{T}) where {T}
+    keys = Set{Any}()
+    for record in records
+        push!(keys, overlay_segment_key(record.edge, T))
+    end
+    return keys
+end
+
+function overlay_segment_string_keys(segments, ::Type{T}) where {T}
+    keys = Set{Any}()
+    for segment in segments
+        length(segment.points) < 2 && continue
+        push!(keys, overlay_segment_key((first(segment.points), last(segment.points)), T))
+    end
+    return keys
+end
+
+function overlay_segment_key((p1, p2), ::Type{T}) where {T}
+    edge = (_tuple_point(p1, T), _tuple_point(p2, T))
+    return min(edge, (edge[2], edge[1]))
 end
 
 function overlay_partition_points(point_input::OverlayInputGeometry, nonpoint_input::OverlayInputGeometry, ::Type{T}) where {T}

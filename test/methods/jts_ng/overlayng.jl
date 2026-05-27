@@ -422,6 +422,24 @@ end
     @test length(point_symdiff) == 2
     @test point_symdiff[1] === line
     @test GO.tuples(point_symdiff[2]) == (3.0, 0.0)
+
+    self_crossing_line = GI.LineString([
+        (20.0, 20.0),
+        (110.0, 110.0),
+        (170.0, 50.0),
+        (130.0, 10.0),
+        (70.0, 70.0),
+    ])
+    self_crossing_points = GI.MultiPoint([(40.0, 90.0), (20.0, 20.0), (70.0, 70.0)])
+    self_crossing_union = GO.union(alg, self_crossing_points, self_crossing_line)
+    @test _result_points(self_crossing_union) == [(40.0, 90.0)]
+    @test Set(_overlayng_segment_key(first(line), last(line)) for line in _result_lines(self_crossing_union)) == Set([
+        _overlayng_segment_key((20.0, 20.0), (70.0, 70.0)),
+        _overlayng_segment_key((70.0, 70.0), (110.0, 110.0)),
+        _overlayng_segment_key((110.0, 110.0), (170.0, 50.0)),
+        _overlayng_segment_key((170.0, 50.0), (130.0, 10.0)),
+        _overlayng_segment_key((130.0, 10.0), (70.0, 70.0)),
+    ])
 end
 
 @testset "OverlayNG point-area dispatch" begin
@@ -656,6 +674,7 @@ end
         ("TestNGOverlayEmpty.xml", 1:16, nothing),
         ("TestNGOverlayGC.xml", 1:4, nothing),
         ("TestOverlayPP.xml", 1:8, nothing),
+        ("TestOverlayPL.xml", 1:5, nothing),
         ("TestOverlayPA.xml", 1:3, nothing),
         ("TestOverlayLL.xml", 1:7, nothing),
         ("TestOverlayLA.xml", 1:4, nothing),
@@ -676,5 +695,5 @@ end
             end
         end
     end
-    @test matched_operations == 715
+    @test matched_operations == 735
 end
