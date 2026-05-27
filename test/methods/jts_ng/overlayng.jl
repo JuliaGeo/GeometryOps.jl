@@ -259,9 +259,9 @@ end
     line_label = GO.overlay_label(line_edge)
 
     @test line_label.input_a.dimension == GO.dim_line
-    @test line_label.input_a.on_location == GO.loc_interior
-    @test line_label.input_a.left_location == GO.loc_exterior
-    @test line_label.input_a.right_location == GO.loc_exterior
+    @test isnothing(line_label.input_a.on_location)
+    @test isnothing(line_label.input_a.left_location)
+    @test isnothing(line_label.input_a.right_location)
     @test line_label.input_a.line_state == GO.overlay_line_part
     @test line_label.input_a.collapse_role == GO.overlay_not_collapsed
     @test line_label.input_b.line_state == GO.overlay_line_part
@@ -303,7 +303,7 @@ end
     missing_b_label = GO.overlay_input_label(single_line_edge, GO.input_b)
     @test missing_b_label.dimension == GO.dim_false
     @test missing_b_label.line_state == GO.overlay_not_part
-    @test missing_b_label.on_location == GO.loc_exterior
+    @test isnothing(missing_b_label.on_location)
 end
 
 @testset "OverlayNG half-edge graph" begin
@@ -323,12 +323,12 @@ end
     center_star = GO.overlay_node_star(graph, (1.0, 1.0))
     @test length(center_star) == 4
     @test getproperty.(center_star, :destination) == [
-        (0.0, 0.0),
-        (2.0, 0.0),
         (2.0, 2.0),
         (0.0, 2.0),
+        (0.0, 0.0),
+        (2.0, 0.0),
     ]
-    @test issorted(getproperty.(center_star, :angle))
+    @test issorted(GO.overlay_jts_angle.(getproperty.(center_star, :angle)))
 
     corner_star = GO.overlay_node_star(graph, (0.0, 0.0))
     @test length(corner_star) == 1
@@ -353,10 +353,20 @@ end
         (1.0, 0.0),
     ]])
     graph = GO.overlay_graph(GO.overlay_merge_edges(alg, left, right))
+    GO.overlay_compute_labelling!(
+        graph,
+        GO.OverlayInputGeometry(alg, left),
+        GO.OverlayInputGeometry(alg, right),
+    )
     shared_key = GO.OverlayEdgeKey((1.0, 0.0), (1.0, 1.0))
     shared_half_edges = filter(half_edge -> half_edge.edge.key == shared_key, graph.half_edges)
 
     duplicate_graph = GO.overlay_graph(GO.overlay_merge_edges(alg, left, right))
+    GO.overlay_compute_labelling!(
+        duplicate_graph,
+        GO.OverlayInputGeometry(alg, left),
+        GO.OverlayInputGeometry(alg, right),
+    )
     duplicate_shared_half_edges = filter(
         half_edge -> half_edge.edge.key == shared_key,
         duplicate_graph.half_edges,
@@ -380,6 +390,11 @@ end
     line_a = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
     line_b = GI.LineString([(2.0, 0.0), (0.0, 0.0)])
     line_graph = GO.overlay_graph(GO.overlay_merge_edges(alg, line_a, line_b))
+    GO.overlay_compute_labelling!(
+        line_graph,
+        GO.OverlayInputGeometry(alg, line_a),
+        GO.OverlayInputGeometry(alg, line_b),
+    )
 
     GO.overlay_mark_result_edges!(line_graph, GO.overlay_intersection)
     @test count(half_edge -> half_edge.result_line, line_graph.half_edges) == 2
@@ -390,6 +405,11 @@ end
     single_line_graph = GO.overlay_graph(GO.overlay_merge_edges(
         GO.overlay_node_segment_strings(alg, line_a, GI.MultiPoint([(10.0, 10.0)])),
     ))
+    GO.overlay_compute_labelling!(
+        single_line_graph,
+        GO.OverlayInputGeometry(alg, line_a),
+        GO.OverlayInputGeometry(alg, GI.MultiPoint([(10.0, 10.0)])),
+    )
 
     GO.overlay_mark_result_edges!(single_line_graph, GO.overlay_difference)
     @test count(half_edge -> half_edge.result_line, single_line_graph.half_edges) == 2
@@ -722,10 +742,11 @@ end
         ("TestOverlayEmpty.xml", 1:144, nothing),
         ("TestOverlayLLPrec.xml", 1:2, nothing),
         ("TestOverlayLAPrec.xml", 1:4, nothing),
-        ("TestOverlayAAPrec.xml", 1:2, nothing),
-        ("TestOverlayAAPrec.xml", 3:3, ("union", "difference", "symdifference")),
-        ("TestOverlayAAPrec.xml", 4:14, nothing),
-        ("TestOverlayAAPrec.xml", 15:16, ("intersection",)),
+        ("TestOverlayAAPrec.xml", 1:4, nothing),
+        ("TestOverlayAAPrec.xml", 5:5, ("union", "difference", "symdifference")),
+        ("TestOverlayAAPrec.xml", 6:13, nothing),
+        ("TestOverlayAAPrec.xml", 14:14, ("union", "difference", "symdifference")),
+        ("TestOverlayAAPrec.xml", 15:16, nothing),
         ("TestOverlayAAPrec.xml", 17:18, nothing),
     )
 
@@ -743,5 +764,5 @@ end
             end
         end
     end
-    @test matched_operations == 812
+    @test matched_operations == 817
 end

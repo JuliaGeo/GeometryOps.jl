@@ -119,11 +119,12 @@ Per-input OverlayNG label state for one merged edge.
 """
 struct OverlayInputLabel
     dimension::TopologicalDimension
-    on_location::TopologicalLocation
-    left_location::TopologicalLocation
-    right_location::TopologicalLocation
+    on_location::Union{Nothing,TopologicalLocation}
+    left_location::Union{Nothing,TopologicalLocation}
+    right_location::Union{Nothing,TopologicalLocation}
     line_state::OverlayLineState
     collapse_role::OverlayCollapseRole
+    ring_role::NGRingRole
 end
 
 """
@@ -175,9 +176,10 @@ Half-edge graph with angularly sorted node stars.
 mutable struct OverlayGraph
     half_edges::Vector{Any}
     node_stars::Dict{Any,Vector{Any}}
+    node_edges::Dict{Any,Any}
 end
 
-OverlayGraph() = OverlayGraph(Any[], Dict{Any,Vector{Any}}())
+OverlayGraph() = OverlayGraph(Any[], Dict{Any,Vector{Any}}(), Dict{Any,Any}())
 
 function OverlayEdgeSourceInfo(segment::NGSegmentString)
     source = segment.source
@@ -310,7 +312,7 @@ end
 
 function overlay_input_label(edge::OverlayEdge, input_side::NGInputSide)
     if overlay_is_area_collapse(edge, input_side)
-        return overlay_area_collapse_line_label()
+        return overlay_area_collapse_line_label(overlay_primary_ring_role(edge, input_side))
     end
 
     label = overlay_empty_input_label()
@@ -333,38 +335,30 @@ function overlay_is_area_collapse(edge::OverlayEdge, input_side::NGInputSide)
     return has_area_source && depth_delta == 0
 end
 
-function overlay_is_same_ring_area_collapse(edge::OverlayEdge, input_side::NGInputSide)
-    sources = Any[]
-    directions = Bool[]
-    for (source, is_forward) in zip(edge.sources, edge.source_directions)
-        source.input_side == input_side || continue
-        push!(sources, source)
-        push!(directions, is_forward)
-    end
-
-    length(sources) >= 2 || return false
-    all(source -> source.source_dimension == dim_area && !source.is_collapsed, sources) || return false
-    length(unique(getproperty.(sources, :element_id))) == 1 || return false
-    length(unique(getproperty.(sources, :ring_id))) == 1 || return false
-    return any(directions) && any(!, directions)
+function overlay_primary_ring_role(edge::OverlayEdge, input_side::NGInputSide)
+    any(source -> source.input_side == input_side && source.ring_role == ring_shell, edge.sources) && return ring_shell
+    any(source -> source.input_side == input_side && source.ring_role == ring_hole, edge.sources) && return ring_hole
+    return ring_none
 end
 
-overlay_area_collapse_line_label() = OverlayInputLabel(
+overlay_area_collapse_line_label(ring_role::NGRingRole) = OverlayInputLabel(
     dim_line,
-    loc_boundary,
-    loc_exterior,
-    loc_exterior,
+    nothing,
+    nothing,
+    nothing,
     overlay_line_part,
     overlay_collapsed,
+    ring_role,
 )
 
 overlay_empty_input_label() = OverlayInputLabel(
     dim_false,
-    loc_exterior,
-    loc_exterior,
-    loc_exterior,
+    nothing,
+    nothing,
+    nothing,
     overlay_not_part,
     overlay_not_collapsed,
+    ring_none,
 )
 
 function overlay_source_label(source::OverlayEdgeSourceInfo, is_forward::Bool)
@@ -378,15 +372,17 @@ function overlay_source_label(source::OverlayEdgeSourceInfo, is_forward::Bool)
             right_location,
             overlay_boundary_part,
             collapse_role,
+            source.ring_role,
         )
     elseif source.source_dimension == dim_line || source.is_collapsed
         return OverlayInputLabel(
             dim_line,
-            loc_interior,
-            loc_exterior,
-            loc_exterior,
+            nothing,
+            nothing,
+            nothing,
             overlay_line_part,
             collapse_role,
+            source.is_collapsed ? source.ring_role : ring_none,
         )
     end
     return overlay_empty_input_label()
@@ -407,8 +403,13 @@ function overlay_merge_input_label(a::OverlayInputLabel, b::OverlayInputLabel)
         overlay_merge_location(a.right_location, b.right_location),
         overlay_merge_line_state(a.line_state, b.line_state),
         overlay_merge_collapse_role(a.collapse_role, b.collapse_role),
+        overlay_merge_ring_role(a.ring_role, b.ring_role),
     )
 end
+
+overlay_merge_location(::Nothing, ::Nothing) = nothing
+overlay_merge_location(::Nothing, b::Union{Nothing,TopologicalLocation}) = b
+overlay_merge_location(a::Union{Nothing,TopologicalLocation}, ::Nothing) = a
 
 function overlay_merge_location(a::TopologicalLocation, b::TopologicalLocation)
     (a == loc_interior || b == loc_interior) && return loc_interior
@@ -424,6 +425,12 @@ end
 
 overlay_merge_collapse_role(a::OverlayCollapseRole, b::OverlayCollapseRole) =
     (a == overlay_collapsed || b == overlay_collapsed) ? overlay_collapsed : overlay_not_collapsed
+
+function overlay_merge_ring_role(a::NGRingRole, b::NGRingRole)
+    (a == ring_shell || b == ring_shell) && return ring_shell
+    (a == ring_hole || b == ring_hole) && return ring_hole
+    return ring_none
+end
 
 function OverlayHalfEdge(edge::OverlayEdge, origin, destination)
     origin = _tuple_point(origin, eltype(first(edge.points)))
@@ -472,13 +479,19 @@ function overlay_add_edge_pair!(graph::OverlayGraph, edge::OverlayEdge)
 end
 
 function overlay_insert_half_edge!(graph::OverlayGraph, half_edge::OverlayHalfEdge)
+    get!(graph.node_edges, half_edge.origin) do
+        half_edge
+    end
     star = get!(graph.node_stars, half_edge.origin) do
         Any[]
     end
     push!(star, half_edge)
-    sort!(star, by = edge -> edge.angle)
+    sort!(star, by = edge -> overlay_jts_angle(edge.angle))
     return half_edge
 end
+
+overlay_jts_angle(angle::Real) =
+    angle < 0 ? angle + 2π : angle
 
 overlay_node_star(graph::OverlayGraph, point) =
     get(graph.node_stars, _tuple_point(point), Any[])
@@ -494,6 +507,7 @@ function overlay_reverse_input_label(label::OverlayInputLabel)
         label.left_location,
         label.line_state,
         label.collapse_role,
+        label.ring_role,
     )
 end
 
@@ -560,15 +574,25 @@ end
 
 function overlay_mark_result_area_edges!(graph::OverlayGraph, op::OverlayOpCode)
     for half_edge in graph.half_edges
-        overlay_is_boundary_edge(half_edge.edge) || continue
         label = overlay_directed_label(half_edge)
+        overlay_is_boundary_either(label) || continue
         half_edge.result_area = overlay_result_location(
             op,
-            label.input_a.right_location,
-            label.input_b.right_location,
+            overlay_boundary_or_line_location(label.input_a, side_right),
+            overlay_boundary_or_line_location(label.input_b, side_right),
         )
     end
     return graph
+end
+
+function overlay_boundary_or_line_location(label::OverlayInputLabel, side::SidePosition)
+    location = if overlay_is_boundary_input(label)
+        side == side_left ? label.left_location : label.right_location
+    else
+        label.on_location
+    end
+    isnothing(location) && throw(ArgumentError("OverlayNG label location is unknown after labelling."))
+    return location
 end
 
 function overlay_unmark_duplicate_result_area_edges!(graph::OverlayGraph)
@@ -628,10 +652,11 @@ overlay_is_boundary_singleton(label::OverlayLabel) =
 overlay_is_boundary_both(label::OverlayLabel) =
     overlay_is_boundary_input(label.input_a) && overlay_is_boundary_input(label.input_b)
 
+overlay_is_boundary_either(label::OverlayLabel) =
+    overlay_is_boundary_input(label.input_a) || overlay_is_boundary_input(label.input_b)
+
 overlay_is_boundary_collapse(label::OverlayLabel) =
-    !overlay_is_line(label) &&
-    (overlay_is_boundary_input(label.input_a) || overlay_is_boundary_input(label.input_b)) &&
-    (overlay_is_collapse_input(label.input_a) || overlay_is_collapse_input(label.input_b))
+    !overlay_is_line(label) && !overlay_is_boundary_both(label)
 
 overlay_is_boundary_touch(label::OverlayLabel) =
     overlay_is_boundary_both(label) &&
@@ -683,6 +708,7 @@ function overlay_effective_line_location(label::OverlayInputLabel)
     if overlay_is_collapse_input(label) || overlay_is_line_input(label)
         return loc_interior
     end
+    isnothing(label.on_location) && throw(ArgumentError("OverlayNG line location is unknown after labelling."))
     return label.on_location
 end
 
@@ -691,39 +717,187 @@ function overlay_is_line_in_area(label::OverlayLabel, input_side::NGInputSide)
     return input_label.on_location == loc_interior
 end
 
-function overlay_label_disconnected_edges!(
+overlay_has_edges(input::OverlayInputGeometry) =
+    dimension_value(input.dimension) > dimension_value(dim_point)
+
+"""
+    overlay_compute_labelling!(graph, input_a, input_b)
+
+Run the JTS OverlayLabeller pass order over a noded overlay graph.
+"""
+function overlay_compute_labelling!(
     graph::OverlayGraph,
-    input_a::OverlayInputGeometry,
-    input_b::OverlayInputGeometry,
+    input_a_geom::OverlayInputGeometry,
+    input_b_geom::OverlayInputGeometry,
 )
-    for half_edge in graph.half_edges
-        half_edge.origin == first(half_edge.edge.points) || continue
-        label = overlay_label_disconnected_inputs(half_edge, input_a, input_b)
-        half_edge.label = label
-        half_edge.sym.label = label
+    overlay_label_area_node_edges!(graph, input_a_geom, input_b_geom)
+    overlay_label_connected_linear_edges!(graph, input_a_geom, input_b_geom)
+    overlay_label_collapsed_edges!(graph)
+    overlay_label_connected_linear_edges!(graph, input_a_geom, input_b_geom)
+    overlay_label_disconnected_edges!(graph, input_a_geom, input_b_geom)
+    return graph
+end
+
+function overlay_label_area_node_edges!(
+    graph::OverlayGraph,
+    input_a_geom::OverlayInputGeometry,
+    input_b_geom::OverlayInputGeometry,
+)
+    for node_edge in values(graph.node_edges)
+        input_a_geom.dimension == dim_area && overlay_propagate_area_locations!(graph, node_edge, input_a)
+        input_b_geom.dimension == dim_area && overlay_propagate_area_locations!(graph, node_edge, input_b)
     end
     return graph
 end
 
-function overlay_label_disconnected_inputs(
-    half_edge::OverlayHalfEdge,
-    input_a::OverlayInputGeometry,
-    input_b::OverlayInputGeometry,
+function overlay_propagate_area_locations!(
+    graph::OverlayGraph,
+    node_edge::OverlayHalfEdge,
+    input_side::NGInputSide,
 )
-    label = half_edge.label
-    return OverlayLabel(
-        overlay_label_disconnected_input(label.input_a, half_edge, input_a),
-        overlay_label_disconnected_input(label.input_b, half_edge, input_b),
+    star = overlay_node_star(graph, node_edge.origin)
+    length(star) <= 1 && return star
+
+    node_edge_index = findfirst(candidate -> candidate === node_edge, star)
+    isnothing(node_edge_index) && return star
+
+    start_index = nothing
+    for offset in 0:(length(star) - 1)
+        candidate_index = mod1(node_edge_index + offset, length(star))
+        half_edge = star[candidate_index]
+        if overlay_is_boundary_input(overlay_input_label(overlay_directed_label(half_edge), input_side))
+            start_index = candidate_index
+            break
+        end
+    end
+    isnothing(start_index) && return star
+
+    start_label = overlay_input_label(overlay_directed_label(star[start_index]), input_side)
+    current_location = start_label.left_location
+    isnothing(current_location) && throw(ArgumentError("OverlayNG boundary edge has no left location."))
+
+    for offset in 1:(length(star) - 1)
+        half_edge = star[mod1(start_index + offset, length(star))]
+        input_label = overlay_input_label(overlay_directed_label(half_edge), input_side)
+        if overlay_is_boundary_input(input_label)
+            input_label.right_location == current_location ||
+                throw(ArgumentError("OverlayNG side location conflict during area propagation."))
+            isnothing(input_label.left_location) &&
+                throw(ArgumentError("OverlayNG boundary edge has no left location."))
+            current_location = input_label.left_location
+        elseif overlay_is_line_location_unknown(input_label)
+            overlay_set_input_line_location!(half_edge, input_side, current_location)
+        end
+    end
+    return star
+end
+
+function overlay_label_connected_linear_edges!(
+    graph::OverlayGraph,
+    input_a_geom::OverlayInputGeometry,
+    input_b_geom::OverlayInputGeometry,
+)
+    overlay_propagate_linear_locations!(graph, input_a; input_is_line = input_a_geom.dimension == dim_line)
+    overlay_has_edges(input_b_geom) &&
+        overlay_propagate_linear_locations!(graph, input_b; input_is_line = input_b_geom.dimension == dim_line)
+    return graph
+end
+
+function overlay_propagate_linear_locations!(
+    graph::OverlayGraph,
+    input_side::NGInputSide;
+    input_is_line::Bool,
+)
+    queue = Any[]
+    for half_edge in graph.half_edges
+        input_label = overlay_input_label(half_edge.label, input_side)
+        if overlay_is_linear_input(input_label) && !overlay_is_line_location_unknown(input_label)
+            push!(queue, half_edge)
+        end
+    end
+
+    while !isempty(queue)
+        half_edge = popfirst!(queue)
+        input_label = overlay_input_label(half_edge.label, input_side)
+        line_location = input_label.on_location
+        isnothing(line_location) && continue
+        input_is_line && line_location != loc_exterior && continue
+
+        star = overlay_node_star(graph, half_edge.origin)
+        start_index = findfirst(candidate -> candidate === half_edge, star)
+        isnothing(start_index) && continue
+        for offset in 1:(length(star) - 1)
+            candidate = star[mod1(start_index + offset, length(star))]
+            candidate_label = overlay_input_label(candidate.label, input_side)
+            overlay_is_line_location_unknown(candidate_label) || continue
+            overlay_set_input_line_location!(candidate, input_side, line_location)
+            pushfirst!(queue, candidate.sym)
+        end
+    end
+    return graph
+end
+
+overlay_is_linear_input(label::OverlayInputLabel) =
+    overlay_is_line_input(label) || overlay_is_collapse_input(label)
+
+overlay_is_line_location_unknown(label::OverlayInputLabel) =
+    isnothing(label.on_location)
+
+function overlay_label_collapsed_edges!(graph::OverlayGraph)
+    for half_edge in graph.half_edges
+        half_edge.origin == first(half_edge.edge.points) || continue
+        overlay_label_collapsed_edge!(half_edge, input_a)
+        overlay_label_collapsed_edge!(half_edge, input_b)
+    end
+    return graph
+end
+
+function overlay_label_collapsed_edge!(half_edge::OverlayHalfEdge, input_side::NGInputSide)
+    input_label = overlay_input_label(half_edge.label, input_side)
+    overlay_is_line_location_unknown(input_label) || return half_edge
+    overlay_is_collapse_input(input_label) || return half_edge
+    location = input_label.ring_role == ring_hole ? loc_interior : loc_exterior
+    overlay_set_input_line_location!(half_edge, input_side, location)
+    return half_edge
+end
+
+function overlay_set_input_line_location!(
+    half_edge::OverlayHalfEdge,
+    input_side::NGInputSide,
+    location::TopologicalLocation,
+)
+    label = overlay_replace_input_label(
+        half_edge.label,
+        input_side,
+        overlay_with_line_location(overlay_input_label(half_edge.label, input_side), location),
+    )
+    half_edge.label = label
+    half_edge.sym.label = label
+    return half_edge
+end
+
+function overlay_replace_input_label(
+    label::OverlayLabel,
+    input_side::NGInputSide,
+    input_label::OverlayInputLabel,
+)
+    input_side == input_a && return OverlayLabel(input_label, label.input_b)
+    return OverlayLabel(label.input_a, input_label)
+end
+
+function overlay_with_line_location(label::OverlayInputLabel, location::TopologicalLocation)
+    return OverlayInputLabel(
+        label.dimension,
+        location,
+        label.left_location,
+        label.right_location,
+        label.line_state,
+        label.collapse_role,
+        label.ring_role,
     )
 end
 
-function overlay_label_disconnected_input(
-    label::OverlayInputLabel,
-    half_edge::OverlayHalfEdge,
-    input::OverlayInputGeometry,
-)
-    label.dimension != dim_false && return label
-    location = overlay_disconnected_edge_location(half_edge, input)
+function overlay_with_all_locations(label::OverlayInputLabel, location::TopologicalLocation)
     return OverlayInputLabel(
         label.dimension,
         location,
@@ -731,25 +905,47 @@ function overlay_label_disconnected_input(
         location,
         label.line_state,
         label.collapse_role,
+        label.ring_role,
     )
+end
+
+function overlay_label_disconnected_edges!(
+    graph::OverlayGraph,
+    input_a_geom::OverlayInputGeometry,
+    input_b_geom::OverlayInputGeometry,
+)
+    for half_edge in graph.half_edges
+        half_edge.origin == first(half_edge.edge.points) || continue
+        overlay_label_disconnected_input!(half_edge, input_a, input_a_geom)
+        overlay_label_disconnected_input!(half_edge, input_b, input_b_geom)
+    end
+    return graph
+end
+
+function overlay_label_disconnected_input!(
+    half_edge::OverlayHalfEdge,
+    input_side::NGInputSide,
+    input::OverlayInputGeometry,
+)
+    input_label = overlay_input_label(half_edge.label, input_side)
+    overlay_is_line_location_unknown(input_label) || return half_edge
+    location = overlay_disconnected_edge_location(half_edge, input)
+    new_label = overlay_replace_input_label(
+        half_edge.label,
+        input_side,
+        overlay_with_all_locations(input_label, location),
+    )
+    half_edge.label = new_label
+    half_edge.sym.label = new_label
+    return half_edge
 end
 
 function overlay_disconnected_edge_location(half_edge::OverlayHalfEdge, input::OverlayInputGeometry)
     input.dimension == dim_area || return loc_exterior
     origin_location = relate_locate_with_dim(input.locator, half_edge.origin).location
     destination_location = relate_locate_with_dim(input.locator, half_edge.destination).location
-    (origin_location == loc_interior && destination_location == loc_interior) && return loc_interior
-    (origin_location == loc_exterior && destination_location == loc_exterior) && return loc_exterior
-
-    midpoint_location = relate_locate_with_dim(
-        input.locator,
-        overlay_midpoint(half_edge.origin, half_edge.destination),
-    ).location
-    return midpoint_location == loc_exterior ? loc_exterior : loc_interior
+    return origin_location != loc_exterior && destination_location != loc_exterior ? loc_interior : loc_exterior
 end
-
-overlay_midpoint(a, b) =
-    ((a[1] + b[1]) / 2, (a[2] + b[2]) / 2)
 
 function overlay_result_area_half_edges(graph::OverlayGraph)
     return [half_edge for half_edge in graph.half_edges if half_edge.result_area]
@@ -1231,7 +1427,7 @@ function overlay_compute_edge_overlay(
 ) where {T}
     noded = overlay_node_segment_strings(alg, input_a, input_b, T)
     graph = overlay_graph(overlay_merge_edges(noded))
-    overlay_label_disconnected_edges!(graph, input_a, input_b)
+    overlay_compute_labelling!(graph, input_a, input_b)
     overlay_mark_result_edges!(
         graph,
         op;
