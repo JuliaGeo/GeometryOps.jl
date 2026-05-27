@@ -697,8 +697,8 @@ function overlay_disconnected_edge_location(half_edge::OverlayHalfEdge, input::O
     input.dimension == dim_area || return loc_exterior
     origin_location = relate_locate_with_dim(input.locator, half_edge.origin).location
     destination_location = relate_locate_with_dim(input.locator, half_edge.destination).location
-    (origin_location == loc_exterior || destination_location == loc_exterior) && return loc_exterior
     (origin_location == loc_interior && destination_location == loc_interior) && return loc_interior
+    (origin_location == loc_exterior && destination_location == loc_exterior) && return loc_exterior
 
     midpoint_location = relate_locate_with_dim(
         input.locator,

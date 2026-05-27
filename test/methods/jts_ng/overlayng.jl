@@ -677,6 +677,21 @@ end
     touch_intersection = GO.intersection(alg, touch, square)
     @test _result_points(touch_intersection) == [(0.0, 0.0)]
     @test isempty(_result_lines(touch_intersection))
+
+    fixed_alg = GO.OverlayNG(; precision_model = GO.FixedPrecisionModel(1.0))
+    line = GI.LineString([(240.0, 190.0), (120.0, 120.0)])
+    triangle = GI.Polygon([[
+        (110.0, 240.0),
+        (50.0, 80.0),
+        (240.0, 70.0),
+        (110.0, 240.0),
+    ]])
+    @test Set(_overlayng_segment_key(first(line), last(line)) for line in _result_lines(
+        GO.intersection(fixed_alg, line, triangle),
+    )) == Set([_overlayng_segment_key((177.0, 153.0), (120.0, 120.0))])
+    @test Set(_overlayng_segment_key(first(line), last(line)) for line in _result_lines(
+        GO.difference(fixed_alg, line, triangle),
+    )) == Set([_overlayng_segment_key((240.0, 190.0), (177.0, 153.0))])
 end
 
 @testset "OverlayNG JTS XML smoke fixtures" begin
@@ -695,6 +710,8 @@ end
         ("TestOverlayAA.xml", 1:13, nothing),
         ("TestOverlayEmpty.xml", 1:144, nothing),
         ("TestOverlayLLPrec.xml", 1:2, nothing),
+        ("TestOverlayLAPrec.xml", 1:1, ("intersection",)),
+        ("TestOverlayLAPrec.xml", 2:4, nothing),
     )
 
     matched_operations = 0
@@ -711,5 +728,5 @@ end
             end
         end
     end
-    @test matched_operations == 741
+    @test matched_operations == 754
 end
