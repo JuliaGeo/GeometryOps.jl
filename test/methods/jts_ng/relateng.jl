@@ -4,6 +4,25 @@ import GeoInterface as GI
 import GeoInterface.Extents: Extents
 using GeometryOpsTestHelpers
 
+const _JTS_RELATE_MISC_FIXTURE_DIR = normpath(joinpath(
+    @__DIR__,
+    "..",
+    "..",
+    "..",
+    "..",
+    "jts",
+    "modules",
+    "tests",
+    "src",
+    "test",
+    "resources",
+    "testxml",
+    "misc",
+))
+
+_relateng_jts_misc_fixtures_available() =
+    isfile(joinpath(_JTS_RELATE_MISC_FIXTURE_DIR, "TestRelateGC.xml"))
+
 function _relateng_fixture_value(alg::GO.RelateNG, op::JTSOperation)
     name = lowercase(op.name)
     a = op.arguments[1]
@@ -363,6 +382,24 @@ end
     end
 end
 
+@testset "RelateNG JTS geometry collection fixtures" begin
+    if !_relateng_jts_misc_fixtures_available()
+        @test_skip _relateng_jts_misc_fixtures_available()
+    else
+        test_set = load_test_set(joinpath(_JTS_RELATE_MISC_FIXTURE_DIR, "TestRelateGC.xml"))
+        matched_operations = 0
+        for alg in (GO.RelateNG(), GO.RelateNG(; prepared = true))
+            for case in test_set.cases
+                for op in case.operations
+                    matched_operations += 1
+                    @test _relateng_fixture_value(alg, op) === op.expected
+                end
+            end
+        end
+        @test matched_operations == 656
+    end
+end
+
 @testset "Relate topology interaction predicates" begin
     a = Extents.Extent(X = (0.0, 1.0), Y = (0.0, 1.0))
     b = Extents.Extent(X = (2.0, 3.0), Y = (2.0, 3.0))
@@ -612,6 +649,31 @@ end
 
 @testset "RelateNG polygon node section conversion" begin
     node_point = (0.0, 0.0)
+    @test GO._relate_compare_angle(node_point, (1.0, 0.0), (0.0, 1.0)) < 0
+    @test GO._relate_compare_angle(node_point, (2.0, 0.0), (1.0, 0.0)) == 0
+    @test GO.relate_polygon_node_is_crossing(
+        node_point,
+        (-1.0, -1.0),
+        (1.0, 1.0),
+        (-1.0, 1.0),
+        (1.0, -1.0),
+    )
+    @test !GO.relate_polygon_node_is_crossing(
+        node_point,
+        (-1.0, 0.0),
+        (1.0, 0.0),
+        (0.0, 1.0),
+        (2.0, 0.0),
+    )
+
+    node = GO.RelateNode(node_point)
+    GO.relate_add_line_edge!(node, GO.input_a, (0.0, 1.0))
+    GO.relate_add_line_edge!(node, GO.input_a, (0.0, -1.0))
+    GO.relate_add_line_edge!(node, GO.input_a, (1.0, 0.0))
+    GO.relate_add_line_edge!(node, GO.input_a, (-1.0, 0.0))
+    @test getproperty.(node.edges, :direction_point) ==
+        [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)]
+
     shell = GO.RelateNodeSection(
         GO.input_a,
         GO.dim_area,
@@ -738,7 +800,7 @@ end
     @test GO.contains(alg, collection, point)
 end
 
-@testset "RelateNG point path unsupported edge cases" begin
+@testset "RelateNG mixed area-line collection evaluation" begin
     crossing_line_a = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
     mixed_collection = GI.GeometryCollection([
         crossing_line_a,
@@ -758,8 +820,13 @@ end
         (0.0, 0.0),
     ]])
 
-    @test_throws ArgumentError GO.relate_matrix(GO.RelateNG(), mixed_collection, polygon)
-    @test_throws ArgumentError GO.contains(GO.RelateNG(), polygon, mixed_collection)
+    for alg in (GO.RelateNG(), GO.RelateNG(; prepared = true))
+        @test GO.de9im_string(GO.relate_matrix(alg, mixed_collection, polygon)) ==
+            "2FFF1FFF2"
+        @test GO.contains(alg, polygon, mixed_collection)
+        @test GO.contains(alg, mixed_collection, polygon)
+        @test GO.equals(alg, mixed_collection, polygon)
+    end
 end
 
 @testset "RelateNG mutual line edge events" begin

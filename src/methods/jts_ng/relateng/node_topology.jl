@@ -123,13 +123,69 @@ function relate_create_edge(
     return edge
 end
 
-function relate_edge_angle(edge::RelateEdge)
-    return _relate_angle(edge.node_point, edge.direction_point)
+function _relate_quadrant(origin, point)
+    dx = point[1] - origin[1]
+    dy = point[2] - origin[2]
+    iszero(dx) && iszero(dy) &&
+        throw(ArgumentError("Cannot compute quadrant for identical points."))
+    if dx >= 0
+        return dy >= 0 ? 0 : 3
+    else
+        return dy >= 0 ? 1 : 2
+    end
 end
 
-function _relate_angle(origin, point)
-    angle = atan(point[2] - origin[2], point[1] - origin[1])
-    return angle < 0 ? angle + 2pi : angle
+"""
+    _relate_compare_angle(origin, point, other)
+
+Compare two node-originating edge angles using JTS quadrant/orientation order.
+"""
+function _relate_compare_angle(origin, point, other; exact = True())
+    quadrant_point = _relate_quadrant(origin, point)
+    quadrant_other = _relate_quadrant(origin, other)
+    quadrant_point > quadrant_other && return 1
+    quadrant_point < quadrant_other && return -1
+
+    orientation = ng_orientation(origin, other, point; exact)
+    orientation > 0 && return 1
+    orientation < 0 && return -1
+    return 0
+end
+
+_relate_is_angle_greater(origin, point, other; exact = True()) =
+    _relate_compare_angle(origin, point, other; exact) > 0
+
+function _relate_compare_between(origin, point, edge_lo, edge_hi; exact = True())
+    comp_lo = _relate_compare_angle(origin, point, edge_lo; exact)
+    iszero(comp_lo) && return 0
+    comp_hi = _relate_compare_angle(origin, point, edge_hi; exact)
+    iszero(comp_hi) && return 0
+    return comp_lo > 0 && comp_hi < 0 ? 1 : -1
+end
+
+"""
+    relate_polygon_node_is_crossing(node_point, a0, a1, b0, b1)
+
+Return true when two polygon ring sections cross at a shared node.
+"""
+function relate_polygon_node_is_crossing(
+    node_point,
+    a0,
+    a1,
+    b0,
+    b1;
+    exact = True(),
+)
+    a_lo, a_hi = a0, a1
+    if _relate_is_angle_greater(node_point, a_lo, a_hi; exact)
+        a_lo, a_hi = a1, a0
+    end
+
+    comp_between0 = _relate_compare_between(node_point, b0, a_lo, a_hi; exact)
+    iszero(comp_between0) && return false
+    comp_between1 = _relate_compare_between(node_point, b1, a_lo, a_hi; exact)
+    iszero(comp_between1) && return false
+    return comp_between0 != comp_between1
 end
 
 function relate_edge_location(edge::RelateEdge, input_side::NGInputSide, side::SidePosition)
@@ -327,13 +383,12 @@ function relate_add_edge!(
     direction = _tuple_point(direction_point, T)
     direction == node.point && return nothing
 
-    angle = _relate_angle(node.point, direction)
     for (i, edge) in pairs(node.edges)
-        edge_angle = relate_edge_angle(edge)
-        if isapprox(edge_angle, angle; atol = eps(T), rtol = zero(T))
+        comparison = _relate_compare_angle(node.point, edge.direction_point, direction)
+        if iszero(comparison)
             relate_merge_edge!(edge, input_side, dimension, is_forward)
             return edge
-        elseif edge_angle > angle
+        elseif comparison > 0
             edge = relate_create_edge(node.point, direction, input_side, dimension, is_forward)
             insert!(node.edges, i, edge)
             return edge
@@ -461,7 +516,11 @@ function relate_convert_polygon_sections(poly_sections)
     sections = relate_extract_unique_sections(
         sort(
             collect(poly_sections);
-            by = section -> _relate_section_angle(section.previous_vertex, section.node_point),
+            lt = (a, b) -> _relate_compare_angle(
+                a.node_point,
+                a.previous_vertex,
+                b.previous_vertex,
+            ) < 0,
         ),
     )
     length(sections) == 1 && return sections
@@ -557,11 +616,6 @@ function _relate_section_key(section::RelateNodeSection)
         section.node_point,
         section.next_vertex,
     )
-end
-
-function _relate_section_angle(previous_vertex, node_point)
-    isnothing(previous_vertex) && return -Inf
-    return _relate_angle(node_point, previous_vertex)
 end
 
 _relate_next_wrapped_index(list, index::Integer) =

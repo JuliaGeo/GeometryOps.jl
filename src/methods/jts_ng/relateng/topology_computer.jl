@@ -505,7 +505,14 @@ function relate_update_area_area_cross!(
     a::RelateNodeSection,
     b::RelateNodeSection,
 )
-    if relate_is_proper(a, b)
+    if relate_is_proper(a, b) ||
+            relate_polygon_node_is_crossing(
+                a.node_point,
+                a.previous_vertex,
+                a.next_vertex,
+                b.previous_vertex,
+                b.next_vertex,
+            )
         relate_update_dimension!(computer, loc_interior, loc_interior, dim_area)
     end
     return computer

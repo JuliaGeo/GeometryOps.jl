@@ -10,11 +10,13 @@ function relate_compute_edge_intersections!(
     ::Type{T} = Float64;
     exact = True(),
 ) where {T}
-    _relate_extents_intersect(computer.geom_a.extent, computer.geom_b.extent) || return computer
+    extents_known = _relate_edge_extents_known(computer)
+    env_int = extents_known ? Extents.intersection(computer.geom_a.extent, computer.geom_b.extent) : nothing
+    extents_known && isnothing(env_int) && return computer
 
-    segments_b = relate_segment_strings(computer.geom_b, T; input_side = input_b)
+    segments_b = relate_segment_strings(computer.geom_b, T; input_side = input_b, extent = env_int)
     if relate_is_self_noding_required(computer)
-        return relate_compute_all_edge_intersections!(computer, segments_b, T; exact)
+        return relate_compute_all_edge_intersections!(computer, segments_b, T; extent = env_int, exact)
     elseif computer.geom_a.prepared
         prepared_index = relate_prepared_edge_index(computer.geom_a, T)
         if !isnothing(prepared_index)
@@ -28,7 +30,7 @@ function relate_compute_edge_intersections!(
         end
     end
 
-    segments_a = relate_segment_strings(computer.geom_a, T; input_side = input_a)
+    segments_a = relate_segment_strings(computer.geom_a, T; input_side = input_a, extent = env_int)
     for segment_a in segments_a
         relate_process_segment_pairs!(computer, segment_a, segments_b, T; exact)
         relate_is_result_known(computer) && return computer
@@ -36,9 +38,8 @@ function relate_compute_edge_intersections!(
     return computer
 end
 
-_relate_extents_intersect(::Nothing, extent_b) = true
-_relate_extents_intersect(extent_a, ::Nothing) = true
-_relate_extents_intersect(extent_a, extent_b) = Extents.intersects(extent_a, extent_b)
+_relate_edge_extents_known(computer::RelateTopologyComputer) =
+    !isnothing(computer.geom_a.extent) && !isnothing(computer.geom_b.extent)
 
 function relate_process_segment_pairs!(
     computer::RelateTopologyComputer,
@@ -60,9 +61,10 @@ function relate_compute_all_edge_intersections!(
     computer::RelateTopologyComputer,
     segments_b,
     ::Type{T};
+    extent = nothing,
     exact,
 ) where {T}
-    segments_a = relate_segment_strings(computer.geom_a, T; input_side = input_a)
+    segments_a = relate_segment_strings(computer.geom_a, T; input_side = input_a, extent)
     relate_process_self_segment_pairs!(computer, segments_a, T; exact)
     relate_is_result_known(computer) && return computer
     relate_process_self_segment_pairs!(computer, segments_b, T; exact)

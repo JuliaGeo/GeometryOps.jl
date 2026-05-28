@@ -9,9 +9,6 @@ function relate_evaluate_predicate(alg::RelateNG, a, b, predicate::TopologyPredi
     computer = RelateTopologyComputer(alg, predicate, a, b)
     relate_is_result_known(computer) && return _relate_finish_predicate!(computer)
 
-    _relate_can_evaluate_current_paths(computer) ||
-        throw(ArgumentError("RelateNG edge-vs-edge evaluation is not implemented yet."))
-
     dim_a = relate_dimension_real(computer.geom_a)
     dim_b = relate_dimension_real(computer.geom_b)
     if dim_a == dim_point && dim_b == dim_point
@@ -38,19 +35,6 @@ end
 function _relate_finish_predicate!(computer::RelateTopologyComputer)
     relate_finish!(computer)
     return computer.predicate
-end
-
-function _relate_can_evaluate_current_paths(computer::RelateTopologyComputer)
-    dim_a = relate_dimension_real(computer.geom_a)
-    dim_b = relate_dimension_real(computer.geom_b)
-    dim_a == dim_false && return true
-    dim_b == dim_false && return true
-    dim_a == dim_point && return true
-    dim_b == dim_point && return true
-    computer.predicate isa RelateInteractionPredicate && return true
-    !(relate_has_area_and_line(computer.geom_a) || relate_has_area_and_line(computer.geom_b)) &&
-        return true
-    return false
 end
 
 """
