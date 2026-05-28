@@ -392,7 +392,7 @@ function parse_operation(op_node::XML.Node, geom_a, geom_b)
     attrs = Dict(String(k) => String(v) for (k, v) in XML.attributes(op_node))
     name = attrs["name"]
     argument_refs = _argument_refs(attrs)
-    arguments = Any[_resolve_argument(ref, geom_a, geom_b) for ref in argument_refs]
+    arguments = Any[_resolve_argument(name, ref, geom_a, geom_b) for ref in argument_refs]
     expected_text = _node_text(op_node)
     expected = _parse_expected(expected_text)
     return JTSOperation(name, argument_refs, arguments, expected, expected_text, attrs)
@@ -608,12 +608,14 @@ function _argument_refs(attrs::Dict{String,String})
     return [attrs[k] for k in arg_keys]
 end
 
-function _resolve_argument(ref::AbstractString, geom_a, geom_b)
+function _resolve_argument(op_name::AbstractString, ref::AbstractString, geom_a, geom_b)
     lower_ref = lowercase(strip(ref))
     if lower_ref == "a"
         return geom_a
     elseif lower_ref == "b"
         return geom_b
+    elseif lowercase(strip(op_name)) == "relate"
+        return strip(ref)
     else
         return _parse_literal(ref)
     end

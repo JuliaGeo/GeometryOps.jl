@@ -163,6 +163,9 @@ function ng_segment_intersection(
         return _ng_no_segment_intersection(T, degenerate_a, degenerate_b)
 
     orientation, intr1, intr2 = _intersection_point(manifold, T, segment_a, segment_b; exact)
+    if orientation == line_cross
+        intr1 = _ng_stable_cross_intr(segment_a, segment_b, T)
+    end
     if orientation == line_over
         intr1, intr2 = _ng_order_overlap_intrs(intr1, intr2)
     end
@@ -171,6 +174,36 @@ function ng_segment_intersection(
         intr2 = _apply_ng_precision_intr(precision_model, intr2, T)
     end
     return NGSegmentIntersection(orientation, intr1, intr2, false, false)
+end
+
+"""
+    _ng_stable_cross_intr(segment_a, segment_b, T)
+
+Compute a crossing point in high precision so equivalent NG nodes share a key.
+"""
+function _ng_stable_cross_intr(segment_a, segment_b, ::Type{T}) where {T}
+    return setprecision(BigFloat, 256) do
+        (a1x, a1y), (a2x, a2y) = _ng_big_segment(segment_a)
+        (b1x, b1y), (b2x, b2y) = _ng_big_segment(segment_b)
+        adx, ady = a2x - a1x, a2y - a1y
+        bdx, bdy = b2x - b1x, b2y - b1y
+        bax, bay = b1x - a1x, b1y - a1y
+        denom = adx * bdy - ady * bdx
+        alpha = (bax * bdy - bay * bdx) / denom
+        beta = (bax * ady - bay * adx) / denom
+        x = abs(adx) >= abs(bdx) ? a1x + alpha * adx : b1x + beta * bdx
+        y = abs(ady) >= abs(bdy) ? a1y + alpha * ady : b1y + beta * bdy
+        return (T(x), T(y)), (
+            clamp(T(alpha), eps(T), one(T) - eps(T)),
+            clamp(T(beta), eps(T), one(T) - eps(T)),
+        )
+    end
+end
+
+function _ng_big_segment((p1, p2))
+    p1 = _tuple_point(p1)
+    p2 = _tuple_point(p2)
+    return (BigFloat(p1[1]), BigFloat(p1[2])), (BigFloat(p2[1]), BigFloat(p2[2]))
 end
 
 """

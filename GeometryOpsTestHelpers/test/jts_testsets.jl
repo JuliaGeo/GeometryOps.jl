@@ -13,6 +13,7 @@ using GeometryOpsTestHelpers
         <a>POINT (0 0)</a>
         <b>POINT (0 0)</b>
         <test><op name="relate" arg1="A" arg2="B" arg3="0FFFFFFF2">true</op></test>
+        <test><op name="relate" arg1="A" arg2="B" arg3="212101212">false</op></test>
         <test><op name="intersection" arg1="A" arg2="B">POINT (0 0)</op></test>
       </case>
     </run>
@@ -39,7 +40,7 @@ using GeometryOpsTestHelpers
         @test primary_conformance_category(test_set, case) == :point_point
         @test conformance_categories(test_set, case) == [:point_point, :precision_snap]
         @test has_conformance_category(test_set, case, :point_point)
-        @test length(case.operations) == 2
+        @test length(case.operations) == 3
 
         relate = case.operations[1]
         @test is_relate_operation(relate)
@@ -50,7 +51,11 @@ using GeometryOpsTestHelpers
         @test relate.arguments[3] == "0FFFFFFF2"
         @test relate.expected === true
 
-        overlay = case.operations[2]
+        numeric_relate = case.operations[2]
+        @test numeric_relate.arguments[3] == "212101212"
+        @test numeric_relate.expected === false
+
+        overlay = case.operations[3]
         @test is_overlay_operation(overlay)
         @test is_overlay_operation("intersectionNG")
         @test is_overlay_operation("symDifferenceNG")
@@ -75,8 +80,10 @@ using GeometryOpsTestHelpers
         marked_ops = only(marked.cases).operations
         @test is_broken(marked_ops[1])
         @test marked_ops[1].status_reason == "matrix later"
-        @test is_unimplemented(marked_ops[2])
-        @test marked_ops[2].status_reason == "overlay later"
+        @test is_broken(marked_ops[2])
+        @test marked_ops[2].status_reason == "matrix later"
+        @test is_unimplemented(marked_ops[3])
+        @test marked_ops[3].status_reason == "overlay later"
     end
 end
 

@@ -20,8 +20,27 @@ const _JTS_RELATE_MISC_FIXTURE_DIR = normpath(joinpath(
     "misc",
 ))
 
+const _JTS_RELATE_GENERAL_FIXTURE_DIR = normpath(joinpath(
+    @__DIR__,
+    "..",
+    "..",
+    "..",
+    "..",
+    "jts",
+    "modules",
+    "tests",
+    "src",
+    "test",
+    "resources",
+    "testxml",
+    "general",
+))
+
 _relateng_jts_misc_fixtures_available() =
     isfile(joinpath(_JTS_RELATE_MISC_FIXTURE_DIR, "TestRelateGC.xml"))
+
+_relateng_jts_general_fixtures_available() =
+    isfile(joinpath(_JTS_RELATE_GENERAL_FIXTURE_DIR, "TestRelatePP.xml"))
 
 function _relateng_fixture_value(alg::GO.RelateNG, op::JTSOperation)
     name = lowercase(op.name)
@@ -379,6 +398,39 @@ end
                 end
             end
         end
+    end
+end
+
+@testset "RelateNG JTS general fixtures" begin
+    if !_relateng_jts_general_fixtures_available()
+        @test_skip _relateng_jts_general_fixtures_available()
+    else
+        fixtures = (
+            ("TestRelatePP.xml", 1:4),
+            ("TestRelatePL.xml", 1:8),
+            ("TestRelatePA.xml", 1:11),
+            ("TestRelateAA.xml", 1:14),
+            # Empty-geometry relate fixtures are covered separately once the
+            # fixture helper lowers typed empties into GeometryOps values.
+            ("TestRelateLA.xml", 1:11),
+            ("TestRelateLL.xml", [1:20; 22:25]),
+        )
+
+        matched_operations = 0
+        for alg in (GO.RelateNG(), GO.RelateNG(; prepared = true))
+            for (filename, case_indices) in fixtures
+                test_set = load_test_set(joinpath(_JTS_RELATE_GENERAL_FIXTURE_DIR, filename))
+                for case_index in case_indices
+                    case = test_set.cases[case_index]
+                    for op in case.operations
+                        is_relate_operation(op) || continue
+                        matched_operations += 1
+                        @test _relateng_fixture_value(alg, op) === op.expected
+                    end
+                end
+            end
+        end
+        @test matched_operations == 458
     end
 end
 

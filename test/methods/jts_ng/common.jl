@@ -174,6 +174,18 @@ end
     @test all(cross.fraction1 .≈ (0.5, 0.5))
     @test GO.ng_intersection_points(cross) == [cross.point1]
 
+    diag = ((0.0, 0.0), (1.0, 1.0))
+    horizontal = ((1.0, 0.1), (-1.0, 0.1))
+    diag_horizontal = GO.ng_segment_intersection(diag, horizontal)
+    horizontal_diag = GO.ng_segment_intersection(horizontal, diag)
+    @test diag_horizontal.orientation == GO.line_cross
+    @test diag_horizontal.point1 == horizontal_diag.point1 == (0.1, 0.1)
+
+    self_cross_a = ((40.0, 40.0), (160.0, 160.0))
+    self_cross_b = ((200.0, 60.0), (60.0, 140.0))
+    @test GO.ng_segment_intersection(self_cross_a, self_cross_b).point1 ==
+        GO.ng_segment_intersection(self_cross_b, self_cross_a).point1
+
     hinge = GO.ng_segment_intersection(
         ((0.0, 0.0), (1.0, 1.0)),
         ((1.0, 1.0), (2.0, 0.0)),
