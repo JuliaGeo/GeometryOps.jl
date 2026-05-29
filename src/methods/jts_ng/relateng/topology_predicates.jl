@@ -98,11 +98,24 @@ function relate_init_predicate!(
 )
     relate_init_dimensions!(predicate, relate_dimension_real(geom_a), relate_dimension_real(geom_b))
     relate_init_extents!(predicate, geom_a.extent, geom_b.extent)
+    relate_init_empty!(predicate, geom_a, geom_b)
     return predicate
 end
 
 relate_init_dimensions!(predicate::RelateInteractionPredicate, dim_a, dim_b) = predicate
 relate_init_extents!(predicate::TopologyPredicate, extent_a, extent_b) = predicate
+relate_init_empty!(predicate::TopologyPredicate, geom_a::RelateGeometry, geom_b::RelateGeometry) = predicate
+
+function relate_init_empty!(
+    predicate::RelateIMPredicate,
+    geom_a::RelateGeometry,
+    geom_b::RelateGeometry,
+)
+    if predicate.name == :equals
+        _relate_set_value_if_unknown!(predicate, true, geom_a.is_empty && geom_b.is_empty)
+    end
+    return predicate
+end
 
 function relate_init_dimensions!(predicate::Union{RelateIMPredicate,RelatePatternPredicate,RelateMatrixPredicate}, dim_a, dim_b)
     predicate.dim_a = dim_a

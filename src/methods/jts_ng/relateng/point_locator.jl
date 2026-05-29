@@ -63,7 +63,7 @@ function relate_locate_with_dim(
     parent_polygonal = nothing,
     exact = True(),
 )
-    GI.isempty(locator.geom) && return RELATE_EXTERIOR
+    _relate_is_empty(locator.geom) && return RELATE_EXTERIOR
 
     if is_node && _relate_is_polygonal(GI.trait(locator.geom), locator.geom)
         return DimensionLocation(dim_area, loc_boundary)
@@ -118,6 +118,21 @@ _relate_locate_on_polygonals(::GI.PointTrait, geom, point, is_node, parent_polyg
 _relate_locate_on_polygonals(::GI.MultiPointTrait, geom, point, is_node, parent_polygonal; exact) = loc_exterior
 _relate_locate_on_polygonals(::GI.AbstractCurveTrait, geom, point, is_node, parent_polygonal; exact) = loc_exterior
 
+function _relate_locate_on_polygonals(::GI.FeatureCollectionTrait, fc, point, is_node, parent_polygonal; exact)
+    polygonal_locations = TopologicalLocation[]
+    for feature in GI.getfeature(fc)
+        loc = _relate_locate_on_polygonals(feature, point, is_node, parent_polygonal; exact)
+        loc == loc_interior && return loc_interior
+        loc == loc_boundary && push!(polygonal_locations, loc)
+    end
+    return _relate_resolve_polygonal_boundary_count(length(polygonal_locations), fc, point; exact)
+end
+
+function _relate_locate_on_polygonals(::GI.FeatureTrait, feature, point, is_node, parent_polygonal; exact)
+    geom = GI.geometry(feature)
+    return _relate_locate_on_polygonals(GI.trait(geom), geom, point, is_node, parent_polygonal; exact)
+end
+
 function _relate_locate_on_polygonals(::GI.PolygonTrait, polygon, point, is_node, parent_polygonal; exact)
     return _relate_locate_on_polygonal(polygon, point, is_node, parent_polygonal; exact)
 end
@@ -143,6 +158,16 @@ function _relate_locate_on_polygonals(::GI.AbstractGeometryTrait, geom, point, i
         loc == loc_boundary && push!(polygonal_locations, loc)
     end
     return _relate_resolve_polygonal_boundary_count(length(polygonal_locations), geom, point; exact)
+end
+
+function _relate_locate_on_polygonals(::Nothing, iterable, point, is_node, parent_polygonal; exact)
+    polygonal_locations = TopologicalLocation[]
+    for child in iterable
+        loc = _relate_locate_on_polygonals(child, point, is_node, parent_polygonal; exact)
+        loc == loc_interior && return loc_interior
+        loc == loc_boundary && push!(polygonal_locations, loc)
+    end
+    return length(polygonal_locations) > 0 ? loc_boundary : loc_exterior
 end
 
 function _relate_locate_on_polygonal_collection(polygonal_geom, polygons, point, is_node, parent_polygonal; exact)
@@ -205,6 +230,15 @@ _relate_probe_polygonals(::GI.PointTrait, geom, point; exact) = loc_exterior
 _relate_probe_polygonals(::GI.MultiPointTrait, geom, point; exact) = loc_exterior
 _relate_probe_polygonals(::GI.AbstractCurveTrait, geom, point; exact) = loc_exterior
 
+function _relate_probe_polygonals(::GI.FeatureCollectionTrait, fc, point; exact)
+    return _relate_probe_polygonals(nothing, GI.getfeature(fc), point; exact)
+end
+
+function _relate_probe_polygonals(::GI.FeatureTrait, feature, point; exact)
+    geom = GI.geometry(feature)
+    return _relate_probe_polygonals(GI.trait(geom), geom, point; exact)
+end
+
 function _relate_probe_polygonals(::GI.PolygonTrait, polygon, point; exact)
     return _relate_point_polygon_location(point, polygon; exact)
 end
@@ -231,11 +265,27 @@ function _relate_probe_polygonals(::GI.AbstractGeometryTrait, geom, point; exact
     return loc_exterior
 end
 
+function _relate_probe_polygonals(::Nothing, iterable, point; exact)
+    boundary_count = 0
+    for child in iterable
+        loc = _relate_probe_polygonals(GI.trait(child), child, point; exact)
+        loc == loc_interior && return loc_interior
+        boundary_count += loc == loc_boundary
+    end
+    boundary_count > 0 && return loc_boundary
+    return loc_exterior
+end
+
 function _relate_is_parent_polygonal(parent_polygonal, polygon)
     isnothing(parent_polygonal) && return false
     parent_polygonal === polygon && return true
 
     trait = GI.trait(parent_polygonal)
+    if trait isa GI.FeatureTrait
+        return _relate_is_parent_polygonal(GI.geometry(parent_polygonal), polygon)
+    elseif trait isa GI.FeatureCollectionTrait
+        return any(feature -> _relate_is_parent_polygonal(feature, polygon), GI.getfeature(parent_polygonal))
+    end
     if trait isa Union{GI.MultiPolygonTrait,GI.GeometryCollectionTrait}
         return any(child -> child === polygon, GI.getgeom(parent_polygonal))
     end
@@ -253,6 +303,16 @@ function _relate_is_line_boundary(locator::RelatePointLocator, point)
     return is_in_boundary(locator.boundary_node_rule, boundary_count)
 end
 
+_relate_has_lines(::GI.FeatureTrait, feature) =
+    _relate_has_lines(GI.trait(GI.geometry(feature)), GI.geometry(feature))
+
+_relate_has_lines(::GI.FeatureCollectionTrait, fc) =
+    _relate_has_lines(nothing, GI.getfeature(fc))
+
+function _relate_has_lines(::Nothing, iterable)
+    return any(child -> _relate_has_lines(GI.trait(child), child), iterable)
+end
+
 _relate_has_lines(::GI.PointTrait, geom) = false
 _relate_has_lines(::GI.MultiPointTrait, geom) = false
 _relate_has_lines(::GI.PolygonTrait, geom) = false
@@ -268,6 +328,23 @@ _relate_line_boundary_count(::GI.PointTrait, geom, point) = 0
 _relate_line_boundary_count(::GI.MultiPointTrait, geom, point) = 0
 _relate_line_boundary_count(::GI.PolygonTrait, geom, point) = 0
 _relate_line_boundary_count(::GI.MultiPolygonTrait, geom, point) = 0
+
+function _relate_line_boundary_count(::GI.FeatureTrait, feature, point)
+    geom = GI.geometry(feature)
+    return _relate_line_boundary_count(GI.trait(geom), geom, point)
+end
+
+function _relate_line_boundary_count(::GI.FeatureCollectionTrait, fc, point)
+    return _relate_line_boundary_count(nothing, GI.getfeature(fc), point)
+end
+
+function _relate_line_boundary_count(::Nothing, iterable, point)
+    count = 0
+    for child in iterable
+        count += _relate_line_boundary_count(GI.trait(child), child, point)
+    end
+    return count
+end
 
 function _relate_line_boundary_count(::GI.AbstractCurveTrait, curve, point)
     GI.isempty(curve) && return 0
@@ -292,6 +369,22 @@ _relate_point_on_any_line(::GI.PointTrait, geom, point) = false
 _relate_point_on_any_line(::GI.MultiPointTrait, geom, point) = false
 _relate_point_on_any_line(::GI.PolygonTrait, geom, point) = false
 _relate_point_on_any_line(::GI.MultiPolygonTrait, geom, point) = false
+
+function _relate_point_on_any_line(::GI.FeatureTrait, feature, point)
+    geom = GI.geometry(feature)
+    return _relate_point_on_any_line(GI.trait(geom), geom, point)
+end
+
+function _relate_point_on_any_line(::GI.FeatureCollectionTrait, fc, point)
+    return _relate_point_on_any_line(nothing, GI.getfeature(fc), point)
+end
+
+function _relate_point_on_any_line(::Nothing, iterable, point)
+    for child in iterable
+        _relate_point_on_any_line(GI.trait(child), child, point) && return true
+    end
+    return false
+end
 
 function _relate_point_on_any_line(::GI.AbstractCurveTrait, curve, point)
     GI.isempty(curve) && return false

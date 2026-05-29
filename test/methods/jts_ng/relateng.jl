@@ -39,13 +39,16 @@ const _JTS_RELATE_GENERAL_FIXTURE_DIR = normpath(joinpath(
 _relateng_jts_misc_fixtures_available() =
     isfile(joinpath(_JTS_RELATE_MISC_FIXTURE_DIR, "TestRelateGC.xml"))
 
+_relateng_jts_empty_fixtures_available() =
+    isfile(joinpath(_JTS_RELATE_MISC_FIXTURE_DIR, "TestRelateEmpty.xml"))
+
 _relateng_jts_general_fixtures_available() =
     isfile(joinpath(_JTS_RELATE_GENERAL_FIXTURE_DIR, "TestRelatePP.xml"))
 
 function _relateng_fixture_value(alg::GO.RelateNG, op::JTSOperation)
     name = lowercase(op.name)
-    a = op.arguments[1]
-    b = op.arguments[2]
+    a = _relateng_fixture_argument(op.arguments[1])
+    b = _relateng_fixture_argument(op.arguments[2])
     if name == "relate"
         return GO.relate(alg, a, b, op.arguments[3])
     elseif name == "intersects"
@@ -72,6 +75,9 @@ function _relateng_fixture_value(alg::GO.RelateNG, op::JTSOperation)
     error("Unsupported RelateNG fixture operation: $(op.name)")
 end
 
+_relateng_fixture_argument(geom) = geom
+_relateng_fixture_argument(::JTSEmptyGeometry) = GI.FeatureCollection(Any[])
+
 @testset "RelatePointLocator point and line locations" begin
     point_locator = GO.RelatePointLocator(GI.Point(1.0, 1.0))
     point_hit = GO.relate_locate_with_dim(point_locator, (1.0, 1.0))
@@ -80,6 +86,9 @@ end
     @test point_hit == GO.DimensionLocation(GO.dim_point, GO.loc_interior)
     @test point_miss == GO.RELATE_EXTERIOR
     @test GO.relate_locate(point_locator, (1.0, 1.0)) == GO.loc_interior
+
+    empty_locator = GO.RelatePointLocator(GI.FeatureCollection(Any[]))
+    @test GO.relate_locate_with_dim(empty_locator, (0.0, 0.0)) == GO.RELATE_EXTERIOR
 
     line_locator = GO.RelatePointLocator(GI.LineString([(0.0, 0.0), (2.0, 0.0)]))
     @test GO.relate_locate_with_dim(line_locator, (1.0, 0.0)) ==
@@ -410,8 +419,6 @@ end
             ("TestRelatePL.xml", 1:8),
             ("TestRelatePA.xml", 1:11),
             ("TestRelateAA.xml", 1:14),
-            # Empty-geometry relate fixtures are covered separately once the
-            # fixture helper lowers typed empties into GeometryOps values.
             ("TestRelateLA.xml", 1:11),
             ("TestRelateLL.xml", [1:20; 22:25]),
         )
@@ -431,6 +438,25 @@ end
             end
         end
         @test matched_operations == 458
+    end
+end
+
+@testset "RelateNG JTS empty fixtures" begin
+    if !_relateng_jts_empty_fixtures_available()
+        @test_skip _relateng_jts_empty_fixtures_available()
+    else
+        test_set = load_test_set(joinpath(_JTS_RELATE_MISC_FIXTURE_DIR, "TestRelateEmpty.xml"))
+        matched_operations = 0
+        for alg in (GO.RelateNG(), GO.RelateNG(; prepared = true))
+            for case in test_set.cases
+                for op in case.operations
+                    is_relate_operation(op) || continue
+                    matched_operations += 1
+                    @test _relateng_fixture_value(alg, op) === op.expected
+                end
+            end
+        end
+        @test matched_operations == 1144
     end
 end
 
