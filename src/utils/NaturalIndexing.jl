@@ -82,14 +82,12 @@ function NaturalIndex{E}(last_level_extents::Vector{E}; nodecapacity = 32) where
     for level_index in (nlevels-1):(-1):1
         prev_level = levels[level_index+1] # this is always instantiated, since we are iterating backwards
         nrects = _number_of_keys(nodecapacity, nlevels - (level_index), ngeoms)
-        extents = [
-            begin
-                start = (rect_index - 1) * nodecapacity + 1
-                stop = min(start + nodecapacity - 1, length(prev_level.extents))
-                reduce(Extents.union, view(prev_level.extents, start:stop))
-            end
-            for rect_index in 1:nrects
-        ]
+        extents = Vector{E}(undef, nrects)
+        for rect_index in 1:nrects
+            start = (rect_index - 1) * nodecapacity + 1
+            stop = min(start + nodecapacity - 1, length(prev_level.extents))
+            extents[rect_index] = reduce(Extents.union, view(prev_level.extents, start:stop))
+        end
         levels[level_index] = NaturalLevel(extents)
     end
 

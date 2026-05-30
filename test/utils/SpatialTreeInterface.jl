@@ -227,6 +227,17 @@ end
     test_dual_query_functionality(NaturalIndex)
     test_geometry_support(NaturalIndex)
     test_find_point_in_all_countries(NaturalIndex)
+
+    @testset "abstract extent vector" begin
+        extents = Extents.Extent[]
+        for i in 1:40
+            x = Float64(i)
+            push!(extents, Extents.Extent(X = (x, x + 0.25), Y = (0.0, 1.0)))
+        end
+        tree = NaturalIndex(extents)
+        @test length(tree.levels) > 1
+        @test collect(query(tree, extents[1])) == [1]
+    end
 end
 
 # This testset is not used because Polylabel.jl has some issues.

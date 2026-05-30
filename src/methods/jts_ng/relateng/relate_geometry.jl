@@ -328,10 +328,72 @@ Return cached unique point coordinates from point components.
 """
 function relate_unique_points(relate_geometry::RelateGeometry)
     if isnothing(relate_geometry.unique_points_cache)
-        relate_geometry.unique_points_cache =
-            Set(extracted.point for extracted in extract_ng_points(relate_geometry.geom))
+        points = if dimension_value(relate_dimension_real(relate_geometry)) <= dimension_value(dim_point)
+            _relate_component_coordinates(relate_geometry.geom, Float64)
+        else
+            (extracted.point for extracted in extract_ng_points(relate_geometry.geom))
+        end
+        relate_geometry.unique_points_cache = Set(points)
     end
     return relate_geometry.unique_points_cache
+end
+
+"""
+    _relate_component_coordinates(geom, T)
+
+Representative point/curve component coordinates for point-dimension RelateNG paths.
+"""
+function _relate_component_coordinates(geom, ::Type{T}) where {T}
+    points = Tuple{T,T}[]
+    _relate_component_coordinates!(points, GI.trait(geom), geom, T)
+    return points
+end
+
+function _relate_component_coordinates!(points, ::Nothing, iterable, ::Type{T}) where {T}
+    for geom in iterable
+        _relate_component_coordinates!(points, GI.trait(geom), geom, T)
+    end
+    return points
+end
+
+_relate_component_coordinates!(points, ::GI.FeatureCollectionTrait, fc, ::Type{T}) where {T} =
+    _relate_component_coordinates!(points, nothing, GI.getfeature(fc), T)
+
+function _relate_component_coordinates!(points, ::GI.FeatureTrait, feature, ::Type{T}) where {T}
+    geom = GI.geometry(feature)
+    return _relate_component_coordinates!(points, GI.trait(geom), geom, T)
+end
+
+function _relate_component_coordinates!(points, ::GI.PointTrait, point, ::Type{T}) where {T}
+    GI.isempty(point) && return points
+    push!(points, _tuple_point(point, T))
+    return points
+end
+
+function _relate_component_coordinates!(points, ::GI.MultiPointTrait, multipoint, ::Type{T}) where {T}
+    GI.isempty(multipoint) && return points
+    for point in GI.getpoint(multipoint)
+        push!(points, _tuple_point(point, T))
+    end
+    return points
+end
+
+function _relate_component_coordinates!(points, ::GI.AbstractCurveTrait, curve, ::Type{T}) where {T}
+    GI.isempty(curve) && return points
+    GI.npoint(curve) == 0 && return points
+    push!(points, _tuple_point(GI.getpoint(curve, 1), T))
+    return points
+end
+
+_relate_component_coordinates!(points, ::GI.PolygonTrait, geom, ::Type{T}) where {T} = points
+_relate_component_coordinates!(points, ::GI.MultiPolygonTrait, geom, ::Type{T}) where {T} = points
+
+function _relate_component_coordinates!(points, ::GI.AbstractGeometryTrait, geom, ::Type{T}) where {T}
+    GI.isempty(geom) && return points
+    for child in GI.getgeom(geom)
+        _relate_component_coordinates!(points, GI.trait(child), child, T)
+    end
+    return points
 end
 
 """
