@@ -1,16 +1,6 @@
 # # RelateNG point-location substrate
 
 const RELATE_EXTERIOR = DimensionLocation(dim_false, loc_exterior)
-const _RELATE_ADJACENT_PROBE_DIRECTIONS = (
-    (1.0, 0.4142135623730951),
-    (0.4142135623730951, 1.0),
-    (-0.4142135623730951, 1.0),
-    (-1.0, 0.4142135623730951),
-    (-1.0, -0.4142135623730951),
-    (-0.4142135623730951, -1.0),
-    (0.4142135623730951, -1.0),
-    (1.0, -0.4142135623730951),
-)
 
 """
     RelatePointLocator(geom; boundary_node_rule, prepared)
@@ -206,74 +196,76 @@ function _relate_point_polygon_location(point, polygon; exact)
     return loc_interior
 end
 
-function _relate_locate_adjacent_area_boundary(polygonal_geom, point; exact)
-    probe_distance = _relate_probe_distance(polygonal_geom)
-    x, y = _tuple_point(point)
+function _relate_locate_adjacent_area_boundary(polygonal_geom, point; exact = True())
+    sections = _relate_adjacent_edge_sections(polygonal_geom, point; exact)
+    isempty(sections.sections) && return loc_boundary
 
-    for (dx, dy) in _RELATE_ADJACENT_PROBE_DIRECTIONS
-        probe = (x + probe_distance * dx, y + probe_distance * dy)
-        loc = _relate_probe_polygonals(GI.trait(polygonal_geom), polygonal_geom, probe; exact)
-        loc == loc_exterior && return loc_boundary
+    node = relate_create_node(sections)
+    return _relate_node_has_exterior_edge(node, input_a) ? loc_boundary : loc_interior
+end
+
+"""
+    _relate_adjacent_edge_sections(geom, point)
+
+Build the JTS `AdjacentEdgeLocator` node sections for polygonal rings touching `point`.
+"""
+function _relate_adjacent_edge_sections(polygonal_geom, point; exact = True())
+    point = _tuple_point(point, Float64)
+    sections = RelateNodeSections(point)
+    segments = extract_ng_segment_strings(
+        polygonal_geom,
+        Float64;
+        input_side = input_a,
+        orient_rings = :relateng,
+    )
+    for segment in segments
+        segment.source.source_dimension == dim_area || continue
+        _relate_add_adjacent_edge_sections!(sections, segment.points, point; exact)
     end
-    return loc_interior
+    return sections
 end
 
-function _relate_probe_distance(geom)
-    extent = GI.extent(geom)
-    xspan = extent.X[2] - extent.X[1]
-    yspan = extent.Y[2] - extent.Y[1]
-    span = max(abs(xspan), abs(yspan), 1.0)
-    return max(span * sqrt(eps(Float64)), eps(Float64))
-end
+function _relate_add_adjacent_edge_sections!(sections, ring_points, point; exact)
+    length(ring_points) >= 2 || return sections
+    for i in 1:(length(ring_points) - 1)
+        p0 = ring_points[i]
+        pnext = ring_points[i + 1]
 
-_relate_probe_polygonals(::GI.PointTrait, geom, point; exact) = loc_exterior
-_relate_probe_polygonals(::GI.MultiPointTrait, geom, point; exact) = loc_exterior
-_relate_probe_polygonals(::GI.AbstractCurveTrait, geom, point; exact) = loc_exterior
-
-function _relate_probe_polygonals(::GI.FeatureCollectionTrait, fc, point; exact)
-    return _relate_probe_polygonals(nothing, GI.getfeature(fc), point; exact)
-end
-
-function _relate_probe_polygonals(::GI.FeatureTrait, feature, point; exact)
-    geom = GI.geometry(feature)
-    return _relate_probe_polygonals(GI.trait(geom), geom, point; exact)
-end
-
-function _relate_probe_polygonals(::GI.PolygonTrait, polygon, point; exact)
-    return _relate_point_polygon_location(point, polygon; exact)
-end
-
-function _relate_probe_polygonals(::GI.MultiPolygonTrait, multipolygon, point; exact)
-    boundary_count = 0
-    for polygon in GI.getpolygon(multipolygon)
-        loc = _relate_point_polygon_location(point, polygon; exact)
-        loc == loc_interior && return loc_interior
-        boundary_count += loc == loc_boundary
+        if point == pnext
+            continue
+        elseif point == p0
+            iprev = i > 1 ? i - 1 : length(ring_points) - 1
+            relate_add_node_section!(
+                sections,
+                _relate_adjacent_edge_section(point, ring_points[iprev], pnext),
+            )
+        elseif ng_jts_point_on_segment(point, p0, pnext)
+            relate_add_node_section!(sections, _relate_adjacent_edge_section(point, p0, pnext))
+        end
     end
-    boundary_count > 0 && return loc_boundary
-    return loc_exterior
+    return sections
 end
 
-function _relate_probe_polygonals(::GI.AbstractGeometryTrait, geom, point; exact)
-    boundary_count = 0
-    for child in GI.getgeom(geom)
-        loc = _relate_probe_polygonals(GI.trait(child), child, point; exact)
-        loc == loc_interior && return loc_interior
-        boundary_count += loc == loc_boundary
-    end
-    boundary_count > 0 && return loc_boundary
-    return loc_exterior
+function _relate_adjacent_edge_section(point, previous_vertex, next_vertex)
+    return RelateNodeSection(
+        input_a,
+        dim_area,
+        1,
+        0,
+        nothing,
+        false,
+        point,
+        previous_vertex,
+        next_vertex,
+    )
 end
 
-function _relate_probe_polygonals(::Nothing, iterable, point; exact)
-    boundary_count = 0
-    for child in iterable
-        loc = _relate_probe_polygonals(GI.trait(child), child, point; exact)
-        loc == loc_interior && return loc_interior
-        boundary_count += loc == loc_boundary
+function _relate_node_has_exterior_edge(node::RelateNode, input_side::NGInputSide)
+    for edge in node.edges
+        relate_edge_location(edge, input_side, side_left) == loc_exterior && return true
+        relate_edge_location(edge, input_side, side_right) == loc_exterior && return true
     end
-    boundary_count > 0 && return loc_boundary
-    return loc_exterior
+    return false
 end
 
 function _relate_is_parent_polygonal(parent_polygonal, polygon)

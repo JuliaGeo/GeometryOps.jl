@@ -146,7 +146,7 @@ function _relate_compare_angle(origin, point, other; exact = True())
     quadrant_point > quadrant_other && return 1
     quadrant_point < quadrant_other && return -1
 
-    orientation = ng_orientation(origin, other, point; exact)
+    orientation = ng_jts_orientation_index(origin, other, point)
     orientation > 0 && return 1
     orientation < 0 && return -1
     return 0

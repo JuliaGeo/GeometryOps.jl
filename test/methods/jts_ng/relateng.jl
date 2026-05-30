@@ -226,6 +226,20 @@ end
     area_line_locator = GO.RelatePointLocator(area_line_collection)
     @test GO.relate_locate_line_end_with_dim(area_line_locator, (0.5, 0.5)) ==
         GO.DimensionLocation(GO.dim_area, GO.loc_interior)
+
+    adjacent_sections = GO._relate_adjacent_edge_sections(GI.MultiPolygon([left, right]), (1.0, 0.5))
+    @test length(adjacent_sections.sections) == 2
+    adjacent_node = GO.relate_create_node(adjacent_sections)
+    @test !GO._relate_node_has_exterior_edge(adjacent_node, GO.input_a)
+    @test GO._relate_locate_adjacent_area_boundary(GI.MultiPolygon([left, right]), (1.0, 0.5)) ==
+        GO.loc_interior
+
+    corner_sections = GO._relate_adjacent_edge_sections(GI.MultiPolygon([left, corner]), (1.0, 1.0))
+    @test length(corner_sections.sections) == 2
+    corner_node = GO.relate_create_node(corner_sections)
+    @test GO._relate_node_has_exterior_edge(corner_node, GO.input_a)
+    @test GO._relate_locate_adjacent_area_boundary(GI.MultiPolygon([left, corner]), (1.0, 1.0)) ==
+        GO.loc_boundary
 end
 
 @testset "RelateGeometry metadata and lazy caches" begin
@@ -837,6 +851,42 @@ end
         (2.0, 0.0),
     )
 
+    @test GO.relate_polygon_node_is_crossing(
+        (1000.0, 1000.0),
+        (500.0, 1000.0),
+        (1000.0, 1500.0),
+        (1000.0, 500.0),
+        (500.0, 1500.0),
+    )
+    @test !GO.relate_polygon_node_is_crossing(
+        (1000.0, 1000.0),
+        (500.0, 1000.0),
+        (1000.0, 1500.0),
+        (300.0, 1200.0),
+        (500.0, 1500.0),
+    )
+    @test !GO.relate_polygon_node_is_crossing(
+        (1000.0, 1000.0),
+        (500.0, 1000.0),
+        (1000.0, 1500.0),
+        (1000.0, 500.0),
+        (1500.0, 1000.0),
+    )
+    @test !GO.relate_polygon_node_is_crossing(
+        (5.0, 5.0),
+        (3.0, 1.0),
+        (9.0, 9.0),
+        (2.0, 1.0),
+        (9.0, 9.0),
+    )
+    @test !GO.relate_polygon_node_is_crossing(
+        (5.0, 5.0),
+        (3.0, 1.0),
+        (9.0, 9.0),
+        (3.0, 1.0),
+        (9.0, 9.0),
+    )
+
     node = GO.RelateNode(node_point)
     GO.relate_add_line_edge!(node, GO.input_a, (0.0, 1.0))
     GO.relate_add_line_edge!(node, GO.input_a, (0.0, -1.0))
@@ -844,6 +894,12 @@ end
     GO.relate_add_line_edge!(node, GO.input_a, (-1.0, 0.0))
     @test getproperty.(node.edges, :direction_point) ==
         [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)]
+
+    merge_node = GO.RelateNode(node_point)
+    first_edge = GO.relate_add_line_edge!(merge_node, GO.input_a, (1.0, 0.0))
+    second_edge = GO.relate_add_line_edge!(merge_node, GO.input_b, (2.0, 0.0))
+    @test first_edge === second_edge
+    @test length(merge_node.edges) == 1
 
     shell = GO.RelateNodeSection(
         GO.input_a,
