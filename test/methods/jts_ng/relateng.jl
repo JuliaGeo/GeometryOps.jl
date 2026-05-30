@@ -36,6 +36,22 @@ const _JTS_RELATE_GENERAL_FIXTURE_DIR = normpath(joinpath(
     "general",
 ))
 
+const _JTS_RELATE_ROBUST_FIXTURE_DIR = normpath(joinpath(
+    @__DIR__,
+    "..",
+    "..",
+    "..",
+    "..",
+    "jts",
+    "modules",
+    "tests",
+    "src",
+    "test",
+    "resources",
+    "testxml",
+    "robust",
+))
+
 _relateng_jts_misc_fixtures_available() =
     isfile(joinpath(_JTS_RELATE_MISC_FIXTURE_DIR, "TestRelateGC.xml"))
 
@@ -44,6 +60,9 @@ _relateng_jts_empty_fixtures_available() =
 
 _relateng_jts_general_fixtures_available() =
     isfile(joinpath(_JTS_RELATE_GENERAL_FIXTURE_DIR, "TestRelatePP.xml"))
+
+_relateng_jts_robust_fixtures_available() =
+    isfile(joinpath(_JTS_RELATE_ROBUST_FIXTURE_DIR, "TestRobustRelate.xml"))
 
 function _relateng_fixture_value(alg::GO.RelateNG, op::JTSOperation)
     name = lowercase(op.name)
@@ -457,6 +476,33 @@ end
             end
         end
         @test matched_operations == 1144
+    end
+end
+
+@testset "RelateNG JTS robust fixtures" begin
+    if !_relateng_jts_robust_fixtures_available()
+        @test_skip _relateng_jts_robust_fixtures_available()
+    else
+        fixtures = (
+            ("TestRobustRelate.xml", 1:1),
+            ("TestRobustRelateFloat.xml", 2:2),
+        )
+
+        matched_operations = 0
+        for alg in (GO.RelateNG(), GO.RelateNG(; prepared = true))
+            for (filename, case_indices) in fixtures
+                test_set = load_test_set(joinpath(_JTS_RELATE_ROBUST_FIXTURE_DIR, filename))
+                for case_index in case_indices
+                    case = test_set.cases[case_index]
+                    for op in case.operations
+                        is_relate_operation(op) || continue
+                        matched_operations += 1
+                        @test _relateng_fixture_value(alg, op) === op.expected
+                    end
+                end
+            end
+        end
+        @test matched_operations == 4
     end
 end
 

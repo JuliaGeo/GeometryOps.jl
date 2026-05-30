@@ -194,14 +194,14 @@ function _relate_locate_on_polygonal(polygon, point, is_node::Bool, parent_polyg
 end
 
 function _relate_point_polygon_location(point, polygon; exact)
-    exterior_location = _point_filled_curve_orientation(point, GI.getexterior(polygon); exact)
-    exterior_location == point_out && return loc_exterior
-    exterior_location == point_on && return loc_boundary
+    exterior_location = ng_jts_locate_point_in_ring(point, GI.getexterior(polygon))
+    exterior_location == loc_exterior && return loc_exterior
+    exterior_location == loc_boundary && return loc_boundary
 
     for hole in GI.gethole(polygon)
-        hole_location = _point_filled_curve_orientation(point, hole; exact)
-        hole_location == point_in && return loc_exterior
-        hole_location == point_on && return loc_boundary
+        hole_location = ng_jts_locate_point_in_ring(point, hole)
+        hole_location == loc_interior && return loc_exterior
+        hole_location == loc_boundary && return loc_boundary
     end
     return loc_interior
 end
@@ -407,7 +407,7 @@ function _relate_point_on_curve(point, curve)
     previous = GI.getpoint(curve, 1)
     for i in 2:npoints
         current = GI.getpoint(curve, i)
-        if _point_segment_orientation(point, previous, current; in = true, on = true, out = false)
+        if ng_jts_point_on_segment(point, previous, current)
             return true
         end
         previous = current

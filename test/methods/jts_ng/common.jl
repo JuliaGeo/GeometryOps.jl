@@ -163,6 +163,7 @@ end
 @testset "NG segment primitives" begin
     @test GO.ng_orientation((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)) > 0
     @test GO.ng_cross((1.0, 0.0), (0.0, 1.0)) > 0
+    @test GO.ng_jts_orientation_index((0.0, 0.0), (1.0, 0.0), (0.0, 1.0)) == 1
 
     cross = GO.ng_segment_intersection(
         ((0.0, 0.0), (2.0, 2.0)),
@@ -218,6 +219,16 @@ end
         ((0.0, 0.0), (1.0, 1.0)),
         ((2.0, 2.0), (3.0, 3.0)),
     )
+
+    @test !GO.ng_jts_point_on_segment(
+        (0.0, 0.0),
+        (-1.23456789e8, -40.0),
+        (3.81039468754763e14, 1.23456789e8),
+    )
+    @test GO.ng_jts_locate_point_in_ring(
+        (0.5, 0.0),
+        GI.LinearRing([(0.0, 0.0), (1.0, 0.0), (0.0, 1.0), (0.0, 0.0)]),
+    ) == GO.loc_boundary
 end
 
 @testset "NG precision hooks and half-closed ownership" begin

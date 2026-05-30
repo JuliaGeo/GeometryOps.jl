@@ -74,6 +74,181 @@ Return the robust orientation sign of point `c` relative to directed segment `a 
 ng_orientation(a, b, c; exact = True()) = Predicates.orient(a, b, c; exact)
 
 """
+    ng_jts_orientation_index(p1, p2, q)
+
+Return JTS `Orientation.index` semantics for point `q` relative to `p1 => p2`.
+"""
+function ng_jts_orientation_index(p1, p2, q)
+    p1x, p1y = _tuple_point(p1, Float64)
+    p2x, p2y = _tuple_point(p2, Float64)
+    qx, qy = _tuple_point(q, Float64)
+
+    index = _ng_jts_orientation_index_filter(p1x, p1y, p2x, p2y, qx, qy)
+    index <= 1 && return index
+
+    return _ng_jts_orientation_index_dd(p1x, p1y, p2x, p2y, qx, qy)
+end
+
+function _ng_jts_orientation_index_filter(p1x, p1y, p2x, p2y, qx, qy)
+    detleft = (p1x - qx) * (p2y - qy)
+    detright = (p1y - qy) * (p2x - qx)
+    det = detleft - detright
+
+    if detleft > 0.0
+        detright <= 0.0 && return _ng_jts_signum(det)
+        detsum = detleft + detright
+    elseif detleft < 0.0
+        detright >= 0.0 && return _ng_jts_signum(det)
+        detsum = -detleft - detright
+    else
+        return _ng_jts_signum(det)
+    end
+
+    errbound = 1e-15 * detsum
+    (det >= errbound || -det >= errbound) && return _ng_jts_signum(det)
+    return 2
+end
+
+function _ng_jts_orientation_index_dd(p1x, p1y, p2x, p2y, qx, qy)
+    dx1 = _ng_jts_dd_add(_ng_jts_dd(p2x), -p1x)
+    dy1 = _ng_jts_dd_add(_ng_jts_dd(p2y), -p1y)
+    dx2 = _ng_jts_dd_add(_ng_jts_dd(qx), -p2x)
+    dy2 = _ng_jts_dd_add(_ng_jts_dd(qy), -p2y)
+    det = _ng_jts_dd_subtract(
+        _ng_jts_dd_multiply(dx1, dy2),
+        _ng_jts_dd_multiply(dy1, dx2),
+    )
+    return _ng_jts_dd_signum(det)
+end
+
+_ng_jts_signum(value) = value > zero(value) ? 1 : value < zero(value) ? -1 : 0
+
+const _NG_JTS_DD_SPLIT = 134217729.0
+
+_ng_jts_dd(value) = (Float64(value), 0.0)
+
+function _ng_jts_dd_add((hi, lo)::Tuple{Float64,Float64}, y::Float64)
+    S = hi + y
+    e = S - hi
+    s = S - e
+    s = (y - e) + (hi - s)
+    f = s + lo
+    H = S + f
+    h = f + (S - H)
+    zhi = H + h
+    zlo = h + (H - zhi)
+    return zhi, zlo
+end
+
+function _ng_jts_dd_subtract(
+    (hi, lo)::Tuple{Float64,Float64},
+    (yhi0, ylo0)::Tuple{Float64,Float64},
+)
+    yhi, ylo = -yhi0, -ylo0
+    S = hi + yhi
+    T = lo + ylo
+    e = S - hi
+    f = T - lo
+    s = S - e
+    t = T - f
+    s = (yhi - e) + (hi - s)
+    t = (ylo - f) + (lo - t)
+    e = s + T
+    H = S + e
+    h = e + (S - H)
+    e = t + h
+    zhi = H + e
+    zlo = e + (H - zhi)
+    return zhi, zlo
+end
+
+function _ng_jts_dd_multiply(
+    (hi, lo)::Tuple{Float64,Float64},
+    (yhi, ylo)::Tuple{Float64,Float64},
+)
+    C = _NG_JTS_DD_SPLIT * hi
+    hx = C - hi
+    c = _NG_JTS_DD_SPLIT * yhi
+    hx = C - hx
+    tx = hi - hx
+    hy = c - yhi
+    C = hi * yhi
+    hy = c - hy
+    ty = yhi - hy
+    c = ((((hx * hy - C) + hx * ty) + tx * hy) + tx * ty) + (hi * ylo + lo * yhi)
+    zhi = C + c
+    hx = C - zhi
+    zlo = c + hx
+    return zhi, zlo
+end
+
+function _ng_jts_dd_signum((hi, lo)::Tuple{Float64,Float64})
+    hi > 0 && return 1
+    hi < 0 && return -1
+    lo > 0 && return 1
+    lo < 0 && return -1
+    return 0
+end
+
+"""
+    ng_jts_point_on_segment(point, p0, p1)
+
+Return whether `point` lies on a segment using JTS `PointLocation.isOnSegment`.
+"""
+function ng_jts_point_on_segment(point, p0, p1)
+    point = _tuple_point(point, Float64)
+    p0 = _tuple_point(p0, Float64)
+    p1 = _tuple_point(p1, Float64)
+
+    _point_in_extent(point, ng_segment_extent((p0, p1), Float64)) || return false
+    point == p0 && return true
+    return ng_jts_orientation_index(p0, p1, point) == 0
+end
+
+"""
+    ng_jts_locate_point_in_ring(point, ring)
+
+Locate `point` against a ring using JTS `RayCrossingCounter` semantics.
+"""
+function ng_jts_locate_point_in_ring(point, ring)
+    npoints = GI.npoint(ring)
+    npoints < 2 && return loc_exterior
+
+    point = _tuple_point(point, Float64)
+    crossing_count = 0
+    for i in 2:npoints
+        p1 = _tuple_point(GI.getpoint(ring, i), Float64)
+        p2 = _tuple_point(GI.getpoint(ring, i - 1), Float64)
+        count, is_on_segment = _ng_jts_count_ray_segment(point, p1, p2)
+        is_on_segment && return loc_boundary
+        crossing_count += count
+    end
+    return isodd(crossing_count) ? loc_interior : loc_exterior
+end
+
+function _ng_jts_count_ray_segment(point, p1, p2)
+    px, py = point
+    p1x, p1y = p1
+    p2x, p2y = p2
+
+    p1x < px && p2x < px && return 0, false
+    (px == p2x && py == p2y) && return 0, true
+
+    if p1y == py && p2y == py
+        minx, maxx = minmax(p1x, p2x)
+        return 0, px >= minx && px <= maxx
+    end
+
+    if ((p1y > py && p2y <= py) || (p2y > py && p1y <= py))
+        orient = ng_jts_orientation_index(p1, p2, point)
+        orient == 0 && return 0, true
+        p2y < p1y && (orient = -orient)
+        return orient == 1 ? 1 : 0, false
+    end
+    return 0, false
+end
+
+"""
     ng_cross(a, b; exact = True())
 
 Return the robust sign of the 2D cross product `a × b`.
