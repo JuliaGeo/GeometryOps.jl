@@ -13,11 +13,29 @@ Run all tests:
 julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-To run a single test file in isolation, simply include it while in the test environment:
+To run a single test file in isolation, simply include it while in the test environment (test files are self-contained — each one does its own `using`/`import`):
 
 ```bash
 julia --project=test -e 'include("test/methods/area.jl")'
 ```
+
+### Testing Against Multiple Geometry Implementations
+
+The **GeometryOpsTestHelpers/** subpackage provides `@test_implementations` and `@testset_implementations`. These macros run a test block once per geometry implementation (GeoInterface wrappers always; ArchGDAL, GeometryBasics, and LibGEOS are added to `GeometryOpsTestHelpers.TEST_MODULES` via package extensions when those packages are loaded). Variables prefixed with `$` are converted to each module's geometry type with `GeoInterface.convert`:
+
+```julia
+using GeometryOpsTestHelpers  # also import LibGEOS/ArchGDAL/etc. to activate their extensions
+
+poly = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]])
+
+@test_implementations GO.area($poly) == 0.5
+
+@testset_implementations "Area" begin
+    @test GO.area($poly) == 0.5
+end
+```
+
+Prefer these macros when testing public API functions, so behavior is verified across all GeoInterface-compatible geometry libraries.
 
 ### Git Commit Style
 Commit messages in this repository follow a simple, descriptive style:
@@ -41,10 +59,11 @@ Bump version from 0.1.30 to 0.1.31
 ## High-Level Architecture
 
 ### Monorepo Structure
-GeometryOps uses a monorepo structure with GeometryOpsCore as a subpackage:
+GeometryOps uses a monorepo structure, organized as a Julia workspace (see `[workspace]` in `Project.toml`; subpackages are resolved by path via `[sources]`):
 - **GeometryOpsCore/**: Core abstractions, types, and primitive functions (`apply`, `applyreduce`, `flatten`, etc.)
+- **GeometryOpsTestHelpers/**: Test utilities (`@test_implementations`, `@testset_implementations`) for running tests across multiple geometry implementations
 - **src/**: Main package implementation
-- **ext/**: Package extensions for optional dependencies (LibGEOS, Proj, TGGeometry, DataFrames, FlexiJoins)
+- **ext/**: Package extensions for optional dependencies (LibGEOS, Proj, TGGeometry, DataFrames, FlexiJoins, Makie)
 
 ### Core Abstractions
 
@@ -195,24 +214,23 @@ _algorithm(::Type{T}, ::GI.PolygonTrait, polygon) where T = # Polygon implementa
 include("methods/algorithm_name.jl")
 ```
 
-7. **Write tests**: Create `test/methods/algorithm_name.jl` mirroring the source structure:
+7. **Write tests**: Create `test/methods/algorithm_name.jl` mirroring the source structure. Make the file self-contained (it runs in a `@safetestset`, and should also work via a bare `include`), and use the GeometryOpsTestHelpers macros to cover all geometry implementations:
 ```julia
 using Test
-using GeometryOps
+import GeometryOps as GO
 import GeoInterface as GI
+import LibGEOS as LG  # loading these activates the corresponding TestHelpers extensions
+import ArchGDAL as AG
+using GeometryOpsTestHelpers
 
-@testset "Algorithm Name" begin
-    @testset "Point" begin
-        # Test with points
-    end
+poly = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]])
 
-    @testset "Polygon" begin
-        # Test with polygons
-    end
+@testset_implementations "Polygon" begin
+    @test GO.algorithm_name($poly) == expected
+end
 
-    @testset "Edge cases" begin
-        # Empty geometries, degenerate cases, etc.
-    end
+@testset "Edge cases" begin
+    # Empty geometries, degenerate cases, etc.
 end
 ```
 
