@@ -9,7 +9,7 @@ In this tutorial, we're going to:
 
 
 
-First, we load some required packages.
+Install the packages used in this tutorial:
 
 ````julia
 using Pkg
