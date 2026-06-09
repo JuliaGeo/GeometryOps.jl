@@ -1,11 +1,11 @@
-# CLAUDE.md
+# AGENTS.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Development Commands
 
 **IMPORTANT**: when running Julia, always run with `julia --project=docs` so that you have access to utility packages
-for loading geometry, etc. etc.
+for loading geometry, etc. etc.  If you get an error about a package not being found, try running `julia --project=docs -e 'using Pkg; Pkg.instantiate()'` first.
 
 ### Testing
 Run all tests:
@@ -13,7 +13,11 @@ Run all tests:
 julia --project=. -e 'using Pkg; Pkg.test()'
 ```
 
-Note: There is currently no way to run a single test file in isolation.
+To run a single test file in isolation, simply include it while in the test environment:
+
+```bash
+julia --project=test -e 'include("test/methods/area.jl")'
+```
 
 ### Git Commit Style
 Commit messages in this repository follow a simple, descriptive style:
