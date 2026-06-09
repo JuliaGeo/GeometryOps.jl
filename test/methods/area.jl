@@ -269,4 +269,24 @@ end
 
         @test computed_area ≈ expected_area rtol=1e-10
     end
+
+    @testset "Type stability" begin
+        # https://github.com/JuliaGeo/GeometryOps.jl/issues/407
+        using GeometryOps.UnitSpherical: UnitSphericalPoint
+        octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
+        usp_octant = GI.Polygon([GI.LinearRing([
+            UnitSphericalPoint(0.0, 0.0, 1.0), UnitSphericalPoint(1.0, 0.0, 0.0),
+            UnitSphericalPoint(0.0, 1.0, 0.0), UnitSphericalPoint(0.0, 0.0, 1.0),
+        ])])
+        R = GO.Spherical().radius
+        expected_area = (π/2) * R^2
+
+        @test only(Base.return_types(GO.area, (GO.Spherical{Float64}, typeof(octant)))) == Float64
+        @test only(Base.return_types(GO.area, (GO.Spherical{Float64}, typeof(usp_octant)))) == Float64
+        @test only(Base.return_types(GO.area, (GO.NaiveTriangulatedSphericalArea{GO.Spherical{Float64}, GO.Eriksson}, typeof(octant)))) == Float64
+        @test only(Base.return_types(GO.area, (GO.Spherical{Float64}, typeof(octant), Type{Float32}))) == Float32
+
+        @test (@inferred GO.area(GO.Spherical(), octant)) ≈ expected_area rtol=1e-10
+        @test (@inferred GO.area(GO.Spherical(), usp_octant)) ≈ expected_area rtol=1e-10
+    end
 end
