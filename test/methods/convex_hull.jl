@@ -2,7 +2,7 @@ using Test
 import GeoInterface as GI
 import GeometryOps as GO 
 import LibGEOS as LG
-using ..TestHelpers
+using GeometryOpsTestHelpers
 
 @testset "Basic example" begin
     points = tuple.(rand(100), rand(100))

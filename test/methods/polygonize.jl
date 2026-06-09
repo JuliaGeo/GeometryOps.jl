@@ -1,5 +1,5 @@
 using GeometryOps, GeoInterface, Test
-using ..TestHelpers
+using GeometryOpsTestHelpers
 
 import GeometryOps as GO 
 import GeoInterface as GI

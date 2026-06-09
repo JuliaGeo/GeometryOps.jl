@@ -3,7 +3,7 @@ using FlexiJoins
 using DataFrames
 import GeometryOps as GO
 import GeoInterface as GI
-using ..TestHelpers
+using GeometryOpsTestHelpers
 
 points = GI.MultiPoint(tuple.(rand(100), rand(100)))
 
