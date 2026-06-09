@@ -2,6 +2,7 @@ using Test
 import GeoInterface as GI
 import GeometryOps as GO 
 import LibGEOS as LG
+import Proj
 using GeometryOpsTestHelpers
 
 pt = LG.Point([0.0, 0.0])
