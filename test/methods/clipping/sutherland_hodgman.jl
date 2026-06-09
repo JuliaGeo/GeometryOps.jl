@@ -181,6 +181,39 @@ import GeoInterface as GI
         @test GO.area(result3) ≈ 0.0 atol=1e-10
     end
 
+    @testset "Disjoint early-out (planar)" begin
+        # The separating-axis early-out (issue #408) must trigger for disjoint
+        # inputs and must NOT trigger for touching/overlapping inputs, where the
+        # full clip is still required.
+        planar_ring(coords) = GI.getexterior(GI.Polygon([[coords..., coords[1]]]))
+
+        unit_square = planar_ring([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+        far_square = planar_ring([(5.0, 5.0), (6.0, 5.0), (6.0, 6.0), (5.0, 6.0)])
+        near_square = planar_ring([(1.001, 0.0), (2.0, 0.0), (2.0, 1.0), (1.001, 1.0)])
+        shared_edge_square = planar_ring([(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)])
+        corner_square = planar_ring([(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)])
+        overlap_square = planar_ring([(0.5, 0.5), (1.5, 0.5), (1.5, 1.5), (0.5, 1.5)])
+        # Disjoint, but no axis-aligned gap - only the triangle's diagonal edge separates
+        diag_triangle = planar_ring([(1.2, 0.0), (2.2, 0.0), (2.2, 1.0)])
+
+        @test GO._convex_polygons_disjoint(unit_square, far_square, Float64)
+        @test GO._convex_polygons_disjoint(far_square, unit_square, Float64)
+        @test GO._convex_polygons_disjoint(unit_square, near_square, Float64)
+        @test GO._convex_polygons_disjoint(unit_square, diag_triangle, Float64)
+        @test GO._convex_polygons_disjoint(diag_triangle, unit_square, Float64)
+        # Touching or overlapping - must fall through to the full clip
+        @test !GO._convex_polygons_disjoint(unit_square, shared_edge_square, Float64)
+        @test !GO._convex_polygons_disjoint(unit_square, corner_square, Float64)
+        @test !GO._convex_polygons_disjoint(unit_square, overlap_square, Float64)
+        @test !GO._convex_polygons_disjoint(unit_square, unit_square, Float64)
+
+        # End-to-end: disjoint inputs give an empty (zero-area) polygon either way around
+        sq1 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+        tri = GI.Polygon([[(1.2, 0.0), (2.2, 0.0), (2.2, 1.0), (1.2, 0.0)]])
+        @test GO.area(GO.intersection(GO.ConvexConvexSutherlandHodgman(), sq1, tri)) == 0.0
+        @test GO.area(GO.intersection(GO.ConvexConvexSutherlandHodgman(), tri, sq1)) == 0.0
+    end
+
     @testset "Spherical helpers" begin
         using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
 
@@ -203,6 +236,37 @@ import GeoInterface as GI
             @test GO._point_in_convex_spherical_polygon(outside_pt, square_pts) == false
             # Edge point should be considered inside (>= 0 check)
             @test GO._point_in_convex_spherical_polygon(edge_pt, square_pts) == true
+        end
+
+        @testset "_convex_spherical_polygons_disjoint" begin
+            transform = UnitSphereFromGeographic()
+            # Closed rings (with closing point), as the algorithm receives them -
+            # the degenerate closing edge must not produce a false separating plane
+            function usp_ring(coords)
+                pts = UnitSphericalPoint{Float64}[transform(c) for c in coords]
+                push!(pts, pts[1])
+                return GI.LinearRing(pts)
+            end
+
+            cell = usp_ring([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+            far_cell = usp_ring([(10.0, 10.0), (11.0, 10.0), (11.0, 11.0), (10.0, 11.0)])
+            near_cell = usp_ring([(1.01, 0.0), (2.0, 0.0), (2.0, 1.0), (1.01, 1.0)])
+            adjacent_cell = usp_ring([(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0)])
+            corner_cell = usp_ring([(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0)])
+            overlap_cell = usp_ring([(0.5, 0.5), (1.5, 0.5), (1.5, 1.5), (0.5, 1.5)])
+            # Disjoint, but only the triangle's slanted edge separates
+            diag_triangle = usp_ring([(1.1, 0.0), (2.1, 0.0), (2.1, 1.0)])
+
+            @test GO._convex_spherical_polygons_disjoint(cell, far_cell)
+            @test GO._convex_spherical_polygons_disjoint(far_cell, cell)
+            @test GO._convex_spherical_polygons_disjoint(cell, near_cell)
+            @test GO._convex_spherical_polygons_disjoint(cell, diag_triangle)
+            @test GO._convex_spherical_polygons_disjoint(diag_triangle, cell)
+            # Touching or overlapping - must fall through to the full clip
+            @test !GO._convex_spherical_polygons_disjoint(cell, adjacent_cell)
+            @test !GO._convex_spherical_polygons_disjoint(cell, corner_cell)
+            @test !GO._convex_spherical_polygons_disjoint(cell, overlap_cell)
+            @test !GO._convex_spherical_polygons_disjoint(cell, cell)
         end
     end
 
@@ -239,6 +303,16 @@ import GeoInterface as GI
                 square1, square2
             )
             @test spherical_area(result) ≈ 0.0 atol=1e-10
+
+            # Exactly antipodal cells: square1's vertices lie ON the candidate
+            # separating great circles, so the early-out stays conservative and
+            # the full clip must still return an empty result
+            antipodal = spherical_polygon([(180.0, -1.0), (181.0, -1.0), (181.0, 0.0), (180.0, 0.0)])
+            result_antipodal = GO.intersection(
+                GO.ConvexConvexSutherlandHodgman(GO.Spherical()),
+                square1, antipodal
+            )
+            @test spherical_area(result_antipodal) ≈ 0.0 atol=1e-10
         end
 
         @testset "Partial overlap" begin

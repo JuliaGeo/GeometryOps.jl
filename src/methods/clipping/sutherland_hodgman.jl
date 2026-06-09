@@ -63,6 +63,13 @@ function _intersection_sutherland_hodgman(
     ring_a = GI.getexterior(poly_a)
     ring_b = GI.getexterior(poly_b)
 
+    # Separating-axis early-out: if any edge of either polygon separates the two,
+    # they are disjoint and we can skip the clip (and its allocations) entirely.
+    if _convex_polygons_disjoint(ring_a, ring_b, T)
+        zero_pt = (zero(T), zero(T))
+        return GI.Polygon([[zero_pt, zero_pt, zero_pt]])
+    end
+
     # Start with vertices of poly_a as the output list (excluding closing point)
     output = Tuple{T,T}[]
     for point in GI.getpoint(ring_a)
@@ -148,6 +155,49 @@ function _sh_line_intersection(p1::Tuple{T,T}, p2::Tuple{T,T}, p3::Tuple{T,T}, p
     return (T(x), T(y))
 end
 
+#=
+## Separating-axis early-out
+
+For two *convex* polygons, if all vertices of one polygon lie strictly outside
+(to the right of) the line through any single edge of the other polygon, the
+polygons are disjoint - that edge's line is a separating axis.  Checking this
+before clipping lets us return the empty result without allocating any
+intermediate point buffers, which matters in workloads (e.g. conservative
+regridding) where most candidate pairs are disjoint.  See issue #408.
+
+This is only a sufficient condition for disjointness as implemented here
+(we only test edge directions, and on the sphere the predicate tolerance makes
+it conservative), so a `false` return just means we fall through to the full
+clip - correctness never depends on it.
+=#
+
+# True if some edge of either convex polygon separates the two (planar version)
+function _convex_polygons_disjoint(ring_a, ring_b, ::Type{T}) where T
+    return _has_separating_edge(ring_a, ring_b, T) || _has_separating_edge(ring_b, ring_a, T)
+end
+
+# True if all vertices of `ring_v` are strictly right of some edge of `ring_e`
+function _has_separating_edge(ring_e, ring_v, ::Type{T}) where T
+    n = GI.npoint(ring_e)
+    for i in 1:n
+        edge_start = _tuple_point(GI.getpoint(ring_e, i), T)
+        edge_end = _tuple_point(GI.getpoint(ring_e, mod1(i + 1, n)), T)
+        # Skip degenerate edges (e.g. the ring's closing point)
+        edge_start == edge_end && continue
+        separates = true
+        for j in 1:GI.npoint(ring_v)
+            pt = _tuple_point(GI.getpoint(ring_v, j), T)
+            # Inside or on the edge line - this edge doesn't separate
+            if Predicates.orient(edge_start, edge_end, pt; exact=False()) >= 0
+                separates = false
+                break
+            end
+        end
+        separates && return true
+    end
+    return false
+end
+
 # Point in convex spherical polygon - true if point is on the left of all edges
 function _point_in_convex_spherical_polygon(
     point::UnitSpherical.UnitSphericalPoint,
@@ -162,6 +212,41 @@ function _point_in_convex_spherical_polygon(
         end
     end
     return true
+end
+
+# True if some edge great circle of either convex spherical polygon separates the two
+function _convex_spherical_polygons_disjoint(ring_a, ring_b)
+    return _has_separating_great_circle(ring_a, ring_b) ||
+        _has_separating_great_circle(ring_b, ring_a)
+end
+
+# True if all vertices of `ring_v` are strictly right of some edge great circle of `ring_e`.
+# The great circle through an edge's endpoints spans a plane through the origin; if every
+# vertex of the other polygon is strictly on its negative side, so is the whole (convex)
+# polygon, while `ring_e`'s polygon is on the non-negative side - hence they are disjoint.
+function _has_separating_great_circle(ring_e, ring_v)
+    tol = eps(Float64) * 16  # Same tolerance as `spherical_orient`
+    n = GI.npoint(ring_e)
+    for i in 1:n
+        edge_start = GI.getpoint(ring_e, i)
+        edge_end = GI.getpoint(ring_e, mod1(i + 1, n))
+        # Skip degenerate edges (e.g. the ring's closing point) - for identical inputs
+        # `robust_cross_product` returns an arbitrary orthogonal vector, which must not
+        # be used as a candidate separating plane.
+        edge_start == edge_end && continue
+        # Hoist the great circle normal out of the vertex loop; the test below then
+        # matches `spherical_orient(edge_start, edge_end, vertex) < 0` exactly.
+        n_edge = UnitSpherical.robust_cross_product(edge_start, edge_end)
+        separates = true
+        for j in 1:GI.npoint(ring_v)
+            if n_edge ⋅ GI.getpoint(ring_v, j) > -tol
+                separates = false
+                break
+            end
+        end
+        separates && return true
+    end
+    return false
 end
 
 # Compute intersection of subject arc (p1, p2) with the GREAT CIRCLE through (p3, p4)
@@ -288,6 +373,14 @@ function _intersection_sutherland_hodgman(
             "Spherical ConvexConvexSutherlandHodgman requires UnitSphericalPoint coordinates, " *
             "got $(typeof(first_pt))"
         ))
+    end
+
+    # Separating-great-circle early-out: if any edge great circle of either polygon
+    # separates the two, they are disjoint and we can skip the clip (and its
+    # allocations) entirely.
+    if _convex_spherical_polygons_disjoint(ring_a, ring_b)
+        north_pole = UnitSpherical.UnitSphericalPoint{T}(0, 0, 1)
+        return GI.Polygon([[north_pole, north_pole, north_pole]])
     end
 
     # Collect clip polygon points (excluding closing point)
