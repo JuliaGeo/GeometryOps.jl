@@ -214,6 +214,41 @@ import GeoInterface as GI
         @test GO.area(GO.intersection(GO.ConvexConvexSutherlandHodgman(), tri, sq1)) == 0.0
     end
 
+    @testset "SeparatingAxisCheck type parameter" begin
+        # Default is CheckSeparatingAxis
+        @test GO.ConvexConvexSutherlandHodgman() isa
+            GO.ConvexConvexSutherlandHodgman{GO.Planar, GO.CheckSeparatingAxis}
+        @test GO.ConvexConvexSutherlandHodgman(GO.Spherical()) isa
+            GO.ConvexConvexSutherlandHodgman{<:GO.Spherical, GO.CheckSeparatingAxis}
+
+        # Only SeparatingAxisCheck values are valid as the second type parameter
+        @test_throws ArgumentError GO.ConvexConvexSutherlandHodgman{GO.Planar, 1}(GO.Planar())
+
+        # With the check disabled, the full clip still returns the correct results
+        alg_skip = GO.ConvexConvexSutherlandHodgman(GO.Planar(), GO.SkipSeparatingAxisCheck)
+        @test alg_skip isa GO.ConvexConvexSutherlandHodgman{GO.Planar, GO.SkipSeparatingAxisCheck}
+
+        sq1 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+        far = GI.Polygon([[(5.0, 5.0), (6.0, 5.0), (6.0, 6.0), (5.0, 6.0), (5.0, 5.0)]])
+        overlap = GI.Polygon([[(0.5, 0.5), (1.5, 0.5), (1.5, 1.5), (0.5, 1.5), (0.5, 0.5)]])
+        @test GO.area(GO.intersection(alg_skip, sq1, far)) == 0.0
+        @test GO.area(GO.intersection(alg_skip, sq1, overlap)) ≈
+            GO.area(GO.intersection(GO.ConvexConvexSutherlandHodgman(), sq1, overlap)) atol=1e-10
+
+        # Spherical with the check disabled
+        using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
+        sph_transform = UnitSphereFromGeographic()
+        function sph_poly(coords)
+            pts = UnitSphericalPoint{Float64}[sph_transform(c) for c in coords]
+            push!(pts, pts[1])
+            return GI.Polygon([pts])
+        end
+        cell_a = sph_poly([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
+        cell_far = sph_poly([(10.0, 10.0), (11.0, 10.0), (11.0, 11.0), (10.0, 11.0)])
+        alg_skip_sph = GO.ConvexConvexSutherlandHodgman(GO.Spherical(), GO.SkipSeparatingAxisCheck)
+        @test GO.area(GO.Spherical(), GO.intersection(alg_skip_sph, cell_a, cell_far)) ≈ 0.0 atol=1e-10
+    end
+
     @testset "Spherical helpers" begin
         using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
 
