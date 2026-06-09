@@ -2,8 +2,6 @@ using GeometryOps
 using Test
 using SafeTestsets
 
-include("helpers.jl")
-
 @testset "Core" begin
     @safetestset "Algorithm" begin include("core/algorithm.jl") end
     @safetestset "Manifold" begin include("core/manifold.jl") end
