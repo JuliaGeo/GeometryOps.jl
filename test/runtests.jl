@@ -2,6 +2,9 @@ using GeometryOps
 using Test
 using SafeTestsets
 
+import GeometryOpsTestHelpers
+import Test, GeoInterface, ArchGDAL, GeometryBasics, LibGEOS # enable GOTestHelpers extensions
+
 @testset "Core" begin
     @safetestset "Algorithm" begin include("core/algorithm.jl") end
     @safetestset "Manifold" begin include("core/manifold.jl") end
