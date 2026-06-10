@@ -1,21 +1,16 @@
 # Creating Geometry
 
 In this tutorial, we're going to:
-1. [Create and plot geometries](@ref creating-geometry)
-2. [Plot geometries on a map using `GeoMakie` and coordinate reference system (`CRS`)](@ref plot-geometry)
-3. [Create geospatial geometries with embedded coordinate reference system information](@ref geom-crs)
-4. [Assign attributes to geospatial geometries](@ref attributes)
-5. [Save geospatial geometries to common geospatial file formats](@ref save-geometry)
-
-
+1. [Create `Point`s and `MultiPoint`s](#create-points-and-multipoints)
+2. [Connect `Point`s into `LineString`s](#connecting-points-into-lines)
+3. [Build `LinearRing`s, `Polygon`s, and `MultiPolygon`s](#building-polygons-and-multipolygons)
 
 Install the packages used in this tutorial:
 
 ````julia
 using Pkg
-Pkg.add(["GeoInterface", "GeometryOps", "GeoFormatTypes", 
-        "GeoJSON", "GeoParquet", "GeoDataFrames",
-        "CoordinateTransformations", "Proj", 
+Pkg.add(["GeoInterface", "GeometryOps", 
+        "CoordinateTransformations",
         "CairoMakie", "GeoMakie"])
 ````
 
@@ -23,13 +18,8 @@ Pkg.add(["GeoInterface", "GeometryOps", "GeoFormatTypes",
 # Geospatial packages from Julia
 import GeoInterface as GI
 import GeometryOps as GO
-import GeoFormatTypes as GFT
-using GeoJSON # to load some data
-using GeoParquet
-using GeoDataFrames
-# Packages for coordinate transformation and projection
+# Coordinate transformation and projection
 import CoordinateTransformations
-import Proj
 # Plotting
 using CairoMakie
 using GeoMakie
@@ -37,7 +27,7 @@ using DisplayAs # hide
 Makie.set_theme!(Makie.MAKIE_DEFAULT_THEME) # hide
 ````
 
-## [Creating and plotting geometries](@id creating-geometry)
+## Create `Point`s and `MultiPoint`s
 
 Let's start by making a single `Point`.
 
@@ -77,6 +67,8 @@ plot!(ax, multipoint.geom; marker = '☁', markersize = 30)
 fig
 ````
 
+## Connecting points into lines
+
 Let's create a `LineString` connecting two points.
 
 ````@example creating_geometry
@@ -100,6 +92,8 @@ lines = GI.LineString(GI.Point.(zip(x,y)));
 plot!(ax, lines; linewidth = 5)
 fig
 ````
+
+## Building polygons and multipolygons
 
 We can also create a single `LinearRing` trait, the building block of a polygon.
 A `LinearRing` is simply a `LineString` with the same beginning and endpoint, i.e., an arbitrary closed shape composed of point pairs.
@@ -173,4 +167,4 @@ plot!(multipolygon)
 fig
 ````
 
-Great, now we can make `Points`, `MultiPoints`, `Lines`, `LineStrings`, `Polygons` (with holes), and `MultiPolygons` and modify them using [`CoordinateTransformations`] and [`GeometryOps`].
+Great, now we can make `Point`s, `MultiPoint`s, `Line`s, `LineString`s, `Polygon`s (with holes), and `MultiPolygon`s and modify them using [`CoordinateTransformations`] and [`GeometryOps`].
