@@ -181,6 +181,78 @@ import GeoInterface as GI
         @test GO.area(result3) ≈ 0.0 atol=1e-10
     end
 
+    @testset "Cache" begin
+        alg = GO.ConvexConvexSutherlandHodgman()
+        square1 = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+        square2 = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+        tri1 = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (2.0, 4.0), (0.0, 0.0)]])
+        tri2 = GI.Polygon([[(0.0, 2.0), (2.0, -2.0), (4.0, 2.0), (0.0, 2.0)]])
+
+        @testset "Same results with and without cache" begin
+            cache = GO.SutherlandHodgmanCache(alg)
+            for (a, b) in [(square1, square2), (tri1, tri2), (square1, tri1)]
+                uncached = GO.intersection(alg, a, b)
+                cached = GO.intersection(alg, a, b; cache)
+                @test collect(GI.getpoint(GI.getexterior(cached))) ==
+                      collect(GI.getpoint(GI.getexterior(uncached)))
+            end
+        end
+
+        @testset "Result does not alias the cache" begin
+            cache = GO.SutherlandHodgmanCache(alg)
+            first_result = GO.intersection(alg, square1, square2; cache)
+            first_points = collect(GI.getpoint(GI.getexterior(first_result)))
+            # Reuse the cache - this must not corrupt the previously returned polygon
+            GO.intersection(alg, tri1, tri2; cache)
+            @test collect(GI.getpoint(GI.getexterior(first_result))) == first_points
+        end
+
+        @testset "Wrong cache point type throws" begin
+            f32_cache = GO.SutherlandHodgmanCache(GO.Planar(), Float32)
+            @test_throws ArgumentError GO.intersection(alg, square1, square2; cache=f32_cache)
+
+            spherical_cache = GO.SutherlandHodgmanCache(GO.Spherical())
+            @test_throws ArgumentError GO.intersection(alg, square1, square2; cache=spherical_cache)
+        end
+
+        @testset "No intermediate allocations after warm-up" begin
+            cache = GO.SutherlandHodgmanCache(alg)
+            GO.intersection(alg, square1, square2; cache)  # warm up buffers and compilation
+            allocated = @allocated GO.intersection(alg, square1, square2; cache)
+            # Only the returned polygon should allocate; loose bound to avoid version flakiness
+            @test allocated <= 512
+        end
+
+        @testset "Spherical cache" begin
+            using GeometryOps.UnitSpherical: UnitSphereFromGeographic
+
+            function spherical_polygon(coords)
+                transform = UnitSphereFromGeographic()
+                points = [transform((lon, lat)) for (lon, lat) in coords]
+                push!(points, points[1])
+                return GI.Polygon([points])
+            end
+
+            salg = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
+            scache = GO.SutherlandHodgmanCache(salg)
+            sq1 = spherical_polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+            sq2 = spherical_polygon([(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+            large = spherical_polygon([(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)])
+
+            for (a, b) in [(sq1, sq2), (large, sq1), (sq1, large)]
+                uncached = GO.intersection(salg, a, b)
+                cached = GO.intersection(salg, a, b; cache=scache)
+                @test GO.area(GO.Spherical(), cached) ≈ GO.area(GO.Spherical(), uncached)
+            end
+
+            # Aliasing check on the spherical path too
+            first_result = GO.intersection(salg, sq1, sq2; cache=scache)
+            first_points = collect(GI.getpoint(GI.getexterior(first_result)))
+            GO.intersection(salg, large, sq1; cache=scache)
+            @test collect(GI.getpoint(GI.getexterior(first_result))) == first_points
+        end
+    end
+
     @testset "Spherical helpers" begin
         using GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
 
