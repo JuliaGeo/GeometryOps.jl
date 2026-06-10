@@ -214,19 +214,19 @@ import GeoInterface as GI
         @test GO.area(GO.intersection(GO.ConvexConvexSutherlandHodgman(), tri, sq1)) == 0.0
     end
 
-    @testset "SeparatingAxisCheck type parameter" begin
-        # Default is CheckSeparatingAxis
+    @testset "DisjointCheck type parameter" begin
+        # Default is CheckDisjoint
         @test GO.ConvexConvexSutherlandHodgman() isa
-            GO.ConvexConvexSutherlandHodgman{GO.Planar, GO.CheckSeparatingAxis}
+            GO.ConvexConvexSutherlandHodgman{GO.Planar, GO.CheckDisjoint}
         @test GO.ConvexConvexSutherlandHodgman(GO.Spherical()) isa
-            GO.ConvexConvexSutherlandHodgman{<:GO.Spherical, GO.CheckSeparatingAxis}
+            GO.ConvexConvexSutherlandHodgman{<:GO.Spherical, GO.CheckDisjoint}
 
-        # Only SeparatingAxisCheck values are valid as the second type parameter
+        # Only DisjointCheck values are valid as the second type parameter
         @test_throws ArgumentError GO.ConvexConvexSutherlandHodgman{GO.Planar, 1}(GO.Planar())
 
         # With the check disabled, the full clip still returns the correct results
-        alg_skip = GO.ConvexConvexSutherlandHodgman(GO.Planar(), GO.SkipSeparatingAxisCheck)
-        @test alg_skip isa GO.ConvexConvexSutherlandHodgman{GO.Planar, GO.SkipSeparatingAxisCheck}
+        alg_skip = GO.ConvexConvexSutherlandHodgman(GO.Planar(), GO.SkipDisjointCheck)
+        @test alg_skip isa GO.ConvexConvexSutherlandHodgman{GO.Planar, GO.SkipDisjointCheck}
 
         sq1 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
         far = GI.Polygon([[(5.0, 5.0), (6.0, 5.0), (6.0, 6.0), (5.0, 6.0), (5.0, 5.0)]])
@@ -245,7 +245,7 @@ import GeoInterface as GI
         end
         cell_a = sph_poly([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)])
         cell_far = sph_poly([(10.0, 10.0), (11.0, 10.0), (11.0, 11.0), (10.0, 11.0)])
-        alg_skip_sph = GO.ConvexConvexSutherlandHodgman(GO.Spherical(), GO.SkipSeparatingAxisCheck)
+        alg_skip_sph = GO.ConvexConvexSutherlandHodgman(GO.Spherical(), GO.SkipDisjointCheck)
         @test GO.area(GO.Spherical(), GO.intersection(alg_skip_sph, cell_a, cell_far)) ≈ 0.0 atol=1e-10
     end
 

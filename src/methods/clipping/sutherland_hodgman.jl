@@ -1,25 +1,25 @@
 # # Sutherland-Hodgman Convex-Convex Clipping
 export ConvexConvexSutherlandHodgman
-export SeparatingAxisCheck, CheckSeparatingAxis, SkipSeparatingAxisCheck
+export DisjointCheck, CheckDisjoint, SkipDisjointCheck
 
 """
-    SeparatingAxisCheck
+    DisjointCheck
 
 Enum controlling whether [`ConvexConvexSutherlandHodgman`](@ref) runs a
 separating-axis early-out for disjoint inputs before clipping. Values:
 
-- `CheckSeparatingAxis` (default): test each edge line (planar) or edge great
+- `CheckDisjoint` (default): test each edge line (planar) or edge great
   circle (spherical) as a candidate separating axis, and return the empty
   result without allocating if one is found. This makes disjoint pairs
   allocation-free at the cost of one extra O(n*m) predicate sweep on
   overlapping pairs.
-- `SkipSeparatingAxisCheck`: always run the full clip.
+- `SkipDisjointCheck`: always run the full clip.
 """
-@enum SeparatingAxisCheck CheckSeparatingAxis SkipSeparatingAxisCheck
+@enum DisjointCheck CheckDisjoint SkipDisjointCheck
 
 """
     ConvexConvexSutherlandHodgman{M <: Manifold, S} <: GeometryOpsCore.Algorithm{M}
-    ConvexConvexSutherlandHodgman(manifold = Planar(), check = CheckSeparatingAxis)
+    ConvexConvexSutherlandHodgman(manifold = Planar(), check = CheckDisjoint)
 
 Sutherland-Hodgman polygon clipping algorithm optimized for convex-convex intersection.
 
@@ -28,9 +28,9 @@ Both input polygons MUST be convex. If either polygon is non-convex, results are
 This is simpler and faster than Foster-Hormann for small convex polygons, with O(n*m)
 complexity where n and m are vertex counts.
 
-The type parameter `S` is a [`SeparatingAxisCheck`](@ref) enum value controlling
+The type parameter `S` is a [`DisjointCheck`](@ref) enum value controlling
 the separating-axis early-out for disjoint inputs (on by default). Pass
-`SkipSeparatingAxisCheck` as the second constructor argument to disable it at
+`SkipDisjointCheck` as the second constructor argument to disable it at
 the type level.
 
 ## Spherical manifold
@@ -52,27 +52,27 @@ square2 = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0
 result = GO.intersection(GO.ConvexConvexSutherlandHodgman(), square1, square2)
 
 # Disable the disjoint early-out:
-alg = GO.ConvexConvexSutherlandHodgman(GO.Planar(), GO.SkipSeparatingAxisCheck)
+alg = GO.ConvexConvexSutherlandHodgman(GO.Planar(), GO.SkipDisjointCheck)
 result = GO.intersection(alg, square1, square2)
 ```
 """
 struct ConvexConvexSutherlandHodgman{M <: Manifold, S} <: GeometryOpsCore.Algorithm{M}
     manifold::M
     function ConvexConvexSutherlandHodgman{M, S}(manifold::M) where {M <: Manifold, S}
-        S isa SeparatingAxisCheck || throw(ArgumentError(
+        S isa DisjointCheck || throw(ArgumentError(
             "The second type parameter of ConvexConvexSutherlandHodgman must be a " *
-            "SeparatingAxisCheck enum value (CheckSeparatingAxis or SkipSeparatingAxisCheck), " *
+            "DisjointCheck enum value (CheckDisjoint or SkipDisjointCheck), " *
             "got $S"
         ))
         return new{M, S}(manifold)
     end
 end
 
-ConvexConvexSutherlandHodgman(manifold::Manifold = Planar(), check::SeparatingAxisCheck = CheckSeparatingAxis) =
+ConvexConvexSutherlandHodgman(manifold::Manifold = Planar(), check::DisjointCheck = CheckDisjoint) =
     ConvexConvexSutherlandHodgman{typeof(manifold), check}(manifold)
 
-# Compile-time accessor for the separating-axis check type parameter
-_separating_axis_check(::ConvexConvexSutherlandHodgman{<:Manifold, S}) where S = S
+# Compile-time accessor for the disjoint-check type parameter
+_disjoint_check(::ConvexConvexSutherlandHodgman{<:Manifold, S}) where S = S
 
 # Main entry point - algorithm dispatch
 function intersection(
@@ -103,7 +103,7 @@ function _intersection_sutherland_hodgman(
     # Separating-axis early-out: if any edge of either polygon separates the two,
     # they are disjoint and we can skip the clip (and its allocations) entirely.
     # The check is selected at the type level, so this branch is compile-time.
-    if _separating_axis_check(alg) === CheckSeparatingAxis && _convex_polygons_disjoint(ring_a, ring_b, T)
+    if _disjoint_check(alg) === CheckDisjoint && _convex_polygons_disjoint(ring_a, ring_b, T)
         zero_pt = (zero(T), zero(T))
         return GI.Polygon([[zero_pt, zero_pt, zero_pt]])
     end
@@ -417,7 +417,7 @@ function _intersection_sutherland_hodgman(
     # separates the two, they are disjoint and we can skip the clip (and its
     # allocations) entirely.
     # The check is selected at the type level, so this branch is compile-time.
-    if _separating_axis_check(alg) === CheckSeparatingAxis && _convex_spherical_polygons_disjoint(ring_a, ring_b)
+    if _disjoint_check(alg) === CheckDisjoint && _convex_spherical_polygons_disjoint(ring_a, ring_b)
         north_pole = UnitSpherical.UnitSphericalPoint{T}(0, 0, 1)
         return GI.Polygon([[north_pole, north_pole, north_pole]])
     end
