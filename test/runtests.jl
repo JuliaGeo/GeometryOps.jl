@@ -39,6 +39,7 @@ end
 @safetestset "Cut" begin include("methods/clipping/cut.jl") end
 @safetestset "Intersection Point" begin include("methods/clipping/intersection_points.jl") end
 @safetestset "Polygon Clipping" begin include("methods/clipping/polygon_clipping.jl") end
+@safetestset "Foster-Hormann Cache" begin include("methods/clipping/foster_hormann_cache.jl") end
 @safetestset "Sutherland-Hodgman" begin include("methods/clipping/sutherland_hodgman.jl") end
 # Transformations
 @safetestset "Embed Extent" begin include("transformations/extent.jl") end

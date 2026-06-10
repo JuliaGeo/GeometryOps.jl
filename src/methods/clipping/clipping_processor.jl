@@ -135,6 +135,83 @@ function Base.showerror(io::IO, e::TracingError{T1, T2}) where {T1, T2}
     end
 end
 
+export FosterHormannCache
+
+#= One frame of reusable scratch buffers for a single active polygon-polygon clipping call.
+Foster-Hormann is re-entrant: hole processing in `_add_holes_to_polys!`, `_combine_holes!`,
+and `_add_union_holes!` calls back into `difference`/`union`/`intersection`. The
+`remove_poly_idx` and `remove_hole_idx` buffers are live across those recursive calls, so
+each recursion level needs its own frame - a single flat scratch would corrupt itself. =#
+struct FosterHormannFrame{T <: AbstractFloat}
+    a_list::Vector{PolyNode{T}}
+    b_list::Vector{PolyNode{T}}
+    a_idx_list::Vector{Int}
+    remove_poly_idx::Vector{Bool}
+    remove_hole_idx::Vector{Int}
+end
+FosterHormannFrame{T}() where T = FosterHormannFrame{T}(PolyNode{T}[], PolyNode{T}[], Int[], Bool[], Int[])
+
+"""
+    FosterHormannCache([T = Float64])
+    FosterHormannCache(alg::FosterHormannClipping, [T = Float64])
+
+An allocation cache for [`FosterHormannClipping`](@ref), the algorithm behind
+[`intersection`](@ref), [`difference`](@ref), and [`union`](@ref).  Pass it via the `cache`
+keyword argument to reuse the algorithm's internal scratch buffers across calls, which
+eliminates most intermediate allocations in hot loops:
+
+```julia
+alg = FosterHormannClipping()
+cache = FosterHormannCache(Float64)
+for (a, b) in polygon_pairs
+    result = intersection(alg, a, b; target = GI.PolygonTrait(), cache)
+end
+```
+
+The type parameter `T` must match the float type of the operation (the `T` argument of
+`intersection`/`difference`/`union`, `Float64` by default), otherwise an `ArgumentError`
+is thrown.
+
+Since the algorithm recurses into itself when processing holes, the cache holds a lazily
+grown stack of buffer frames, one per active recursion level. Returned geometries never
+alias the cache, so results remain valid after subsequent calls with the same cache.
+
+!!! warning "Thread safety"
+    A cache must not be shared across concurrent tasks. Create one cache per task/thread.
+    The default `cache = nothing` allocates fresh buffers per call and is always safe.
+
+!!! tip
+    When clipping multipolygons in a hot loop, also pass `fix_multipoly = nothing` (if you
+    know your multipolygons are valid) - the default `UnionIntersectingPolygons()`
+    correction allocates heavily and does not use the cache.
+"""
+mutable struct FosterHormannCache{T <: AbstractFloat}
+    frames::Vector{FosterHormannFrame{T}}
+    depth::Int  # current recursion depth, 0 when idle
+end
+FosterHormannCache(::Type{T} = Float64) where T = FosterHormannCache{T}([FosterHormannFrame{T}()], 0)
+FosterHormannCache(::FosterHormannClipping, ::Type{T} = Float64) where T = FosterHormannCache(T)
+
+#= Get the scratch frame for the next recursion level, growing the frame stack if this
+recursion is deeper than any seen before. Must be paired with `_fh_release!`, in a
+`try ... finally` so that a thrown `TracingError` can't wedge the depth counter. =#
+function _fh_acquire!(cache::FosterHormannCache{T}) where T
+    cache.depth += 1
+    cache.depth > length(cache.frames) && push!(cache.frames, FosterHormannFrame{T}())
+    return @inbounds cache.frames[cache.depth]
+end
+_fh_release!(cache::FosterHormannCache) = (cache.depth -= 1; nothing)
+
+# Check that a user-provided cache matches the float type of the operation.
+_fh_check_cache(cache::FosterHormannCache{T}, ::Type{T}) where T = cache
+function _fh_check_cache(cache::FosterHormannCache{C}, ::Type{T}) where {C, T}
+    throw(ArgumentError(
+        "The provided `FosterHormannCache` was constructed for element type $C, " *
+        "but this operation is being computed with element type $T. " *
+        "Construct a matching cache with `FosterHormannCache($T)`."
+    ))
+end
+
 
 
 #=
@@ -147,10 +224,10 @@ returns are the fully updated vectors of PolyNodes that represent the rings 'pol
 'poly_b', respectively. This function also returns 'a_idx_list', which at its "ith" index
 stores the index in 'a_list' at which the "ith" intersection point lies.
 =#
-function _build_ab_list(alg::FosterHormannClipping, ::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_bounce_f::F2; exact) where {T, F1, F2}
+function _build_ab_list(alg::FosterHormannClipping, ::Type{T}, poly_a, poly_b, delay_cross_f::F1, delay_bounce_f::F2, frame::FosterHormannFrame{T} = FosterHormannFrame{T}(); exact) where {T, F1, F2}
     # Make a list for nodes of each polygon
-    a_list, a_idx_list, n_b_intrs = _build_a_list(alg, T, poly_a, poly_b; exact)
-    b_list = _build_b_list(alg, T, a_idx_list, a_list, n_b_intrs, poly_b)
+    a_list, a_idx_list, n_b_intrs = _build_a_list(alg, T, poly_a, poly_b, frame; exact)
+    b_list = _build_b_list(alg, T, a_idx_list, a_list, n_b_intrs, poly_b, frame)
 
     # Flag crossings
     _classify_crossing!(alg, T, a_list, b_list; exact)
@@ -466,11 +543,11 @@ not update the entry and exit flags for a_list.
 The a_idx_list is a list of the indices of intersection points in a_list. The value at
 index i of a_idx_list is the location in a_list where the ith intersection point lies.
 =#
-function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly_b; exact) where {T, M, A}
+function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly_b, frame::FosterHormannFrame{T} = FosterHormannFrame{T}(); exact) where {T, M, A}
     n_a_edges = _nedge(poly_a)
-    a_list = PolyNode{T}[]  # list of points in poly_a
+    a_list = empty!(frame.a_list)  # list of points in poly_a
     sizehint!(a_list, n_a_edges)
-    a_idx_list = Vector{Int}()  # finds indices of intersection points in a_list
+    a_idx_list = empty!(frame.a_idx_list)  # finds indices of intersection points in a_list
     local a_count::Int = 0  # number of points added to a_list
     local n_b_intrs::Int = 0
     local prev_counter::Int = 0
@@ -579,13 +656,13 @@ is needed for clipping using the Greiner-Hormann clipping algorithm.
 Note: after calling this function, b_list is not fully updated. The entry/exit flags still
 need to be updated. However, the neighbor value in a_list is now updated.
 =#
-function _build_b_list(alg::FosterHormannClipping{M, A}, ::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b) where {T, M, A} 
+function _build_b_list(alg::FosterHormannClipping{M, A}, ::Type{T}, a_idx_list, a_list, n_b_intrs, poly_b, frame::FosterHormannFrame{T} = FosterHormannFrame{T}()) where {T, M, A}
     # Sort intersection points by insertion order in b_list
     sort!(a_idx_list, by = x-> a_list[x].neighbor + a_list[x].fracs[2])
     # Initialize needed values and lists
     n_b_edges = _nedge(poly_b)
     n_intr_pts = length(a_idx_list)
-    b_list = PolyNode{T}[]
+    b_list = empty!(frame.b_list)
     sizehint!(b_list, n_b_edges + n_b_intrs)
     intr_curr = 1
     b_count = 0
@@ -968,7 +1045,9 @@ function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b
             same_status, prev_status = true, curr.ent_exit
             while same_status
                 if visited_pts >= total_pts
-                    throw(TracingError("Clipping tracing hit every point - clipping error.", poly_a, poly_b, a_list, b_list, a_idx_list))
+                    #= Copy the lists since they may be cache-owned buffers that would
+                    otherwise be mutated by later calls reusing the cache. =#
+                    throw(TracingError("Clipping tracing hit every point - clipping error.", poly_a, poly_b, copy(a_list), copy(b_list), copy(a_idx_list)))
                 end
                 # Traverse polygon either forwards or backwards
                 idx += step
@@ -1039,9 +1118,9 @@ The holes specified by the hole iterator are added to the polygons in the return
 If this creates more polygons, they are added to the end of the list. If this removes
 polygons, they are removed from the list
 =#
-function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, return_polys, hole_iterator, remove_poly_idx; exact) where {T, M, A}
+function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, return_polys, hole_iterator, remove_poly_idx, remove_hole_idx::Vector{Int} = Int[]; exact, cache::Union{Nothing, FosterHormannCache{T}} = nothing) where {T, M, A}
     n_polys = length(return_polys)
-    remove_hole_idx = Int[]
+    empty!(remove_hole_idx)
     # Remove set of holes from all polygons
     for i in 1:n_polys
         n_new_per_poly = 0
@@ -1054,7 +1133,7 @@ function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, retur
                 curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
                 in_ext, on_ext, out_ext = _line_polygon_interactions(#=TODO: alg.manifold=#curr_hole, curr_poly_ext; exact, closed_line = true)
                 if in_ext  # hole is at least partially within the polygon's exterior
-                    new_hole, new_hole_poly, n_new_pieces = _combine_holes!(alg, T, curr_hole, curr_poly, return_polys, remove_hole_idx)
+                    new_hole, new_hole_poly, n_new_pieces = _combine_holes!(alg, T, curr_hole, curr_poly, return_polys, remove_hole_idx; cache)
                     if n_new_pieces > 0
                         append!(remove_poly_idx, falses(n_new_pieces))
                         n_new_per_poly += n_new_pieces
@@ -1062,7 +1141,7 @@ function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, retur
                     if !on_ext && !out_ext  # hole is completely within exterior
                         push!(curr_poly.geom, new_hole)
                     else  # hole is partially within and outside of polygon's exterior
-                        new_polys = difference(alg, curr_poly_ext, new_hole_poly, T; target=GI.PolygonTrait())
+                        new_polys = difference(alg, curr_poly_ext, new_hole_poly, T; target=GI.PolygonTrait(), cache)
                         n_new_polys = length(new_polys) - 1
                         # replace original
                         curr_poly.geom[1] = GI.getexterior(new_polys[1])
@@ -1099,7 +1178,7 @@ are in the "main" polygon or in one of these new pieces and moved accordingly.
 If the holes don't touch or curr_poly has no holes, then new_hole is returned without any
 changes.
 =#
-function _combine_holes!(alg::FosterHormannClipping{M, A}, ::Type{T}, new_hole, curr_poly, return_polys, remove_hole_idx) where {T, M, A}
+function _combine_holes!(alg::FosterHormannClipping{M, A}, ::Type{T}, new_hole, curr_poly, return_polys, remove_hole_idx; cache::Union{Nothing, FosterHormannCache{T}} = nothing) where {T, M, A}
     n_new_polys = 0
     empty!(remove_hole_idx)
     new_hole_poly = GI.Polygon(StaticArrays.SVector(new_hole))
@@ -1108,7 +1187,7 @@ function _combine_holes!(alg::FosterHormannClipping{M, A}, ::Type{T}, new_hole, 
         old_hole_poly = GI.Polygon(StaticArrays.SVector(old_hole))
         if intersects(#=TODO: alg.manifold=#new_hole_poly, old_hole_poly)
             # If the holes intersect, combine them into a bigger hole
-            hole_union = union(alg, new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait())[1]
+            hole_union = union(alg, new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait(), cache)[1]
             push!(remove_hole_idx, k + 1)
             new_hole = GI.getexterior(hole_union)
             new_hole_poly = GI.Polygon(StaticArrays.SVector(new_hole))

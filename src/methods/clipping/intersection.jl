@@ -22,7 +22,12 @@ might be comprised of polygons that intersect, if `fix_multipoly` is set to an
 `IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
 needed multipolygons will be fixed to be valid before performing the intersection to ensure
 a correct answer. Only set `fix_multipoly` to nothing if you know that the multipolygons are
-valid, as it will avoid unneeded computation. 
+valid, as it will avoid unneeded computation.
+
+When calling this in a hot loop with a `FosterHormannClipping` algorithm, a
+[`FosterHormannCache`](@ref) can be passed via the `cache` keyword argument to reuse
+internal buffers and avoid most intermediate allocations. See its docstring for the
+thread-safety contract.
 
 ## Example
 
@@ -75,31 +80,38 @@ function _intersection(
     alg::FosterHormannClipping, ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
-    exact, kwargs...,
+    exact, cache::Union{Nothing, FosterHormannCache} = nothing, kwargs...,
 ) where {T}
-    # First we get the exteriors of 'poly_a' and 'poly_b'
-    ext_a = GI.getexterior(poly_a)
-    ext_b = GI.getexterior(poly_b)
-    # Then we find the intersection of the exteriors
-    a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact)
-    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b)
-    if isempty(polys) # no crossing points, determine if either poly is inside the other
-        a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
-        if a_in_b
-            push!(polys, GI.Polygon([tuples(ext_a)]))
-        elseif b_in_a
-            push!(polys, GI.Polygon([tuples(ext_b)]))
+    cache = isnothing(cache) ? FosterHormannCache(T) : _fh_check_cache(cache, T)
+    frame = _fh_acquire!(cache)
+    try
+        # First we get the exteriors of 'poly_a' and 'poly_b'
+        ext_a = GI.getexterior(poly_a)
+        ext_b = GI.getexterior(poly_b)
+        # Then we find the intersection of the exteriors
+        a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f, frame; exact)
+        polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b)
+        if isempty(polys) # no crossing points, determine if either poly is inside the other
+            a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
+            if a_in_b
+                push!(polys, GI.Polygon([tuples(ext_a)]))
+            elseif b_in_a
+                push!(polys, GI.Polygon([tuples(ext_b)]))
+            end
         end
+        remove_idx = resize!(frame.remove_poly_idx, length(polys))
+        fill!(remove_idx, false)
+        # If the original polygons had holes, take that into account.
+        if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
+            hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
+            _add_holes_to_polys!(alg, T, polys, hole_iterator, remove_idx, frame.remove_hole_idx; exact, cache)
+        end
+        # Remove unneeded collinear points on same edge
+        _remove_collinear_points!(alg, polys, remove_idx, poly_a, poly_b)
+        return polys
+    finally
+        _fh_release!(cache)
     end
-    remove_idx = falses(length(polys))
-    # If the original polygons had holes, take that into account.
-    if GI.nhole(poly_a) != 0 || GI.nhole(poly_b) != 0
-        hole_iterator = Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b)))
-        _add_holes_to_polys!(alg, T, polys, hole_iterator, remove_idx; exact)
-    end
-    # Remove unneeded collinear points on same edge
-    _remove_collinear_points!(alg, polys, remove_idx, poly_a, poly_b)
-    return polys
 end
 # # Helper functions for Intersections with Greiner and Hormann Polygon Clipping
 
@@ -125,14 +137,14 @@ function _intersection(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), cache = nothing, kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
         multipoly_b = fix_multipoly(multipoly_b)
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(alg, poly_a, poly_b; target))
+        append!(polys, intersection(alg, poly_a, poly_b; target, cache))
     end
     return polys
 end
@@ -156,7 +168,7 @@ function _intersection(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), cache = nothing, kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix both multipolygons to prevent duplicated regions
         multipoly_a = fix_multipoly(multipoly_a)
@@ -165,7 +177,7 @@ function _intersection(
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly))
+        append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly, cache))
     end
     return polys
 end

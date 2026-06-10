@@ -15,9 +15,14 @@ might be comprised of polygons that intersect, if `fix_multipoly` is set to an
 `IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
 needed multipolygons will be fixed to be valid before performing the intersection to ensure
 a correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
-valid, as it will avoid unneeded computation. 
+valid, as it will avoid unneeded computation.
 
-## Example 
+When calling this in a hot loop with a `FosterHormannClipping` algorithm, a
+[`FosterHormannCache`](@ref) can be passed via the `cache` keyword argument to reuse
+internal buffers and avoid most intermediate allocations. See its docstring for the
+thread-safety contract.
+
+## Example
 
 ```jldoctest
 import GeoInterface as GI, GeometryOps as GO
@@ -52,44 +57,51 @@ function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
-    exact, kwargs...
+    exact, cache::Union{Nothing, FosterHormannCache} = nothing, kwargs...
 ) where T
-    # Get the exterior of the polygons
-    ext_a = GI.getexterior(poly_a)
-    ext_b = GI.getexterior(poly_b)
-    # Find the difference of the exterior of the polygons
-    a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f; exact)
-    polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b)
-    # if no crossing points, determine if either poly is inside of the other
-    if isempty(polys)
-        a_in_b, b_in_a = _find_non_cross_orientation(alg.manifold, a_list, b_list, ext_a, ext_b; exact)
-        # add case for if they polygons are the same (all intersection points!)
-        # add a find_first check to find first non-inter poly!
-        if b_in_a && !a_in_b  # b in a and can't be the same polygon
-            poly_a_b_hole = GI.Polygon([tuples(ext_a), tuples(ext_b)])
-            push!(polys, poly_a_b_hole)
-        elseif !b_in_a && !a_in_b # polygons don't intersect
-            push!(polys, tuples(poly_a))
-            return polys
-        end
-    end
-    remove_idx = falses(length(polys))
-    # If the original polygons had holes, take that into account.
-    if GI.nhole(poly_a) != 0
-        _add_holes_to_polys!(alg, T, polys, GI.gethole(poly_a), remove_idx; exact)
-    end
-    if GI.nhole(poly_b) != 0
-        for hole in GI.gethole(poly_b)
-            hole_poly = GI.Polygon(StaticArrays.SVector(hole))
-            new_polys = intersection(alg, hole_poly, poly_a, T; target = GI.PolygonTrait)
-            if length(new_polys) > 0
-                append!(polys, new_polys)
+    cache = isnothing(cache) ? FosterHormannCache(T) : _fh_check_cache(cache, T)
+    frame = _fh_acquire!(cache)
+    try
+        # Get the exterior of the polygons
+        ext_a = GI.getexterior(poly_a)
+        ext_b = GI.getexterior(poly_b)
+        # Find the difference of the exterior of the polygons
+        a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _diff_delay_cross_f, _diff_delay_bounce_f, frame; exact)
+        polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b)
+        # if no crossing points, determine if either poly is inside of the other
+        if isempty(polys)
+            a_in_b, b_in_a = _find_non_cross_orientation(alg.manifold, a_list, b_list, ext_a, ext_b; exact)
+            # add case for if they polygons are the same (all intersection points!)
+            # add a find_first check to find first non-inter poly!
+            if b_in_a && !a_in_b  # b in a and can't be the same polygon
+                poly_a_b_hole = GI.Polygon([tuples(ext_a), tuples(ext_b)])
+                push!(polys, poly_a_b_hole)
+            elseif !b_in_a && !a_in_b # polygons don't intersect
+                push!(polys, tuples(poly_a))
+                return polys
             end
         end
+        remove_idx = resize!(frame.remove_poly_idx, length(polys))
+        fill!(remove_idx, false)
+        # If the original polygons had holes, take that into account.
+        if GI.nhole(poly_a) != 0
+            _add_holes_to_polys!(alg, T, polys, GI.gethole(poly_a), remove_idx, frame.remove_hole_idx; exact, cache)
+        end
+        if GI.nhole(poly_b) != 0
+            for hole in GI.gethole(poly_b)
+                hole_poly = GI.Polygon(StaticArrays.SVector(hole))
+                new_polys = intersection(alg, hole_poly, poly_a, T; target = GI.PolygonTrait, cache)
+                if length(new_polys) > 0
+                    append!(polys, new_polys)
+                end
+            end
+        end
+        # Remove unneeded collinear points on same edge
+        _remove_collinear_points!(alg, polys, remove_idx, poly_a, poly_b)
+        return polys
+    finally
+        _fh_release!(cache)
     end
-    # Remove unneeded collinear points on same edge
-    _remove_collinear_points!(alg, polys, remove_idx, poly_a, poly_b)
-    return polys
 end
 
 # # Helper functions for Differences with Greiner and Hormann Polygon Clipping
@@ -117,12 +129,12 @@ function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    kwargs...,
+    cache = nothing, kwargs...,
 ) where T
     polys = [tuples(poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         isempty(polys) && break
-        polys = mapreduce(p -> difference(alg, p, poly_b; target), append!, polys)
+        polys = mapreduce(p -> difference(alg, p, poly_b; target, cache), append!, polys)
     end
     return polys
 end
@@ -135,7 +147,7 @@ function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), cache = nothing, kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
         multipoly_a = fix_multipoly(multipoly_a)
@@ -143,7 +155,7 @@ function _difference(
     polys = Vector{_get_poly_type(T)}()
     sizehint!(polys, GI.npolygon(multipoly_a))
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, difference(alg, poly_a, poly_b; target))
+        append!(polys, difference(alg, poly_a, poly_b; target, cache))
     end
     return polys
 end
@@ -157,7 +169,7 @@ function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(), cache = nothing, kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
         multipoly_a = fix_multipoly(multipoly_a)
@@ -169,9 +181,9 @@ function _difference(
         pieces of `multipolygon_a`` are removed, continue to take difference with new shape
         `polys` =#
         polys = if i == 1
-            difference(alg, multipoly_a, poly_b; target, fix_multipoly)
+            difference(alg, multipoly_a, poly_b; target, fix_multipoly, cache)
         else
-            difference(alg, GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
+            difference(alg, GI.MultiPolygon(polys), poly_b; target, fix_multipoly, cache)
         end
         #= One multipoly_a has been completely covered (and thus removed) there is no need to
         continue taking the difference =#
