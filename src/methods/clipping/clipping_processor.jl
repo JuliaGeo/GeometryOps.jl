@@ -137,6 +137,17 @@ end
 
 export FosterHormannCache
 
+#= Counters used while building `a_list` in `_build_a_list`. The three callbacks passed to
+`foreach_pair_of_maybe_intersecting_edges_in_order` all mutate these; as bare local
+variables each one would be captured as a heap-allocated, type-unstable `Core.Box`.
+Capturing one mutable struct and mutating its fields avoids the boxing. =#
+mutable struct ABuildCounters
+    a_count::Int       # number of points added to a_list
+    n_b_intrs::Int     # number of intersection points that lie on edges of poly_b
+    prev_counter::Int  # value of a_count when the current edge's start point was added
+end
+ABuildCounters() = ABuildCounters(0, 0, 0)
+
 #= One frame of reusable scratch buffers for a single active polygon-polygon clipping call.
 Foster-Hormann is re-entrant: hole processing in `_add_holes_to_polys!`, `_combine_holes!`,
 and `_add_union_holes!` calls back into `difference`/`union`/`intersection`. The
@@ -148,8 +159,9 @@ struct FosterHormannFrame{T <: AbstractFloat}
     a_idx_list::Vector{Int}
     remove_poly_idx::Vector{Bool}
     remove_hole_idx::Vector{Int}
+    counters::ABuildCounters
 end
-FosterHormannFrame{T}() where T = FosterHormannFrame{T}(PolyNode{T}[], PolyNode{T}[], Int[], Bool[], Int[])
+FosterHormannFrame{T}() where T = FosterHormannFrame{T}(PolyNode{T}[], PolyNode{T}[], Int[], Bool[], Int[], ABuildCounters())
 
 """
     FosterHormannCache([T = Float64])
@@ -548,23 +560,26 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     a_list = empty!(frame.a_list)  # list of points in poly_a
     sizehint!(a_list, n_a_edges)
     a_idx_list = empty!(frame.a_idx_list)  # finds indices of intersection points in a_list
-    local a_count::Int = 0  # number of points added to a_list
-    local n_b_intrs::Int = 0
-    local prev_counter::Int = 0
+    #= The callbacks below all mutate these counters; routing them through a mutable struct
+    (rather than bare captured locals) keeps them out of `Core.Box`es - see `ABuildCounters`. =#
+    counters = frame.counters
+    counters.a_count = 0
+    counters.n_b_intrs = 0
+    counters.prev_counter = 0
 
     function on_each_a(a_pt, i)
         new_point = PolyNode{T}(;point = a_pt)
-        a_count += 1
+        counters.a_count += 1
         push!(a_list, new_point)
-        prev_counter = a_count
+        counters.prev_counter = counters.a_count
         return nothing
     end
 
     function after_each_a(a_pt, i)
         # Order intersection points by placement along edge using fracs value
-        if prev_counter < a_count
-            Δintrs = a_count - prev_counter
-            inter_points = @view a_list[(a_count - Δintrs + 1):a_count]
+        if counters.prev_counter < counters.a_count
+            Δintrs = counters.a_count - counters.prev_counter
+            inter_points = @view a_list[(counters.a_count - Δintrs + 1):counters.a_count]
             sort!(inter_points, by = x -> x.fracs[1])
         end
         return nothing
@@ -584,10 +599,10 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                     point = int_pt, inter = true, neighbor = j, # j is now equivalent to old j-1
                     crossing = true, fracs = fracs,
                 )
-                a_count += 1
-                n_b_intrs += 1
+                counters.a_count += 1
+                counters.n_b_intrs += 1
                 push!(a_list, new_intr)
-                push!(a_idx_list, a_count)
+                push!(a_idx_list, counters.a_count)
             else
                 (_, (α1, β1)) = intr1
                 # Determine if a1 or b1 should be added to a_list
@@ -607,21 +622,21 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                 end
                 # Add intersection points determined above
                 if add_a1
-                    n_b_intrs += a1_β == 0 ? 0 : 1
-                    a_list[prev_counter] = PolyNode{T}(;
+                    counters.n_b_intrs += a1_β == 0 ? 0 : 1
+                    a_list[counters.prev_counter] = PolyNode{T}(;
                         point = a_pt1, inter = true, neighbor = j,
                         fracs = (zero(T), a1_β),
                     )
-                    push!(a_idx_list, prev_counter)
+                    push!(a_idx_list, counters.prev_counter)
                 end
                 if add_b1
                     new_intr = PolyNode{T}(;
                         point = b_pt1, inter = true, neighbor = j,
                         fracs = (b1_α, zero(T)),
                     )
-                    a_count += 1
+                    counters.a_count += 1
                     push!(a_list, new_intr)
-                    push!(a_idx_list, a_count)
+                    push!(a_idx_list, counters.a_count)
                 end
             end
         end
@@ -643,7 +658,7 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     =#
     foreach_pair_of_maybe_intersecting_edges_in_order(alg, on_each_a, after_each_a, on_each_maybe_intersect, poly_a, poly_b, T)
 
-    return a_list, a_idx_list, n_b_intrs
+    return a_list, a_idx_list, counters.n_b_intrs
 end
 
 #=
