@@ -408,3 +408,69 @@ end
         @test 0 < early.known_checks < full.known_checks
     end
 end
+
+# ---------------------------------------------------------------------------
+# Self-pair enumeration (`process_self_intersections!`)
+# ---------------------------------------------------------------------------
+
+@testset "self-intersections: accelerators produce identical computer state" begin
+    # A self-intersecting zigzag polyline, well above the AutoAccelerator
+    # threshold: 41 zigzag vertices oscillating across y = 0, then a return
+    # segment along y = 0 that properly crosses every zigzag segment.
+    zig_pts = [(Float64(i), iseven(i) ? 1.0 : -1.0) for i in 0:40]
+    push!(zig_pts, (40.5, 0.0))
+    push!(zig_pts, (-0.5, 0.0))
+    zig = GI.LineString(zig_pts)
+    @test length(zig_pts) - 1 >= GO.GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+
+    # disjoint far-away B side, so the computer state reflects only A's
+    # self-noding
+    rgb_far = rgeom(GI.LineString([(100.0, 100.0), (101.0, 100.0)]))
+
+    function run_self(acc)
+        rga = rgeom(zig)
+        tc, pred = im_computer(rga, rgb_far)
+        GO.process_self_intersections!(tc,
+            GO.extract_segment_strings(rga, true, nothing), acc)
+        return node_counts(tc), imstr(pred)
+    end
+
+    counts_loop, im_loop = run_self(GO.NestedLoop())
+    counts_tree, im_tree = run_self(GO.DoubleSTRtree())
+    @test counts_loop == counts_tree
+    @test im_loop == im_tree
+    # sanity: the return segment properly crosses all 40 zigzag segments
+    @test count(k -> k.is_crossing, keys(counts_loop)) == 40
+    # self pairs record sections but never update the A/B matrix
+    @test im_loop == "FFFFFFFF2"
+end
+
+@testset "self-intersections: early exit when the result is known" begin
+    # Mirror JTS computeEdgesAll: feed the strings of BOTH inputs through
+    # one self-pair enumeration, so the cross (A x B) pairs update the
+    # matrix and an `intersects` predicate becomes known at the first proper
+    # crossing — the traversal must then stop early.
+    ga = ngon(0.0, 0.0, 1.0, 64)
+    gb = ngon(0.1, 0.0, 1.0, 64)
+    function run_self_counted(inner_pred, acc)
+        rga, rgb = rgeom(ga), rgeom(gb)
+        pred = CountingPredicate(inner_pred)
+        tc = GO.TopologyComputer(pred, rga, rgb)
+        ss_list = vcat(GO.extract_segment_strings(rga, true, nothing),
+            GO.extract_segment_strings(rgb, false, nothing))
+        GO.process_self_intersections!(tc, ss_list, acc)
+        return pred
+    end
+    for acc in (GO.NestedLoop(), GO.DoubleSTRtree())
+        # baseline: the full-matrix predicate is never known early, so its
+        # count is the total number of pairs the enumeration would process
+        full = run_self_counted(GO.RelateMatrixPredicate(), acc)
+        @test !GO.is_known(full.inner)
+        @test full.known_checks > 0
+
+        early = run_self_counted(GO.pred_intersects(), acc)
+        @test GO.is_known(early.inner)
+        @test GO.predicate_value(early.inner)
+        @test 0 < early.known_checks < full.known_checks
+    end
+end

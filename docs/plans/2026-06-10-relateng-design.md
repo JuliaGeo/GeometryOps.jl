@@ -87,6 +87,26 @@ accepted as a slow path for now. **Follow-up F1** investigates a fast filter
 (interval arithmetic before the rational fallback) or a proof that the case is
 unreachable for valid inputs with non-self-noding predicates.
 
+> **Amendment (2026-06-11, Task 21).** The "only relevant for
+> self-intersecting/invalid input or `require_self_noding`" scoping above is
+> wrong. JTS `RelateNGTest.testPolygonLineCrossingContained` disproves it: a
+> *valid* MultiPolygon A against a line B, through the ordinary mutual-edges
+> path, requires a B-line's *proper crossing* of one A polygon to merge with
+> its *vertex touch* of the other A polygon. JTS performs this merge
+> implicitly and mode-independently: its nodeMap is keyed by the constructed
+> floating-point intersection Coordinate, so any keys that round to the same
+> FP point land in one node — in every mode, not only under self-noding.
+> Consequently the coincidence-merge pass is **unconditional** — it runs
+> whenever any crossing key exists — and it covers **crossing–vertex**
+> coincidence, not just crossing–crossing. Implemented
+> (`_merge_coincident_nodes!` in `topology_computer.jl`) by hash-bucketing
+> all node keys on the deterministically-rounded representative point of
+> each key, with coincidence confirmed *exactly* (rational arithmetic)
+> inside multi-member buckets. This is strictly more correct than Java in
+> both directions: it merges true coincidences Java can miss by an ulp (Java
+> compares two independently-rounded constructed coordinates), and it never
+> conflates distinct exact points that merely round to the same Float64.
+
 ### D4. Integration: `Algorithm` type, opt-in first
 
 The engine is exposed as `RelateNG{M<:Manifold} <: Algorithm{M}` (mirroring `GEOS()`,
