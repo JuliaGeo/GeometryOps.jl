@@ -88,7 +88,7 @@ nothing #hide
 Plot `land` for context.
 
 ````@example geospatial_geometry
-poly!(ga, land_geo, color=:black)
+poly!(ga, land_geo; color=:black)
 fig
 ````
 
