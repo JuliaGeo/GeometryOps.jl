@@ -72,9 +72,172 @@ function rk_classify_intersection(m::Planar, a0, a1, b0, b1; exact)
     return SegSegClass(SS_DISJOINT, false, false, false, false)
 end
 
+# Edge ordering around nodes: port of JTS PolygonNodeTopology
+# (algorithm/PolygonNodeTopology.java), with the apex generalized to a
+# symbolic NodeKey. Vertex-node apexes are a direct port; crossing-node
+# apexes are handled exactly via the original segment endpoints (see
+# rk_compare_edge_dir) — no apex coordinate is ever constructed.
+
+# Port of PolygonNodeTopology.quadrant / Quadrant.quadrant: NE=0, NW=1,
+# SW=2, SE=3, numbered CCW from the positive X-axis; axis directions belong
+# to the `dx >= 0` / `dy >= 0` side. Pure coordinate comparisons, exact.
+function rk_quadrant(::Planar, origin, p)
+    ox, oy = GI.x(origin), GI.y(origin)
+    px, py = GI.x(p), GI.y(p)
+    (px == ox && py == oy) &&
+        throw(ArgumentError("cannot compute the quadrant of a zero-length direction"))
+    if px >= ox
+        return py >= oy ? 0 : 3   # NE : SE
+    else
+        return py >= oy ? 1 : 2   # NW : SW
+    end
+end
+
+# Port of PolygonNodeTopology.compareAngle with a vertex apex: angles
+# increase CCW from the positive X-axis; different quadrants decide the
+# comparison, same-quadrant ties are resolved by orientation (P > Q if P is
+# CCW of Q).
+function _compare_angle(m::Planar, origin, p, q; exact)
+    quadrant_p = rk_quadrant(m, origin, p)
+    quadrant_q = rk_quadrant(m, origin, q)
+    quadrant_p > quadrant_q && return 1
+    quadrant_p < quadrant_q && return -1
+    # vectors are in the same quadrant: check relative orientation
+    o = rk_orient(m, origin, q, p; exact)
+    o > 0 && return 1
+    o < 0 && return -1
+    return 0
+end
+
+# Port of PolygonNodeTopology.isAngleGreater.
+function _is_angle_greater(m::Planar, origin, p, q; exact)
+    quadrant_p = rk_quadrant(m, origin, p)
+    quadrant_q = rk_quadrant(m, origin, q)
+    quadrant_p > quadrant_q && return true
+    quadrant_p < quadrant_q && return false
+    # vectors are in the same quadrant: P > Q if it is CCW of Q
+    return rk_orient(m, origin, q, p; exact) > 0
+end
+
+# Port of PolygonNodeTopology.isBetween: whether edge p is inside the arc
+# from e0 to e1 (the arc not including the origin direction). Edges assumed
+# distinct (non-collinear).
+function _is_between(m::Planar, origin, p, e0, e1; exact)
+    _is_angle_greater(m, origin, p, e0; exact) || return false
+    return !_is_angle_greater(m, origin, p, e1; exact)
+end
+
+# Port of PolygonNodeTopology.compareBetween: 1 if p is inside the arc from
+# e0 to e1 (the arc not crossing the positive X-axis), -1 if outside, 0 if
+# collinear with either edge.
+function _compare_between(m::Planar, origin, p, e0, e1; exact)
+    comp0 = _compare_angle(m, origin, p, e0; exact)
+    comp0 == 0 && return 0
+    comp1 = _compare_angle(m, origin, p, e1; exact)
+    comp1 == 0 && return 0
+    (comp0 > 0 && comp1 < 0) && return 1
+    return -1
+end
+
+# The opposite endpoint of incident endpoint `p` on its defining segment of
+# crossing node `k`. `p` must be one of the four endpoints.
+function _crossing_opposite(k::NodeKey, p)
+    _equals2(p, k.pt) && return k.a1
+    _equals2(p, k.a1) && return k.pt
+    _equals2(p, k.b0) && return k.b1
+    _equals2(p, k.b1) && return k.b0
+    throw(ArgumentError("direction point is not an endpoint of the crossing node's defining segments"))
+end
+
+function rk_compare_edge_dir(m::Planar, node::NodeKey, p, q; exact)
+    node.is_crossing || return _compare_angle(m, node.pt, p, q; exact)
+    #=
+    Crossing apex (needed by RelateEdge/NodeSection edge ordering, where the
+    node may be a proper crossing): the directions to compare are always
+    among the four endpoints of the defining segments. Because the symbolic
+    apex lies *strictly* inside both segments (SS_PROPER), for any incident
+    endpoint `x` with opposite endpoint `opp(x)` on the same segment:
+      - the vector apex → x is a positive multiple of opp(x) → x, so
+        quadrant(apex, x) == quadrant(opp(x), x), and
+      - the directed line apex → x equals the directed line opp(x) → x, so
+        sign(orient(apex, x, y)) == sign(orient(opp(x), x, y)).
+    Substituting these into compareAngle reproduces the Java comparison
+    (anchored at the positive X-axis of the apex) exactly, without ever
+    constructing the apex coordinate.
+    =#
+    popp = _crossing_opposite(node, p)
+    qopp = _crossing_opposite(node, q)
+    quadrant_p = rk_quadrant(m, popp, p)
+    quadrant_q = rk_quadrant(m, qopp, q)
+    quadrant_p > quadrant_q && return 1
+    quadrant_p < quadrant_q && return -1
+    # same quadrant: orient(apex, q, p) has the sign of orient(opp(q), q, p).
+    # Zero only when p == q (distinct incident endpoints in the same quadrant
+    # are never collinear through the apex of a proper crossing).
+    o = rk_orient(m, qopp, q, p; exact)
+    o > 0 && return 1
+    o < 0 && return -1
+    return 0
+end
+
+"""
+CCW cyclic order of the four half-edge directions incident to the
+proper crossing of (a0,a1) × (b0,b1), starting from a1. Since the
+crossing is proper, b0/b1 are strictly on opposite sides of line(a0,a1):
+if b1 is to the left, CCW order is (a1, b1, a0, b0), else (a1, b0, a0, b1).
+"""
+function rk_crossing_dirs_ccw(m::Planar, a0, a1, b0, b1; exact)
+    if rk_orient(m, a0, a1, b1; exact) > 0
+        return (a1, b1, a0, b0)
+    else
+        return (a1, b0, a0, b1)
+    end
+end
+
+# Port of PolygonNodeTopology.isCrossing, apex = vertex node coordinate.
+# Crossing-node apexes are rejected: a proper crossing is a crossing by
+# construction, and the only caller (TopologyComputer.updateAreaAreaCross)
+# short-circuits proper intersections before asking.
+function rk_is_crossing(m::Planar, node::NodeKey, a0, a1, b0, b1; exact)
+    node.is_crossing &&
+        throw(ArgumentError("rk_is_crossing requires a vertex-node apex; proper crossings cross by construction"))
+    nodept = node.pt
+    a_lo, a_hi = a0, a1
+    if _is_angle_greater(m, nodept, a_lo, a_hi; exact)
+        a_lo, a_hi = a1, a0
+    end
+    # Find positions of b0 and b1. The edges cross if the positions are
+    # different. If any edge is collinear they are reported as not crossing.
+    comp_between0 = _compare_between(m, nodept, b0, a_lo, a_hi; exact)
+    comp_between0 == 0 && return false
+    comp_between1 = _compare_between(m, nodept, b1, a_lo, a_hi; exact)
+    comp_between1 == 0 && return false
+    return comp_between0 != comp_between1
+end
+
+# Port of PolygonNodeTopology.isInteriorSegment, apex = vertex node
+# coordinate: whether segment node→b lies in the interior of the ring corner
+# a0–node–a1 (ring interior on the right, i.e. a CW shell or CCW hole).
+function rk_is_interior_segment(m::Planar, node::NodeKey, a0, a1, b; exact)
+    node.is_crossing &&
+        throw(ArgumentError("rk_is_interior_segment requires a vertex-node apex"))
+    nodept = node.pt
+    a_lo, a_hi = a0, a1
+    is_interior_between = true
+    if _is_angle_greater(m, nodept, a_lo, a_hi; exact)
+        a_lo, a_hi = a1, a0
+        is_interior_between = false
+    end
+    is_between = _is_between(m, nodept, b, a_lo, a_hi; exact)
+    return (is_between && is_interior_between) || (!is_between && !is_interior_between)
+end
+
 # Node coincidence, rational slow path (design D3). Float64 values are
 # dyadic rationals, so Rational{BigInt} conversion and arithmetic are exact.
 
+# Precondition: the segments cross *properly* (SS_PROPER), so their
+# direction vectors are non-parallel and the denominator below is nonzero.
+# crossing_node keys are only ever constructed for proper crossings.
 "Exact intersection point of two properly crossing segments, as rationals."
 function _exact_crossing_point(a0, a1, b0, b1)
     R = Rational{BigInt}

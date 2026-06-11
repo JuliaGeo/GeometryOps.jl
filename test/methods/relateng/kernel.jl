@@ -148,6 +148,104 @@ end
     @test cz1 == cz2 && hash(cz1) == hash(cz2)
 end
 
+@testset "rk_quadrant" begin
+    # JTS Quadrant convention: NE=0, NW=1, SW=2, SE=3, numbered CCW from the
+    # positive X-axis; axis directions belong to the `>= 0` side (so +x and
+    # +y are NE, -x is NW, -y is SE).
+    o = (0.0, 0.0)
+    @test GO.rk_quadrant(m, o, (1.,0.)) == 0    # +x axis is NE
+    @test GO.rk_quadrant(m, o, (1.,1.)) == 0
+    @test GO.rk_quadrant(m, o, (0.,1.)) == 0    # +y axis is NE
+    @test GO.rk_quadrant(m, o, (-1.,1.)) == 1
+    @test GO.rk_quadrant(m, o, (-1.,0.)) == 1   # -x axis is NW
+    @test GO.rk_quadrant(m, o, (-1.,-1.)) == 2
+    @test GO.rk_quadrant(m, o, (0.,-1.)) == 3   # -y axis is SE
+    @test GO.rk_quadrant(m, o, (1.,-1.)) == 3
+    @test GO.rk_quadrant(m, (2.0, 3.0), (3.0, 3.0)) == 0   # non-origin apex
+    @test_throws ArgumentError GO.rk_quadrant(m, o, (0.0, 0.0))   # zero-length direction
+end
+
+@testset "edge ordering around a vertex node" begin
+    # Sign expectations verified against the Java contract
+    # (PolygonNodeTopology.compareAngle): returns negative / zero / positive
+    # as angle(P) is less than / equal to / greater than angle(Q), with
+    # angles increasing CCW from the positive X-axis. Different quadrants
+    # decide the comparison; same-quadrant ties are resolved by
+    # Orientation.index(origin, q, p) (CCW -> P greater).
+    origin = GO.vertex_node((0.0, 0.0))
+    east, north, west, south = (1.,0.), (0.,1.), (-1.,0.), (0.,-1.)
+    vcmp(p, q) = GO.rk_compare_edge_dir(m, origin, p, q; exact = True())
+    @test vcmp(east, north) < 0   # same quadrant (NE holds both + axes), orientation resolves
+    @test vcmp(north, west) < 0   # NE=0 < NW=1
+    @test vcmp(west, south) < 0   # NW=1 < SE=3 (south lies on the dx>=0 side)
+    @test vcmp(east, east) == 0
+    @test vcmp(north, east) > 0
+    # same quadrant resolved by orientation
+    @test vcmp((2.0, 1.0), (1.0, 2.0)) < 0
+    # full fan in strictly increasing angular order: comparator must be a
+    # total order matching position in the fan (antisymmetry included)
+    fan = [(1.,0.), (2.,1.), (1.,1.), (1.,2.), (0.,1.),            # NE: 0..90
+           (-1.,2.), (-1.,1.), (-2.,1.), (-1.,0.),                  # NW: (90)..180
+           (-2.,-1.), (-1.,-1.), (-1.,-2.),                         # SW: (180)..(270)
+           (0.,-1.), (1.,-2.), (1.,-1.), (2.,-1.)]                  # SE: 270..(360)
+    for i in eachindex(fan), j in eachindex(fan)
+        @test vcmp(fan[i], fan[j]) == (i == j ? 0 : (i < j ? -1 : 1))
+    end
+end
+
+@testset "crossing-node incident edge order" begin
+    # a: (0,0)->(2,2), b: (0,2)->(2,0); crossing at symbolic (1,1)
+    dirs = GO.rk_crossing_dirs_ccw(m, (0.,0.), (2.,2.), (0.,2.), (2.,0.); exact = True())
+    # CCW order starting from direction toward a1=(2,2):
+    @test dirs == ((2.,2.), (0.,2.), (0.,0.), (2.,0.))
+    # reversing b gives the same cyclic order (other orientation branch)
+    dirs2 = GO.rk_crossing_dirs_ccw(m, (0.,0.), (2.,2.), (2.,0.), (0.,2.); exact = True())
+    @test dirs2 == ((2.,2.), (0.,2.), (0.,0.), (2.,0.))
+
+    # rk_compare_edge_dir with a crossing apex reproduces compareAngle
+    # anchored at the positive X-axis of the (symbolic) crossing point (1,1):
+    # angles from the apex: (2,2)=45deg, (0,2)=135deg, (0,0)=225deg, (2,0)=315deg
+    cn = GO.crossing_node((0.,0.), (2.,2.), (0.,2.), (2.,0.))
+    ccmp(p, q) = GO.rk_compare_edge_dir(m, cn, p, q; exact = True())
+    order = [(2.,2.), (0.,2.), (0.,0.), (2.,0.)]
+    for i in eachindex(order), j in eachindex(order)
+        @test ccmp(order[i], order[j]) == (i == j ? 0 : (i < j ? -1 : 1))
+    end
+    # only the four incident endpoints are valid directions at a crossing apex
+    @test_throws ArgumentError ccmp((5.,5.), (2.,2.))
+    # same-quadrant pair around a crossing apex, resolved by orientation:
+    # a: (0,0)->(4,1) x b: (1,-1)->(2,4) cross properly at (24/19, 6/19);
+    # both a1=(4,1) and b1=(2,4) are NE of the apex, with angle(4,1) smaller
+    cn2 = GO.crossing_node((0.,0.), (4.,1.), (1.,-1.), (2.,4.))
+    @test GO.rk_compare_edge_dir(m, cn2, (4.,1.), (2.,4.); exact = True()) < 0
+    @test GO.rk_compare_edge_dir(m, cn2, (2.,4.), (4.,1.); exact = True()) > 0
+    @test GO.rk_compare_edge_dir(m, cn2, (2.,4.), (2.,4.); exact = True()) == 0
+end
+
+@testset "isCrossing / isInteriorSegment" begin
+    n = (1.0, 1.0)
+    @test GO.rk_is_crossing(m, GO.vertex_node(n), (0.,0.), (2.,2.), (0.,2.), (2.,0.); exact = True())
+    @test !GO.rk_is_crossing(m, GO.vertex_node(n), (0.,0.), (2.,2.), (2.,0.), (2.,2.); exact = True())
+    # both b-arms on the same side of the a-corner: a touch, not a crossing
+    @test !GO.rk_is_crossing(m, GO.vertex_node(n), (0.,0.), (2.,2.), (0.,2.), (1.,2.); exact = True())
+    # collinear arm -> reported as not crossing (Java contract)
+    @test !GO.rk_is_crossing(m, GO.vertex_node(n), (0.,0.), (2.,2.), (0.,0.), (2.,0.); exact = True())
+    # crossing-node apexes are rejected: proper crossings are crossings by
+    # construction (JTS TopologyComputer.updateAreaAreaCross short-circuits
+    # them with `isProper ||` before ever calling isCrossing)
+    cn = GO.crossing_node((0.,0.), (2.,2.), (0.,2.), (2.,0.))
+    @test_throws ArgumentError GO.rk_is_crossing(m, cn, (0.,0.), (2.,2.), (0.,2.), (2.,0.); exact = True())
+
+    # isInteriorSegment: corner a0 -> node -> a1, ring interior on the right
+    nd = GO.vertex_node((0.0, 0.0))
+    @test !GO.rk_is_interior_segment(m, nd, (0.,1.), (1.,0.), (1.,1.); exact = True())
+    @test GO.rk_is_interior_segment(m, nd, (0.,1.), (1.,0.), (-1.,-1.); exact = True())
+    # reversed corner flips the interior side
+    @test GO.rk_is_interior_segment(m, nd, (1.,0.), (0.,1.), (1.,1.); exact = True())
+    @test !GO.rk_is_interior_segment(m, nd, (1.,0.), (0.,1.), (-1.,-1.); exact = True())
+    @test_throws ArgumentError GO.rk_is_interior_segment(m, cn, (0.,0.), (2.,2.), (1.,1.); exact = True())
+end
+
 @testset "exact crossing coincidence (rational slow path)" begin
     # X crossing at exactly (1,1); a vertex node placed there must coincide
     c = GO.crossing_node((0.,0.), (2.,2.), (0.,2.), (2.,0.))
