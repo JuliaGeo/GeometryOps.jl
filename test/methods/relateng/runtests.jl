@@ -7,6 +7,7 @@ using SafeTestsets
 @safetestset "Point locator" begin include("point_locator.jl") end
 @safetestset "RelateGeometry" begin include("relate_geometry.jl") end
 @safetestset "Node topology" begin include("node_topology.jl") end
+@safetestset "TopologyComputer" begin include("topology_computer.jl") end
 @safetestset "XML harness" begin include("xml_harness.jl") end
 # Further files appended here as tasks land:
 # ...
