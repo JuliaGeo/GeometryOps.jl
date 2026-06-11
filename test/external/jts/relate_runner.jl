@@ -103,6 +103,9 @@ function run_relate_cases(relate_fn, pattern_fn, predicate_fns, files;
                                 continue
                             end
                         catch err
+                            # An errored op must never count as a pass (e.g.
+                            # `relate_fn` throwing after `pattern_fn` succeeded).
+                            passed = false
                             @error "relate case errored" file case.description item.operation exception = (err, catch_backtrace())
                         end
                         passed ? (n_pass += 1) : (n_fail += 1)
