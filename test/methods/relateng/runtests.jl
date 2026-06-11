@@ -10,5 +10,6 @@ using SafeTestsets
 @safetestset "TopologyComputer" begin include("topology_computer.jl") end
 @safetestset "Edge intersector" begin include("edge_intersector.jl") end
 @safetestset "XML harness" begin include("xml_harness.jl") end
+@safetestset "RelateNG engine" begin include("relate_ng.jl") end
 # Further files appended here as tasks land:
 # ...
