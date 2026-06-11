@@ -203,7 +203,12 @@ relateng_predicate(GO_f, g1, g2) =
 
 # Divergences where old GO disagrees with LibGEOS/RelateNG (which agree with
 # each other): the new behavior is asserted in the loop below; the old engine
-# is not consulted for these pairs. (None found so far.)
+# is not consulted for these pairs. One gap IS known: old `GO.overlaps`
+# wrongly returns `true` for polygons touching along an edge (DE-9IM
+# interior/interior is F, so `overlaps` must be false; RelateNG and LibGEOS
+# agree). It is asserted in test/methods/relateng/relate_ng.jl (PublicAPI
+# testset) rather than in this list because the pair is not part of
+# `test_pairs`.
 KNOWN_OLD_GO_GAPS = Tuple{Function, String, String}[]
 
 function test_geom_relation(GO_f, alg::GO.Algorithm, f_name; swap_points=false)
