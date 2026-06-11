@@ -1,7 +1,7 @@
 # Tests for the RelateNG point-location machinery (point_locator.jl).
 # LinearBoundary section ports JTS LinearBoundaryTest.java; the
-# AdjacentEdgeLocator section ports JTS AdjacentEdgeLocatorTest.java; later
-# tasks append RelatePointLocator tests to this file.
+# AdjacentEdgeLocator section ports JTS AdjacentEdgeLocatorTest.java; the
+# RelatePointLocator section ports JTS RelatePointLocatorTest.java.
 
 using Test
 import GeometryOps as GO
@@ -174,5 +174,111 @@ end
             ]),
         ])
         check_location(gc, 2, 4, GO.LOC_BOUNDARY)
+    end
+end
+
+# Port of RelatePointLocatorTest.java. The Java fixture WKT
+# `gcPLA` is hand-translated into GI constructors:
+# GEOMETRYCOLLECTION (POINT (1 1), POINT (2 1), LINESTRING (3 1, 3 9),
+#   LINESTRING (4 1, 5 4, 7 1, 4 1), LINESTRING (12 12, 14 14),
+#   POLYGON ((6 5, 6 9, 9 9, 9 5, 6 5)),
+#   POLYGON ((10 10, 10 16, 16 16, 16 10, 10 10)),
+#   POLYGON ((11 11, 11 17, 17 17, 17 11, 11 11)),
+#   POLYGON ((12 12, 12 16, 16 16, 16 12, 12 12)))
+const gc_PLA = GI.GeometryCollection([
+    GI.Point(1.0, 1.0),
+    GI.Point(2.0, 1.0),
+    GI.LineString([(3.0, 1.0), (3.0, 9.0)]),
+    GI.LineString([(4.0, 1.0), (5.0, 4.0), (7.0, 1.0), (4.0, 1.0)]),
+    GI.LineString([(12.0, 12.0), (14.0, 14.0)]),
+    GI.Polygon([[(6.0, 5.0), (6.0, 9.0), (9.0, 9.0), (9.0, 5.0), (6.0, 5.0)]]),
+    GI.Polygon([[(10.0, 10.0), (10.0, 16.0), (16.0, 16.0), (16.0, 10.0), (10.0, 10.0)]]),
+    GI.Polygon([[(11.0, 11.0), (11.0, 17.0), (17.0, 17.0), (17.0, 11.0), (11.0, 11.0)]]),
+    GI.Polygon([[(12.0, 12.0), (12.0, 16.0), (16.0, 16.0), (16.0, 12.0), (12.0, 12.0)]]),
+])
+
+# Port of RelatePointLocatorTest.checkDimLocation.
+function check_dim_location(geom, x, y, expected_dim_loc)
+    locator = GO.RelatePointLocator(Planar(), geom; exact = True())
+    actual = GO.locate_with_dim(locator, (Float64(x), Float64(y)))
+    @test actual == expected_dim_loc
+end
+
+# Port of RelatePointLocatorTest.checkLineEndDimLocation.
+function check_line_end_dim_location(geom, x, y, expected_dim_loc)
+    locator = GO.RelatePointLocator(Planar(), geom; exact = True())
+    actual = GO.locate_line_end_with_dim(locator, (Float64(x), Float64(y)))
+    @test actual == expected_dim_loc
+end
+
+# Port of RelatePointLocatorTest.checkNodeLocation.
+function check_node_location(geom, x, y, expected_loc)
+    locator = GO.RelatePointLocator(Planar(), geom; exact = True())
+    actual = GO.locate_node(locator, (Float64(x), Float64(y)), nothing)
+    @test actual == expected_loc
+end
+
+@testset "RelatePointLocator" begin
+    # testPoint
+    @testset "point" begin
+        check_dim_location(gc_PLA, 1, 1, GO.DL_POINT_INTERIOR)
+        check_dim_location(gc_PLA, 0, 1, GO.DL_EXTERIOR)
+    end
+
+    # testPointInLine
+    @testset "point in line" begin
+        check_dim_location(gc_PLA, 3, 8, GO.DL_LINE_INTERIOR)
+    end
+
+    # testPointInArea
+    @testset "point in area" begin
+        check_dim_location(gc_PLA, 8, 8, GO.DL_AREA_INTERIOR)
+    end
+
+    # testLine
+    @testset "line" begin
+        check_dim_location(gc_PLA, 3, 3, GO.DL_LINE_INTERIOR)
+        check_dim_location(gc_PLA, 3, 1, GO.DL_LINE_BOUNDARY)
+    end
+
+    # testLineInArea
+    @testset "line in area" begin
+        check_dim_location(gc_PLA, 11, 11, GO.DL_AREA_INTERIOR)
+        check_dim_location(gc_PLA, 14, 14, GO.DL_AREA_INTERIOR)
+    end
+
+    # testArea
+    @testset "area" begin
+        check_dim_location(gc_PLA, 8, 8, GO.DL_AREA_INTERIOR)
+        check_dim_location(gc_PLA, 9, 9, GO.DL_AREA_BOUNDARY)
+    end
+
+    # testAreaInArea
+    @testset "area in area" begin
+        check_dim_location(gc_PLA, 11, 11, GO.DL_AREA_INTERIOR)
+        check_dim_location(gc_PLA, 12, 12, GO.DL_AREA_INTERIOR)
+        check_dim_location(gc_PLA, 10, 10, GO.DL_AREA_BOUNDARY)
+        check_dim_location(gc_PLA, 16, 16, GO.DL_AREA_INTERIOR)
+    end
+
+    # testLineNode
+    @testset "line node" begin
+        # checkNodeLocation(gcPLA, 12.1, 12.2, Location.INTERIOR) — commented
+        # out in the Java test too.
+        check_node_location(gc_PLA, 3, 1, GO.LOC_BOUNDARY)
+    end
+
+    # testLineEndInGCLA:
+    # GEOMETRYCOLLECTION (POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0)),
+    #   LINESTRING (12 2, 0 2, 0 5, 5 5), LINESTRING (12 10, 12 2))
+    @testset "line end in GC LA" begin
+        gc = GI.GeometryCollection([
+            GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]]),
+            GI.LineString([(12.0, 2.0), (0.0, 2.0), (0.0, 5.0), (5.0, 5.0)]),
+            GI.LineString([(12.0, 10.0), (12.0, 2.0)]),
+        ])
+        check_line_end_dim_location(gc, 5, 5, GO.DL_AREA_INTERIOR)
+        check_line_end_dim_location(gc, 12, 2, GO.DL_LINE_INTERIOR)
+        check_line_end_dim_location(gc, 12, 10, GO.DL_LINE_BOUNDARY)
     end
 end
