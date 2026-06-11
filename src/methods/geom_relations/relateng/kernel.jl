@@ -49,7 +49,38 @@ Conservative interaction-bounds tests used for short-circuiting:
 `rk_bounds_covers` must only return `true` when `extA` covers `extB` in the
 X/Y dimensions. These operate on the extents produced by
 `rk_interaction_bounds` and are manifold-generic.
+
+    rk_classify_intersection(m, a0, a1, b0, b1; exact)::SegSegClass
+
+Combinatorial classification of the intersection of the closed segments
+`(a0, a1)` and `(b0, b1)` (replaces JTS's `RobustLineIntersector`, design
+D2). No intersection coordinate is ever constructed: a proper interior
+crossing is reported purely symbolically as `SS_PROPER`, and all vertex
+incidences are reported via the boolean `*_on_*` flags of the returned
+`SegSegClass`, whose coordinates are exact input vertices. With
+`exact = True()` the classification must be correct even for adversarial
+near-collinear inputs.
 =#
+
+# Symbolic segment-pair intersection classification (replaces RobustLineIntersector).
+@enum SegSegKind::Int8 SS_DISJOINT SS_PROPER SS_TOUCH SS_COLLINEAR
+
+"""
+    SegSegClass
+
+Combinatorial classification of the intersection of closed segments
+(a0,a1) × (b0,b1). `kind` is `SS_PROPER` only for a crossing in both
+segments' interiors (the node is *symbolic*: no coordinate exists for
+it anywhere in the engine). All vertex incidences are reported via the
+`*_on_*` flags, whose coordinates are exact input vertices.
+"""
+struct SegSegClass
+    kind::SegSegKind
+    a0_on_b::Bool
+    a1_on_b::Bool
+    b0_on_a::Bool
+    b1_on_a::Bool
+end
 
 # Manifold-generic helpers
 
