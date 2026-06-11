@@ -506,12 +506,17 @@ mode" of JTS `RelateNG.prepare`). Holds:
   forced,
 - `segs_a`: the A segment strings, extracted once *without* an
   interaction-envelope filter so they serve any B geometry,
-- `edge_tree`: the prebuilt [`PreparedEdgeIndex`](@ref) over `segs_a`'s
+- `edge_tree`: the prebuilt `PreparedEdgeIndex` over `segs_a`'s
   segment extents, or `nothing` below the accelerator size threshold
   (where the nested loop wins).
 
 Construct with [`prepare`](@ref); evaluate with [`relate`](@ref) /
 [`relate_predicate`](@ref).
+
+!!! warning
+    Not safe for concurrent use: self-noding evaluations mutate the held
+    `RelateGeometry` (edge re-extraction, element-id counter). Use one
+    `PreparedRelate` per thread.
 """
 struct PreparedRelate{ALG <: RelateNG, RG <: RelateGeometry,
         SS <: AbstractVector{<:RelateSegmentString}, T <: Union{Nothing, PreparedEdgeIndex}}
