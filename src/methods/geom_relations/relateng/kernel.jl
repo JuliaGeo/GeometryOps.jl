@@ -79,6 +79,49 @@ exactly on a proper crossing, or two distinct crossings meeting at one
 point) is decided exactly — on the plane via `Rational{BigInt}` arithmetic
 (design D3). Only invoked on self-noding paths, so the slow path is
 acceptable.
+
+    rk_quadrant(m, origin, p)::Int
+
+Quadrant of the direction from `origin` to `p`, in the JTS `Quadrant`
+convention: `0` = NE, `1` = NW, `2` = SW, `3` = SE, numbered CCW from the
+positive X-axis, with axis directions belonging to the `dx >= 0` /
+`dy >= 0` side. Throws `ArgumentError` for a zero-length direction.
+
+    rk_compare_edge_dir(m, node::NodeKey, p, q; exact)::Int
+
+Compare the angles of the edge directions `node → p` and `node → q` around
+the (possibly symbolic) apex `node`: negative / zero / positive as the
+direction toward `p` has angle less than / equal to / greater than the
+direction toward `q`, angles increasing CCW from the positive X-axis at the
+apex (port of JTS `PolygonNodeTopology.compareAngle` with a `NodeKey` apex).
+For vertex nodes the apex coordinate is exact and the port is direct. For
+crossing nodes `p` and `q` must be among the four endpoints of the node's
+defining segments; the comparison is derived exactly from the original
+endpoints, never from a constructed apex coordinate.
+
+    rk_crossing_dirs_ccw(m, a0, a1, b0, b1; exact)
+
+CCW cyclic order of the four half-edge directions incident to the proper
+crossing of `(a0, a1)` × `(b0, b1)`, as a 4-tuple of the original segment
+endpoints starting from `a1`. Derived from a single orientation sign; no
+crossing coordinate is constructed.
+
+    rk_is_crossing(m, node, a0, a1, b0, b1; exact)::Bool
+
+Whether the rings entering vertex node `node` along segments `a0–node–a1`
+and `b0–node–b1` cross at the node (port of JTS
+`PolygonNodeTopology.isCrossing`). If any segment is collinear with another,
+returns `false`. Vertex-node apexes only: proper crossings are crossings by
+construction and are short-circuited by the caller
+(JTS `TopologyComputer.updateAreaAreaCross`).
+
+    rk_is_interior_segment(m, node, a0, a1, b; exact)::Bool
+
+Whether the segment `node → b` lies in the interior of the ring corner
+`a0–node–a1`, the ring interior being on the right of the corner (i.e. a CW
+shell or CCW hole); port of JTS `PolygonNodeTopology.isInteriorSegment`.
+The test segment must not be collinear with the corner segments.
+Vertex-node apexes only.
 =#
 
 # Symbolic segment-pair intersection classification (replaces RobustLineIntersector).
@@ -148,8 +191,13 @@ end
 
 Node key of the proper crossing of segments `(a0, a1)` and `(b0, b1)`.
 Canonicalize: each segment ordered lexicographically by (x, y); segments
-ordered by their first point — so any order/orientation of the same pair
-produces an identical key.
+ordered lexicographically by their endpoint tuples — so any
+order/orientation of the same pair produces an identical key.
+
+Only construct crossing keys for properly crossing segments (`SS_PROPER`
+from `rk_classify_intersection`): the exact rational slow path in
+`rk_nodes_coincide` divides by the segments' direction cross product, which
+is nonzero precisely when the crossing is proper.
 """
 function crossing_node(a0, a1, b0, b1)
     a0, a1 = _seg_canon(_node_point(a0), _node_point(a1))
