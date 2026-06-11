@@ -110,6 +110,27 @@ end
         test_cached_equals_uncached(GO.intersection, square_a, square_b; T = Float32)
     end
 
+    @testset "reset!" begin
+        alg = GO.FosterHormannClipping()
+        cache = GO.FosterHormannCache()
+        #= holed_a's hole straddles half_b's boundary, forcing a recursive difference call,
+        so this grows the frame stack beyond the initial single frame =#
+        GO.difference(alg, holed_a, half_b; target = GI.PolygonTrait(), cache)
+        @test length(cache.frames) > 1
+        @test !isempty(cache.frames[1].a_list)
+        @test GO.reset!(cache) === cache
+        @test cache.depth == 0
+        @test length(cache.frames) == 1
+        frame = cache.frames[1]
+        @test isempty(frame.a_list) && isempty(frame.b_list) && isempty(frame.a_idx_list) &&
+            isempty(frame.remove_poly_idx) && isempty(frame.remove_hole_idx)
+        # The cache still works correctly after a reset
+        expected = GO.difference(alg, holed_a, half_b; target = GI.PolygonTrait())
+        result = GO.difference(alg, holed_a, half_b; target = GI.PolygonTrait(), cache)
+        @test GI.coordinates.(result) == GI.coordinates.(expected)
+        @test cache.depth == 0
+    end
+
     @testset "Cached calls allocate less" begin
         alg = GO.FosterHormannClipping()
         cache = GO.FosterHormannCache()

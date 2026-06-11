@@ -188,6 +188,10 @@ Since the algorithm recurses into itself when processing holes, the cache holds 
 grown stack of buffer frames, one per active recursion level. Returned geometries never
 alias the cache, so results remain valid after subsequent calls with the same cache.
 
+The buffers grow to fit the largest geometries seen and stay at that size for reuse; call
+[`GeometryOps.reset!`](@ref reset!) to release them and return the cache to its freshly
+constructed state.
+
 !!! warning "Thread safety"
     A cache must not be shared across concurrent tasks. Create one cache per task/thread.
     The default `cache = nothing` allocates fresh buffers per call and is always safe.
@@ -213,6 +217,25 @@ function _fh_acquire!(cache::FosterHormannCache{T}) where T
     return @inbounds cache.frames[cache.depth]
 end
 _fh_release!(cache::FosterHormannCache) = (cache.depth -= 1; nothing)
+
+"""
+    reset!(cache::FosterHormannCache)
+
+Release all of `cache`'s internal buffers, returning it to a freshly constructed state,
+and return `cache`.
+
+The cache's buffers grow to the high-water mark of the geometries they have processed and
+are otherwise retained for reuse, so call this to reclaim that memory, e.g. after clipping
+an unusually large geometry. Must not be called while a clipping operation using the cache
+is in progress.
+
+This function is not exported, to avoid name clashes - call it as `GeometryOps.reset!`.
+"""
+function reset!(cache::FosterHormannCache{T}) where T
+    cache.frames = [FosterHormannFrame{T}()]
+    cache.depth = 0
+    return cache
+end
 
 # Check that a user-provided cache matches the float type of the operation.
 _fh_check_cache(cache::FosterHormannCache{T}, ::Type{T}) where T = cache
