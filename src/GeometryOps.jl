@@ -94,6 +94,8 @@ include("methods/geom_relations/relateng/relate_predicates.jl")
 # topology-layer files (Task 6+) that will call the kernel functions.
 include("methods/geom_relations/relateng/kernel.jl")
 include("methods/geom_relations/relateng/kernel_planar.jl")
+# Point location: after the kernel (uses `_node_point` and de9im constants).
+include("methods/geom_relations/relateng/point_locator.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")
