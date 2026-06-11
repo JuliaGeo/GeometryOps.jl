@@ -28,6 +28,9 @@ function jts_wkt_to_geom(wkt::String)
     if occursin("EMPTY", upper_wkt) ||
             startswith(upper_wkt, "GEOMETRYCOLLECTION") ||
             startswith(upper_wkt, "LINEARRING")
+        # Intentionally return the raw LibGEOS geometry: GI wrappers cannot represent
+        # EMPTY, and LG geoms are GeoInterface-compatible, so consumers (the engine)
+        # must access them via GI accessors anyway.
         return LG.readgeom(sanitized_wkt)
     end
     geom = GFT.WellKnownText(GFT.Geom(), sanitized_wkt)

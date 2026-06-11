@@ -13,50 +13,62 @@ using Test
 Run the JTS relate XML test cases in `files` (paths to vendored XML files)
 against a relate implementation:
 
-- `relate_fn(a, b)::DE9IM` — computes the full DE-9IM matrix (currently unused
-  directly; reserved for matrix-vs-pattern diagnostics).
+- `relate_fn(a, b)::DE9IM` — computes the full DE-9IM matrix. Currently unused,
+  but kept as a required argument on purpose: Task 23 will use it for
+  full-matrix (matrix-vs-pattern) checks.
 - `pattern_fn(a, b, pattern)::Bool` — evaluates a DE-9IM pattern match
   (used for `relate` ops, whose `arg3` is the pattern).
 - `predicate_fns::AbstractDict` — maps lowercase op names (`"intersects"`,
   `"contains"`, ...) to `(a, b) -> Bool` closures. Ops with no entry are
   recorded as skipped.
 
-Cases whose `(file, description, op)` key is in `skiplist` are recorded as
-skipped, never silently dropped — as are ops outside `BOOLEAN_OPS` (e.g.
-`getboundary`) and runs with a FIXED precision model.
+Ops whose `(file, case_index, op, arg_order)` key is in `skiplist` are recorded
+as skipped, never silently dropped — as are ops outside `BOOLEAN_OPS` (e.g.
+`getboundary`) and runs with a FIXED precision model. `case_index` is the
+1-based index of the `<case>` within the file; `arg_order` is `"AB"` when the
+op's `arg1` is the case's A geometry and `"BA"` when it is B (some files, e.g.
+TestRelateGC.xml, run each predicate both ways, and case descriptions are not
+unique within a file, so neither alone can serve as a key).
 
 Each executed op contributes one `@test`. Returns a NamedTuple
 `(per_file, skipped)` where `per_file` is a `Vector` of
 `(file, n_pass, n_fail, n_skip)` NamedTuples and `skipped` is a `Vector` of
-`(file, description, op, reason)` tuples for every skipped op.
+`(file, case_index, description, op, arg_order, reason)` NamedTuples for every
+skipped op.
 """
 function run_relate_cases(relate_fn, pattern_fn, predicate_fns, files;
-        skiplist::Set{Tuple{String, String, String}} = RELATE_SKIPLIST)
+        skiplist::Set{Tuple{String, Int, String, String}} = RELATE_SKIPLIST)
     per_file = NamedTuple{(:file, :n_pass, :n_fail, :n_skip), Tuple{String, Int, Int, Int}}[]
-    skipped = Tuple{String, String, String, String}[]
+    skipped = NamedTuple{(:file, :case_index, :description, :op, :arg_order, :reason),
+        Tuple{String, Int, String, String, String, String}}[]
     for filepath in files
         file = basename(filepath)
         run = load_test_run(filepath)
         n_pass = 0
         n_fail = 0
         n_skip = 0
-        skip!(case, item, reason) = begin
+        skip!(case_index, case, item, arg_order, reason) = begin
             n_skip += 1
-            push!(skipped, (file, case.description, item.operation, reason))
+            push!(skipped, (; file, case_index, description = case.description,
+                op = item.operation, arg_order, reason))
         end
         @testset "$file" begin
-            for case in run.cases
+            for (case_index, case) in enumerate(run.cases)
                 @testset "$(case.description)" begin
                     for item in case.items
                         op = lowercase(item.operation)
-                        if (file, case.description, item.operation) in skiplist
-                            skip!(case, item, "in skiplist")
+                        # "AB" when the op's arg1 is the case's A geometry, "BA"
+                        # when it is B (e.g. TestRelateGC runs each predicate
+                        # with the arguments both ways round).
+                        arg_order = item.arg1 === case.geom_a ? "AB" : "BA"
+                        if (file, case_index, item.operation, arg_order) in skiplist
+                            skip!(case_index, case, item, arg_order, "in skiplist")
                             continue
                         elseif run.precision_model != "FLOATING"
-                            skip!(case, item, "non-FLOATING precision model ($(run.precision_model))")
+                            skip!(case_index, case, item, arg_order, "non-FLOATING precision model ($(run.precision_model))")
                             continue
                         elseif !(op in BOOLEAN_OPS)
-                            skip!(case, item, "non-boolean op")
+                            skip!(case_index, case, item, arg_order, "non-boolean op")
                             continue
                         end
                         a, b = item.arg1, item.arg2
@@ -67,7 +79,7 @@ function run_relate_cases(relate_fn, pattern_fn, predicate_fns, files;
                             elseif haskey(predicate_fns, op)
                                 predicate_fns[op](a, b)
                             else
-                                skip!(case, item, "no predicate function provided")
+                                skip!(case_index, case, item, arg_order, "no predicate function provided")
                                 continue
                             end
                             passed = (actual == item.expected_result)

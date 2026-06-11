@@ -2,6 +2,7 @@
 # (which is now a pure parser). Not wired into CI; run manually.
 include(joinpath(@__DIR__, "jts_testset_reader.jl"))
 
+# TODO: parameterize; path predates vendored test/data/jts files
 testfile = "/Users/anshul/.julia/dev/geo/jts/modules/tests/src/test/resources/testxml/general/TestOverlayAA.xml"
 
 cases = load_test_cases(testfile)
