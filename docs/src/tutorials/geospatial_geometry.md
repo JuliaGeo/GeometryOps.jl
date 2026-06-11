@@ -71,7 +71,7 @@ Read this dataset in as a `GeoJSON.FeatureCollection`.
 land_geo = GeoJSON.read(land_path)
 ````
 
-We then need to create a figure with a `GeoAxis` that can handle the projection between `source` and `destination` CRS. For GeoMakie, `source` is the CRS of the input and `dest` is the CRS you want to visualize in.
+We then need to create a figure with a `GeoAxis` that can handle the projection between `source` and `destination` CRS. For [`GeoMakie`](https://geo.makie.org/stable/), `source` is the CRS of the input and `dest` is the CRS you want to visualize in.
 
 ````@example geospatial_geometry
 fig = Figure(size=(1000, 500));
@@ -97,11 +97,24 @@ Now let's plot a `Polygon` like before, but this time with a CRS that differs fr
 ````@example geospatial_geometry
 function ring(radius)
     ϴ = 0:0.01:2π
-	points = @. GI.Point(50 + r * cos(ϴ), 50 + r * sin(ϴ))
+	points = @. GI.Point(50 + radius * cos(ϴ), 50 + radius * sin(ϴ))
 	return GI.LinearRing(points)
 end
-spiro = GI.LinearRing(GI.Point.(zip(50 .+ 22cos.(ϴ) .- 2cos.(11ϴ), 50 .+ 22sin.(ϴ) .- 2sin.(11ϴ))))
-multipolygon = GI.MultiPolygon([GI.Polygon([spiro, ring(8)]), GI.Polygon([ring(4)])])
+
+function spiro(a = 22, b = 2, k = 11)
+    ϴ = 0:0.01:2π
+    points = @. GI.Point(
+        50 + a*cos(ϴ) - b*cos(k*ϴ),
+        50 + a*sin(ϴ) - b*sin(k*ϴ)
+    )
+    return GI.LinearRing(points)
+end
+
+
+multipolygon = GI.MultiPolygon([
+    GI.Polygon([spiro(), ring(8)]),
+    GI.Polygon([ring(4)])
+])
 
 plot!(multipolygon; color = :green)
 fig
@@ -198,33 +211,52 @@ df
 
 There are Julia packages for most commonly used geographic data formats.  Below, we show how to export that data to each of these.
 
-We begin with [GeoJSON](https://github.com/JuliaGeo/GeoJSON.jl), which is a [JSON](https://en.wikipedia.org/wiki/JSON) format for geospatial feature collections.  It's human-readable and widely supported by most web-based and desktop geospatial libraries.
+::: tabs
+
+== GeoDataFrames
+
+In general, [`GeoDataFrames`](https://github.com/evetion/GeoDataFrames.jl) is recomended as the default way to write data to your desired format. This package uses the [GDAL](https://gdal.org/) library under the hood which supports writing to nearly all geospatial formats.
+
+Writing to `gpkg`:
 
 ````@example geospatial_geometry
-fn = "shapes.json"
-GeoJSON.write(fn, df)
+GeoDataFrames.write("shapes.gpkg", df)
 ````
+
+Writing to `GeoJSON`:
+
+````@example geospatial_geometry
+GeoDataFrames.write("file.geojson", df)
+````
+
+View the [`GeoDataFrames`](https://github.com/evetion/GeoDataFrames.jl) documentation for all recognized file extensions.
+
+
+== GeoJSON
+
+Next, let's save as a [GeoJSON](https://github.com/JuliaGeo/GeoJSON.jl), which is a [JSON](https://en.wikipedia.org/wiki/JSON) format for geospatial feature collections.  It's human-readable and widely supported by most web-based and desktop geospatial libraries.
+
+````@example geospatial_geometry
+GeoJSON.write("shapes.json", df)
+````
+
+== Shapefile
 
 Now, let's save as a [`Shapefile`](https://github.com/JuliaGeo/Shapefile.jl).  Shapefiles are actually a set of files (usually 4) that hold geometry information, a CRS, and additional attribute information as a separate table.  When you give `Shapefile.write` a file name, it will write 4 files of the same name but with different extensions.
 
 ````@example geospatial_geometry
-fn = "shapes.shp"
-Shapefile.write(fn, df)
+Shapefile.write("shapes.shp", df)
 ````
+
+== GeoParquet
 
 Now, let's save as a [`GeoParquet`](https://github.com/JuliaGeo/GeoParquet.jl).  GeoParquet is a geospatial extension to the [Parquet](https://parquet.apache.org/) format, which is a high-performance data store.  It's great for storing large amounts of data in a single file.
 
 ````@example geospatial_geometry
-fn = "shapes.parquet"
-GeoParquet.write(fn, df, (:geometry,))
+GeoParquet.write("shapes.parquet", df)
 ````
 
-Finally, if there's no Julia-native package that can write data to your desired format (e.g. `.gpkg`, `.gml`, etc), you can use [`GeoDataFrames`](https://github.com/evetion/GeoDataFrames.jl). This package uses the [GDAL](https://gdal.org/) library under the hood which supports writing to nearly all geospatial formats.
-
-````@example geospatial_geometry
-fn = "shapes.gpkg"
-GeoDataFrames.write(fn, df)
-````
+:::
 
 ## [Geodesic paths](@id geodesic-paths)
 
@@ -242,7 +274,7 @@ AMS = (4.897070, 52.377956)
 fig, ga, _cp = lines(GeoMakie.coastlines(); axis = (; type = GeoAxis))
 
 # Create our line along the Earth, accounting for curvature
-lines!(ga, GO.segmentize(GO.Geodesic(), GI.LineString([IAH, AMS]); max_distance = 100_000); color = Makie.wong_colors()[2])
+lines!(ga, GO.segmentize(GO.Geodesic(), GI.LineString([IAH, AMS]); max_distance = 100_000))
 fig
 ````
 
