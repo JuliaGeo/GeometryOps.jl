@@ -274,27 +274,22 @@ end
 """
     create_node(m::Manifold, nss::NodeSections; exact)
 
-Port of NodeSections.createNode — **partial** (Task 15). The Java method
-prepares the sections, builds a `RelateNode` at the node point and feeds it
-the sections via `node.addEdges` (per-polygon section groups are first
-rewritten by `PolygonNodeConverter.convert` into maximal-ring structure).
+Creates the node topology: prepares the sections, builds a
+[`RelateNode`](@ref) at the node and feeds it the sections via
+[`add_edges!`](@ref). Per-polygon section groups are first rewritten into
+maximal-ring structure by [`polygon_node_convert`](@ref) (the
+`PolygonNodeConverter.convert` port). Returns the assembled node.
 
-`RelateNode` lands in Task 17, so this ports the section-assembly half —
-the [`prepare_sections!`](@ref) sort and the per-polygon grouping /
-converter delegation — and returns the ordered section list that the
-`RelateNode.addEdges` calls will consume, instead of the node.
-TODO(Task 17): construct the `RelateNode` here, replace the `append!`/
-`push!` calls with `add_edges!(node, ...)`, and return the node.
-
-The per-polygon section groups are rewritten into maximal-ring structure by
-[`polygon_node_convert`](@ref) (the `PolygonNodeConverter.convert` port).
-The manifold/`exact` parameters (absent in Java, where `createNode()` is
-nullary) are threaded through for the converter's angle comparisons.
+Port of NodeSections.createNode. The manifold/`exact` parameters (absent in
+Java, where `createNode()` is nullary) are threaded through for the angle
+comparisons in the converter and the node's edge wheel. (`RelateNode` is
+defined in relate_node.jl, included after this file; the reference resolves
+at call time.)
 """
 function create_node(m::Manifold, nss::NodeSections; exact)
     prepare_sections!(nss)
 
-    node_sections = NodeSection[]
+    node = RelateNode(m, nss.node; exact)
     i = 1
     while i <= length(nss.sections)
         ns = nss.sections[i]
@@ -302,15 +297,15 @@ function create_node(m::Manifold, nss::NodeSections; exact)
         if is_area(ns) && _has_multiple_polygon_sections(nss.sections, i)
             poly_sections = _collect_polygon_sections(nss.sections, i)
             ns_convert = polygon_node_convert(m, poly_sections; exact)
-            append!(node_sections, ns_convert)
+            add_edges!(node, ns_convert)
             i += length(poly_sections)
         else
             #-- the most common case is a line or a single polygon ring section
-            push!(node_sections, ns)
+            add_edges!(node, ns)
             i += 1
         end
     end
-    return node_sections
+    return node
 end
 
 """
