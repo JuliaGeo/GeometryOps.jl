@@ -169,7 +169,7 @@ geopoly1 = GI.Polygon([ring4], crs = source_crs1)
 !!! note
     It is good practice to only include CRS information with the highest-level geometry. Not doing so can bloat the memory footprint of the geometry. CRS information _can_ be included at the individual `Point` level but is discouraged.
 
-And let's create second `Polygon` by shifting the first using CoordinateTransformations
+And let's create a second `Polygon` by shifting the first using CoordinateTransformations
 
 ````@example geospatial_geometry
 xoffset = 20.;
