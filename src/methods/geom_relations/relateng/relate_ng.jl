@@ -1,36 +1,104 @@
-# # RelateNG engine
-#
-# Port of JTS `RelateNG.java` — the evaluation engine that drives all the
-# RelateNG machinery (Tasks 1–20) to compute the value of a topological
-# predicate between two geometries, based on the DE-9IM model.
-#
-# Method order parallels the Java file (`evaluate`, `hasRequiredEnvelopeInteraction`,
-# `finishValue`, `computePP`, `computeAtPoints`, `computePoints`, `computePoint`,
-# `computeLineEnds`, `computeLineEnd`, `computeAreaVertex` ×2, `computeAtEdges`,
-# `computeEdgesAll`, `computeEdgesMutual`), so this file diffs against its
-# Java counterpart. Idiom changes:
-#
-# - The Java class holds `geomA` (for prepared mode); here the unprepared
-#   entry points build both `RelateGeometry`s per call, while prepared mode
-#   carries the A side — with its lazy caches forced and the segment
-#   strings/segment tree prebuilt — in a [`PreparedRelate`](@ref), threaded
-#   through the evaluation as the optional `prep` argument.
-# - The algorithm configuration (manifold, accelerator, exactness flag,
-#   boundary node rule) travels in the `RelateNG` algorithm struct, the
-#   house `Algorithm{M}` idiom (cf. `FosterHormannClipping`).
-# - Java's `computeEdgesAll` feeds the combined A∪B edge set through one
-#   `EdgeSetIntersector` (every unordered chain pair once). Here that is
-#   phased as A×B (`process_edge_intersections!`), then A×A and B×B
-#   (`process_self_intersections!`) — the same pair set, possibly visited
-#   in a different order, which only affects *when* a short-circuiting
-#   predicate exits, never the final value (dimension updates are
-#   monotone).
-# - Java's null `Envelope` is `nothing` here: empty geometries have a
-#   `nothing` extent, `ext_intersects`/`ext_covers` return `false` for it
-#   (as Java's null envelope does), and `computeAtEdges` early-returns
-#   before ever forwarding an extent filter that could be `nothing`.
+# # Relate
 
 export relate, RelateNG, prepare
+
+#=
+## What is relate?
+
+The `relate` function computes the full topological relationship between two
+geometries — not just a single yes/no question like [`intersects`](@ref) or
+[`within`](@ref), but the complete description from which *every* such
+question can be answered. That description is the
+**dimensionally extended nine-intersection model (DE-9IM)** matrix.
+
+To provide an example, consider these two overlapping polygons:
+```@example relateng
+import GeometryOps as GO
+import GeoInterface as GI
+using Makie
+using CairoMakie
+
+p1 = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
+p2 = GI.Polygon([[(2.0, 2.0), (5.0, 2.0), (5.0, 5.0), (2.0, 5.0), (2.0, 2.0)]])
+f, a, p = poly(collect(GI.getpoint(p1)); color = (:blue, 0.5), axis = (; aspect = DataAspect()))
+poly!(collect(GI.getpoint(p2)); color = (:orange, 0.5))
+f
+```
+Their relationship is captured by a single matrix:
+```@example relateng
+GO.relate(p1, p2)
+```
+
+## What is the DE-9IM?
+
+Every geometry partitions the plane into three point sets: its *interior*,
+its *boundary*, and its *exterior*. The DE-9IM matrix records, for each of
+the nine pairings of those sets between geometry A (rows) and geometry B
+(columns), the dimension of the pair's intersection: `F` for empty, `0` for
+points, `1` for lines, `2` for areas. The matrix above, `"212101212"`, reads
+row-major:
+
+|                | B interior | B boundary | B exterior |
+|----------------|------------|------------|------------|
+| **A interior** | `2`        | `1`        | `2`        |
+| **A boundary** | `1`        | `0`        | `1`        |
+| **A exterior** | `2`        | `1`        | `2`        |
+
+The interiors meet in an area (`2`), the boundaries cross at points (`0`),
+and each geometry has interior outside the other (`2` in the exterior
+column/row) — exactly the *overlaps* relationship. Named predicates are
+just patterns over this matrix, where `T` means "non-empty (any dimension)"
+and `*` means "don't care". You can match a pattern directly, which
+short-circuits as soon as the answer is known instead of computing the full
+matrix:
+```@example relateng
+GO.relate(p1, p2, "T*T***T**") # the `overlaps` pattern for two areas
+```
+or evaluate a named predicate through the [`RelateNG`](@ref) algorithm:
+```@example relateng
+GO.overlaps(GO.RelateNG(), p1, p2)
+```
+When one geometry is tested against many others, [`prepare`](@ref) it once
+and reuse the cached indexes:
+```@example relateng
+prep = GO.prepare(GO.RelateNG(), p1)
+GO.relate(prep, p2)
+```
+
+## Implementation
+
+This file is the port of JTS `RelateNG.java` — the evaluation engine that
+drives all the RelateNG machinery (the kernel, point locators, topology
+computer, and node analysis in the surrounding files) to compute the value
+of a topological predicate between two geometries, based on the DE-9IM
+model.
+
+Method order parallels the Java file (`evaluate`, `hasRequiredEnvelopeInteraction`,
+`finishValue`, `computePP`, `computeAtPoints`, `computePoints`, `computePoint`,
+`computeLineEnds`, `computeLineEnd`, `computeAreaVertex` ×2, `computeAtEdges`,
+`computeEdgesAll`, `computeEdgesMutual`), so this file diffs against its
+Java counterpart. Idiom changes:
+
+- The Java class holds `geomA` (for prepared mode); here the unprepared
+  entry points build both `RelateGeometry`s per call, while prepared mode
+  carries the A side — with its lazy caches forced and the segment
+  strings/segment tree prebuilt — in a [`PreparedRelate`](@ref), threaded
+  through the evaluation as the optional `prep` argument.
+- The algorithm configuration (manifold, accelerator, exactness flag,
+  boundary node rule) travels in the `RelateNG` algorithm struct, the
+  house `Algorithm{M}` idiom (cf. `FosterHormannClipping`).
+- Java's `computeEdgesAll` feeds the combined A∪B edge set through one
+  `EdgeSetIntersector` (every unordered chain pair once). Here that is
+  phased as A×B (`process_edge_intersections!`), then A×A and B×B
+  (`process_self_intersections!`) — the same pair set, possibly visited
+  in a different order, which only affects *when* a short-circuiting
+  predicate exits, never the final value (dimension updates are
+  monotone).
+- Java's null `Envelope` is `nothing` here: empty geometries have a
+  `nothing` extent, `ext_intersects`/`ext_covers` return `false` for it
+  (as Java's null envelope does), and `computeAtEdges` early-returns
+  before ever forwarding an extent filter that could be `nothing`.
+=#
 
 """
     RelateNG{M <: Manifold, A <: IntersectionAccelerator, E, BR <: BoundaryNodeRule}
@@ -69,7 +137,7 @@ RelateNG(m::Manifold; kw...) = RelateNG(; manifold = m, kw...)
 GeometryOpsCore.manifold(alg::RelateNG) = alg.manifold
 
 #==========================================================================
-# Entry points (the static RelateNG.relate(...) overloads)
+## Entry points (the static RelateNG.relate(...) overloads)
 ==========================================================================#
 
 """
@@ -125,17 +193,19 @@ function relate_predicate(alg::RelateNG, predicate::TopologyPredicate, a, b)
 end
 
 #==========================================================================
-# Named-predicate methods (the ports of the JTS RelateNG static predicate
-# overloads). These add `RelateNG` algorithm methods to the existing GO
-# predicate functions, following the house `GO.f(alg::Algorithm, a, b)`
-# idiom (cf. `GO.intersects(GO.GEOS(), a, b)` in the LibGEOS extension).
-# They are opt-in: the two-argument forms `GO.intersects(a, b)` etc. keep
-# dispatching to the old engines (design D4).
-#
-# `equals` maps to `pred_equalstopo`, i.e. *topological* equality (the
-# DE-9IM `T*F**FFF*` sense), which can differ from the structural equality
-# the two-argument `GO.equals` implements only in exotic cases (both
-# treat rotated/reversed rings and repeated points as equal).
+## Named-predicate methods
+
+The ports of the JTS RelateNG static predicate overloads. These add
+`RelateNG` algorithm methods to the existing GO predicate functions,
+following the house `GO.f(alg::Algorithm, a, b)` idiom (cf.
+`GO.intersects(GO.GEOS(), a, b)` in the LibGEOS extension). They are
+opt-in: the two-argument forms `GO.intersects(a, b)` etc. keep
+dispatching to the old engines (design D4).
+
+`equals` maps to `pred_equalstopo`, i.e. *topological* equality (the
+DE-9IM `T*F**FFF*` sense), which can differ from the structural equality
+the two-argument `GO.equals` implements only in exotic cases (both
+treat rotated/reversed rings and repeated points as equal).
 ==========================================================================#
 intersects(alg::RelateNG, g1, g2) = relate_predicate(alg, pred_intersects(), g1, g2)
 disjoint(alg::RelateNG, g1, g2)   = relate_predicate(alg, pred_disjoint(), g1, g2)
@@ -149,7 +219,7 @@ touches(alg::RelateNG, g1, g2)    = relate_predicate(alg, pred_touches(), g1, g2
 equals(alg::RelateNG, g1, g2)     = relate_predicate(alg, pred_equalstopo(), g1, g2)
 
 #==========================================================================
-# Evaluation (port of RelateNG.evaluate and helpers)
+## Evaluation (port of RelateNG.evaluate and helpers)
 ==========================================================================#
 
 # Port of RelateNG.evaluate(Geometry b, TopologyPredicate predicate):
@@ -505,8 +575,10 @@ function compute_edges_mutual!(alg::RelateNG, tc::TopologyComputer,
 end
 
 #==========================================================================
-# Prepared mode (port of the RelateNG.prepare entry points and the
-# prepared-mode branches)
+## Prepared mode
+
+The port of the RelateNG.prepare entry points and the prepared-mode
+branches.
 ==========================================================================#
 
 # The prebuilt A-side segment index reused across evaluations: an STRtree
@@ -672,7 +744,7 @@ function _process_prepared_edges!(tc::TopologyComputer, segs_a,
 end
 
 #==========================================================================
-# Small geometry helpers
+## Small geometry helpers
 ==========================================================================#
 
 # Java `elem.getEnvelopeInternal().disjoint(geomTarget.getEnvelope())`. A

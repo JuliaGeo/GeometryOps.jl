@@ -26,7 +26,7 @@ const POS_LEFT = Int8(1)
 const POS_RIGHT = Int8(2)
 
 #==========================================================================
-# RelateEdge (port of JTS RelateEdge.java)
+## RelateEdge (port of JTS RelateEdge.java)
 ==========================================================================#
 
 # Port of RelateEdge.IS_FORWARD / IS_REVERSE.
@@ -419,7 +419,7 @@ function _loc_symbol(loc::Integer)
 end
 
 #==========================================================================
-# RelateNode (port of JTS RelateNode.java)
+## RelateNode (port of JTS RelateNode.java)
 ==========================================================================#
 
 """

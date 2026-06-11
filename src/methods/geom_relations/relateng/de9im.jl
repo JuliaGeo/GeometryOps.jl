@@ -239,15 +239,46 @@ end
 Abstract supertype for rules deciding which endpoints of a linear geometry
 are on its boundary, given the number of line ends meeting at the point
 (port of JTS `BoundaryNodeRule`). Concrete rules are [`Mod2Boundary`](@ref)
-(the OGC SFS default), `EndpointBoundary`, `MultivalentEndpointBoundary`,
-and `MonovalentEndpointBoundary`; each implements
+(the OGC SFS default), [`EndpointBoundary`](@ref),
+[`MultivalentEndpointBoundary`](@ref), and
+[`MonovalentEndpointBoundary`](@ref); each implements
 `is_in_boundary(rule, boundary_count)`.
 """
 abstract type BoundaryNodeRule end
-"OGC SFS standard rule: a vertex is on the boundary iff an odd number of line ends meet it (Mod-2 rule)."
+"""
+    Mod2Boundary()
+
+The OGC SFS standard [`BoundaryNodeRule`](@ref) (and the RelateNG default):
+an endpoint is on the boundary iff an odd number of line ends meet it
+(the "Mod-2 rule"; JTS `Mod2BoundaryNodeRule`).
+"""
 struct Mod2Boundary <: BoundaryNodeRule end
+
+"""
+    EndpointBoundary()
+
+[`BoundaryNodeRule`](@ref) under which any endpoint of a line is on the
+boundary, regardless of how many line ends meet there (JTS
+`EndPointBoundaryNodeRule`).
+"""
 struct EndpointBoundary <: BoundaryNodeRule end
+
+"""
+    MultivalentEndpointBoundary()
+
+[`BoundaryNodeRule`](@ref) under which an endpoint is on the boundary iff
+**more than one** line end meets it (JTS
+`MultiValentEndPointBoundaryNodeRule`).
+"""
 struct MultivalentEndpointBoundary <: BoundaryNodeRule end
+
+"""
+    MonovalentEndpointBoundary()
+
+[`BoundaryNodeRule`](@ref) under which an endpoint is on the boundary iff
+**exactly one** line end meets it (JTS
+`MonoValentEndPointBoundaryNodeRule`).
+"""
 struct MonovalentEndpointBoundary <: BoundaryNodeRule end
 
 is_in_boundary(::Mod2Boundary, boundary_count::Integer) = isodd(boundary_count)

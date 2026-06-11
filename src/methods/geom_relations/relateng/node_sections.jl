@@ -11,7 +11,7 @@
 # diffs against its Java counterparts.
 
 #==========================================================================
-# NodeSection (port of JTS NodeSection.java)
+## NodeSection (port of JTS NodeSection.java)
 ==========================================================================#
 
 """
@@ -60,7 +60,7 @@ with the positive X axis at the node, angles increasing CCW.
 
 Port of `NodeSection.EdgeAngleComparator` (a static nested `Comparator`
 class in Java, `compareAngle(ns1.nodePt, ns1.getVertex(0), ns2.getVertex(0))`);
-here a comparator function over [`rk_compare_edge_dir`](@ref) with the
+here a comparator function over `rk_compare_edge_dir` with the
 symbolic node of `ns1` as apex, taking the manifold and `exact` flag the
 kernel comparison needs. Use as a sort predicate via
 `lt = (a, b) -> edge_angle_compare(m, a, b; exact) < 0`.
@@ -208,7 +208,7 @@ function _compare_pt(p, q)
 end
 
 #==========================================================================
-# NodeSections (port of JTS NodeSections.java)
+## NodeSections (port of JTS NodeSections.java)
 ==========================================================================#
 
 """
@@ -277,7 +277,7 @@ end
 
 Creates the node topology: prepares the sections, builds a
 [`RelateNode`](@ref) at the node and feeds it the sections via
-[`add_edges!`](@ref). Per-polygon section groups are first rewritten into
+`add_edges!`. Per-polygon section groups are first rewritten into
 maximal-ring structure by [`polygon_node_convert`](@ref) (the
 `PolygonNodeConverter.convert` port). Returns the assembled node.
 
