@@ -30,3 +30,44 @@ function rk_bounds_covers(extA, extB)
     (extA.X[1] <= extB.X[1] && extB.X[2] <= extA.X[2]) &&
     (extA.Y[1] <= extB.Y[1] && extB.Y[2] <= extA.Y[2])
 end
+
+# Exact coordinate equality of two points.
+_equals2(p, q) = GI.x(p) == GI.x(q) && GI.y(p) == GI.y(q)
+
+function rk_classify_intersection(m::Planar, a0, a1, b0, b1; exact)
+    oa0 = rk_orient(m, b0, b1, a0; exact)
+    oa1 = rk_orient(m, b0, b1, a1; exact)
+    ob0 = rk_orient(m, a0, a1, b0; exact)
+    ob1 = rk_orient(m, a0, a1, b1; exact)
+    # fully collinear configuration (handles zero-length segments too)
+    if oa0 == 0 && oa1 == 0 && ob0 == 0 && ob1 == 0
+        a0_on_b = _collinear_between(a0, b0, b1)
+        a1_on_b = _collinear_between(a1, b0, b1)
+        b0_on_a = _collinear_between(b0, a0, a1)
+        b1_on_a = _collinear_between(b1, a0, a1)
+        n_inc = a0_on_b + a1_on_b + b0_on_a + b1_on_a
+        n_inc == 0 && return SegSegClass(SS_DISJOINT, false, false, false, false)
+        # single shared endpoint counts twice (one endpoint of each on the other)
+        shared_endpoint_only = n_inc == 2 &&
+            ((a0_on_b || a1_on_b) && (b0_on_a || b1_on_a)) &&
+            (_equals2(a0, b0) || _equals2(a0, b1) || _equals2(a1, b0) || _equals2(a1, b1))
+        kind = shared_endpoint_only ? SS_TOUCH : SS_COLLINEAR
+        # zero-length degenerate: a point on a segment is a touch, not an overlap
+        if _equals2(a0, a1) || _equals2(b0, b1)
+            kind = SS_TOUCH
+        end
+        return SegSegClass(kind, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    a0_on_b = oa0 == 0 && _collinear_between(a0, b0, b1)
+    a1_on_b = oa1 == 0 && _collinear_between(a1, b0, b1)
+    b0_on_a = ob0 == 0 && _collinear_between(b0, a0, a1)
+    b1_on_a = ob1 == 0 && _collinear_between(b1, a0, a1)
+    if a0_on_b || a1_on_b || b0_on_a || b1_on_a
+        return SegSegClass(SS_TOUCH, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    if (oa0 > 0) != (oa1 > 0) && oa0 != 0 && oa1 != 0 &&
+       (ob0 > 0) != (ob1 > 0) && ob0 != 0 && ob1 != 0
+        return SegSegClass(SS_PROPER, false, false, false, false)
+    end
+    return SegSegClass(SS_DISJOINT, false, false, false, false)
+end
