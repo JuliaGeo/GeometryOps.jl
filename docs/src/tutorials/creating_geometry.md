@@ -20,6 +20,7 @@ using GeoJSON # to load some data
 # Packages for coordinate transformation and projection
 import CoordinateTransformations
 import Proj
+import Rotations
 # Plotting
 using CairoMakie
 using GeoMakie
@@ -79,7 +80,7 @@ This time we get a bit more fancy with point creation.
 ````@example creating_geometry
 r = 2;
 k = 10;
-ϴ = 0:0.01:2pi;
+ϴ = LinRange(0, 2pi, 629);
 x = r .* (k + 1) .* cos.(ϴ) .- r .* cos.((k + 1) .* ϴ);
 y = r .* (k + 1) .* sin.(ϴ) .- r .* sin.((k + 1) .* ϴ);
 lines = GI.LineString(GI.Point.(zip(x,y)));
@@ -93,7 +94,8 @@ A `LinearRing` is simply a `LineString` with the same beginning and endpoint, i.
 A `LinearRing` is composed of a series of points.
 
 ````@example creating_geometry
-ring1 = GI.LinearRing(GI.getpoint(lines));
+ring1_points = collect(GI.getpoint(lines))
+ring1 = GI.LinearRing(vcat(ring1_points, [first(ring1_points)]));
 ````
 
 Now, let's make the `LinearRing` into a `Polygon`.
@@ -111,6 +113,37 @@ f = CoordinateTransformations.Translation(xoffset, yoffset);
 polygon1 = GO.transform(f, polygon1);
 plot!(polygon1)
 fig
+````
+
+We can also rotate a polygon with the same `transform` function. Here we use a
+2D rotation from `Rotations.jl`, which rotates around the origin.
+
+````@example creating_geometry
+theta = π / 4
+rotation = Rotations.Angle2d(theta);
+polygon1_rotated_origin = GO.transform(p -> rotation * p, polygon1);
+
+fig_rotation = Figure()
+ax_origin = Axis(fig_rotation[1, 1]; title = "Rotate around the origin", aspect = DataAspect())
+poly!(ax_origin, polygon1; color = (:steelblue, 0.5), strokecolor = :steelblue)
+poly!(ax_origin, polygon1_rotated_origin; color = (:orange, 0.35), strokecolor = :orange)
+fig_rotation
+````
+
+To rotate around a polygon's centroid instead, rotate each point relative to
+the centroid and then shift it back.
+
+````@example creating_geometry
+polygon1_centroid = GO.centroid(polygon1)
+polygon1_rotated_centroid = GO.transform(
+    p -> rotation * (p .- polygon1_centroid) .+ polygon1_centroid,
+    polygon1,
+);
+
+ax_centroid = Axis(fig_rotation[1, 2]; title = "Rotate around the centroid", aspect = DataAspect())
+poly!(ax_centroid, polygon1; color = (:steelblue, 0.5), strokecolor = :steelblue)
+poly!(ax_centroid, polygon1_rotated_centroid; color = (:orange, 0.35), strokecolor = :orange)
+fig_rotation
 ````
 
 Polygons can contain "holes". The first `LinearRing` in a polygon is the exterior, and all subsequent `LinearRing`s are treated as holes in the leading `LinearRing`.

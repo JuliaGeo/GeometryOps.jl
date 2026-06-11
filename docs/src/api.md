@@ -65,4 +65,5 @@ Modules = [GeometryOps]
 
 ```@autodocs
 Modules = [GeometryOpsCore]
+Order = [:type]
 ```
