@@ -101,4 +101,31 @@ end
     # identical segments: collinear, all four flags
     r = cl((0.,0.),(1.,0.),(0.,0.),(1.,0.))
     @test r.kind == GO.SS_COLLINEAR && r.a0_on_b && r.a1_on_b && r.b0_on_a && r.b1_on_a
+
+    # --- systematic symmetry checks over representative configurations ---
+    seg_pairs = [
+        ((0.,0.),(1.,0.),(0.,1.),(1.,1.)),   # disjoint
+        ((0.,0.),(2.,2.),(0.,2.),(2.,0.)),   # proper crossing
+        ((0.,0.),(2.,0.),(1.,0.),(1.,1.)),   # touch: b0 on interior of a
+        ((0.,0.),(1.,0.),(1.,0.),(1.,1.)),   # touch: shared endpoint
+        ((0.,0.),(2.,0.),(1.,0.),(3.,0.)),   # collinear overlap
+        ((0.,0.),(1.,0.),(2.,0.),(3.,0.)),   # collinear disjoint
+        ((0.,0.),(1.,0.),(1.,0.),(2.,0.)),   # collinear abutment
+        ((0.,0.),(3.,0.),(1.,0.),(2.,0.)),   # collinear containment
+        ((0.,0.),(2.,0.),(1.,0.),(1.,0.)),   # zero-length b on a
+        ((1.,0.),(2.,1.),(0.,0.),(2.,0.)),   # T-touch: a0 on b's interior
+        ((0.,0.),(1.,1.),(3.,0.),(3.,4.)),   # almost-crossing
+        ((0.,0.),(1.,0.),(0.,0.),(1.,0.)),   # identical segments
+    ]
+    for (a0, a1, b0, b1) in seg_pairs
+        r = cl(a0, a1, b0, b1)
+        # swapping A and B: same kind, flags permuted
+        s = cl(b0, b1, a0, a1)
+        @test s.kind == r.kind
+        @test (s.a0_on_b, s.a1_on_b, s.b0_on_a, s.b1_on_a) == (r.b0_on_a, r.b1_on_a, r.a0_on_b, r.a1_on_b)
+        # reversing a's endpoints: kind invariant, a's flags swapped, b's unchanged
+        v = cl(a1, a0, b0, b1)
+        @test v.kind == r.kind
+        @test (v.a0_on_b, v.a1_on_b, v.b0_on_a, v.b1_on_a) == (r.a1_on_b, r.a0_on_b, r.b0_on_a, r.b1_on_a)
+    end
 end

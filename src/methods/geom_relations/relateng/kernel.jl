@@ -63,6 +63,11 @@ near-collinear inputs.
 =#
 
 # Symbolic segment-pair intersection classification (replaces RobustLineIntersector).
+# JTS LineIntersector outcome mapping (for porting reference):
+#   SS_DISJOINT  ↔ NO_INTERSECTION
+#   SS_PROPER    ↔ POINT_INTERSECTION with isProper()
+#   SS_TOUCH     ↔ POINT_INTERSECTION, not proper (incl. collinear abutment)
+#   SS_COLLINEAR ↔ COLLINEAR_INTERSECTION
 @enum SegSegKind::Int8 SS_DISJOINT SS_PROPER SS_TOUCH SS_COLLINEAR
 
 """
