@@ -82,10 +82,13 @@ end
     file = joinpath(JTS_DATA_DIR, "general", "TestRelatePP.xml")
     cases = load_test_cases(file)
     n_ops = sum(c -> length(c.items), cases)
-    relate_fn = (a, b) -> error("relate_fn is unused until Task 23")
+    # `check_matrix = false` so the stub `relate_fn` is never called (the full
+    # matrix consistency check only makes sense against a real engine; the
+    # real-engine run lives in xml_suite.jl).
+    relate_fn = (a, b) -> error("relate_fn must not be called when check_matrix = false")
     pattern_fn = (a, b, p) -> true
     predicate_fns = Dict{String, Function}(op => ((a, b) -> true) for op in BOOLEAN_OPS if op != "relate")
-    summary = run_relate_cases(relate_fn, pattern_fn, predicate_fns, [file])
+    summary = run_relate_cases(relate_fn, pattern_fn, predicate_fns, [file]; check_matrix = false)
     stats = only(summary.per_file)
     @test stats.file == basename(file)
     # nothing skipped: FLOATING precision, all ops boolean, all predicates provided
