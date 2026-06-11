@@ -56,8 +56,11 @@ function _ref_compare_angle(apex::Tuple{Rational{BigInt}, Rational{BigInt}}, p, 
 end
 
 function kernel_conformance_suite(m; exact)
-    # Fixed seed: same property sample every run (StableRNGs is not a test
-    # dep; MersenneTwister's stream is stable across Julia versions).
+    # Fixed seed: same property sample within a Julia version (Julia only
+    # guarantees within-version RNG stream reproducibility). The property
+    # checks below are sample-independent, and the count thresholds
+    # (`n_proper > 20`/`> 50`, etc.) are robust to any reasonable uniform
+    # sample from this grid.
     rng = Random.MersenneTwister(0x5e1a7e)
     # Random point on a small integer grid: all predicates exactly decidable.
     rpt() = (Float64(rand(rng, -8:8)), Float64(rand(rng, -8:8)))
@@ -105,6 +108,12 @@ function kernel_conformance_suite(m; exact)
             if r.kind == GO.SS_PROPER
                 n_proper += 1
                 @test !(r.a0_on_b || r.a1_on_b || r.b0_on_a || r.b1_on_a)
+                # a proper crossing means each endpoint is strictly off the
+                # other segment's line: all four orientations are nonzero
+                @test GO.rk_orient(m, b0, b1, a0; exact) != 0
+                @test GO.rk_orient(m, b0, b1, a1; exact) != 0
+                @test GO.rk_orient(m, a0, a1, b0; exact) != 0
+                @test GO.rk_orient(m, a0, a1, b1; exact) != 0
             end
             r.kind == GO.SS_TOUCH && (n_touch += 1)
             r.kind == GO.SS_COLLINEAR && (n_collinear += 1)
@@ -117,6 +126,7 @@ function kernel_conformance_suite(m; exact)
         # the random sample must actually exercise the interesting kinds
         @test n_proper > 20
         @test n_touch > 0
+        @test n_collinear > 0
 
         # shared-endpoint configurations (non-collinear) classify as touch
         r = GO.rk_classify_intersection(m, (0., 0.), (1., 0.), (0., 0.), (0., 1.); exact)
@@ -153,25 +163,31 @@ function kernel_conformance_suite(m; exact)
         end
     end
 
-    @testset "rk_compare_edge_dir: crossing apex vs exact rational reference" begin
-        # Differential test (Task 8 review item): for proper crossings on an
-        # integer grid, the symbolic crossing-apex comparison must agree in
-        # sign with compareAngle evaluated at the exact rational apex.
-        n_proper = 0
-        for _ in 1:2000
-            a0, a1, b0, b1 = rpt(), rpt(), rpt(), rpt()
-            r = GO.rk_classify_intersection(m, a0, a1, b0, b1; exact)
-            r.kind == GO.SS_PROPER || continue
-            n_proper += 1
-            node = GO.crossing_node(a0, a1, b0, b1)
-            apex = GO._exact_crossing_point(a0, a1, b0, b1)
-            endpoints = (a0, a1, b0, b1)
-            for p in endpoints, q in endpoints
-                @test _sgn(GO.rk_compare_edge_dir(m, node, p, q; exact)) ==
-                      _ref_compare_angle(apex, p, q)
+    # The crossing-apex differential test is planar-specific: it uses the
+    # planar internal `GO._exact_crossing_point` and a planar-Cartesian
+    # rational reference (`_ref_compare_angle`). A Spherical kernel must
+    # supply its own differential reference for this property.
+    if m isa GO.Planar
+        @testset "rk_compare_edge_dir: crossing apex vs exact rational reference" begin
+            # Differential test (Task 8 review item): for proper crossings on an
+            # integer grid, the symbolic crossing-apex comparison must agree in
+            # sign with compareAngle evaluated at the exact rational apex.
+            n_proper = 0
+            for _ in 1:2000
+                a0, a1, b0, b1 = rpt(), rpt(), rpt(), rpt()
+                r = GO.rk_classify_intersection(m, a0, a1, b0, b1; exact)
+                r.kind == GO.SS_PROPER || continue
+                n_proper += 1
+                node = GO.crossing_node(a0, a1, b0, b1)
+                apex = GO._exact_crossing_point(a0, a1, b0, b1)
+                endpoints = (a0, a1, b0, b1)
+                for p in endpoints, q in endpoints
+                    @test _sgn(GO.rk_compare_edge_dir(m, node, p, q; exact)) ==
+                          _ref_compare_angle(apex, p, q)
+                end
             end
+            @test n_proper > 50    # the filter kept a meaningful sample
         end
-        @test n_proper > 50    # the filter kept a meaningful sample
     end
 
     @testset "rk_nodes_coincide: reflexive, symmetric, consistent with ==" begin
@@ -199,6 +215,12 @@ function kernel_conformance_suite(m; exact)
         # cross-kind coincidence: c1 crosses at exactly (1, 1)
         @test GO.rk_nodes_coincide(m, c1, GO.vertex_node((1.0, 1.0)); exact)
         @test !GO.rk_nodes_coincide(m, c3, GO.vertex_node((1.0, 1.0)); exact)
+        # slow path: two *distinct* crossing pairs sharing the same apex —
+        # keys differ, yet the nodes coincide at (1, 1)
+        c_a = GO.crossing_node((0., 0.), (2., 2.), (0., 2.), (2., 0.))
+        c_b = GO.crossing_node((1., 0.), (1., 2.), (0., 1.), (2., 1.))
+        @test c_a != c_b
+        @test GO.rk_nodes_coincide(m, c_a, c_b; exact)
     end
 
     @testset "rk_point_in_ring agrees with rk_point_on_segment on edges" begin
