@@ -895,12 +895,20 @@ end # @testset "RelateNGTest"
         for (x, y) in [(pa, pb), (pa, far), (pa, inner), (pa, pa)]
             @test GO.overlaps(alg, x, y) == GO.overlaps(x, y)
         end
+        # LibGEOS agrees; old GO.overlaps wrongly returns true (known old-GO gap)
+        @test GO.overlaps(GO.RelateNG(), pa, touching) == false
         #-- `crosses`: the old GO method only supports mixed-dimension
         #-- (point/line/polygon) pairs
         crossing_line = GI.LineString([(-1.0, 2.0), (5.0, 2.0)])
         miss_line = GI.LineString([(-2.0, -2.0), (-1.0, -2.0)])
         @test GO.crosses(alg, crossing_line, pa) == GO.crosses(crossing_line, pa) == true
         @test GO.crosses(alg, miss_line, pa) == GO.crosses(miss_line, pa) == false
+        #-- swapped argument order (old GO supports poly/line too)
+        @test GO.crosses(alg, pa, crossing_line) == GO.crosses(pa, crossing_line) == true
+        @test GO.crosses(alg, pa, miss_line) == GO.crosses(pa, miss_line) == false
+        #-- poly/poly crosses is always false per DE-9IM dimension rules;
+        #-- RelateNG-only capability (old GO has no poly/poly `crosses` method)
+        @test GO.crosses(GO.RelateNG(), pa, pb) == false
 
         #-- spot values
         @test GO.intersects(alg, pa, pb)
