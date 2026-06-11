@@ -117,11 +117,20 @@ end
     line_b = GI.LineString([(0.0, 1.0), (0.0, 0.0)])
     tc, _ = run_case(line_a, line_b)
     @test node_counts(tc) == Dict(GO.vertex_node((0.0, 0.0)) => 2)
+    # the node lies in the interior of A's segment, so the A-side section is
+    # NOT at a vertex; it IS at a vertex of B (B's line end), per the JTS
+    # createNodeSection semantics
+    sections = tc.node_sections[GO.vertex_node((0.0, 0.0))].sections
+    @test !GO.is_node_at_vertex(only(filter(GO.is_a, sections)))
+    @test GO.is_node_at_vertex(only(filter(!GO.is_a, sections)))
 
     # touch point is the START of B
     line_b2 = GI.LineString([(0.0, 0.0), (0.0, 1.0)])
     tc, _ = run_case(line_a, line_b2)
     @test node_counts(tc) == Dict(GO.vertex_node((0.0, 0.0)) => 2)
+    sections2 = tc.node_sections[GO.vertex_node((0.0, 0.0))].sections
+    @test !GO.is_node_at_vertex(only(filter(GO.is_a, sections2)))
+    @test GO.is_node_at_vertex(only(filter(!GO.is_a, sections2)))
 end
 
 @testset "shared endpoint: one point, one section pair" begin
@@ -176,6 +185,9 @@ end
     @test GO.get_vertex(nsa, 0) == (-1.0, 1.0)
     @test GO.get_vertex(nsa, 1) == (1.0, 1.0)
     @test GO.is_node_at_vertex(nsa)
+    # the node lies in the interior of B's segment, so the B-side section is
+    # not at a vertex
+    @test !GO.is_node_at_vertex(only(filter(!GO.is_a, sections)))
 
     # both strings have a mid-string vertex at the node: 4 touching pairs,
     # still exactly one section pair
@@ -236,4 +248,163 @@ end
         GI.LineString([(0.0, 1.0), (1.0, 1.0)]))
     @test isempty(tc.node_sections)
     @test imstr(pred) == "FFFFFFFF2"
+end
+
+@testset "collinear overlap across multi-segment strings" begin
+    # B overlaps both segments of A; the overlap interval ends (1,0) and
+    # (3,0) lie in segment interiors of A, and A's mid-string vertex (2,0)
+    # lies in B's interior. Three nodes, one section pair each, regardless
+    # of B's direction.
+    line_a = GI.LineString([(0.0, 0.0), (2.0, 0.0), (4.0, 0.0)])
+    expected = Dict(
+        GO.vertex_node((1.0, 0.0)) => 2,
+        GO.vertex_node((2.0, 0.0)) => 2,
+        GO.vertex_node((3.0, 0.0)) => 2,
+    )
+    for bpts in ([(1.0, 0.0), (3.0, 0.0)], [(3.0, 0.0), (1.0, 0.0)])
+        tc, _ = run_case(line_a, GI.LineString(bpts))
+        @test node_counts(tc) == expected
+    end
+end
+
+@testset "ring x ring sharing the closing corner" begin
+    # two squares touching only at the point that closes BOTH rings: the
+    # wraparound canonicality rule must fire on both sides at once, so the
+    # corner is recorded exactly once with one section pair
+    sq_a = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+    sq_b = GI.Polygon([[(0.0, 0.0), (-1.0, 0.0), (-1.0, -1.0), (0.0, -1.0), (0.0, 0.0)]])
+    tc, _ = run_case(sq_a, sq_b)
+    @test node_counts(tc) == Dict(GO.vertex_node((0.0, 0.0)) => 2)
+end
+
+# ---------------------------------------------------------------------------
+# Task 20: accelerated edge set enumeration (`process_edge_intersections!`)
+# ---------------------------------------------------------------------------
+
+# Run the full A x B enumeration through `process_edge_intersections!` with a
+# given accelerator.
+function run_enum(ga, gb, accelerator)
+    rga, rgb = rgeom(ga), rgeom(gb)
+    tc, pred = im_computer(rga, rgb)
+    ssa_list = GO.extract_segment_strings(rga, true, nothing)
+    ssb_list = GO.extract_segment_strings(rgb, false, nothing)
+    GO.process_edge_intersections!(tc, ssa_list, ssb_list, accelerator)
+    return tc, pred
+end
+
+# Ground truth: the plain all-pairs enumeration used by the Task 19 tests,
+# extended over string lists.
+function run_all_pairs(ga, gb)
+    rga, rgb = rgeom(ga), rgeom(gb)
+    tc, pred = im_computer(rga, rgb)
+    for ssa in GO.extract_segment_strings(rga, true, nothing),
+            ssb in GO.extract_segment_strings(rgb, false, nothing)
+        run_pairs!(tc, ssa, ssb)
+    end
+    return tc, pred
+end
+
+# A closed n-gon ring approximating a circle of radius `r` centered at
+# `(cx, cy)` (many segments; used to exceed the AutoAccelerator threshold).
+ngon(cx, cy, r, n) = GI.Polygon([[
+    (cx + r * cos(θ), cy + r * sin(θ)) for θ in range(0, 2π; length = n + 1)
+]])
+
+@testset "accelerators produce identical computer state" begin
+    fixtures = [
+        # proper crossing
+        (GI.LineString([(-1.0, 0.0), (1.0, 0.0)]), GI.LineString([(0.0, -1.0), (0.0, 1.0)])),
+        # T-touch, both directions of B
+        (GI.LineString([(-1.0, 0.0), (1.0, 0.0)]), GI.LineString([(0.0, 1.0), (0.0, 0.0)])),
+        (GI.LineString([(-1.0, 0.0), (1.0, 0.0)]), GI.LineString([(0.0, 0.0), (0.0, 1.0)])),
+        # shared endpoint
+        (GI.LineString([(0.0, 0.0), (1.0, 0.0)]), GI.LineString([(0.0, 0.0), (0.0, 1.0)])),
+        # collinear overlaps
+        (GI.LineString([(0.0, 0.0), (3.0, 0.0)]), GI.LineString([(1.0, 0.0), (4.0, 0.0)])),
+        (GI.LineString([(0.0, 0.0), (4.0, 0.0)]), GI.LineString([(1.0, 0.0), (2.0, 0.0)])),
+        (GI.LineString([(0.0, 0.0), (3.0, 0.0)]), GI.LineString([(3.0, 0.0), (0.0, 0.0)])),
+        # collinear overlap across multi-segment strings, both directions
+        (GI.LineString([(0.0, 0.0), (2.0, 0.0), (4.0, 0.0)]), GI.LineString([(1.0, 0.0), (3.0, 0.0)])),
+        (GI.LineString([(0.0, 0.0), (2.0, 0.0), (4.0, 0.0)]), GI.LineString([(3.0, 0.0), (1.0, 0.0)])),
+        # adjacent-segment shared vertex
+        (GI.LineString([(-1.0, 1.0), (0.0, 0.0), (1.0, 1.0)]), GI.LineString([(-2.0, 0.0), (2.0, 0.0)])),
+        # multi-string side: a MultiLineString crossing a line twice
+        (GI.MultiLineString([
+            GI.LineString([(-1.0, -1.0), (-1.0, 1.0)]),
+            GI.LineString([(1.0, -1.0), (1.0, 1.0)]),
+        ]), GI.LineString([(-2.0, 0.0), (2.0, 0.0)])),
+        # ring x ring at the closing corner; ring x line at the wraparound
+        (GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]]),
+         GI.Polygon([[(0.0, 0.0), (-1.0, 0.0), (-1.0, -1.0), (0.0, -1.0), (0.0, 0.0)]])),
+        (GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]]),
+         GI.LineString([(-1.0, -1.0), (0.0, 0.0)])),
+        # disjoint
+        (GI.LineString([(0.0, 0.0), (1.0, 0.0)]), GI.LineString([(0.0, 1.0), (1.0, 1.0)])),
+        # heavily-overlapping many-segment rings: above the AutoAccelerator
+        # threshold, so Auto takes the tree path here
+        (ngon(0.0, 0.0, 1.0, 64), ngon(0.1, 0.0, 1.0, 64)),
+    ]
+    for (ga, gb) in fixtures
+        tc_truth, pred_truth = run_all_pairs(ga, gb)
+        for acc in (GO.NestedLoop(), GO.DoubleSTRtree(), GO.AutoAccelerator())
+            tc, pred = run_enum(ga, gb, acc)
+            @test node_counts(tc) == node_counts(tc_truth)
+            @test imstr(pred) == imstr(pred_truth)
+        end
+    end
+end
+
+# A TopologyPredicate wrapper that counts `is_known` queries. The enumerator
+# checks `is_result_known(computer)` (which calls `is_known(predicate)`)
+# exactly once after each segment pair it processes, so the count equals the
+# number of pairs processed.
+mutable struct CountingPredicate{P <: GO.TopologyPredicate} <: GO.TopologyPredicate
+    const inner::P
+    known_checks::Int
+end
+CountingPredicate(inner) = CountingPredicate(inner, 0)
+GO.predicate_name(p::CountingPredicate) = GO.predicate_name(p.inner)
+GO.require_self_noding(p::CountingPredicate) = GO.require_self_noding(p.inner)
+GO.require_interaction(p::CountingPredicate) = GO.require_interaction(p.inner)
+GO.require_covers(p::CountingPredicate, is_source_a::Bool) = GO.require_covers(p.inner, is_source_a)
+GO.require_exterior_check(p::CountingPredicate, is_source_a::Bool) = GO.require_exterior_check(p.inner, is_source_a)
+GO.init_dims!(p::CountingPredicate, dimA::Integer, dimB::Integer) = GO.init_dims!(p.inner, dimA, dimB)
+GO.init_bounds!(p::CountingPredicate, extA, extB) = GO.init_bounds!(p.inner, extA, extB)
+GO.update_dim!(p::CountingPredicate, locA, locB, dim) = GO.update_dim!(p.inner, locA, locB, dim)
+GO.finish!(p::CountingPredicate) = GO.finish!(p.inner)
+GO.predicate_value(p::CountingPredicate) = GO.predicate_value(p.inner)
+function GO.is_known(p::CountingPredicate)
+    p.known_checks += 1
+    return GO.is_known(p.inner)
+end
+
+# Enumerate with a counting predicate; returns the wrapper for inspection.
+function run_counted(ga, gb, accelerator, inner_pred)
+    rga, rgb = rgeom(ga), rgeom(gb)
+    pred = CountingPredicate(inner_pred)
+    tc = GO.TopologyComputer(pred, rga, rgb)
+    ssa_list = GO.extract_segment_strings(rga, true, nothing)
+    ssb_list = GO.extract_segment_strings(rgb, false, nothing)
+    GO.process_edge_intersections!(tc, ssa_list, ssb_list, accelerator)
+    return pred
+end
+
+@testset "early exit when the result is known" begin
+    # two heavily-overlapping many-segment rings: an `intersects` predicate
+    # becomes known at the first proper edge crossing, so the traversal must
+    # stop long before enumerating every extent-overlapping pair
+    ga = ngon(0.0, 0.0, 1.0, 64)
+    gb = ngon(0.1, 0.0, 1.0, 64)
+    for acc in (GO.NestedLoop(), GO.DoubleSTRtree())
+        # baseline: the full-matrix predicate is never known early, so its
+        # count is the total number of pairs the enumeration would process
+        full = run_counted(ga, gb, acc, GO.RelateMatrixPredicate())
+        @test !GO.is_known(full.inner)
+        @test full.known_checks > 0
+
+        early = run_counted(ga, gb, acc, GO.pred_intersects())
+        @test GO.is_known(early.inner)
+        @test GO.predicate_value(early.inner)
+        @test 0 < early.known_checks < full.known_checks
+    end
 end
