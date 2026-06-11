@@ -182,6 +182,20 @@ end
 @inline _pos_zero(x) = x + zero(x)
 @inline _node_point(p) = (_pos_zero(GI.x(p)), _pos_zero(GI.y(p)))
 
+# Collect a curve's coordinates as node points into a plain `Vector`. (A
+# typed comprehension over `GI.getpoint` is not enough: for geometries backed
+# by StaticArrays — e.g. the `extent_to_polygon` output — the iterator has
+# static axes, so `collect` returns a `SizedVector`, which downstream code
+# expecting `Vector` point lists rejects.)
+function _node_points(geom)
+    pts = Vector{Tuple{Float64, Float64}}()
+    sizehint!(pts, GI.npoint(geom))
+    for p in GI.getpoint(geom)
+        push!(pts, _node_point(p))
+    end
+    return pts
+end
+
 "Node key of a vertex node: keyed exactly by its coordinate."
 function vertex_node(pt)
     p = _node_point(pt)

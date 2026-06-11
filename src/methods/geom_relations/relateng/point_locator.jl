@@ -197,7 +197,7 @@ _add_rings!(m, ::GI.AbstractTrait, geom, ring_list; exact) = nothing
 # helper `_ring_is_ccw`.)
 function _add_ring!(m, ring, require_cw::Bool, ring_list; exact)
     #TODO: remove repeated points?
-    pts = Tuple{Float64, Float64}[_node_point(pt) for pt in GI.getpoint(ring)]
+    pts = _node_points(ring)
     pts = _orient_ring(m, pts, require_cw; exact)
     push!(ring_list, pts)
     return nothing
