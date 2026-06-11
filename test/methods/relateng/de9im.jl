@@ -56,3 +56,15 @@ end
     @test_throws ArgumentError DE9IM("212")        # wrong length
     @test_throws ArgumentError GO.matches(DE9IM(), "T*F**FF")  # wrong length
 end
+
+@testset "BoundaryNodeRule" begin
+    @test GO.is_in_boundary(GO.Mod2Boundary(), 1) == true
+    @test GO.is_in_boundary(GO.Mod2Boundary(), 2) == false
+    @test GO.is_in_boundary(GO.Mod2Boundary(), 3) == true
+    @test GO.is_in_boundary(GO.EndpointBoundary(), 1) == true
+    @test GO.is_in_boundary(GO.EndpointBoundary(), 2) == true
+    @test GO.is_in_boundary(GO.MultivalentEndpointBoundary(), 1) == false
+    @test GO.is_in_boundary(GO.MultivalentEndpointBoundary(), 2) == true
+    @test GO.is_in_boundary(GO.MonovalentEndpointBoundary(), 1) == true
+    @test GO.is_in_boundary(GO.MonovalentEndpointBoundary(), 2) == false
+end
