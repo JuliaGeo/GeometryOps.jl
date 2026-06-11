@@ -13,5 +13,6 @@ using SafeTestsets
 @safetestset "RelateNG engine" begin include("relate_ng.jl") end
 @safetestset "JTS XML suite" begin include("xml_suite.jl") end
 @safetestset "LibGEOS differential fuzz" begin include("fuzz.jl") end
+@safetestset "Allocations and type stability" begin include("allocations.jl") end
 # Further files appended here as tasks land:
 # ...
