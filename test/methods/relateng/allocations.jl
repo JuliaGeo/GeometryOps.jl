@@ -22,19 +22,22 @@ const ALG = GO.RelateNG()
 # as the benchmarks (benchmarks/relateng.jl); validity does not matter for an
 # allocation measurement, so no oracle check is needed here.
 rng = Xoshiro(42)
-poly_a = GO.tuples(GI.Polygon(generate_random_poly(0.0, 0.0, 256, 2.0, 0.3, 0.1, rng)))
-poly_b = GO.tuples(GI.Polygon(generate_random_poly(2.0, 0.0, 256, 2.0, 0.3, 0.1, rng)))   # overlaps a
-poly_c = GO.tuples(GI.Polygon(generate_random_poly(10.0, 0.0, 256, 2.0, 0.3, 0.1, rng)))  # disjoint from a
+const poly_a = GO.tuples(GI.Polygon(generate_random_poly(0.0, 0.0, 256, 2.0, 0.3, 0.1, rng)))
+const poly_b = GO.tuples(GI.Polygon(generate_random_poly(2.0, 0.0, 256, 2.0, 0.3, 0.1, rng)))   # overlaps a
+const poly_c = GO.tuples(GI.Polygon(generate_random_poly(10.0, 0.0, 256, 2.0, 0.3, 0.1, rng)))  # disjoint from a
 
 @testset "allocation budget (256-vertex pairs)" begin
     # Baselines measured 2026-06-11 (Julia 1.12.6, Apple M4 Pro macOS):
     #   intersects, overlapping pair:  355_232 bytes
     #   intersects, disjoint pair:         112 bytes (extent-filter early exit)
     #   full relate, overlapping pair: 587_600 bytes
-    # Budget = 2x measured baseline.
+    # Budget = 2x measured baseline, except the disjoint case: its baseline is
+    # a handful of small allocations whose byte size varies across Julia minor
+    # versions (1.10 Array vs 1.11+ Memory headers), so it gets a generous
+    # 1 KiB budget — a missed early exit would land at ~355 KB regardless.
     for (name, x, y, budget) in [
         ("intersects overlapping", poly_a, poly_b, 2 * 355_232),
-        ("intersects disjoint",    poly_a, poly_c, 2 * 112),
+        ("intersects disjoint",    poly_a, poly_c, 1024),
     ]
         @testset "$name" begin
             GO.relate_predicate(ALG, GO.pred_intersects(), x, y)  # warmup
