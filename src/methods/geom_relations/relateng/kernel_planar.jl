@@ -282,6 +282,11 @@ coincidence-merged crossing node which are not endpoints of the node's
 defining segments. All arithmetic is over `Rational{BigInt}` (Float64
 inputs convert exactly), so the comparison is exact. Mirrors
 `_compare_angle` (quadrant first, then `orient(origin, q, p)`).
+
+Precondition: the direction points `p` and `q` must differ from the apex
+`origin` — the quadrant of a zero vector is undefined. This is unreachable
+in practice because section direction points are adjacent ring/line
+vertices, which are distinct from the node.
 =#
 function _compare_angle_exact(origin, p, q)
     R = Rational{BigInt}
