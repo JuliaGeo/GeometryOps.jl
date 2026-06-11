@@ -60,6 +60,25 @@ incidences are reported via the boolean `*_on_*` flags of the returned
 `SegSegClass`, whose coordinates are exact input vertices. With
 `exact = True()` the classification must be correct even for adversarial
 near-collinear inputs.
+
+    vertex_node(pt)::NodeKey
+    crossing_node(a0, a1, b0, b1)::NodeKey
+
+Manifold-generic constructors for symbolic node identities (design D2).
+`vertex_node` keys a node by its exact coordinate; `crossing_node` keys a
+proper-crossing node by the canonicalized defining segment pair, never by a
+computed intersection coordinate. Keys constructed from the same vertex, or
+from the same segment pair in any order/orientation, are `==` and hash
+equal, so they can be used directly as `Dict` keys.
+
+    rk_nodes_coincide(m, k1, k2; exact)::Bool
+
+Whether two node keys denote the same point of the manifold. Same-kind keys
+that are `==` trivially coincide; cross-kind coincidence (a vertex lying
+exactly on a proper crossing, or two distinct crossings meeting at one
+point) is decided exactly — on the plane via `Rational{BigInt}` arithmetic
+(design D3). Only invoked on self-noding paths, so the slow path is
+acceptable.
 =#
 
 # Symbolic segment-pair intersection classification (replaces RobustLineIntersector).
@@ -88,6 +107,61 @@ struct SegSegClass
 end
 
 # Manifold-generic helpers
+
+# Symbolic node identity (design D2). One concrete isbits key type for both
+# node kinds so Dict{NodeKey{P}, ...} is type-stable. Equality and hashing
+# are the default bit-pattern (egal) semantics for isbits structs; this is
+# safe because the constructors normalize the only Float64 values whose
+# numeric equality disagrees with bit equality: signed zeros (-0.0 → 0.0,
+# via `x + zero(x)`, exact in IEEE arithmetic).
+"""
+    NodeKey{P}
+
+Symbolic identity of a node (design D2). Vertex nodes key exactly by their
+coordinate (`is_crossing == false`, all point fields equal to the vertex);
+proper-crossing nodes key by their canonicalized defining segment pair
+(`is_crossing == true`, fields `(pt, a1)` and `(b0, b1)` are the two
+segments). No intersection coordinate is ever computed for the key.
+Construct via [`vertex_node`](@ref) and [`crossing_node`](@ref).
+"""
+struct NodeKey{P}
+    is_crossing::Bool
+    pt::P          # vertex nodes: the coordinate. crossing nodes: canonical a0.
+    a1::P
+    b0::P
+    b1::P
+end
+
+# Normalize signed zeros: -0.0 + 0.0 == +0.0 exactly, every other finite
+# value is unchanged. Keeps bit-pattern key equality == coordinate equality.
+@inline _pos_zero(x) = x + zero(x)
+@inline _node_point(p) = (_pos_zero(GI.x(p)), _pos_zero(GI.y(p)))
+
+"Node key of a vertex node: keyed exactly by its coordinate."
+function vertex_node(pt)
+    p = _node_point(pt)
+    return NodeKey(false, p, p, p, p)
+end
+
+"""
+    crossing_node(a0, a1, b0, b1)::NodeKey
+
+Node key of the proper crossing of segments `(a0, a1)` and `(b0, b1)`.
+Canonicalize: each segment ordered lexicographically by (x, y); segments
+ordered by their first point — so any order/orientation of the same pair
+produces an identical key.
+"""
+function crossing_node(a0, a1, b0, b1)
+    a0, a1 = _seg_canon(_node_point(a0), _node_point(a1))
+    b0, b1 = _seg_canon(_node_point(b0), _node_point(b1))
+    if (GI.x(b0), GI.y(b0), GI.x(b1), GI.y(b1)) < (GI.x(a0), GI.y(a0), GI.x(a1), GI.y(a1))
+        a0, a1, b0, b1 = b0, b1, a0, a1
+    end
+    return NodeKey(true, a0, a1, b0, b1)
+end
+
+# Order a segment's endpoints lexicographically by (x, y).
+_seg_canon(p, q) = (GI.x(p), GI.y(p)) <= (GI.x(q), GI.y(q)) ? (p, q) : (q, p)
 
 # Whether `p` lies within the coordinate bounding box of segment `(q0, q1)`.
 # Valid as an on-segment test only when `p` is already known collinear with

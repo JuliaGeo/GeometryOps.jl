@@ -129,3 +129,34 @@ end
         @test (v.a0_on_b, v.a1_on_b, v.b0_on_a, v.b1_on_a) == (r.a1_on_b, r.a0_on_b, r.b0_on_a, r.b1_on_a)
     end
 end
+
+@testset "NodeKey" begin
+    v = GO.vertex_node((1.0, 2.0))
+    v2 = GO.vertex_node((1.0, 2.0))
+    @test v == v2 && hash(v) == hash(v2)
+    c1 = GO.crossing_node((0.,0.), (2.,2.), (0.,2.), (2.,0.))
+    c2 = GO.crossing_node((0.,2.), (2.,0.), (2.,2.), (0.,0.))  # same pair, swapped & reversed
+    @test c1 == c2 && hash(c1) == hash(c2)
+    @test v != c1
+    # signed zeros: -0.0 == 0.0 numerically but has different bits; constructors
+    # must normalize so the default bit-pattern ==/hash agrees with coordinate equality
+    z1 = GO.vertex_node((-0.0, 0.0))
+    z2 = GO.vertex_node((0.0, -0.0))
+    @test z1 == z2 && hash(z1) == hash(z2)
+    cz1 = GO.crossing_node((-0.0,-2.), (0.,2.), (-2.,0.), (2.,-0.0))
+    cz2 = GO.crossing_node((0.0,-2.), (-0.0,2.), (-2.,-0.0), (2.,0.))
+    @test cz1 == cz2 && hash(cz1) == hash(cz2)
+end
+
+@testset "exact crossing coincidence (rational slow path)" begin
+    # X crossing at exactly (1,1); a vertex node placed there must coincide
+    c = GO.crossing_node((0.,0.), (2.,2.), (0.,2.), (2.,0.))
+    @test GO.rk_nodes_coincide(m, c, GO.vertex_node((1.0, 1.0)); exact = True()) == true
+    @test GO.rk_nodes_coincide(m, c, GO.vertex_node((1.0, 1.0 + eps(1.0))); exact = True()) == false
+    # two crossings meeting at the same point
+    c2 = GO.crossing_node((1.,0.), (1.,2.), (0.,1.), (2.,1.))
+    @test GO.rk_nodes_coincide(m, c, c2; exact = True()) == true
+    # crossing point with non-representable rational coordinates
+    c3 = GO.crossing_node((0.,0.), (3.,1.), (0.,1.), (3.,0.))  # crosses at (1.5, 0.5)
+    @test GO.rk_nodes_coincide(m, c3, GO.vertex_node((1.5, 0.5)); exact = True()) == true
+end
