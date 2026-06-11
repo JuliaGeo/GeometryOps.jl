@@ -211,8 +211,12 @@ end
     for i in eachindex(order), j in eachindex(order)
         @test ccmp(order[i], order[j]) == (i == j ? 0 : (i < j ? -1 : 1))
     end
-    # only the four incident endpoints are valid directions at a crossing apex
-    @test_throws ArgumentError ccmp((5.,5.), (2.,2.))
+    # directions which are not incident endpoints (D3 coincidence-merged
+    # nodes) fall back to the exact rational apex (1,1): (5,5) lies on the
+    # same ray from the apex as (2,2)
+    @test ccmp((5.,5.), (2.,2.)) == 0
+    @test ccmp((5.,5.), (0.,2.)) < 0
+    @test ccmp((0.,2.), (5.,5.)) > 0
     # same-quadrant pair around a crossing apex, resolved by orientation:
     # a: (0,0)->(4,1) x b: (1,-1)->(2,4) cross properly at (24/19, 6/19);
     # both a1=(4,1) and b1=(2,4) are NE of the apex, with angle(4,1) smaller
