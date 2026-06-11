@@ -4,11 +4,12 @@ export segmentize
 export LinearSegments, GeodesicSegments
 
 #=
-This function "segmentizes" or "densifies" a geometry by adding 
-extra vertices to the geometry so that no segment is longer than 
-a given distance.  This is useful for plotting geometries with a 
-limited number of vertices, or for ensuring that a geometry is not 
-too "coarse" for a given application.
+This function "segmentizes" or "densifies" a geometry by adding extra
+vertices to the geometry so that either a) no segment is longer than a
+given distance, or b) total number of vertices is no less then a given
+number. This is useful for plotting geometries with a limited number
+of vertices, or for ensuring that a geometry is not too "coarse" for a
+given application.
 
 !!! info
     We plan to add interpolated segmentization from DataInterpolations.jl in the future, 
@@ -25,6 +26,16 @@ linear = GO.segmentize(rectangle; max_distance = 5)
 collect(GI.getpoint(linear))
 ```
 You can see that this geometry was segmentized correctly, and now has 8 vertices where it previously had only 4.
+
+If you want to _increase_ the number of vertices above to a specific number you can use the `max_number` keyword
+argument instead of `min_distance`.
+
+```@example segmentize
+rectangle = GI.Wrappers.Polygon([[(0.0, 50.0), (7.071, 57.07), (0, 64.14), (-7.07, 57.07), (0.0, 50.0)]])
+linear = GO.segmentize(rectangle; min_number = 9)
+collect(GI.getpoint(linear))
+```
+This gives you the exact same segmentation as above.
 
 Now, we'll also segmentize this using the geodesic method, which is more accurate for lat/lon coordinates.
 
@@ -163,20 +174,26 @@ end
 # ## Implementation
 
 """
-    segmentize([method = Planar()], geom; max_distance::Real, threaded)
+    segmentize([method = Planar()], geom; max_distance::Union{Real, Nothing}, min_number::Union{Int, Nothing}, threaded)
 
-Segmentize a geometry by adding extra vertices to the geometry so that no segment is longer than a given distance.  
+Segmentize a geometry by adding extra vertices to the geometry so that no segment is longer than a given distance or contains at least a given number of vertices.  
 This is useful for plotting geometries with a limited number of vertices, or for ensuring that a geometry is not too "coarse" for a given application.
 
 ## Arguments
 - `method::Manifold = Planar()`: The method to use for segmentizing the geometry.  At the moment, only [`Planar`](@ref) (assumes a flat plane) and [`Geodesic`](@ref) (assumes geometry on the ellipsoidal Earth and uses Vincenty's formulae) are available.
 - `geom`: The geometry to segmentize.  Must be a `LineString`, `LinearRing`, `Polygon`, `MultiPolygon`, or `GeometryCollection`, or some vector or table of those.
-- `max_distance::Real`: The maximum distance between vertices in the geometry.  **Beware: for `Planar`, this is in the units of the geometry, but for `Geodesic` and `Spherical` it's in units of the radius of the sphere.**
+- `max_distance::Union{Real, Nothing}`: The maximum distance between vertices in the geometry.  **Beware: for `Planar`, this is in the units of the geometry, but for `Geodesic` and `Spherical` it's in units of the radius of the sphere.**
+- `min_number::Union{Int, Nothing}`: The minimum number of vertices in the geometry.
 
 Returns a geometry of similar type to the input geometry, but resampled.
 """
-function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
-    return segmentize(Planar(), geom; max_distance, threaded = booltype(threaded))
+function segmentize(
+    geom;
+    max_distance::Union{Real, Nothing} = nothing,
+    min_number::Union{Int, Nothing} = nothing,
+    threaded::Union{Bool, BoolsAsTypes} = False()
+    )
+    return segmentize(Planar(), geom; max_distance, min_number, threaded = booltype(threaded))
 end
 
 # allow three-arg method as well, just in case
@@ -184,11 +201,30 @@ segmentize(geom, max_distance::Real; threaded = False()) = segmentize(Planar(), 
 segmentize(method::Manifold, geom, max_distance::Real; threaded = False()) = segmentize(Planar(), geom; max_distance, threaded)
 
 # generic implementation
-function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
-    if max_distance <= 0 
-        throw(ArgumentError("`max_distance` should be positive and nonzero!  Found $(max_distance)."))
+function segmentize(
+    method::Manifold,
+    geom;
+    max_distance::Union{Real,Nothing} = nothing,
+    min_number::Union{Int,Nothing} = nothing,
+    threaded::Union{Bool, BoolsAsTypes} = False(),
+    )
+    if count(isnothing, (max_distance, min_number)) ≠ 1
+        throw(ArgumentError("Must provide one of `max_distance`, or `min_number` keywords"))
     end
-    _segmentize_function(geom) = _segmentize(method, geom, GI.trait(geom); max_distance)
+    if !isnothing(max_distance)
+        if max_distance ≤ 0
+            throw(ArgumentError("`max_distance` should be positive and nonzero!  Found $(max_distance)."))
+        end
+    elseif !isnothing(min_number)
+        if min_number ≤ 0
+            throw(ArgumentError("`min_number` should be positive and nonzero!  Found $(min_number)."))
+        end
+    end
+    _segmentize_function(geom) = if !isnothing(max_distance)
+        _segmentize(method, geom, GI.trait(geom); max_distance)
+    else
+        _segmentize(geom, GI.trait(geom); min_number)
+    end
     return apply(_segmentize_function, TraitTarget(GI.LinearRingTrait(), GI.LineStringTrait()), geom; threaded)
 end
 
@@ -214,6 +250,65 @@ function _segmentize(method::Union{Planar, Spherical}, geom, T::Union{GI.LineStr
         _fill_linear_kernel!(method, new_coords, x1, y1, x2, y2; max_distance)
         x1, y1 = x2, y2
     end 
+    return rebuild(geom, new_coords)
+end
+
+function _segmentize(geom, T::Union{GI.LineStringTrait, GI.LinearRingTrait}; min_number)
+    new_coords = GI.getgeom(geom)
+
+    if min_number <= length(new_coords)
+        return rebuild(geom, new_coords)
+    end
+
+    distances = Vector()
+    first_coord = GI.getpoint(geom, 1)
+    x1, y1 = GI.x(first_coord), GI.y(first_coord)
+    for coord in Iterators.drop(GI.getpoint(geom), 1)
+        x2, y2 = GI.x(coord), GI.y(coord)
+        dx, dy = x2 - x1, y2 - y1
+        distance = hypot(dx, dy)
+        push!(distances, distance)
+        x1, y1 = x2, y2
+    end
+
+    if new_coords isa Vector{Tuple{Int, Int}}
+        new_coords = convert(Vector{Tuple{Float64, Float64}}, new_coords)
+    elseif new_coords isa Vector{Vector{Int}}
+        new_coords = convert(Vector{Vector{Float64}}, new_coords)
+    end
+
+    point = if first_coord isa Tuple
+        (a, b) -> (a, b)
+    else
+        (a, b) -> [a, b]
+    end
+
+    while length(new_coords) < min_number
+        max_2 = 0
+        i, max_1 = 0, 0
+        for (j, dist) in Iterators.enumerate(distances)
+            if dist > max_1
+                max_2 = max_1
+                i, max_1 = j, dist
+            elseif dist > max_2
+                max_2 = dist
+            end
+        end
+        x1, y1 = new_coords[i]
+        x2, y2 = new_coords[i + 1]
+        dx, dy = x2 - x1, y2 - y1
+
+        n_segments = 1 + min(ceil(Int, max_1 / (max_2 + 1)), min_number - length(new_coords))
+        new_dist = max_1 / n_segments
+        distances[i] = new_dist
+        for j in 1:(n_segments - 1)
+            t = j / n_segments
+            new_coord = point(x1 + t * dx, y1 + t * dy)
+            insert!(new_coords, i + j, new_coord)
+            insert!(distances, i + j, new_dist)
+        end
+    end
+
     return rebuild(geom, new_coords)
 end
 
