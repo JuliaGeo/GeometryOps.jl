@@ -33,6 +33,7 @@ end
 @safetestset "Convex Hull" begin include("methods/convex_hull.jl") end
 @safetestset "Voronoi" begin include("methods/voronoi.jl") end
 @safetestset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
+@safetestset "RelateNG" begin include("methods/relateng/runtests.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end
 @safetestset "Extent" begin include("methods/extent.jl") end
