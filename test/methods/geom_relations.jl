@@ -206,21 +206,6 @@ relateng_predicate(GO_f, g1, g2) =
 # is not consulted for these pairs. (None found so far.)
 KNOWN_OLD_GO_GAPS = Tuple{Function, String, String}[]
 
-function test_geom_relation(GO_f, LG_f, f_name; swap_points=false)
-    for (g1, g2, sg1, sg2, sdesc) in test_pairs
-        @testset "$sg1 $sg2 $sdesc" begin
-            if swap_points
-                @test_implementations (GO_f($g2, $g1) == LG_f($g2, $g1))
-                @test_implementations relateng_predicate(GO_f, $g2, $g1) == LG_f($g2, $g1)
-            else
-                @test_implementations GO_f($g1, $g2) == LG_f($g1, $g2)
-                @test_implementations relateng_predicate(GO_f, $g1, $g2) == LG_f($g1, $g2)
-            end
-        end
-    end
-end
-
-
 function test_geom_relation(GO_f, alg::GO.Algorithm, f_name; swap_points=false)
     for (g1, g2, sg1, sg2, sdesc) in test_pairs
         @testset "$sg1 $sg2 $sdesc" begin
@@ -244,6 +229,20 @@ end
 @testset "Touches" begin test_geom_relation(GO.touches, GO.GEOS(), "touches") end
 @testset "Within" begin test_geom_relation(GO.within, GO.GEOS(), "within") end
 
+# `equals` is not part of the relation loop above (old `GO.equals` does not
+# accept Extent inputs and is structural rather than topological equality),
+# so the RelateNG `pred_equalstopo` mapping gets its own cross-check here.
+@testset "Equals (RelateNG)" begin
+    @testset_implementations begin
+        @test relateng_predicate(GO.equals, $p2, $p2) == GO.equals($p2, $p2) == LG.equals($p2, $p2) == true
+        @test relateng_predicate(GO.equals, $p1, $p2) == GO.equals($p1, $p2) == LG.equals($p1, $p2) == false
+        @test relateng_predicate(GO.equals, $l1, $l1) == GO.equals($l1, $l1) == LG.equals($l1, $l1) == true
+        @test relateng_predicate(GO.equals, $l1, $l2) == GO.equals($l1, $l2) == LG.equals($l1, $l2) == false
+        @test relateng_predicate(GO.equals, $l10, $r1) == GO.equals($l10, $r1) == LG.equals($l10, $r1) == true
+        @test relateng_predicate(GO.equals, $pt1, $pt1) == GO.equals($pt1, $pt1) == LG.equals($pt1, $pt1) == true
+        @test relateng_predicate(GO.equals, $pt1, $pt2) == GO.equals($pt1, $pt2) == LG.equals($pt1, $pt2) == false
+    end
+end
 
 @testset "Overlaps" begin
     p1 = LG.Point([0.0, 0.0])
