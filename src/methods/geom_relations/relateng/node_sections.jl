@@ -64,6 +64,12 @@ here a comparator function over [`rk_compare_edge_dir`](@ref) with the
 symbolic node of `ns1` as apex, taking the manifold and `exact` flag the
 kernel comparison needs. Use as a sort predicate via
 `lt = (a, b) -> edge_angle_compare(m, a, b; exact) < 0`.
+
+Precondition at a crossing node (a `NodeKey` with `is_crossing`):
+`rk_compare_edge_dir` requires both sections' `v0` to be among the four
+endpoints of the node's defining segments. This holds by construction,
+since the sections incident at a crossing `NodeKey` are built from those
+defining segments themselves.
 """
 edge_angle_compare(m::Manifold, ns1::NodeSection, ns2::NodeSection; exact) =
     rk_compare_edge_dir(m, ns1.node, get_vertex(ns1, 0), get_vertex(ns2, 0); exact)
@@ -280,11 +286,10 @@ converter delegation — and returns the ordered section list that the
 TODO(Task 17): construct the `RelateNode` here, replace the `append!`/
 `push!` calls with `add_edges!(node, ...)`, and return the node.
 
-The `PolygonNodeConverter` delegation is stubbed until Task 16
-([`_polygon_node_convert`](@ref) errors), so nodes where one polygon
-contributes multiple sections are not yet supported. The manifold/`exact`
-parameters (absent in Java, where `createNode()` is nullary) are threaded
-through for the converter's angle comparisons.
+The per-polygon section groups are rewritten into maximal-ring structure by
+[`polygon_node_convert`](@ref) (the `PolygonNodeConverter.convert` port).
+The manifold/`exact` parameters (absent in Java, where `createNode()` is
+nullary) are threaded through for the converter's angle comparisons.
 """
 function create_node(m::Manifold, nss::NodeSections; exact)
     prepare_sections!(nss)
@@ -296,7 +301,7 @@ function create_node(m::Manifold, nss::NodeSections; exact)
         #-- if there multiple polygon sections incident at node convert them to maximal-ring structure
         if is_area(ns) && _has_multiple_polygon_sections(nss.sections, i)
             poly_sections = _collect_polygon_sections(nss.sections, i)
-            ns_convert = _polygon_node_convert(m, poly_sections; exact)
+            ns_convert = polygon_node_convert(m, poly_sections; exact)
             append!(node_sections, ns_convert)
             i += length(poly_sections)
         else
@@ -307,12 +312,6 @@ function create_node(m::Manifold, nss::NodeSections; exact)
     end
     return node_sections
 end
-
-# Stand-in for PolygonNodeConverter.convert at the create_node call site.
-# TODO(Task 16): replace with the real PolygonNodeConverter port and re-run
-# the Task-15 tests (which until then only cover single-polygon nodes).
-_polygon_node_convert(m::Manifold, poly_sections; exact) =
-    error("`PolygonNodeConverter` is not yet ported — Task 16")
 
 """
     prepare_sections!(nss::NodeSections)
