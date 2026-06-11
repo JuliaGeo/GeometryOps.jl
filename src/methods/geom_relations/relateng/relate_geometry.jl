@@ -395,6 +395,13 @@ end
 Extract [`RelateSegmentString`](@ref)s from the geometry which intersect a
 given extent (one per line, one per polygon ring). If `ext_filter` is
 `nothing` all edges are extracted.
+
+!!! warning
+    `nothing` here means *no filter* (Java's prepared-mode `null`), while
+    `get_extent(rg)` returns `nothing` for an *empty* geometry, where JTS's
+    null Envelope intersects nothing. Never forward an empty geometry's
+    extent as the filter — callers (the engine's `computeAtEdges` port)
+    must early-return on empty inputs before extraction.
 """
 function extract_segment_strings(rg::RelateGeometry, is_a::Bool, ext_filter)
     seg_strings = RelateSegmentString[]
