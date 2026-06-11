@@ -29,6 +29,7 @@ function dim_char(d::Integer)
 end
 
 function dim_code(c::AbstractChar)
+    c = uppercase(c)
     c == 'F' && return DIM_FALSE
     c == 'T' && return DIM_TRUE
     c == '*' && return DIM_DONTCARE
@@ -102,7 +103,7 @@ Base.show(io::IO, im::DE9IM) = print(io, "DE9IM(\"", string(im), "\")")
 "Match a single matrix entry against a pattern code (JTS `IntersectionMatrix.matches`)."
 function matches_entry(dim::Int8, pat::Int8)
     pat == DIM_DONTCARE && return true
-    pat == DIM_TRUE     && return dim >= 0
+    pat == DIM_TRUE     && return dim >= 0 || dim == DIM_TRUE
     return dim == pat
 end
 
