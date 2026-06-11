@@ -71,3 +71,28 @@ function rk_classify_intersection(m::Planar, a0, a1, b0, b1; exact)
     end
     return SegSegClass(SS_DISJOINT, false, false, false, false)
 end
+
+# Node coincidence, rational slow path (design D3). Float64 values are
+# dyadic rationals, so Rational{BigInt} conversion and arithmetic are exact.
+
+"Exact intersection point of two properly crossing segments, as rationals."
+function _exact_crossing_point(a0, a1, b0, b1)
+    R = Rational{BigInt}
+    ax0, ay0 = R(GI.x(a0)), R(GI.y(a0)); ax1, ay1 = R(GI.x(a1)), R(GI.y(a1))
+    bx0, by0 = R(GI.x(b0)), R(GI.y(b0)); bx1, by1 = R(GI.x(b1)), R(GI.y(b1))
+    dax, day = ax1 - ax0, ay1 - ay0
+    dbx, dby = bx1 - bx0, by1 - by0
+    denom = dax * dby - day * dbx          # nonzero for a proper crossing
+    t = ((bx0 - ax0) * dby - (by0 - ay0) * dbx) // denom
+    return (ax0 + t * dax, ay0 + t * day)
+end
+
+_exact_node_point(k::NodeKey) = k.is_crossing ?
+    _exact_crossing_point(k.pt, k.a1, k.b0, k.b1) :
+    (Rational{BigInt}(GI.x(k.pt)), Rational{BigInt}(GI.y(k.pt)))
+
+function rk_nodes_coincide(::Planar, k1::NodeKey, k2::NodeKey; exact)
+    k1 == k2 && return true
+    # Slow path (design D3, follow-up F1): exact rational comparison.
+    return _exact_node_point(k1) == _exact_node_point(k2)
+end
