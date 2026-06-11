@@ -503,8 +503,9 @@ another). Here node identity is symbolic, so the merge is an explicit pass,
 run whenever any crossing key exists.
 
 Grouping is hash-based on the representative Float64 point of each key
-(`_crossing_locate_point`: the *correctly rounded* exact rational crossing
-point; vertex keys use their exact coordinate). Coincident keys always
+(`_crossing_locate_point`: the exact rational crossing point,
+deterministically rounded via 256-bit BigFloat; vertex keys use their exact
+coordinate). Coincident keys always
 round identically, so they share a bucket; within a bucket coincidence is
 confirmed *exactly* via the rational `_exact_node_point` (distinct exact
 points that happen to round together are never merged). This keeps the
@@ -516,11 +517,16 @@ exact, so the edge wheel and node location never need the rational apex.
 Otherwise the merged crossing node's wheel compares foreign directions
 around the exact rational apex (`rk_compare_edge_dir` slow path).
 =#
+# TODO(F1): every evaluation with a proper crossing pays one Rational +
+# BigFloat rounding per crossing key here, even when no coincidence exists.
+# F1 could compute a cheap floating-point representative with an error bound
+# instead, reserving the rational arithmetic for keys that fall inside
+# multi-member buckets.
 function _merge_coincident_nodes!(tc::TopologyComputer)
     nodemap = tc.node_sections
     any(k -> k.is_crossing, keys(nodemap)) || return nothing
     K = keytype(nodemap)
-    #-- bucket keys by their representative (correctly rounded) coordinate
+    #-- bucket keys by their representative (deterministically rounded) coordinate
     buckets = Dict{Tuple{Float64, Float64}, Vector{K}}()
     for k in keys(nodemap)
         pt = k.is_crossing ? _crossing_locate_point(k) : k.pt
@@ -644,9 +650,12 @@ function is_node_in_area(rg::RelateGeometry, key::NodeKey, parent_polygonal)
     return is_node_in_area(rg, _crossing_locate_point(key), parent_polygonal)
 end
 
-# Representative Float64 coordinate of a proper-crossing node, rounded from
-# the exact rational crossing point (via BigFloat to avoid overflow in the
-# Rational → Float64 conversion of huge numerators/denominators).
+# Representative Float64 coordinate of a proper-crossing node,
+# deterministically rounded via 256-bit BigFloat from the exact rational
+# crossing point (BigFloat avoids overflow in the Rational → Float64
+# conversion of huge numerators/denominators; the double rounding through
+# BigFloat's default precision is deterministic, though not strictly
+# correctly rounded).
 function _crossing_locate_point(key::NodeKey)
     xr, yr = _exact_crossing_point(key.pt, key.a1, key.b0, key.b1)
     return (Float64(BigFloat(xr)), Float64(BigFloat(yr)))
