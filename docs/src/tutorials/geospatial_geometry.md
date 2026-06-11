@@ -95,8 +95,11 @@ fig
 Now let's plot a `Polygon` like before, but this time with a CRS that differs from our `source` data
 
 ````@example geospatial_geometry
-ϴ = 0:0.01:2π
-ring(r) = GI.LinearRing(GI.Point.(zip(50 .+ r .* cos.(ϴ), 50 .+ r .* sin.(ϴ))))
+function ring(radius)
+    ϴ = 0:0.01:2π
+	points = @. GI.Point(50 + r * cos(ϴ), 50 + r * sin(ϴ))
+	return GI.LinearRing(points)
+end
 spiro = GI.LinearRing(GI.Point.(zip(50 .+ 22cos.(ϴ) .- 2cos.(11ϴ), 50 .+ 22sin.(ϴ) .- 2sin.(11ϴ))))
 multipolygon = GI.MultiPolygon([GI.Polygon([spiro, ring(8)]), GI.Polygon([ring(4)])])
 
