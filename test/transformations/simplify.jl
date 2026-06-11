@@ -21,6 +21,18 @@ datadir = realpath(joinpath(dirname(pathof(GO)), "../test/data"))
 end
 
 @testset "DouglasPeucker" begin
+    # Test for issue #386: BoundsError when simplifying small geometries with low number/ratio
+    @testset "small geometry simplification (issue #386)" begin
+        # This would cause a BoundsError before the fix due to indexing bug in the while loop
+        line = GI.LineString([(rand(), rand()) for _ in 1:4])
+        @test_nowarn GO.simplify(line; ratio=0.1)
+        @test_nowarn GO.simplify(line; tol=0.1)
+        @test_nowarn GO.simplify(line; number=3)
+        # Verify the output is valid
+        result = GO.simplify(line; number=3)
+        @test GI.npoint(result) == 3
+    end
+
     poly_coords = JLD2.jldopen(joinpath(datadir, "complex_polygons.jld2"))["verts"][1:4]
     for c in poly_coords
         npoints = length(c[1])
