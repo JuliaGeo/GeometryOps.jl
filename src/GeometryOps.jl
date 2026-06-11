@@ -99,6 +99,9 @@ include("methods/geom_relations/relateng/kernel_planar.jl")
 include("methods/geom_relations/relateng/node_sections.jl")
 # Point location: after the kernel (uses `_node_point` and de9im constants).
 include("methods/geom_relations/relateng/point_locator.jl")
+# Input facade: after the point locator (RelateGeometry wraps a lazy
+# RelatePointLocator) and node sections (RelateSegmentString creates them).
+include("methods/geom_relations/relateng/relate_geometry.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")
