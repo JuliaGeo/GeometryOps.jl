@@ -108,9 +108,7 @@ _create_section(ns::NodeSection, v0, v1) = NodeSection(
     is_node_at_vertex(ns), v0, node_pt(ns), v1)
 
 # Port of PolygonNodeConverter.extractUnique: drop consecutive duplicate
-# sections (the list is sorted, so duplicates are adjacent). Also used by the
-# Task-11 AdjacentEdgeLocator slice in point_locator.jl, where `compare_to`
-# reduces to the edge-vertex comparison since all other fields are equal.
+# sections (the list is sorted, so duplicates are adjacent).
 function _extract_unique(sections::Vector{S}) where {S <: NodeSection}
     unique_sections = S[]
     last_unique = sections[1]
