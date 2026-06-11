@@ -242,17 +242,10 @@ function _ns_compare_vertices(a::NodeSection, b::NodeSection)
     return _compare_pt(get_vertex(a, 1), get_vertex(b, 1))
 end
 
-# Port of PolygonNodeConverter.extractUnique: drop consecutive duplicate
-# sections (assumes the list is sorted so duplicates are adjacent).
-function _extract_unique(sections::Vector{S}) where {S <: NodeSection}
-    unique_sections = S[sections[1]]
-    for ns in sections
-        if _ns_compare_vertices(last(unique_sections), ns) != 0
-            push!(unique_sections, ns)
-        end
-    end
-    return unique_sections
-end
+# (`_extract_unique` — the PolygonNodeConverter.extractUnique port — lived
+# here until Task 16; it now comes from polygon_node_converter.jl. Its
+# `compare_to` ordering reduces to `_ns_compare_vertices` for AEL sections,
+# whose other compared fields are all equal.)
 
 # Port of RelateNode.addEdges(NodeSection), area case (the only case here).
 function _add_edges!(m, node::NodeKey, edges::Vector{<:_AelEdge}, ns::NodeSection; exact)

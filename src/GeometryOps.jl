@@ -97,6 +97,9 @@ include("methods/geom_relations/relateng/kernel_planar.jl")
 # Node sections: after the kernel (uses `NodeKey`), before the point locator
 # (AdjacentEdgeLocator builds NodeSections).
 include("methods/geom_relations/relateng/node_sections.jl")
+# Polygon node converter: after node sections (rewrites a polygon's
+# NodeSection group into maximal-ring structure for `create_node`).
+include("methods/geom_relations/relateng/polygon_node_converter.jl")
 # Point location: after the kernel (uses `_node_point` and de9im constants).
 include("methods/geom_relations/relateng/point_locator.jl")
 # Input facade: after the point locator (RelateGeometry wraps a lazy
