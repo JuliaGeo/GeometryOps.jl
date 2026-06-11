@@ -7,15 +7,27 @@ isdefined(@__MODULE__, :RELATE_SKIPLIST) || include(joinpath(@__DIR__, "relate_s
 
 using Test
 
+# Standard DE-9IM pattern matching over the 9-character string forms, kept
+# local so the runner stays engine-agnostic (it must not depend on the
+# implementation under test for its own pass/fail logic).
+_de9im_entry_matches(c::Char, p::Char) =
+    p == '*' ? true :
+    p == 'T' ? c in ('0', '1', '2') :
+    c == p
+_de9im_matches(im::AbstractString, pattern::AbstractString) =
+    all(_de9im_entry_matches(im[i], pattern[i]) for i in 1:9)
+
 """
-    run_relate_cases(relate_fn, pattern_fn, predicate_fns, files; skiplist = RELATE_SKIPLIST)
+    run_relate_cases(relate_fn, pattern_fn, predicate_fns, files; skiplist = RELATE_SKIPLIST, check_matrix = true)
 
 Run the JTS relate XML test cases in `files` (paths to vendored XML files)
 against a relate implementation:
 
-- `relate_fn(a, b)::DE9IM` — computes the full DE-9IM matrix. Currently unused,
-  but kept as a required argument on purpose: Task 23 will use it for
-  full-matrix (matrix-vs-pattern) checks.
+- `relate_fn(a, b)::DE9IM` — computes the full DE-9IM matrix. For every
+  `relate` op (unless `check_matrix = false`), the full matrix's `string`
+  form is matched against the op's pattern as a consistency check: the
+  matrix route and the pattern-predicate route must agree on the expected
+  result for the op to pass.
 - `pattern_fn(a, b, pattern)::Bool` — evaluates a DE-9IM pattern match
   (used for `relate` ops, whose `arg3` is the pattern).
 - `predicate_fns::AbstractDict` — maps lowercase op names (`"intersects"`,
@@ -37,7 +49,8 @@ Each executed op contributes one `@test`. Returns a NamedTuple
 skipped op.
 """
 function run_relate_cases(relate_fn, pattern_fn, predicate_fns, files;
-        skiplist::Set{Tuple{String, Int, String, String}} = RELATE_SKIPLIST)
+        skiplist::Set{Tuple{String, Int, String, String}} = RELATE_SKIPLIST,
+        check_matrix::Bool = true)
     per_file = NamedTuple{(:file, :n_pass, :n_fail, :n_skip), Tuple{String, Int, Int, Int}}[]
     skipped = NamedTuple{(:file, :case_index, :description, :op, :arg_order, :reason),
         Tuple{String, Int, String, String, String, String}}[]
@@ -74,15 +87,21 @@ function run_relate_cases(relate_fn, pattern_fn, predicate_fns, files;
                         a, b = item.arg1, item.arg2
                         passed = false
                         try
-                            actual = if op == "relate"
-                                pattern_fn(a, b, item.pattern)
+                            if op == "relate"
+                                passed = pattern_fn(a, b, item.pattern) == item.expected_result
+                                if passed && check_matrix
+                                    # Consistency check: the full matrix, matched
+                                    # against the pattern, must reproduce the
+                                    # pattern-predicate result.
+                                    im_str = string(relate_fn(a, b))
+                                    passed = _de9im_matches(im_str, item.pattern) == item.expected_result
+                                end
                             elseif haskey(predicate_fns, op)
-                                predicate_fns[op](a, b)
+                                passed = predicate_fns[op](a, b) == item.expected_result
                             else
                                 skip!(case_index, case, item, arg_order, "no predicate function provided")
                                 continue
                             end
-                            passed = (actual == item.expected_result)
                         catch err
                             @error "relate case errored" file case.description item.operation exception = (err, catch_backtrace())
                         end

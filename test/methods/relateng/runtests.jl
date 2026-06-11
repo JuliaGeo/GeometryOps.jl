@@ -11,5 +11,6 @@ using SafeTestsets
 @safetestset "Edge intersector" begin include("edge_intersector.jl") end
 @safetestset "XML harness" begin include("xml_harness.jl") end
 @safetestset "RelateNG engine" begin include("relate_ng.jl") end
+@safetestset "JTS XML suite" begin include("xml_suite.jl") end
 # Further files appended here as tasks land:
 # ...
