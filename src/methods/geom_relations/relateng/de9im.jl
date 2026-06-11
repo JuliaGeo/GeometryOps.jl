@@ -112,6 +112,124 @@ function matches(im::DE9IM, pattern::AbstractString)
     return all(matches_entry(im.entries[i], dim_code(pattern[i])) for i in 1:9)
 end
 
+#=
+## Relate queries on a DE-9IM matrix
+
+Ports of the JTS `IntersectionMatrix` named-relationship test methods
+(`isContains`, `isWithin`, `isCovers`, `isCoveredBy`, `isCrosses`,
+`isEquals`, `isOverlaps`, `isTouches`); `matches` above is the port of
+`IntersectionMatrix.matches`. These are used as the `value_im`
+implementations of the named `IMPredicate` kinds in
+`relate_predicates.jl`.
+=#
+
+# JTS `IntersectionMatrix.isTrue`: an actual dimension value >= 0 is "true"
+# ('T' only occurs in patterns, but is accepted for parity with JTS).
+im_is_true(dim::Integer) = dim >= 0 || dim == DIM_TRUE
+
+# Matches `[T*****FF*]`.
+is_contains(im::DE9IM) =
+    im_is_true(im[LOC_INTERIOR, LOC_INTERIOR]) &&
+    im[LOC_EXTERIOR, LOC_INTERIOR] == DIM_FALSE &&
+    im[LOC_EXTERIOR, LOC_BOUNDARY] == DIM_FALSE
+
+# Matches `[T*F**F***]`.
+is_within(im::DE9IM) =
+    im_is_true(im[LOC_INTERIOR, LOC_INTERIOR]) &&
+    im[LOC_INTERIOR, LOC_EXTERIOR] == DIM_FALSE &&
+    im[LOC_BOUNDARY, LOC_EXTERIOR] == DIM_FALSE
+
+# Matches `[T*****FF*]`, `[*T****FF*]`, `[***T**FF*]` or `[****T*FF*]`.
+function is_covers(im::DE9IM)
+    has_point_in_common =
+        im_is_true(im[LOC_INTERIOR, LOC_INTERIOR]) ||
+        im_is_true(im[LOC_INTERIOR, LOC_BOUNDARY]) ||
+        im_is_true(im[LOC_BOUNDARY, LOC_INTERIOR]) ||
+        im_is_true(im[LOC_BOUNDARY, LOC_BOUNDARY])
+    return has_point_in_common &&
+        im[LOC_EXTERIOR, LOC_INTERIOR] == DIM_FALSE &&
+        im[LOC_EXTERIOR, LOC_BOUNDARY] == DIM_FALSE
+end
+
+# Matches `[T*F**F***]`, `[*TF**F***]`, `[**FT*F***]` or `[**F*TF***]`.
+function is_coveredby(im::DE9IM)
+    has_point_in_common =
+        im_is_true(im[LOC_INTERIOR, LOC_INTERIOR]) ||
+        im_is_true(im[LOC_INTERIOR, LOC_BOUNDARY]) ||
+        im_is_true(im[LOC_BOUNDARY, LOC_INTERIOR]) ||
+        im_is_true(im[LOC_BOUNDARY, LOC_BOUNDARY])
+    return has_point_in_common &&
+        im[LOC_INTERIOR, LOC_EXTERIOR] == DIM_FALSE &&
+        im[LOC_BOUNDARY, LOC_EXTERIOR] == DIM_FALSE
+end
+
+# Matches `[T*T******]` (P/L, P/A, L/A), `[T*****T**]` (L/P, A/P, A/L)
+# or `[0********]` (L/L); false for any other dimension combination.
+function is_crosses(im::DE9IM, dimA::Integer, dimB::Integer)
+    if (dimA == DIM_P && dimB == DIM_L) ||
+       (dimA == DIM_P && dimB == DIM_A) ||
+       (dimA == DIM_L && dimB == DIM_A)
+        return im_is_true(im[LOC_INTERIOR, LOC_INTERIOR]) &&
+            im_is_true(im[LOC_INTERIOR, LOC_EXTERIOR])
+    end
+    if (dimA == DIM_L && dimB == DIM_P) ||
+       (dimA == DIM_A && dimB == DIM_P) ||
+       (dimA == DIM_A && dimB == DIM_L)
+        return im_is_true(im[LOC_INTERIOR, LOC_INTERIOR]) &&
+            im_is_true(im[LOC_EXTERIOR, LOC_INTERIOR])
+    end
+    if dimA == DIM_L && dimB == DIM_L
+        return im[LOC_INTERIOR, LOC_INTERIOR] == DIM_P
+    end
+    return false
+end
+
+# Dimensions equal and matrix matches `[T*F**FFF*]`. (JTS deliberately
+# deviates from the SFS pattern `[TFFFTFFFT]` so identical points are equal.)
+function is_equals(im::DE9IM, dimA::Integer, dimB::Integer)
+    dimA != dimB && return false
+    return im_is_true(im[LOC_INTERIOR, LOC_INTERIOR]) &&
+        im[LOC_INTERIOR, LOC_EXTERIOR] == DIM_FALSE &&
+        im[LOC_BOUNDARY, LOC_EXTERIOR] == DIM_FALSE &&
+        im[LOC_EXTERIOR, LOC_INTERIOR] == DIM_FALSE &&
+        im[LOC_EXTERIOR, LOC_BOUNDARY] == DIM_FALSE
+end
+
+# Matches `[T*T***T**]` (P/P, A/A) or `[1*T***T**]` (L/L).
+function is_overlaps(im::DE9IM, dimA::Integer, dimB::Integer)
+    if (dimA == DIM_P && dimB == DIM_P) || (dimA == DIM_A && dimB == DIM_A)
+        return im_is_true(im[LOC_INTERIOR, LOC_INTERIOR]) &&
+            im_is_true(im[LOC_INTERIOR, LOC_EXTERIOR]) &&
+            im_is_true(im[LOC_EXTERIOR, LOC_INTERIOR])
+    end
+    if dimA == DIM_L && dimB == DIM_L
+        return im[LOC_INTERIOR, LOC_INTERIOR] == DIM_L &&
+            im_is_true(im[LOC_INTERIOR, LOC_EXTERIOR]) &&
+            im_is_true(im[LOC_EXTERIOR, LOC_INTERIOR])
+    end
+    return false
+end
+
+# Matches `[FT*******]`, `[F**T*****]` or `[F***T****]`;
+# false if both geometries are points.
+function is_touches(im::DE9IM, dimA::Integer, dimB::Integer)
+    if dimA > dimB
+        # no need to get transpose because the pattern matrix is symmetrical
+        return is_touches(im, dimB, dimA)
+    end
+    if (dimA == DIM_A && dimB == DIM_A) ||
+       (dimA == DIM_L && dimB == DIM_L) ||
+       (dimA == DIM_L && dimB == DIM_A) ||
+       (dimA == DIM_P && dimB == DIM_A) ||
+       (dimA == DIM_P && dimB == DIM_L)
+        return im[LOC_INTERIOR, LOC_INTERIOR] == DIM_FALSE &&
+            (im_is_true(im[LOC_INTERIOR, LOC_BOUNDARY]) ||
+             im_is_true(im[LOC_BOUNDARY, LOC_INTERIOR]) ||
+             im_is_true(im[LOC_BOUNDARY, LOC_BOUNDARY]))
+    end
+    return false
+end
+
 # Boundary node rules (JTS BoundaryNodeRule.java). Zero-size structs.
 abstract type BoundaryNodeRule end
 "OGC SFS standard rule: a vertex is on the boundary iff an odd number of line ends meet it (Mod-2 rule)."
