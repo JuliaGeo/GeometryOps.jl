@@ -35,6 +35,16 @@ require_covers(::Type{<:TopologyPredicate}, is_source_a::Bool) = false
 # Whether the predicate requires checking if the source input intersects
 # the exterior of the target input. JTS default: true.
 require_exterior_check(::Type{<:TopologyPredicate}, is_source_a::Bool) = true
+
+# Instance-level forwarding of the requirement flags. Most predicates'
+# flags are pure functions of the type (so evaluation can specialize on
+# them), but runtime-data-dependent predicates (e.g. `IMPatternMatcher`,
+# whose `require_interaction` is computed from its pattern matrix) can
+# override these instance methods.
+require_self_noding(p::TopologyPredicate) = require_self_noding(typeof(p))
+require_interaction(p::TopologyPredicate) = require_interaction(typeof(p))
+require_covers(p::TopologyPredicate, is_source_a::Bool) = require_covers(typeof(p), is_source_a)
+require_exterior_check(p::TopologyPredicate, is_source_a::Bool) = require_exterior_check(typeof(p), is_source_a)
 # Initializes the predicate for a specific geometric case from the input
 # dimensions. Default: dimensions provide no information.
 init_dims!(p::TopologyPredicate, dimA::Integer, dimB::Integer) = nothing
