@@ -111,3 +111,16 @@ function matches(im::DE9IM, pattern::AbstractString)
     length(pattern) == 9 || throw(ArgumentError("DE-9IM pattern must have 9 characters, got $(repr(pattern))"))
     return all(matches_entry(im.entries[i], dim_code(pattern[i])) for i in 1:9)
 end
+
+# Boundary node rules (JTS BoundaryNodeRule.java). Zero-size structs.
+abstract type BoundaryNodeRule end
+"OGC SFS standard rule: a vertex is on the boundary iff an odd number of line ends meet it (Mod-2 rule)."
+struct Mod2Boundary <: BoundaryNodeRule end
+struct EndpointBoundary <: BoundaryNodeRule end
+struct MultivalentEndpointBoundary <: BoundaryNodeRule end
+struct MonovalentEndpointBoundary <: BoundaryNodeRule end
+
+is_in_boundary(::Mod2Boundary, boundary_count::Integer) = isodd(boundary_count)
+is_in_boundary(::EndpointBoundary, boundary_count::Integer) = boundary_count > 0
+is_in_boundary(::MultivalentEndpointBoundary, boundary_count::Integer) = boundary_count > 1
+is_in_boundary(::MonovalentEndpointBoundary, boundary_count::Integer) = boundary_count == 1
