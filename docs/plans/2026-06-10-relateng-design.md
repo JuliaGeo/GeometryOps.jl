@@ -64,6 +64,20 @@ We eliminate constructed points. Every segment-pair intersection is first classi
 This is possible because relate produces no output geometry: every answer is a finite
 set of sign computations on input coordinates.
 
+> **Amendment (2026-06-11, Task 18).** One bounded deviation: locating a *crossing
+> node* against a **lineal or GeometryCollection target** uses a representative
+> Float64 point, correctly rounded from the exact rational crossing point
+> (`_crossing_locate_point` in `topology_computer.jl`). Polygonal targets still need
+> no coordinate (a node of a polygonal geometry is on its boundary, exactly).
+> The failure window of the rounded point is only when the exact crossing lies
+> within half an ULP of another element's endpoint (lineal targets — and only a
+> false BOUNDARY answer is possible there; a false INTERIOR is impossible, since a
+> crossing that is exactly representable rounds to itself) or within half an ULP of
+> a non-parent polygon's boundary (GC targets). Correct rounding means this matches
+> or beats JTS's `RobustLineIntersector`-constructed coordinate in every such
+> window. A fully exact alternative (rational on-segment / rational point-in-polygon
+> tests over the target's edges) is recorded as **Follow-up F6**.
+
 ### D3. Exact crossing-node coincidence via a slow path (follow-up: make it fast)
 
 Whether two *proper crossings* coincide (only relevant for self-intersecting/invalid
@@ -275,6 +289,10 @@ Each stage lands reviewable and green:
 - **F4.** Generalize `prepare` into a package-wide prepared-geometry mechanism.
 - **F5.** GeometryCollection edge cases beyond the JTS XML suite's coverage (mixed-dim
   GCs with overlapping components) — extra fuzzing.
+- **F6.** Exact crossing-node location against lineal/GC targets: replace the
+  correctly-rounded representative point of `_crossing_locate_point` with rational
+  on-segment / rational point-in-polygon tests over the target's edges (see the
+  D2 amendment of 2026-06-11 for the half-ULP failure window this would close).
 
 ## References
 

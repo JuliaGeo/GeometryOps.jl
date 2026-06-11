@@ -48,6 +48,8 @@ function TopologyComputer(predicate::TopologyPredicate,
     #-- both inputs must have been built with the same settings
     (geom_a.m == geom_b.m && geom_a.exact == geom_b.exact) ||
         throw(ArgumentError("RelateGeometry manifold/exact settings of the A and B inputs must agree"))
+    #-- P matches relate_geometry.jl's `_node_point` normalization of all
+    #-- segment-string coordinates to Tuple{Float64, Float64}
     P = Tuple{Float64, Float64}
     tc = TopologyComputer(predicate, geom_a, geom_b, Dict{NodeKey{P}, NodeSections{P}}())
     init_exterior_dims!(tc)
@@ -499,27 +501,31 @@ exact, so the edge wheel and node location never need the rational apex.
 Otherwise the merged crossing node's wheel compares foreign directions
 around the exact rational apex (`rk_compare_edge_dir` slow path).
 
-The grouping is O(k²) in the number of crossing keys with rational
-arithmetic per candidate pair — an acceptable slow path, reached only for
-self-noding predicates on self-intersecting linework (design D3;
-follow-up F1: add an interval-arithmetic filter).
+The grouping is O(C·N) — each unmerged crossing key (C of them) scans all
+N node keys — with rational arithmetic per candidate pair: an acceptable
+slow path, reached only for self-noding predicates on self-intersecting
+linework (design D3; follow-up F1: add an interval-arithmetic filter).
 =#
 function _merge_coincident_nodes!(tc::TopologyComputer)
     is_self_noding_required(tc) || return nothing
     nodemap = tc.node_sections
     any(k -> k.is_crossing, keys(nodemap)) || return nothing
-    m = _manifold(tc)
-    exact = _exact(tc)
     all_keys = collect(keys(nodemap))
     merged = Set{eltype(all_keys)}()
     for kx in all_keys
         (kx.is_crossing && !(kx in merged)) || continue
+        #-- hoist: the exact rational point of kx is invariant over the
+        #-- inner scan, so compute it once instead of letting
+        #-- `rk_nodes_coincide` recompute it per candidate pair
+        px = _exact_node_point(kx)
         #-- collect the keys coinciding with kx (coincidence is transitive:
         #-- all group members denote one exact point)
         group = eltype(all_keys)[]
         for k in all_keys
             (k == kx || k in merged) && continue
-            rk_nodes_coincide(m, kx, k; exact) && push!(group, k)
+            #-- equivalent to rk_nodes_coincide(m, kx, k; exact): its
+            #-- k1 == k2 fast path is covered by the k == kx skip above
+            px == _exact_node_point(k) && push!(group, k)
         end
         isempty(group) && continue
         #-- prefer a vertex key as the canonical node (at most one exists:
