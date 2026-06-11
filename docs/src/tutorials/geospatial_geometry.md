@@ -65,7 +65,7 @@ land_path = GeoMakie.assetpath("ne_110m_land.geojson")
 !!! note
     Natural Earth has lots of other datasets, and there is a Julia package that provides an interface to it called [NaturalEarth.jl](https://github.com/JuliaGeo/NaturalEarth.jl).
 
-Read the land `MultiPolygon`s as a `GeoJSON.FeatureCollection`.
+Read this dataset in as a `GeoJSON.FeatureCollection`.
 
 ````@example geospatial_geometry
 land_geo = GeoJSON.read(land_path)
