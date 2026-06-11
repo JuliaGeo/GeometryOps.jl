@@ -141,6 +141,8 @@ end
 
 # The opposite endpoint of incident endpoint `p` on its defining segment of
 # crossing node `k`. `p` must be one of the four endpoints.
+# Coordinate-equality matching is unambiguous because the four endpoints of
+# a proper crossing are pairwise distinct.
 function _crossing_opposite(k::NodeKey, p)
     _equals2(p, k.pt) && return k.a1
     _equals2(p, k.a1) && return k.pt
