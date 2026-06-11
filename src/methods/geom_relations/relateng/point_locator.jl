@@ -492,3 +492,302 @@ function _ring_is_ccw(m, ring::Vector; exact)
         return del_x < 0
     end
 end
+
+#==========================================================================
+# RelatePointLocator (port of JTS RelatePointLocator.java)
+==========================================================================#
+
+"""
+    RelatePointLocator(m::Manifold, geom; exact, is_prepared = false,
+                       boundary_rule = Mod2Boundary())
+
+Locates a point on a geometry, including mixed-type collections.
+The dimension of the containing geometry element is also determined.
+GeometryCollections are handled with union semantics;
+i.e. the location of a point is that location of that point
+on the union of the elements of the collection.
+
+Union semantics for GeometryCollections has the following behaviours:
+
+1. For a mixed-dimension (heterogeneous) collection a point may lie on two
+   geometry elements with different dimensions. In this case the location on
+   the largest-dimension element is reported.
+2. For a collection with overlapping or adjacent polygons, points on polygon
+   element boundaries may lie in the effective interior of the collection
+   geometry.
+
+Supports specifying the [`BoundaryNodeRule`](@ref) to use for line endpoints
+(`RelateGeometry` passes its rule down here; the default matches Java's
+`BoundaryNodeRule.OGC_SFS_BOUNDARY_RULE`, i.e. Mod-2).
+
+The Java constructor signature is `RelatePointLocator(geom, isPrepared,
+bnRule)`; the manifold/`exact` parameters are the only additions (consistent
+with [`AdjacentEdgeLocator`](@ref)). In JTS, prepared mode swaps the
+per-polygon `SimplePointInAreaLocator` for a cached
+`IndexedPointInAreaLocator`; here the `is_prepared` flag is stored but both
+modes currently use the direct ring loop — prepared-mode spatial indexing is
+a perf follow-up (Task 22).
+"""
+mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule}
+    const m::M
+    const exact::E
+    const geom::G
+    const is_prepared::Bool
+    const boundary_rule::BR
+    # element collections extracted from the (possibly nested-GC) input.
+    # Java leaves these null when no element of that kind exists; here they
+    # are simply empty. Heterogeneous GI element types force `Any` element
+    # eltypes.
+    const points::Set{Tuple{Float64, Float64}}
+    const lines::Vector{Any}
+    const polygons::Vector{Any}
+    const line_boundary::LinearBoundary{BR, Tuple{Float64, Float64}}
+    const is_empty::Bool
+    # lazily built on the first multi-boundary point (Java: adjEdgeLocator)
+    adj_edge_locator::Union{Nothing, AdjacentEdgeLocator{M, E, Tuple{Float64, Float64}}}
+end
+
+function RelatePointLocator(m::Manifold, geom; exact,
+        is_prepared::Bool = false, boundary_rule::BoundaryNodeRule = Mod2Boundary())
+    #-- init(geom)
+    points = Set{Tuple{Float64, Float64}}()
+    lines = Any[]
+    polygons = Any[]
+    _extract_elements!(points, lines, polygons, geom)
+    # Java caches `isEmpty = geom.isEmpty()` (recursive emptiness); since
+    # `extractElements` skips empty elements, the input is recursively empty
+    # iff nothing was extracted.
+    is_empty = isempty(points) && isempty(lines) && isempty(polygons)
+    # Java builds `lineBoundary` only when lines exist; an empty
+    # LinearBoundary behaves identically (no boundary, no boundary points),
+    # so it is built unconditionally here.
+    line_boundary = LinearBoundary(lines, boundary_rule)
+    return RelatePointLocator(m, exact, geom, is_prepared, boundary_rule,
+        points, lines, polygons, line_boundary, is_empty, nothing)
+end
+
+has_boundary(loc::RelatePointLocator) = has_boundary(loc.line_boundary)
+
+# Port of RelatePointLocator.extractElements + addPoint/addLine/addPolygonal:
+# trait-dispatched traversal of the (possibly nested) collection structure.
+_extract_elements!(points, lines, polygons, geom) =
+    _extract_elements!(points, lines, polygons, GI.trait(geom), geom)
+
+function _extract_elements!(points, lines, polygons, trait::GI.AbstractTrait, geom)
+    GI.isempty(geom) && return nothing
+    if trait isa GI.PointTrait
+        #-- addPoint: normalized coordinate tuples, as in LinearBoundary
+        push!(points, _node_point(geom))
+    elseif trait isa GI.AbstractCurveTrait
+        #-- addLine (Java LinearRing extends LineString, hence AbstractCurve)
+        push!(lines, geom)
+    elseif trait isa Union{GI.PolygonTrait, GI.MultiPolygonTrait}
+        #-- addPolygonal: whole polygonal geometry kept as one element
+        push!(polygons, geom)
+    elseif trait isa GI.AbstractGeometryCollectionTrait
+        #-- covers GeometryCollection, MultiPoint, MultiLineString
+        for g in GI.getgeom(geom)
+            _extract_elements!(points, lines, polygons, g)
+        end
+    end
+    return nothing
+end
+
+"""
+    locate(loc::RelatePointLocator, p)
+
+The location (`LOC_*` code) of point `p` relative to the locator's geometry,
+under GC union semantics.
+"""
+locate(loc::RelatePointLocator, p) = dimloc_location(locate_with_dim(loc, p))
+
+"""
+    locate_line_end_with_dim(loc::RelatePointLocator, p)
+
+Locates a line endpoint, as a `DL_*` dimension-location code.
+In a mixed-dim GC, the line end point may also lie in an area.
+In this case the area location is reported.
+Otherwise, the dimloc is either `DL_LINE_BOUNDARY` or `DL_LINE_INTERIOR`,
+depending on the endpoint valence and the [`BoundaryNodeRule`](@ref) in place.
+"""
+function locate_line_end_with_dim(loc::RelatePointLocator, p)
+    #-- if a GC with areas, check for point on area
+    if !isempty(loc.polygons)
+        loc_poly = locate_on_polygons(loc, p, false, nothing)
+        loc_poly != LOC_EXTERIOR && return dimloc_area(loc_poly)
+    end
+    #-- not in area, so return line end location
+    return is_boundary(loc.line_boundary, p) ? DL_LINE_BOUNDARY : DL_LINE_INTERIOR
+end
+
+"""
+    locate_node(loc::RelatePointLocator, p, parent_polygonal)
+
+The location (`LOC_*` code) of a point `p` which is known to be a node of
+the geometry (i.e. a vertex or on an edge). `parent_polygonal` is the
+polygonal element the point is a node of (or `nothing`).
+"""
+locate_node(loc::RelatePointLocator, p, parent_polygonal) =
+    dimloc_location(locate_node_with_dim(loc, p, parent_polygonal))
+
+"""
+    locate_node_with_dim(loc::RelatePointLocator, p, parent_polygonal)
+
+The dimension-location (`DL_*` code) of a point `p` which is known to be a
+node of the geometry.
+"""
+locate_node_with_dim(loc::RelatePointLocator, p, parent_polygonal) =
+    locate_with_dim(loc, p, true, parent_polygonal)
+
+"""
+    locate_with_dim(loc::RelatePointLocator, p)
+
+Computes the topological location (`DL_*` dimension-location code) of a
+single point in a geometry, including the dimension of the geometry element
+the point is located in (if not in the exterior). It handles both
+single-element and multi-element geometries. The algorithm for multi-part
+geometries takes into account the SFS Boundary Determination Rule.
+"""
+locate_with_dim(loc::RelatePointLocator, p) = locate_with_dim(loc, p, false, nothing)
+
+# Private 4-argument form (Java `locateWithDim(p, isNode, parentPolygonal)`):
+# `is_node` indicates the coordinate is a node (on an edge) of the geometry.
+function locate_with_dim(loc::RelatePointLocator, p, is_node::Bool, parent_polygonal)
+    loc.is_empty && return DL_EXTERIOR
+
+    #=
+    In a polygonal geometry a node must be on the boundary.
+    (This is not the case for a mixed collection, since
+    the node may be in the interior of a polygon.)
+    =#
+    if is_node && GI.trait(loc.geom) isa Union{GI.PolygonTrait, GI.MultiPolygonTrait}
+        return DL_AREA_BOUNDARY
+    end
+
+    dim_loc = compute_dim_location(loc, p, is_node, parent_polygonal)
+    return dim_loc
+end
+
+# Port of RelatePointLocator.computeDimLocation.
+function compute_dim_location(loc::RelatePointLocator, p, is_node::Bool, parent_polygonal)
+    #-- check dimensions in order of precedence
+    if !isempty(loc.polygons)
+        loc_poly = locate_on_polygons(loc, p, is_node, parent_polygonal)
+        loc_poly != LOC_EXTERIOR && return dimloc_area(loc_poly)
+    end
+    if !isempty(loc.lines)
+        loc_line = locate_on_lines(loc, p, is_node)
+        loc_line != LOC_EXTERIOR && return dimloc_line(loc_line)
+    end
+    if !isempty(loc.points)
+        loc_pt = locate_on_points(loc, p)
+        loc_pt != LOC_EXTERIOR && return dimloc_point(loc_pt)
+    end
+    return DL_EXTERIOR
+end
+
+# Port of RelatePointLocator.locateOnPoints.
+function locate_on_points(loc::RelatePointLocator, p)
+    return _node_point(p) in loc.points ? LOC_INTERIOR : LOC_EXTERIOR
+end
+
+# Port of RelatePointLocator.locateOnLines.
+function locate_on_lines(loc::RelatePointLocator, p, is_node::Bool)
+    if is_boundary(loc.line_boundary, p)
+        return LOC_BOUNDARY
+    end
+    #-- must be on line, in interior
+    is_node && return LOC_INTERIOR
+
+    #TODO: index the lines
+    for line in loc.lines
+        #-- have to check every line, since any/all may contain point
+        l = locate_on_line(loc, p, is_node, line)
+        l != LOC_EXTERIOR && return l
+        #TODO: minor optimization - some BoundaryNodeRules can short-circuit
+    end
+    return LOC_EXTERIOR
+end
+
+# Port of RelatePointLocator.locateOnLine. (Java first short-circuits on the
+# cached line envelope; GI geometries do not cache extents, so the check is
+# skipped — perf follow-up alongside prepared-mode indexing, Task 22.)
+# `is_node` is unused, as in Java (kept for signature parity).
+function locate_on_line(loc::RelatePointLocator, p, is_node::Bool, line)
+    #-- Java: PointLocation.isOnLine over the coordinate sequence
+    n = GI.npoint(line)
+    q0 = _tuple_point(GI.getpoint(line, 1))
+    for i in 2:n
+        q1 = _tuple_point(GI.getpoint(line, i))
+        if rk_point_on_segment(loc.m, p, q0, q1; exact = loc.exact)
+            return LOC_INTERIOR
+        end
+        q0 = q1
+    end
+    return LOC_EXTERIOR
+end
+
+# Port of RelatePointLocator.locateOnPolygons.
+function locate_on_polygons(loc::RelatePointLocator, p, is_node::Bool, parent_polygonal)
+    num_bdy = 0
+    #TODO: use a spatial index on the polygons
+    for polygonal in loc.polygons
+        l = locate_on_polygonal(loc, p, is_node, parent_polygonal, polygonal)
+        if l == LOC_INTERIOR
+            return LOC_INTERIOR
+        end
+        if l == LOC_BOUNDARY
+            num_bdy += 1
+        end
+    end
+    if num_bdy == 1
+        return LOC_BOUNDARY
+    #-- check for point lying on adjacent boundaries
+    elseif num_bdy > 1
+        if loc.adj_edge_locator === nothing
+            loc.adj_edge_locator = AdjacentEdgeLocator(loc.m, loc.geom; exact = loc.exact)
+        end
+        return locate(loc.adj_edge_locator, p)
+    end
+    return LOC_EXTERIOR
+end
+
+# Port of RelatePointLocator.locateOnPolygonal (+ getLocator): Java
+# dispatches to a per-polygonal PointOnGeometryLocator (indexed when
+# prepared, simple otherwise); here the SimplePointInAreaLocator ring loop
+# is used for both modes (prepared-mode indexing is Task 22 territory).
+function locate_on_polygonal(loc::RelatePointLocator, p, is_node::Bool, parent_polygonal, polygonal)
+    if is_node && parent_polygonal === polygonal
+        return LOC_BOUNDARY
+    end
+    return _locate_point_in_polygonal(loc.m, p, GI.trait(polygonal), polygonal; exact = loc.exact)
+end
+
+#=
+Port of the SimplePointInAreaLocator logic used by `locateOnPolygonal`
+(SimplePointInAreaLocator.locate → locateInGeometry → locatePointInPolygon),
+with point-in-ring routed through the kernel: shell first, then standard
+even-odd composition over the holes. (The Java envelope short-circuit is
+skipped, as in `locate_on_line`.)
+=#
+function _locate_point_in_polygonal(m, p, ::GI.PolygonTrait, poly; exact)
+    GI.isempty(poly) && return LOC_EXTERIOR
+    shell_loc = rk_point_in_ring(m, p, GI.getexterior(poly); exact)
+    shell_loc != LOC_INTERIOR && return shell_loc
+    #-- now test if the point lies in or on the holes
+    for hole in GI.gethole(poly)
+        hole_loc = rk_point_in_ring(m, p, hole; exact)
+        hole_loc == LOC_BOUNDARY && return LOC_BOUNDARY
+        hole_loc == LOC_INTERIOR && return LOC_EXTERIOR
+        #-- if in EXTERIOR of this hole keep checking the other ones
+    end
+    return LOC_INTERIOR
+end
+
+function _locate_point_in_polygonal(m, p, ::GI.MultiPolygonTrait, mp; exact)
+    for poly in GI.getgeom(mp)
+        l = _locate_point_in_polygonal(m, p, GI.trait(poly), poly; exact)
+        l != LOC_EXTERIOR && return l
+    end
+    return LOC_EXTERIOR
+end
