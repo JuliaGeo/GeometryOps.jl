@@ -3,8 +3,12 @@
 # the Java file; the Java's commented-out checks are kept commented for
 # parity.
 #
-# Prepared-mode checks (`check_prepared`/`check_prepared_matches`) are
-# skipped until Task 22 lands prepared mode; flip `RUN_PREPARED` there.
+# Prepared-mode checks (`check_prepared`/`check_prepared_matches`) follow
+# RelateNGTestCase.checkPrepared/checkPreparedMatches: every result through
+# the `PreparedRelate` path must equal the unprepared result. In addition
+# (GO-side, Task 22) the full-matrix fixture pairs are recorded as they run
+# and a wholesale prepared-vs-unprepared loop over a representative sample
+# of them runs at the end, plus a cache-reuse smoke test.
 
 using Test
 import GeometryOps as GO
@@ -12,13 +16,18 @@ import GeoInterface as GI
 
 include(joinpath(@__DIR__, "wkt_util.jl"))
 
-const RUN_PREPARED = false
+const RUN_PREPARED = true
 
 # =========================================================================
 # RelateNGTestCase.java helpers
 # =========================================================================
 
+# Every full-matrix fixture pair is recorded as it runs; the wholesale
+# prepared-mode loop at the end of the file samples from this list.
+const PREPARED_FIXTURES = Tuple{String, String}[]
+
 function check_relate(awkt, bwkt, expected_im::String)
+    push!(PREPARED_FIXTURES, (awkt, bwkt))
     a, b = from_wkt(awkt), from_wkt(bwkt)
     @test string(GO.relate(GO.RelateNG(), a, b)) == expected_im
 end
@@ -69,13 +78,32 @@ function check_equals(wkta, wktb, expected::Bool)
     check_predicate(GO.pred_equalstopo, wktb, wkta, expected)
 end
 
+# The named predicates checked by RelateNGTestCase.checkPrepared, in the
+# same order as the Java method.
+const PREPARED_PREDICATES = [
+    ("equalsTopo", GO.pred_equalstopo),
+    ("intersects", GO.pred_intersects),
+    ("disjoint", GO.pred_disjoint),
+    ("covers", GO.pred_covers),
+    ("coveredBy", GO.pred_coveredby),
+    ("within", GO.pred_within),
+    ("contains", GO.pred_contains),
+    ("crosses", GO.pred_crosses),
+    ("touches", GO.pred_touches),
+]
+
 function check_prepared(wkta, wktb)
     if !RUN_PREPARED
         @test_skip "prepared mode (Task 22)"
         return
     end
-    # Task 22: prepared-vs-unprepared equality across all named predicates +
-    # the full matrix, per RelateNGTestCase.checkPrepared.
+    a, b = from_wkt(wkta), from_wkt(wktb)
+    prep_a = GO.prepare(GO.RelateNG(), a)
+    for (name, pred_factory) in PREPARED_PREDICATES
+        @test GO.relate_predicate(prep_a, pred_factory(), b) ==
+            GO.relate_predicate(GO.RelateNG(), pred_factory(), a, b)
+    end
+    @test string(GO.relate(prep_a, b)) == string(GO.relate(GO.RelateNG(), a, b))
 end
 
 function check_prepared_matches(wkta, wktb, pattern::String)
@@ -83,6 +111,9 @@ function check_prepared_matches(wkta, wktb, pattern::String)
         @test_skip "prepared mode (Task 22)"
         return
     end
+    a, b = from_wkt(wkta), from_wkt(wktb)
+    prep_a = GO.prepare(GO.RelateNG(), a)
+    @test GO.relate(prep_a, b, pattern) == GO.relate(GO.RelateNG(), a, b, pattern)
 end
 
 # The empty-geometry WKT list (RelateNGTest.java `empties`), hoisted above
@@ -739,6 +770,77 @@ end
     pattern_trans = "T*F**F***"   # IntersectionMatrix.transpose(pattern)
     check_prepared_matches(a, b, pattern)
     check_prepared_matches(b, a, pattern_trans)
+end
+
+# ===  Prepared mode, GO-side additions (not in RelateNGTest.java)  ===
+
+# Wholesale prepared-vs-unprepared equality over the full-matrix fixture
+# pairs recorded by `check_relate` above (they span P/L/A x P/L/A and the
+# empty/GC cases). An evenly spaced sample capped at 40 pairs — plus every
+# GeometryCollection pair, and one explicit mixed GC since RelateNGTest's
+# only GC matrix fixtures are empty — keeps the added runtime modest
+# (`check_prepared` is ~20 engine evaluations per pair).
+@testset "testPreparedWholesale" begin
+    fixtures = unique(PREPARED_FIXTURES)
+    @test length(fixtures) >= 30
+    idxs = unique(round.(Int, range(1, length(fixtures); length = min(40, length(fixtures)))))
+    sample = fixtures[idxs]
+    for fix in fixtures
+        is_gc = occursin("GEOMETRYCOLLECTION", fix[1]) || occursin("GEOMETRYCOLLECTION", fix[2])
+        is_gc && !(fix in sample) && push!(sample, fix)
+    end
+    push!(sample, (
+        "GEOMETRYCOLLECTION (POINT (1 1), LINESTRING (0 5, 5 5), POLYGON ((0 0, 0 3, 3 3, 3 0, 0 0)))",
+        "POLYGON ((2 2, 2 6, 6 6, 6 2, 2 2))",
+    ))
+    for (awkt, bwkt) in sample
+        check_prepared(awkt, bwkt)
+    end
+end
+
+# Cache-reuse smoke test: one `PreparedRelate` evaluated against several
+# different B geometries, each twice, exercising the prebuilt-tree path
+# (large A), the below-threshold nested-loop path (small A), and the
+# self-noding path that bypasses the cached edges (line A).
+@testset "testPreparedCacheReuse" begin
+    #-- large A (64 segments >= threshold): the segment tree is prebuilt
+    n = 64
+    coords = [(5 + 4 * cospi(2k / n), 5 + 4 * sinpi(2k / n)) for k in 0:(n - 1)]
+    push!(coords, coords[1])
+    a = GI.Polygon([coords])
+    prep = GO.prepare(GO.RelateNG(), a)
+    @test prep.edge_tree !== nothing
+    bs = [
+        GI.Polygon([[(4.0, 4.0), (11.0, 4.0), (11.0, 11.0), (4.0, 11.0), (4.0, 4.0)]]),
+        GI.LineString([(-1.0, 5.0), (11.0, 5.0)]),
+        GI.Point((20.0, 20.0)),
+    ]
+    for b in bs
+        expected = string(GO.relate(GO.RelateNG(), a, b))
+        @test string(GO.relate(prep, b)) == expected
+        #-- second evaluation against the same prepared instance
+        @test string(GO.relate(prep, b)) == expected
+        @test GO.relate_predicate(prep, GO.pred_intersects(), b) ==
+            GO.relate_predicate(GO.RelateNG(), GO.pred_intersects(), a, b)
+    end
+
+    #-- small A: below the threshold no tree is prebuilt (nested-loop reuse)
+    a2 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+    prep2 = GO.prepare(GO.RelateNG(), a2)
+    @test prep2.edge_tree === nothing
+    b21 = GI.Polygon([[(0.5, 0.5), (1.5, 0.5), (1.5, 1.5), (0.5, 1.5), (0.5, 0.5)]])
+    b22 = GI.LineString([(0.5, -1.0), (0.5, 2.0)])
+    @test string(GO.relate(prep2, b21)) == string(GO.relate(GO.RelateNG(), a2, b21))
+    @test string(GO.relate(prep2, b22)) == string(GO.relate(GO.RelateNG(), a2, b22))
+
+    #-- self-crossing line A: matrix evaluation requires self-noding, which
+    #-- bypasses the cached edges (re-extracted per call, envelope-filtered)
+    a3 = GI.LineString([(0.0, 0.0), (5.0, 5.0), (5.0, 0.0), (0.0, 5.0)])
+    prep3 = GO.prepare(GO.RelateNG(), a3)
+    b3 = GI.LineString([(0.0, 2.0), (6.0, 2.0)])
+    expected3 = string(GO.relate(GO.RelateNG(), a3, b3))
+    @test string(GO.relate(prep3, b3)) == expected3
+    @test string(GO.relate(prep3, b3)) == expected3
 end
 
 end # @testset "RelateNGTest"
