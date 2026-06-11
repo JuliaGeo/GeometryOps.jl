@@ -55,7 +55,8 @@ Now let's pick a `destination` CRS for displaying our map. Here we'll pick [nate
 destination_crs = "+proj=natearth2"
 ````
 
-Let's add land area for context. First, download and open the [Natural Earth](https://www.naturalearthdata.com) global land polygons at 110 m resolution.`GeoMakie` ships with this particular dataset, so we will access it from there.
+Let's add land area for context. First, download and open the [Natural Earth](https://www.naturalearthdata.com) global land polygons at 110 m resolution.  `GeoMakie` ships with this particular dataset, so we will access it from there.
+Note that this will be a path on your local machine, so you could easily point it to any other `.geojson` file you have.
 
 ````@example geospatial_geometry
 land_path = GeoMakie.assetpath("ne_110m_land.geojson")
