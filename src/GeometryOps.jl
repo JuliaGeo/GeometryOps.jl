@@ -90,6 +90,10 @@ include("methods/geom_relations/common.jl")
 include("methods/geom_relations/relateng/de9im.jl")
 include("methods/geom_relations/relateng/topology_predicate.jl")
 include("methods/geom_relations/relateng/relate_predicates.jl")
+# Kernel files: after de9im.jl (they use the `LOC_` constants) and before the
+# topology-layer files (Task 6+) that will call the kernel functions.
+include("methods/geom_relations/relateng/kernel.jl")
+include("methods/geom_relations/relateng/kernel_planar.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")
