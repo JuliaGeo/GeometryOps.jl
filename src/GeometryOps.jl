@@ -111,6 +111,8 @@ include("methods/geom_relations/relateng/relate_geometry.jl")
 # Topology computer: after the input facade and node topology (it drives
 # RelateGeometry locates, NodeSections grouping and RelateNode evaluation).
 include("methods/geom_relations/relateng/topology_computer.jl")
+# Edge intersector: feeds segment-pair intersections into the computer.
+include("methods/geom_relations/relateng/edge_intersector.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")
