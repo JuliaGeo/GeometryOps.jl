@@ -231,6 +231,16 @@ function is_touches(im::DE9IM, dimA::Integer, dimB::Integer)
 end
 
 # Boundary node rules (JTS BoundaryNodeRule.java). Zero-size structs.
+"""
+    BoundaryNodeRule
+
+Abstract supertype for rules deciding which endpoints of a linear geometry
+are on its boundary, given the number of line ends meeting at the point
+(port of JTS `BoundaryNodeRule`). Concrete rules are [`Mod2Boundary`](@ref)
+(the OGC SFS default), `EndpointBoundary`, `MultivalentEndpointBoundary`,
+and `MonovalentEndpointBoundary`; each implements
+`is_in_boundary(rule, boundary_count)`.
+"""
 abstract type BoundaryNodeRule end
 "OGC SFS standard rule: a vertex is on the boundary iff an odd number of line ends meet it (Mod-2 rule)."
 struct Mod2Boundary <: BoundaryNodeRule end
