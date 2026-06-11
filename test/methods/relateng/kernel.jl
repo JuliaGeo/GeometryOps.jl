@@ -21,6 +21,8 @@ m = Planar()
     c = (0.5, nextfloat(0.5))   # above the line by one ulp
     @test c[2] != 0.5           # guard: perturbation survives rounding
     @test GO.rk_orient(m, a, b, c; exact = True()) == GO.rk_orient(m, a, b, (0.5, 0.6); exact = True())
+    # plain FP determinant evaluates to exactly 0.0 here; true sign is +1
+    @test GO.rk_orient(m, (12.0,12.0), (24.0,24.0), (0.5, nextfloat(0.5)); exact = True()) > 0
 end
 
 @testset "rk_point_on_segment" begin

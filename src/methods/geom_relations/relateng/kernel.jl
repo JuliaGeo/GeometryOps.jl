@@ -16,11 +16,12 @@ exactly like `Predicates.orient`.
 
 The contract — what every manifold implementation must provide:
 
-    rk_orient(m, a, b, c; exact)::Integer
+    rk_orient(m, a, b, c; exact)
 
-Orientation of point `c` relative to the oriented segment `(a, b)`:
-`> 0` if `c` is to the left, `< 0` if to the right, `0` if collinear
-(or `a == b`). With `exact = True()` the sign must be correct even for
+Orientation of point `c` relative to the oriented segment `(a, b)`,
+returned as a sign-valued number: `> 0` (counterclockwise, `c` to the
+left), `< 0` (clockwise, `c` to the right), `== 0` (collinear, or
+`a == b`). With `exact = True()` the sign must be correct even for
 adversarial near-collinear inputs.
 
     rk_point_on_segment(m, p, q0, q1; exact)::Bool
