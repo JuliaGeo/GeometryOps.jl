@@ -11,8 +11,10 @@
 # Java counterpart. Idiom changes:
 #
 # - The Java class holds `geomA` (for prepared mode); here the unprepared
-#   entry points build both `RelateGeometry`s per call. Prepared mode is
-#   Task 22 (`PreparedRelate`).
+#   entry points build both `RelateGeometry`s per call, while prepared mode
+#   carries the A side — with its lazy caches forced and the segment
+#   strings/segment tree prebuilt — in a [`PreparedRelate`](@ref), threaded
+#   through the evaluation as the optional `prep` argument.
 # - The algorithm configuration (manifold, accelerator, exactness flag,
 #   boundary node rule) travels in the `RelateNG` algorithm struct, the
 #   house `Algorithm{M}` idiom (cf. `FosterHormannClipping`).
@@ -125,8 +127,11 @@ end
 ==========================================================================#
 
 # Port of RelateNG.evaluate(Geometry b, TopologyPredicate predicate):
-# the phased evaluation against a prebuilt A-side RelateGeometry.
-function evaluate!(alg::RelateNG, geom_a::RelateGeometry, b, predicate::TopologyPredicate)
+# the phased evaluation against a prebuilt A-side RelateGeometry. In
+# prepared mode `prep` is the `PreparedRelate` carrying the cached A-side
+# edges/index; otherwise `nothing`.
+function evaluate!(alg::RelateNG, geom_a::RelateGeometry, b, predicate::TopologyPredicate,
+        prep = nothing)
     #-- fast envelope checks
     if !has_required_envelope_interaction(geom_a, b, predicate)
         return false
@@ -161,7 +166,7 @@ function evaluate!(alg::RelateNG, geom_a::RelateGeometry, b, predicate::Topology
     is_result_known(tc) && return get_result(tc)
 
     if has_edges(geom_a) && has_edges(geom_b)
-        compute_at_edges!(alg, tc, geom_a, geom_b)
+        compute_at_edges!(alg, tc, geom_a, geom_b, prep)
     end
 
     #-- after all processing, set remaining unknown values in IM
@@ -414,7 +419,7 @@ end
 # filter passed to `extract_segment_strings` is never `nothing`
 # (see the warning on that function).
 function compute_at_edges!(alg::RelateNG, tc::TopologyComputer,
-        geom_a::RelateGeometry, geom_b::RelateGeometry)
+        geom_a::RelateGeometry, geom_b::RelateGeometry, prep = nothing)
     ext_a = get_extent(geom_a)
     ext_b = get_extent(geom_b)
     (ext_a === nothing || ext_b === nothing) && return nothing
@@ -424,9 +429,12 @@ function compute_at_edges!(alg::RelateNG, tc::TopologyComputer,
     edges_b = extract_segment_strings(geom_b, GEOM_B, env_int)
 
     if is_self_noding_required(tc)
+        #-- predicates requiring self-noding bypass the prepared cache: as in
+        #-- Java, computeEdgesAll re-extracts the A edges per evaluation,
+        #-- filtered by the interaction envelope (`prep` is not forwarded)
         compute_edges_all!(alg, tc, geom_a, edges_b, env_int)
     else
-        compute_edges_mutual!(alg, tc, geom_a, edges_b, env_int)
+        compute_edges_mutual!(alg, tc, geom_a, edges_b, env_int, prep)
     end
     is_result_known(tc) && return nothing
 
@@ -453,13 +461,182 @@ function compute_edges_all!(alg::RelateNG, tc::TopologyComputer,
     return nothing
 end
 
-# Port of RelateNG.computeEdgesMutual (private). (The Java prepared-mode
-# index reuse — null extract filter + cached MCIndexSegmentSetMutualIntersector
-# — is Task 22.)
+# Port of RelateNG.computeEdgesMutual (private). In prepared mode (`prep`
+# a `PreparedRelate`) the cached A-side segment strings and prebuilt segment
+# tree are reused — the port of Java's cached
+# `MCIndexSegmentSetMutualIntersector`, which is built over A edges extracted
+# with a *null* filter (`envExtract = geomA.isPrepared() ? null : envInt`):
+# the cached strings are unfiltered so they serve any future B.
 function compute_edges_mutual!(alg::RelateNG, tc::TopologyComputer,
-        geom_a::RelateGeometry, edges_b, env_int)
-    edges_a = extract_segment_strings(geom_a, GEOM_A, env_int)
-    process_edge_intersections!(tc, edges_a, edges_b, alg.accelerator)
+        geom_a::RelateGeometry, edges_b, env_int, prep = nothing)
+    if prep === nothing
+        edges_a = extract_segment_strings(geom_a, GEOM_A, env_int)
+        process_edge_intersections!(tc, edges_a, edges_b, alg.accelerator)
+    else
+        _process_prepared_edges!(tc, prep.segs_a, prep.edge_tree, edges_b)
+    end
+    return nothing
+end
+
+#==========================================================================
+# Prepared mode (port of the RelateNG.prepare entry points and the
+# prepared-mode branches)
+==========================================================================#
+
+# The prebuilt A-side segment index reused across evaluations: an STRtree
+# over the per-segment extents of the cached (unfiltered) A segment strings,
+# plus the owner table mapping each flat tree index back to
+# (string index, segment index). The stand-in for Java's cached
+# `MCIndexSegmentSetMutualIntersector`.
+struct PreparedEdgeIndex{T}
+    tree::T
+    owners::Vector{NTuple{2, Int}}
+end
+
+"""
+    PreparedRelate{ALG, RG, SS, T}
+
+A prepared RelateNG instance for optimized repeated evaluation of
+topological relationships against a single geometry `a` (the "prepared
+mode" of JTS `RelateNG.prepare`). Holds:
+
+- `alg`: the [`RelateNG`](@ref) algorithm configuration,
+- `geom_a`: the A-side [`RelateGeometry`](@ref), constructed with
+  `is_prepared = true` and with its lazy locator/unique-points caches
+  forced,
+- `segs_a`: the A segment strings, extracted once *without* an
+  interaction-envelope filter so they serve any B geometry,
+- `edge_tree`: the prebuilt [`PreparedEdgeIndex`](@ref) over `segs_a`'s
+  segment extents, or `nothing` below the accelerator size threshold
+  (where the nested loop wins).
+
+Construct with [`prepare`](@ref); evaluate with [`relate`](@ref) /
+[`relate_predicate`](@ref).
+"""
+struct PreparedRelate{ALG <: RelateNG, RG <: RelateGeometry,
+        SS <: AbstractVector{<:RelateSegmentString}, T <: Union{Nothing, PreparedEdgeIndex}}
+    alg::ALG
+    geom_a::RG
+    segs_a::SS
+    edge_tree::T
+end
+
+"""
+    prepare(alg::RelateNG, a)::PreparedRelate
+
+Creates a prepared relate instance to optimize the repeated evaluation of
+relationships against the single geometry `a`.
+
+Port of `RelateNG.prepare(Geometry)` (the algorithm's `boundary_rule` plays
+the role of the `prepare(Geometry, BoundaryNodeRule)` overload). The A-side
+`RelateGeometry` is constructed with `is_prepared = true`, and the lazy
+caches that the Java instance accumulates across evaluations are forced
+eagerly:
+
+- the [`RelatePointLocator`](@ref) — in Java the prepared flag selects the
+  indexed point-in-area locator; here the locator is identical either way
+  and the flag is stored for parity (see `point_locator.jl`);
+- the unique-point set, when `a` has effective dimension P (the only case
+  the P/P fast path consults it);
+- the A segment strings, extracted ONCE **without** an interaction-envelope
+  filter (Java's prepared-mode `envExtract = null` in `computeEdgesMutual`)
+  so the cache serves any future B, plus the prebuilt segment tree over
+  them.
+
+!!! note
+    Predicates whose evaluation requires self-noding
+    (`is_self_noding_required`) bypass the cached edges entirely: as in the
+    Java prepared branch, `computeEdgesAll` re-extracts the A edges per
+    evaluation, filtered by the A/B interaction envelope.
+"""
+function prepare(alg::RelateNG, a)
+    m = GeometryOpsCore.manifold(alg)
+    geom_a = RelateGeometry(m, a; exact = alg.exact, is_prepared = true,
+        boundary_rule = alg.boundary_rule)
+    #-- force the lazy caches that repeated evaluations reuse
+    _get_locator(geom_a)
+    get_dimension_real(geom_a) == DIM_P && get_unique_points(geom_a)
+    #-- cached A edges: extracted once, unfiltered (Java's null envExtract)
+    segs_a = extract_segment_strings(geom_a, GEOM_A, nothing)
+    edge_tree = _build_prepared_edge_index(m, alg.accelerator, segs_a)
+    return PreparedRelate(alg, geom_a, segs_a, edge_tree)
+end
+
+"""
+    relate(p::PreparedRelate, b)::DE9IM
+
+Computes the DE-9IM matrix for the topological relationship of the prepared
+geometry to `b`. Port of the instance method `RelateNG.evaluate(Geometry)`.
+"""
+function relate(p::PreparedRelate, b)
+    pred = RelateMatrixPredicate()
+    relate_predicate(p, pred, b)
+    return result_im(pred)
+end
+
+"""
+    relate(p::PreparedRelate, b, im_pattern::AbstractString)::Bool
+
+Tests whether the topological relationship of the prepared geometry to `b`
+matches the DE-9IM pattern. Port of `RelateNG.evaluate(Geometry, String)`.
+"""
+relate(p::PreparedRelate, b, im_pattern::AbstractString) =
+    relate_predicate(p, pred_matches(im_pattern), b)
+
+"""
+    relate_predicate(p::PreparedRelate, predicate::TopologyPredicate, b)::Bool
+
+Tests whether the topological relationship of the prepared geometry to `b`
+satisfies the predicate. Port of the instance method
+`RelateNG.evaluate(Geometry, TopologyPredicate)` in prepared mode.
+"""
+relate_predicate(p::PreparedRelate, predicate::TopologyPredicate, b) =
+    evaluate!(p.alg, p.geom_a, b, predicate, p)
+
+# Whether to prebuild the A-side segment tree, mirroring the dispatch of
+# `process_edge_intersections!` + `_select_edge_set_accelerator`: an explicit
+# `NestedLoop` accelerator never uses a tree; `AutoAccelerator` uses one on
+# `Planar` above the clipping size threshold only (B is unknown at prepare
+# time, so the decision is made on A's segment count alone); any other
+# explicit accelerator always takes the tree path.
+_build_prepared_edge_index(::Manifold, ::IntersectionAccelerator, segs_a) =
+    _make_prepared_edge_index(segs_a)
+_build_prepared_edge_index(::Manifold, ::NestedLoop, segs_a) = nothing
+_build_prepared_edge_index(::Manifold, ::AutoAccelerator, segs_a) = nothing
+function _build_prepared_edge_index(::Planar, ::AutoAccelerator, segs_a)
+    _total_segment_count(segs_a) >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS ||
+        return nothing
+    return _make_prepared_edge_index(segs_a)
+end
+
+function _make_prepared_edge_index(segs_a)
+    extents, owners = _segment_extent_table(segs_a)
+    isempty(extents) && return nothing
+    return PreparedEdgeIndex(STRtree(extents), owners)
+end
+
+# The prepared counterpart of the mutual-pair enumeration: no prebuilt tree
+# means the cached strings go through the plain nested loop.
+_process_prepared_edges!(tc::TopologyComputer, segs_a, ::Nothing, edges_b) =
+    process_edge_intersections!(tc, segs_a, edges_b, NestedLoop())
+
+# Tree path: the prebuilt A tree is dual-traversed against a per-call tree
+# over B's (envelope-filtered) segment extents — cf. the unprepared tree path
+# in `process_edge_intersections!`, which builds both trees per call.
+function _process_prepared_edges!(tc::TopologyComputer, segs_a,
+        eidx::PreparedEdgeIndex, edges_b;
+        m::Manifold = _manifold(tc), exact = _exact(tc))
+    extents_b, owners_b = _segment_extent_table(edges_b)
+    isempty(extents_b) && return nothing
+    tree_b = STRtree(extents_b)
+    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, eidx.tree, tree_b) do ia, ib
+        (sa, ka) = eidx.owners[ia]
+        (sb, kb) = owners_b[ib]
+        process_intersections!(tc, segs_a[sa], ka, edges_b[sb], kb; m, exact)
+        #-- the Java noder's isDone() early-exit hook
+        is_result_known(tc) && return Action(:full_return, nothing)
+        return nothing
+    end
     return nothing
 end
 
