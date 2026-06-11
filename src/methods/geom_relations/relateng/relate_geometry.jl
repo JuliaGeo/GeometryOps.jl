@@ -438,7 +438,7 @@ function _extract_segment_strings_from_atomic!(rg::RelateGeometry, is_a::Bool, g
     rg.element_id += Int32(1)
     trait = GI.trait(geom)
     if trait isa GI.AbstractCurveTrait
-        pts = Tuple{Float64, Float64}[_node_point(p) for p in GI.getpoint(geom)]
+        pts = _node_points(geom)
         ss = _rss_create_line(pts, is_a, rg.element_id, rg)
         push!(seg_strings, ss)
     elseif trait isa GI.AbstractPolygonTrait
@@ -461,7 +461,7 @@ function _extract_ring_to_segment_string!(rg::RelateGeometry, is_a::Bool, ring, 
 
     #-- orient the points if required
     require_cw = ring_id == 0
-    pts = Tuple{Float64, Float64}[_node_point(p) for p in GI.getpoint(ring)]
+    pts = _node_points(ring)
     pts = _orient_ring(rg.m, pts, require_cw; exact = rg.exact)
     ss = _rss_create_ring(pts, is_a, rg.element_id, ring_id, parent_poly, rg)
     push!(seg_strings, ss)
