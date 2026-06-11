@@ -100,6 +100,9 @@ include("methods/geom_relations/relateng/node_sections.jl")
 # Polygon node converter: after node sections (rewrites a polygon's
 # NodeSection group into maximal-ring structure for `create_node`).
 include("methods/geom_relations/relateng/polygon_node_converter.jl")
+# Node-edge topology: after node sections and the converter (`create_node`
+# assembles a RelateNode from converted sections).
+include("methods/geom_relations/relateng/relate_node.jl")
 # Point location: after the kernel (uses `_node_point` and de9im constants).
 include("methods/geom_relations/relateng/point_locator.jl")
 # Input facade: after the point locator (RelateGeometry wraps a lazy
