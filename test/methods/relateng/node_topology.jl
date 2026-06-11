@@ -1,10 +1,13 @@
-# Tests for the RelateNG node-topology layer (node_sections.jl):
-# `NodeSection` accessors and comparators, and the `NodeSections` collector.
-# Ports of JTS NodeSection.java / NodeSections.java. No dedicated JUnit file
-# exists for these classes; tests follow the implementation plan (Task 15):
-# EdgeAngleComparator ordering, isProper/isNodeAtVertex semantics, the
-# prepareSections ordering invariant, and the (partial, see node_sections.jl)
-# createNode port on a simple two-area touch.
+# Tests for the RelateNG node-topology layer (node_sections.jl and
+# polygon_node_converter.jl): `NodeSection` accessors and comparators, the
+# `NodeSections` collector, and the `PolygonNodeConverter` port.
+# Ports of JTS NodeSection.java / NodeSections.java / PolygonNodeConverter.java.
+# No dedicated JUnit file exists for the first two classes; those tests follow
+# the implementation plan (Task 15): EdgeAngleComparator ordering,
+# isProper/isNodeAtVertex semantics, the prepareSections ordering invariant,
+# and the (partial, see node_sections.jl) createNode port on a simple
+# two-area touch. The converter tests port PolygonNodeConverterTest.java
+# in full (Task 16).
 
 using Test
 import GeometryOps as GO
@@ -131,13 +134,15 @@ end
     s_shell_a1 = make_section(; is_a = true, dim = GO.DIM_A, id = 1, ring_id = 0)
     s_hole_a1 = make_section(; is_a = true, dim = GO.DIM_A, id = 1, ring_id = 1)
     s_shell_a2 = make_section(; is_a = true, dim = GO.DIM_A, id = 2, ring_id = 0)
+    s_line_b = make_section(; is_a = false, dim = GO.DIM_L, id = 3, ring_id = -1, v1 = nothing)
     s_shell_b = make_section(; is_a = false, dim = GO.DIM_A, id = 1, ring_id = 0)
-    for s in (s_shell_b, s_shell_a2, s_hole_a1, s_line_a, s_shell_a1)
+    for s in (s_shell_b, s_shell_a2, s_hole_a1, s_line_b, s_line_a, s_shell_a1)
         GO.add_node_section!(nss, s)
     end
     GO.prepare_sections!(nss)
-    # lines before areas; sections of the same polygon contiguous; A before B.
-    @test nss.sections == [s_line_a, s_shell_a1, s_hole_a1, s_shell_a2, s_shell_b]
+    # A before B (dominating dimension: the B line sorts after every A area);
+    # within a geometry lines before areas; same-polygon sections contiguous.
+    @test nss.sections == [s_line_a, s_shell_a1, s_hole_a1, s_shell_a2, s_line_b, s_shell_b]
 end
 
 @testset "NodeSections" begin
@@ -176,10 +181,114 @@ end
     @test out[1] === sa
     @test out[2] === sb
 
-    # Multiple sections of the same polygon route through PolygonNodeConverter,
-    # which is stubbed until Task 16.
+    # Multiple sections of the same polygon route through PolygonNodeConverter
+    # (Task 16): two shell corners of one polygon are rewritten to themselves,
+    # in edge-angle order ((0,1) at 90° before (-1,0) at 180°).
     nss_multi = GO.NodeSections(NODE)
-    GO.add_node_section!(nss_multi, make_section(; id = 1, v0 = (0.0, 1.0), v1 = (1.0, 0.0)))
-    GO.add_node_section!(nss_multi, make_section(; id = 1, v0 = (-1.0, 0.0), v1 = (0.0, -1.0)))
-    @test_throws ErrorException GO.create_node(m, nss_multi; exact = True())
+    multi_1 = make_section(; id = 1, v0 = (0.0, 1.0), v1 = (1.0, 0.0))
+    multi_2 = make_section(; id = 1, v0 = (-1.0, 0.0), v1 = (0.0, -1.0))
+    GO.add_node_section!(nss_multi, multi_1)
+    GO.add_node_section!(nss_multi, multi_2)
+    out_multi = GO.create_node(m, nss_multi; exact = True())
+    @test length(out_multi) == 2
+    @test GO.compare_to(out_multi[1], multi_1) == 0
+    @test GO.compare_to(out_multi[2], multi_2) == 0
+end
+
+# Port of JTS PolygonNodeConverterTest.java — every test method, plus the
+# checkConversion / checkSectionsEqual / sort / section helpers. The Java
+# section helpers build A-geometry area sections of polygon 1 at node (5,5)
+# (no parent polygonal, node not at a vertex); equality of section lists is
+# up to edge-angle order, compared with NodeSection.compareTo.
+@testset "PolygonNodeConverter" begin
+    m = Planar()
+
+    # Port of section(ringId, v0x, v0y, nx, ny, v1x, v1y).
+    section(ring_id, v0x, v0y, nx, ny, v1x, v1y) = GO.NodeSection(
+        true, GO.DIM_A, Int32(1), Int32(ring_id), nothing, false,
+        (Float64(v0x), Float64(v0y)),
+        GO.vertex_node((Float64(nx), Float64(ny))),
+        (Float64(v1x), Float64(v1y)))
+    # Ports of sectionShell / sectionHole.
+    section_shell(coords...) = section(0, coords...)
+    section_hole(coords...) = section(1, coords...)
+
+    # Port of sort(List<NodeSection>): EdgeAngleComparator ordering.
+    sort_sections!(ns) =
+        sort!(ns; lt = (a, b) -> GO.edge_angle_compare(m, a, b; exact = True()) < 0)
+
+    # Port of checkSectionsEqual.
+    function is_sections_equal(ns1, ns2)
+        length(ns1) == length(ns2) || return false
+        sort_sections!(ns1)
+        sort_sections!(ns2)
+        for i in eachindex(ns1)
+            GO.compare_to(ns1[i], ns2[i]) == 0 || return false
+        end
+        return true
+    end
+
+    # Port of checkConversion.
+    function check_conversion(input, expected)
+        actual = GO.polygon_node_convert(m, input; exact = True())
+        @test is_sections_equal(actual, expected)
+    end
+
+    @testset "testShells" begin
+        check_conversion(
+            GO.NodeSection[
+                section_shell(1, 1, 5, 5, 9, 9),
+                section_shell(8, 9, 5, 5, 6, 9),
+                section_shell(4, 9, 5, 5, 2, 9)],
+            GO.NodeSection[
+                section_shell(1, 1, 5, 5, 9, 9),
+                section_shell(8, 9, 5, 5, 6, 9),
+                section_shell(4, 9, 5, 5, 2, 9)])
+    end
+
+    @testset "testShellAndHole" begin
+        check_conversion(
+            GO.NodeSection[
+                section_shell(1, 1, 5, 5, 9, 9),
+                section_hole(6, 0, 5, 5, 4, 0)],
+            GO.NodeSection[
+                section_shell(1, 1, 5, 5, 4, 0),
+                section_shell(6, 0, 5, 5, 9, 9)])
+    end
+
+    @testset "testShellsAndHoles" begin
+        check_conversion(
+            GO.NodeSection[
+                section_shell(1, 1, 5, 5, 9, 9),
+                section_hole(6, 0, 5, 5, 4, 0),
+                section_shell(8, 8, 5, 5, 1, 8),
+                section_hole(4, 8, 5, 5, 6, 8)],
+            GO.NodeSection[
+                section_shell(1, 1, 5, 5, 4, 0),
+                section_shell(6, 0, 5, 5, 9, 9),
+                section_shell(4, 8, 5, 5, 1, 8),
+                section_shell(8, 8, 5, 5, 6, 8)])
+    end
+
+    @testset "testShellAnd2Holes" begin
+        check_conversion(
+            GO.NodeSection[
+                section_shell(1, 1, 5, 5, 9, 9),
+                section_hole(7, 0, 5, 5, 6, 0),
+                section_hole(4, 0, 5, 5, 3, 0)],
+            GO.NodeSection[
+                section_shell(1, 1, 5, 5, 3, 0),
+                section_shell(4, 0, 5, 5, 6, 0),
+                section_shell(7, 0, 5, 5, 9, 9)])
+    end
+
+    @testset "testHoles" begin
+        check_conversion(
+            GO.NodeSection[
+                section_hole(7, 0, 5, 5, 6, 0),
+                section_hole(4, 0, 5, 5, 3, 0)],
+            GO.NodeSection[
+                section_shell(4, 0, 5, 5, 6, 0),
+                section_shell(7, 0, 5, 5, 3, 0)])
+    end
 end
