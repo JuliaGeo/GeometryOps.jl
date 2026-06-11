@@ -31,7 +31,7 @@
 The DE-9IM accumulation engine of RelateNG: translates topological events
 into dimension updates on `predicate` and collects edge-intersection
 [`NodeSection`](@ref)s per node (keyed by symbolic [`NodeKey`](@ref),
-design D2) for [`evaluate_nodes!`](@ref).
+design D2) for `evaluate_nodes!`.
 
 Port of JTS `TopologyComputer`.
 """
@@ -614,21 +614,21 @@ function evaluate_node_edges!(tc::TopologyComputer, node::RelateNode)
 end
 
 #==========================================================================
-# Locating symbolic nodes in an input geometry
-#
-# Java's updateNodeLocation/evaluateNode pass the node Coordinate into
-# RelateGeometry.locateNode/isNodeInArea. Here the node may be a symbolic
-# proper-crossing key (design D2) with no stored coordinate:
-#
-# - Vertex keys locate by their exact coordinate, as in Java.
-# - Crossing keys on a *polygonal* geometry need no coordinate at all: a
-#   node of a Polygon/MultiPolygon lies on its boundary (the same exact
-#   shortcut as `locate_with_dim`'s isNode branch).
-# - Otherwise (lineal geometries and GCs, where another element may cover
-#   the node) a representative coordinate is required. The exact rational
-#   crossing point is computed and rounded to Float64 — at least as precise
-#   as JTS, whose node coordinate is the floating-point intersection
-#   computed by RobustLineIntersector.
+## Locating symbolic nodes in an input geometry
+
+Java's updateNodeLocation/evaluateNode pass the node Coordinate into
+RelateGeometry.locateNode/isNodeInArea. Here the node may be a symbolic
+proper-crossing key (design D2) with no stored coordinate:
+
+- Vertex keys locate by their exact coordinate, as in Java.
+- Crossing keys on a *polygonal* geometry need no coordinate at all: a
+  node of a Polygon/MultiPolygon lies on its boundary (the same exact
+  shortcut as `locate_with_dim`'s isNode branch).
+- Otherwise (lineal geometries and GCs, where another element may cover
+  the node) a representative coordinate is required. The exact rational
+  crossing point is computed and rounded to Float64 — at least as precise
+  as JTS, whose node coordinate is the floating-point intersection
+  computed by RobustLineIntersector.
 ==========================================================================#
 
 function locate_node(rg::RelateGeometry, key::NodeKey, parent_polygonal)

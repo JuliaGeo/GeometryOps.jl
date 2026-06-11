@@ -14,13 +14,19 @@ functions of the *type*, so evaluation specializes per predicate.
 
 #=
 ## `TopologyPredicate` API (TopologyPredicate.java)
+=#
+
+"""
+    TopologyPredicate
 
 The abstract supertype for strategy types implementing spatial predicates
-based on the DE-9IM topology model. Concrete predicates implement:
-`predicate_name(p)`, `update_dim!(p, locA, locB, dim)`, `finish!(p)`,
-`is_known(p)`, `predicate_value(p)`, and may override the requirement
-flags and `init_dims!`/`init_bounds!` hooks below.
-=#
+based on the DE-9IM topology model (port of JTS `TopologyPredicate`).
+Concrete predicates implement `predicate_name(p)`,
+`update_dim!(p, locA, locB, dim)`, `finish!(p)`, `is_known(p)`, and
+`predicate_value(p)`, and may override the requirement flags and the
+`init_dims!`/`init_bounds!` hooks. Evaluate one against a pair of
+geometries with [`relate_predicate`](@ref).
+"""
 abstract type TopologyPredicate end
 
 # Whether the predicate requires self-noding for geometries with
