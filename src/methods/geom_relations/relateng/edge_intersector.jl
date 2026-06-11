@@ -192,6 +192,13 @@ recorded on `computer`.
 After each processed pair `is_result_known(computer)` is consulted and the
 enumeration stops early once the predicate value is determined (the port of
 the Java noder's `isDone()` hook used by `EdgeSetIntersector.process`).
+
+!!! warning
+    This enumerates A×B pairs only. JTS's `EdgeSetIntersector` also feeds
+    A×A and B×B pairs (self-noding) with an id-ordering guard so each
+    unordered pair is processed once. Calling this with the same list on
+    both sides would process every pair twice — the engine's
+    `computeAtEdges` port must add a guarded self-pair path instead.
 """
 process_edge_intersections!(tc::TopologyComputer,
         ssa_list::AbstractVector{<:RelateSegmentString},
