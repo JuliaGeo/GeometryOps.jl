@@ -25,7 +25,8 @@ import LibGEOS as LG
 include(joinpath(@__DIR__, "..", "..", "data", "polygon_generation.jl"))
 
 # The oracle must be RelateNG-native GEOS (3.13+); bail out loudly otherwise.
-@assert VersionNumber(LG.GEOS_VERSION) >= v"3.13" "Differential fuzz requires GEOS >= 3.13 (RelateNG-native oracle); found $(LG.GEOS_VERSION)"
+VersionNumber(LG.GEOS_VERSION) >= v"3.13" ||
+    error("Differential fuzz requires GEOS >= 3.13 (RelateNG-native oracle); found $(LG.GEOS_VERSION)")
 
 const FUZZ_N = something(tryparse(Int, get(ENV, "GO_RELATENG_FUZZ_N", "")), 500)
 const ALG = GO.RelateNG()

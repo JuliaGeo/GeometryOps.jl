@@ -844,3 +844,77 @@ end
 end
 
 end # @testset "RelateNGTest"
+
+# =========================================================================
+# Public API surface (Task 26): default-algorithm `relate`, exported names,
+# and the named-predicate methods `GO.intersects(GO.RelateNG(), a, b)` etc.
+# The named predicates are opt-in (design D4): the two-argument defaults
+# dispatch to the old engines and are untouched here.
+# =========================================================================
+
+@testset "PublicAPI" begin
+    pa = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)]])
+    pb = GI.Polygon([[(2.0, 2.0), (6.0, 2.0), (6.0, 6.0), (2.0, 6.0), (2.0, 2.0)]])
+
+    @testset "exports" begin
+        for name in (:relate, :DE9IM, :RelateNG, :prepare,
+                :Mod2Boundary, :EndpointBoundary,
+                :MultivalentEndpointBoundary, :MonovalentEndpointBoundary)
+            @test name in names(GO)
+        end
+    end
+
+    @testset "relate entry points" begin
+        @test GO.relate(pa, pb) isa GO.DE9IM
+        @test string(GO.relate(pa, pb)) == "212101212"
+        @test GO.relate(pa, pb, "T*F**FFF*") isa Bool
+        @test GO.relate(pa, pb) == GO.relate(GO.RelateNG(), pa, pb)
+        #-- prepared equivalents
+        prep = GO.prepare(GO.RelateNG(), pa)
+        @test GO.relate(prep, pb) == GO.relate(pa, pb)
+        @test GO.relate(prep, pb, "T********") == GO.relate(pa, pb, "T********") == true
+    end
+
+    @testset "named predicates (opt-in RelateNG form)" begin
+        alg = GO.RelateNG()
+        far = GI.Polygon([[(10.0, 10.0), (12.0, 10.0), (12.0, 12.0), (10.0, 12.0), (10.0, 10.0)]])
+        inner = GI.Polygon([[(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]])
+        touching = GI.Polygon([[(4.0, 0.0), (8.0, 0.0), (8.0, 4.0), (4.0, 4.0), (4.0, 0.0)]])
+
+        #-- each named predicate must agree with the (old-engine) default
+        for f in (GO.intersects, GO.disjoint, GO.contains, GO.within,
+                GO.covers, GO.coveredby, GO.touches, GO.equals)
+            for (x, y) in [(pa, pb), (pa, far), (pa, inner), (inner, pa),
+                    (pa, touching), (pa, pa)]
+                @test f(alg, x, y) == f(x, y)
+            end
+        end
+        #-- `overlaps`: skip the edge-touching pair, where the old engine
+        #-- reports edge intersection (DE-9IM `overlaps` of touching
+        #-- polygons is false; the old GO method returns true there)
+        for (x, y) in [(pa, pb), (pa, far), (pa, inner), (pa, pa)]
+            @test GO.overlaps(alg, x, y) == GO.overlaps(x, y)
+        end
+        #-- `crosses`: the old GO method only supports mixed-dimension
+        #-- (point/line/polygon) pairs
+        crossing_line = GI.LineString([(-1.0, 2.0), (5.0, 2.0)])
+        miss_line = GI.LineString([(-2.0, -2.0), (-1.0, -2.0)])
+        @test GO.crosses(alg, crossing_line, pa) == GO.crosses(crossing_line, pa) == true
+        @test GO.crosses(alg, miss_line, pa) == GO.crosses(miss_line, pa) == false
+
+        #-- spot values
+        @test GO.intersects(alg, pa, pb)
+        @test GO.disjoint(alg, pa, far)
+        @test GO.contains(alg, pa, inner)
+        @test GO.within(alg, inner, pa)
+        @test GO.covers(alg, pa, inner)
+        @test GO.coveredby(alg, inner, pa)
+        @test GO.touches(alg, pa, touching)
+        @test GO.overlaps(alg, pa, pb)
+        #-- `equals(::RelateNG, ...)` is *topological* equality
+        #-- (pred_equalstopo): a rotated ring is still equal
+        pa_rot = GI.Polygon([[(4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0), (4.0, 0.0)]])
+        @test GO.equals(alg, pa, pa_rot) == GO.equals(pa, pa_rot) == true
+        @test !GO.equals(alg, pa, pb)
+    end
+end

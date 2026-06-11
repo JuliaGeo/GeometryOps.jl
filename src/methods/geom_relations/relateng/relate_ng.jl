@@ -30,6 +30,8 @@
 #   (as Java's null envelope does), and `computeAtEdges` early-returns
 #   before ever forwarding an extent filter that could be `nothing`.
 
+export relate, RelateNG, prepare
+
 """
     RelateNG{M <: Manifold, A <: IntersectionAccelerator, E, BR <: BoundaryNodeRule}
 
@@ -121,6 +123,30 @@ function relate_predicate(alg::RelateNG, predicate::TopologyPredicate, a, b)
     geom_a = RelateGeometry(m, a; exact = alg.exact, boundary_rule = alg.boundary_rule)
     return evaluate!(alg, geom_a, b, predicate)
 end
+
+#==========================================================================
+# Named-predicate methods (the ports of the JTS RelateNG static predicate
+# overloads). These add `RelateNG` algorithm methods to the existing GO
+# predicate functions, following the house `GO.f(alg::Algorithm, a, b)`
+# idiom (cf. `GO.intersects(GO.GEOS(), a, b)` in the LibGEOS extension).
+# They are opt-in: the two-argument forms `GO.intersects(a, b)` etc. keep
+# dispatching to the old engines (design D4).
+#
+# `equals` maps to `pred_equalstopo`, i.e. *topological* equality (the
+# DE-9IM `T*F**FFF*` sense), which can differ from the structural equality
+# the two-argument `GO.equals` implements only in exotic cases (both
+# treat rotated/reversed rings and repeated points as equal).
+==========================================================================#
+intersects(alg::RelateNG, g1, g2) = relate_predicate(alg, pred_intersects(), g1, g2)
+disjoint(alg::RelateNG, g1, g2)   = relate_predicate(alg, pred_disjoint(), g1, g2)
+contains(alg::RelateNG, g1, g2)   = relate_predicate(alg, pred_contains(), g1, g2)
+within(alg::RelateNG, g1, g2)     = relate_predicate(alg, pred_within(), g1, g2)
+covers(alg::RelateNG, g1, g2)     = relate_predicate(alg, pred_covers(), g1, g2)
+coveredby(alg::RelateNG, g1, g2)  = relate_predicate(alg, pred_coveredby(), g1, g2)
+crosses(alg::RelateNG, g1, g2)    = relate_predicate(alg, pred_crosses(), g1, g2)
+overlaps(alg::RelateNG, g1, g2)   = relate_predicate(alg, pred_overlaps(), g1, g2)
+touches(alg::RelateNG, g1, g2)    = relate_predicate(alg, pred_touches(), g1, g2)
+equals(alg::RelateNG, g1, g2)     = relate_predicate(alg, pred_equalstopo(), g1, g2)
 
 #==========================================================================
 # Evaluation (port of RelateNG.evaluate and helpers)

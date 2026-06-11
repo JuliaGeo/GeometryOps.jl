@@ -1,4 +1,6 @@
 # # DE-9IM matrix, location and dimension codes
+export DE9IM
+export Mod2Boundary, EndpointBoundary, MultivalentEndpointBoundary, MonovalentEndpointBoundary
 #=
 Port of code-level concepts from JTS: `Location`, `Dimension`,
 `IntersectionMatrix` (pattern matching only), and
