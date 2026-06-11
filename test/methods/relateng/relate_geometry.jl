@@ -213,6 +213,19 @@ end
         @test !GO.is_closed(ss)
     end
 
+    # Regression (found by cross-validation, Task 24): geometries backed by
+    # StaticArrays — e.g. `GO.extent_to_polygon` output, whose ring wraps an
+    # SVector — must extract to plain `Vector` point lists; a typed
+    # comprehension over `GI.getpoint` collected them to a `SizedVector`,
+    # which `_orient_ring` rejected.
+    @testset "static-array-backed ring extraction" begin
+        poly = GO.extent_to_polygon(Extents.Extent(X = (0.0, 1.0), Y = (0.0, 1.0)))
+        sss = GO.extract_segment_strings(relate_geom(poly), GO.GEOM_A, nothing)
+        @test length(sss) == 1
+        @test only(sss).pts isa Vector{Tuple{Float64, Float64}}
+        @test GO.relate_predicate(GO.RelateNG(), GO.pred_equalstopo(), poly, poly)
+    end
+
     # CW shell ring: (0 0, 0 10, 10 10, 10 0, 0 0) after reorientation
     shell = only(GO.extract_segment_strings(
         relate_geom(GI.Polygon([
