@@ -142,3 +142,164 @@ delegates to [`is_containing_segment`](@ref) (its direct port).
 """
 _is_canonical_incidence(ss::RelateSegmentString, seg_index::Integer, pt) =
     is_containing_segment(ss, seg_index, pt)
+
+#==========================================================================
+# Edge set enumeration
+#
+# Replaces JTS `EdgeSetIntersector.java` (HPRtree + monotone chains) and the
+# mutual A x B pruning of `MCIndexSegmentSetMutualIntersector`: enumerate
+# every segment pair (one segment from an A string, one from a B string)
+# whose extents interact and feed it through `process_intersections!`.
+#
+# The accelerator strategy mirrors the clipping pattern
+# (`foreach_pair_of_maybe_intersecting_edges_in_order` in
+# clipping_processor.jl), reusing its `IntersectionAccelerator` types and the
+# `GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS` size threshold.
+#
+# The Java noder's `isDone()` early-exit hook lands here: after each
+# processed pair the enumerator consults `is_result_known(computer)` and
+# stops as soon as the predicate value is determined. On the tree path the
+# traversal is terminated by returning `Action(:full_return, nothing)` from
+# the callback — `dual_depth_first_search` processes `LoopStateMachine`
+# actions via `@controlflow`, and `:full_return` propagates out of the whole
+# recursion (a plain `:break` would only exit the innermost leaf loop), so
+# no exception is needed.
+==========================================================================#
+
+"""
+    process_edge_intersections!(computer, ssa_list, ssb_list,
+        accelerator = AutoAccelerator(); m, exact)
+
+Enumerate all extent-interacting segment pairs between the A-side segment
+strings `ssa_list` and the B-side segment strings `ssb_list`, feeding each
+pair through [`process_intersections!`](@ref) so the intersections are
+recorded on `computer`.
+
+`accelerator` selects the enumeration strategy:
+
+- [`NestedLoop`](@ref GO.IntersectionAccelerator): a plain double loop over
+  string pairs and segment pairs, with a per-pair segment-extent
+  disjointness skip (on `Planar`).
+- Any tree-backed accelerator (e.g. `DoubleSTRtree`): an `STRtree` is built
+  over the per-segment extents of each side and traversed with
+  [`dual_depth_first_search`](@ref GO.SpatialTreeInterface.dual_depth_first_search)
+  under the `Extents.intersects` predicate.
+- [`AutoAccelerator`](@ref): picks `NestedLoop` below the clipping size
+  threshold (`GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS`) and on
+  non-`Planar` manifolds (planar extent trees are not valid there), and the
+  tree path otherwise.
+
+After each processed pair `is_result_known(computer)` is consulted and the
+enumeration stops early once the predicate value is determined (the port of
+the Java noder's `isDone()` hook used by `EdgeSetIntersector.process`).
+"""
+process_edge_intersections!(tc::TopologyComputer,
+        ssa_list::AbstractVector{<:RelateSegmentString},
+        ssb_list::AbstractVector{<:RelateSegmentString};
+        m::Manifold = _manifold(tc), exact = _exact(tc)) =
+    process_edge_intersections!(tc, ssa_list, ssb_list, AutoAccelerator(); m, exact)
+
+# AutoAccelerator: pick the strategy from the manifold and the segment
+# counts, mirroring the clipping selection
+# (`foreach_pair_of_maybe_intersecting_edges_in_order(::AutoAccelerator)`).
+function process_edge_intersections!(tc::TopologyComputer,
+        ssa_list::AbstractVector{<:RelateSegmentString},
+        ssb_list::AbstractVector{<:RelateSegmentString},
+        ::AutoAccelerator;
+        m::Manifold = _manifold(tc), exact = _exact(tc))
+    return process_edge_intersections!(tc, ssa_list, ssb_list,
+        _select_edge_set_accelerator(m, ssa_list, ssb_list); m, exact)
+end
+
+# STRtrees over planar extents are only valid on the Planar manifold, and
+# below the clipping threshold the nested loop wins anyway.
+function _select_edge_set_accelerator(::Planar, ssa_list, ssb_list)
+    na = _total_segment_count(ssa_list)
+    nb = _total_segment_count(ssb_list)
+    if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS &&
+            nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+        return NestedLoop()
+    else
+        return DoubleSTRtree()
+    end
+end
+_select_edge_set_accelerator(::Manifold, ssa_list, ssb_list) = NestedLoop()
+
+_total_segment_count(ss_list) =
+    sum(ss -> length(ss.pts) - 1, ss_list; init = 0)
+
+# NestedLoop path: double loop over string pairs x segment pairs, skipping
+# pairs whose segment extents are disjoint (the pruning that the monotone
+# chains of Java's MCIndexSegmentSetMutualIntersector provide).
+function process_edge_intersections!(tc::TopologyComputer,
+        ssa_list::AbstractVector{<:RelateSegmentString},
+        ssb_list::AbstractVector{<:RelateSegmentString},
+        ::NestedLoop;
+        m::Manifold = _manifold(tc), exact = _exact(tc))
+    for ssa in ssa_list, ssb in ssb_list
+        for ia in 1:(length(ssa.pts) - 1)
+            a0 = ssa.pts[ia]
+            a1 = ssa.pts[ia + 1]
+            for ib in 1:(length(ssb.pts) - 1)
+                b0 = ssb.pts[ib]
+                b1 = ssb.pts[ib + 1]
+                _segment_envs_disjoint(m, a0, a1, b0, b1) && continue
+                process_intersections!(tc, ssa, ia, ssb, ib; m, exact)
+                #-- the Java noder's isDone() early-exit hook
+                is_result_known(tc) && return nothing
+            end
+        end
+    end
+    return nothing
+end
+
+# Per-pair extent pruning is a planar coordinate comparison; on other
+# manifolds it could wrongly discard interacting pairs (e.g. across the
+# antimeridian), so prune nothing there.
+_segment_envs_disjoint(::Planar, a0, a1, b0, b1) =
+    min(a0[1], a1[1]) > max(b0[1], b1[1]) ||
+    max(a0[1], a1[1]) < min(b0[1], b1[1]) ||
+    min(a0[2], a1[2]) > max(b0[2], b1[2]) ||
+    max(a0[2], a1[2]) < min(b0[2], b1[2])
+_segment_envs_disjoint(::Manifold, a0, a1, b0, b1) = false
+
+# Tree path (any other accelerator, canonically DoubleSTRtree): an STRtree
+# over the per-segment extents of each side, traversed simultaneously.
+function process_edge_intersections!(tc::TopologyComputer,
+        ssa_list::AbstractVector{<:RelateSegmentString},
+        ssb_list::AbstractVector{<:RelateSegmentString},
+        ::IntersectionAccelerator;
+        m::Manifold = _manifold(tc), exact = _exact(tc))
+    extents_a, owners_a = _segment_extent_table(ssa_list)
+    extents_b, owners_b = _segment_extent_table(ssb_list)
+    (isempty(extents_a) || isempty(extents_b)) && return nothing
+    tree_a = STRtree(extents_a)
+    tree_b = STRtree(extents_b)
+    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do ia, ib
+        (sa, ka) = owners_a[ia]
+        (sb, kb) = owners_b[ib]
+        process_intersections!(tc, ssa_list[sa], ka, ssb_list[sb], kb; m, exact)
+        #-- the Java noder's isDone() early-exit hook; :full_return
+        #-- propagates out of the whole dual traversal via @controlflow
+        is_result_known(tc) && return Action(:full_return, nothing)
+        return nothing
+    end
+    return nothing
+end
+
+# Flat per-segment extent list for a segment-string list, with the offset
+# table mapping each flat index back to (string index, segment index).
+function _segment_extent_table(ss_list)
+    extents = Extents.Extent{(:X, :Y), NTuple{2, NTuple{2, Float64}}}[]
+    owners = NTuple{2, Int}[]
+    for (si, ss) in enumerate(ss_list)
+        pts = ss.pts
+        for k in 1:(length(pts) - 1)
+            p = pts[k]
+            q = pts[k + 1]
+            push!(extents, Extents.Extent(X = minmax(p[1], q[1]), Y = minmax(p[2], q[2])))
+            push!(owners, (si, k))
+        end
+    end
+    return extents, owners
+end
