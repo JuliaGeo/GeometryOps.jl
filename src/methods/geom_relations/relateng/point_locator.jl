@@ -234,20 +234,12 @@ end
 # Specialization of NodeSection.compareTo for AdjacentEdgeLocator sections:
 # `is_a`/`dim`/`id`/`ring_id` are identical across sections, so only the
 # edge-vertex comparison remains (no `nothing` vertices occur for area
-# sections).
+# sections). `_compare_pt` is the Coordinate.compareTo port from
+# node_sections.jl.
 function _ns_compare_vertices(a::NodeSection, b::NodeSection)
     comp_v0 = _compare_pt(get_vertex(a, 0), get_vertex(b, 0))
     comp_v0 != 0 && return comp_v0
     return _compare_pt(get_vertex(a, 1), get_vertex(b, 1))
-end
-
-# JTS Coordinate.compareTo: lexicographic on (x, y).
-function _compare_pt(p, q)
-    GI.x(p) < GI.x(q) && return -1
-    GI.x(p) > GI.x(q) && return 1
-    GI.y(p) < GI.y(q) && return -1
-    GI.y(p) > GI.y(q) && return 1
-    return 0
 end
 
 # Port of PolygonNodeConverter.extractUnique: drop consecutive duplicate
