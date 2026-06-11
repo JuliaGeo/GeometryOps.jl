@@ -9,7 +9,7 @@
 # 3. `RelatePointLocator`    (JTS RelatePointLocator.java)  — Task 12
 
 #==========================================================================
-# LinearBoundary (port of JTS LinearBoundary.java)
+## LinearBoundary (port of JTS LinearBoundary.java)
 ==========================================================================#
 
 """
@@ -81,7 +81,7 @@ function _add_endpoint!(p, degree::Dict)
 end
 
 #==========================================================================
-# AdjacentEdgeLocator (port of JTS AdjacentEdgeLocator.java)
+## AdjacentEdgeLocator (port of JTS AdjacentEdgeLocator.java)
 ==========================================================================#
 
 """
@@ -204,7 +204,7 @@ function _add_ring!(m, ring, require_cw::Bool, ring_list; exact)
 end
 
 #==========================================================================
-# RelatePointLocator (port of JTS RelatePointLocator.java)
+## RelatePointLocator (port of JTS RelatePointLocator.java)
 ==========================================================================#
 
 """

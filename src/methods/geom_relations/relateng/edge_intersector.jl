@@ -62,7 +62,7 @@ end
     add_intersections!(tc::TopologyComputer, ssA, seg_index_a, ssB, seg_index_b; m, exact)
 
 Classify the intersection of one segment pair via
-[`rk_classify_intersection`](@ref) and add a [`NodeSection`](@ref) pair (one
+`rk_classify_intersection` and add a [`NodeSection`](@ref) pair (one
 on `ssA`, one on `ssB`) to `tc` for each distinct intersection point:
 
 - `SS_DISJOINT`: nothing to add.
@@ -144,26 +144,26 @@ _is_canonical_incidence(ss::RelateSegmentString, seg_index::Integer, pt) =
     is_containing_segment(ss, seg_index, pt)
 
 #==========================================================================
-# Edge set enumeration
-#
-# Replaces JTS `EdgeSetIntersector.java` (HPRtree + monotone chains) and the
-# mutual A x B pruning of `MCIndexSegmentSetMutualIntersector`: enumerate
-# every segment pair (one segment from an A string, one from a B string)
-# whose extents interact and feed it through `process_intersections!`.
-#
-# The accelerator strategy mirrors the clipping pattern
-# (`foreach_pair_of_maybe_intersecting_edges_in_order` in
-# clipping_processor.jl), reusing its `IntersectionAccelerator` types and the
-# `GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS` size threshold.
-#
-# The Java noder's `isDone()` early-exit hook lands here: after each
-# processed pair the enumerator consults `is_result_known(computer)` and
-# stops as soon as the predicate value is determined. On the tree path the
-# traversal is terminated by returning `Action(:full_return, nothing)` from
-# the callback — `dual_depth_first_search` processes `LoopStateMachine`
-# actions via `@controlflow`, and `:full_return` propagates out of the whole
-# recursion (a plain `:break` would only exit the innermost leaf loop), so
-# no exception is needed.
+## Edge set enumeration
+
+Replaces JTS `EdgeSetIntersector.java` (HPRtree + monotone chains) and the
+mutual A x B pruning of `MCIndexSegmentSetMutualIntersector`: enumerate
+every segment pair (one segment from an A string, one from a B string)
+whose extents interact and feed it through `process_intersections!`.
+
+The accelerator strategy mirrors the clipping pattern
+(`foreach_pair_of_maybe_intersecting_edges_in_order` in
+clipping_processor.jl), reusing its `IntersectionAccelerator` types and the
+`GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS` size threshold.
+
+The Java noder's `isDone()` early-exit hook lands here: after each
+processed pair the enumerator consults `is_result_known(computer)` and
+stops as soon as the predicate value is determined. On the tree path the
+traversal is terminated by returning `Action(:full_return, nothing)` from
+the callback — `dual_depth_first_search` processes `LoopStateMachine`
+actions via `@controlflow`, and `:full_return` propagates out of the whole
+recursion (a plain `:break` would only exit the innermost leaf loop), so
+no exception is needed.
 ==========================================================================#
 
 """
@@ -177,12 +177,12 @@ recorded on `computer`.
 
 `accelerator` selects the enumeration strategy:
 
-- [`NestedLoop`](@ref GO.IntersectionAccelerator): a plain double loop over
+- `NestedLoop`: a plain double loop over
   string pairs and segment pairs, with a per-pair segment-extent
   disjointness skip (on `Planar`).
 - Any tree-backed accelerator (e.g. `DoubleSTRtree`): an `STRtree` is built
   over the per-segment extents of each side and traversed with
-  [`dual_depth_first_search`](@ref GO.SpatialTreeInterface.dual_depth_first_search)
+  `SpatialTreeInterface.dual_depth_first_search`
   under the `Extents.intersects` predicate.
 - [`AutoAccelerator`](@ref): picks `NestedLoop` below the clipping size
   threshold (`GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS`) and on
@@ -296,24 +296,24 @@ function process_edge_intersections!(tc::TopologyComputer,
 end
 
 #==========================================================================
-# Self-pair enumeration (the A×A / B×B side of JTS EdgeSetIntersector)
-#
-# When `is_self_noding_required(tc)` holds, JTS's `computeEdgesAll` puts the
-# edges of BOTH inputs into one `EdgeSetIntersector`, whose `process` visits
-# every unordered pair of distinct monotone chains exactly once (the
-# `testChain.getId() <= queryChain.getId()` guard) — i.e. all A×B pairs plus
-# the A×A and B×B self pairs. The mutual A×B pairs are handled by
-# `process_edge_intersections!` above; `process_self_intersections!` is the
-# guarded self-pair path for one side's list.
-#
-# The id-ordering guard becomes: unordered string pairs `si <= sj`, and
-# within a single string (`si == sj`) unordered segment pairs `ka < kb`
-# (never a segment with itself). Note JTS never compares a chain with
-# itself — safe there because a monotone chain cannot self-intersect; a
-# whole segment string can, so same-string segment pairs ARE enumerated
-# here. Trivial adjacent-segment endpoint touches are filtered by the same
-# canonical-incidence rule as in Java (`is_containing_segment`), so this
-# produces exactly the node sections the Java chain enumeration does.
+## Self-pair enumeration (the A×A / B×B side of JTS EdgeSetIntersector)
+
+When `is_self_noding_required(tc)` holds, JTS's `computeEdgesAll` puts the
+edges of BOTH inputs into one `EdgeSetIntersector`, whose `process` visits
+every unordered pair of distinct monotone chains exactly once (the
+`testChain.getId() <= queryChain.getId()` guard) — i.e. all A×B pairs plus
+the A×A and B×B self pairs. The mutual A×B pairs are handled by
+`process_edge_intersections!` above; `process_self_intersections!` is the
+guarded self-pair path for one side's list.
+
+The id-ordering guard becomes: unordered string pairs `si <= sj`, and
+within a single string (`si == sj`) unordered segment pairs `ka < kb`
+(never a segment with itself). Note JTS never compares a chain with
+itself — safe there because a monotone chain cannot self-intersect; a
+whole segment string can, so same-string segment pairs ARE enumerated
+here. Trivial adjacent-segment endpoint touches are filtered by the same
+canonical-incidence rule as in Java (`is_containing_segment`), so this
+produces exactly the node sections the Java chain enumeration does.
 ==========================================================================#
 
 """

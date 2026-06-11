@@ -13,7 +13,7 @@
 # it.
 
 #==========================================================================
-# RelateGeometry (port of JTS RelateGeometry.java)
+## RelateGeometry (port of JTS RelateGeometry.java)
 ==========================================================================#
 
 # `GEOM_A`/`GEOM_B` (JTS `RelateGeometry.GEOM_A/GEOM_B`) are defined in
@@ -539,7 +539,7 @@ function _ring_is_ccw(m, ring::Vector; exact)
 end
 
 #==========================================================================
-# RelateSegmentString (port of JTS RelateSegmentString.java)
+## RelateSegmentString (port of JTS RelateSegmentString.java)
 ==========================================================================#
 
 """
