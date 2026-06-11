@@ -41,3 +41,9 @@ end
         @test all(GI.coordinates(GO.simplify($linestring; tol = 100.0)) .== lg_vals)
     end
 end
+
+@testset "Simplify small LinearRing" begin
+    lr = GI.LinearRing([(1, 1), (2, 2), (3, 3), (4, 4), (1, 1)])
+    @test GI.npoint(GO.simplify(lr, tol=10)) == 3
+    @test GI.npoint(GO.simplify(lr, number=3)) == 3
+end
