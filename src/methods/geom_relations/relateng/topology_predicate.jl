@@ -67,6 +67,9 @@ const TRI_TRUE    = Int8(1)
 is_intersection(locA::Integer, locB::Integer) =
     locA != LOC_EXTERIOR && locB != LOC_EXTERIOR
 
+# TODO(RelateNG engine task): JTS `Envelope.intersects`/`covers` return false when
+# either envelope is null. Empty geometries must be resolved before `init_bounds!`
+# is called, or these helpers need null-extent methods returning false.
 ext_intersects(extA, extB) = Extents.intersects(extA, extB)
 ext_covers(extA, extB) = Extents.covers(extA, extB)
 
