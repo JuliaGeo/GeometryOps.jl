@@ -67,11 +67,18 @@ const TRI_TRUE    = Int8(1)
 is_intersection(locA::Integer, locB::Integer) =
     locA != LOC_EXTERIOR && locB != LOC_EXTERIOR
 
-# TODO(RelateNG engine task): JTS `Envelope.intersects`/`covers` return false when
-# either envelope is null. Empty geometries must be resolved before `init_bounds!`
-# is called, or these helpers need null-extent methods returning false.
+# JTS `Envelope.intersects`/`covers` return false when either envelope is
+# null. A null (empty-geometry) extent is represented as `nothing` here
+# (`get_extent(rg)` of an empty `RelateGeometry`), so the `nothing` methods
+# mirror the Java null-envelope behavior exactly.
 ext_intersects(extA, extB) = Extents.intersects(extA, extB)
+ext_intersects(::Nothing, extB) = false
+ext_intersects(extA, ::Nothing) = false
+ext_intersects(::Nothing, ::Nothing) = false
 ext_covers(extA, extB) = Extents.covers(extA, extB)
+ext_covers(::Nothing, extB) = false
+ext_covers(extA, ::Nothing) = false
+ext_covers(::Nothing, ::Nothing) = false
 
 mutable struct BasicPredicate{K} <: TopologyPredicate
     const kind::K

@@ -113,6 +113,8 @@ include("methods/geom_relations/relateng/relate_geometry.jl")
 include("methods/geom_relations/relateng/topology_computer.jl")
 # Edge intersector: feeds segment-pair intersections into the computer.
 include("methods/geom_relations/relateng/edge_intersector.jl")
+# The RelateNG engine: drives all of the above through the phased evaluation.
+include("methods/geom_relations/relateng/relate_ng.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")

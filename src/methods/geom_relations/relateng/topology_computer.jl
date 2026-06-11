@@ -489,65 +489,77 @@ function evaluate_nodes!(tc::TopologyComputer)
 end
 
 #=
-D3 coincidence-merge pass: when self-noding is required, distinct symbolic
-crossing keys (different segment pairs) — and vertex keys — may denote the
-same geometric point. Group them exactly via `rk_nodes_coincide` and merge
-their NodeSections into one node, so that a self-crossing and a mutual
-crossing at the same logical location are evaluated as a single node (the
-purpose of explicit self-noding in JTS, TopologyComputer.java:117-141).
+D3 coincidence-merge pass: distinct symbolic crossing keys (different
+segment pairs) — and vertex keys — may denote the same geometric point.
+Group them exactly and merge their NodeSections into one node.
+
+In JTS this merging is implicit and unconditional: the nodeMap is keyed by
+the *constructed* intersection Coordinate, so a proper crossing whose
+(floating-point) intersection point coincides with a vertex node — or with
+another crossing — lands in the same map entry, in every mode (not only
+under self-noding; e.g. RelateNGTest.testPolygonLineCrossingContained needs
+a B-line proper crossing of one A polygon merged with its vertex touch of
+another). Here node identity is symbolic, so the merge is an explicit pass,
+run whenever any crossing key exists.
+
+Grouping is hash-based on the representative Float64 point of each key
+(`_crossing_locate_point`: the *correctly rounded* exact rational crossing
+point; vertex keys use their exact coordinate). Coincident keys always
+round identically, so they share a bucket; within a bucket coincidence is
+confirmed *exactly* via the rational `_exact_node_point` (distinct exact
+points that happen to round together are never merged). This keeps the
+merge decisions exact (design D3) at hashing cost O(N) plus one rational
+evaluation per key in a multi-member bucket.
 
 A vertex key is preferred as the canonical merged node: its coordinate is
 exact, so the edge wheel and node location never need the rational apex.
 Otherwise the merged crossing node's wheel compares foreign directions
 around the exact rational apex (`rk_compare_edge_dir` slow path).
-
-The grouping is O(C·N) — each unmerged crossing key (C of them) scans all
-N node keys — with rational arithmetic per candidate pair: an acceptable
-slow path, reached only for self-noding predicates on self-intersecting
-linework (design D3; follow-up F1: add an interval-arithmetic filter).
 =#
 function _merge_coincident_nodes!(tc::TopologyComputer)
-    is_self_noding_required(tc) || return nothing
     nodemap = tc.node_sections
     any(k -> k.is_crossing, keys(nodemap)) || return nothing
-    all_keys = collect(keys(nodemap))
-    merged = Set{eltype(all_keys)}()
-    for kx in all_keys
-        (kx.is_crossing && !(kx in merged)) || continue
-        #-- hoist: the exact rational point of kx is invariant over the
-        #-- inner scan, so compute it once instead of letting
-        #-- `rk_nodes_coincide` recompute it per candidate pair
-        px = _exact_node_point(kx)
-        #-- collect the keys coinciding with kx (coincidence is transitive:
-        #-- all group members denote one exact point)
-        group = eltype(all_keys)[]
-        for k in all_keys
-            (k == kx || k in merged) && continue
-            #-- equivalent to rk_nodes_coincide(m, kx, k; exact): its
-            #-- k1 == k2 fast path is covered by the k == kx skip above
-            px == _exact_node_point(k) && push!(group, k)
-        end
-        isempty(group) && continue
-        #-- prefer a vertex key as the canonical node (at most one exists:
-        #-- distinct vertex keys are distinct points)
-        canonical = kx
-        for k in group
-            if !k.is_crossing
-                canonical = k
-                break
+    K = keytype(nodemap)
+    #-- bucket keys by their representative (correctly rounded) coordinate
+    buckets = Dict{Tuple{Float64, Float64}, Vector{K}}()
+    for k in keys(nodemap)
+        pt = k.is_crossing ? _crossing_locate_point(k) : k.pt
+        push!(get!(() -> K[], buckets, pt), k)
+    end
+    for group in values(buckets)
+        length(group) > 1 || continue
+        _merge_coincident_group!(nodemap, group)
+    end
+    return nothing
+end
+
+# Merge each exact-coincidence class within one rounded-coordinate bucket.
+function _merge_coincident_group!(nodemap::Dict, group::Vector)
+    #-- confirm coincidence exactly (rational arithmetic): bucket members
+    #-- are only candidates, since distinct exact points may round together
+    exacts = [_exact_node_point(k) for k in group]
+    merged = falses(length(group))
+    for i in eachindex(group)
+        merged[i] && continue
+        cls = [i]
+        for j in (i + 1):length(group)
+            merged[j] && continue
+            if exacts[j] == exacts[i]
+                push!(cls, j)
+                merged[j] = true
             end
         end
+        length(cls) > 1 || continue
+        #-- prefer a vertex key as the canonical node (at most one exists:
+        #-- distinct vertex keys are distinct points)
+        ci = findfirst(j -> !group[j].is_crossing, cls)
+        canonical = group[cls[ci === nothing ? 1 : ci]]
         target = nodemap[canonical]
-        for k in group
+        for j in cls
+            k = group[j]
             k == canonical && continue
             _merge_node_sections!(target, pop!(nodemap, k), canonical)
-            push!(merged, k)
         end
-        if canonical != kx
-            _merge_node_sections!(target, pop!(nodemap, kx), canonical)
-        end
-        push!(merged, kx)
-        push!(merged, canonical)
     end
     return nothing
 end

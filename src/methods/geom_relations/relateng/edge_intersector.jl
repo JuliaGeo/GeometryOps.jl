@@ -198,7 +198,8 @@ the Java noder's `isDone()` hook used by `EdgeSetIntersector.process`).
     A×A and B×B pairs (self-noding) with an id-ordering guard so each
     unordered pair is processed once. Calling this with the same list on
     both sides would process every pair twice — the engine's
-    `computeAtEdges` port must add a guarded self-pair path instead.
+    `computeAtEdges` port uses [`process_self_intersections!`](@ref) for
+    the self-pair path instead.
 """
 process_edge_intersections!(tc::TopologyComputer,
         ssa_list::AbstractVector{<:RelateSegmentString},
@@ -286,6 +287,103 @@ function process_edge_intersections!(tc::TopologyComputer,
         (sa, ka) = owners_a[ia]
         (sb, kb) = owners_b[ib]
         process_intersections!(tc, ssa_list[sa], ka, ssb_list[sb], kb; m, exact)
+        #-- the Java noder's isDone() early-exit hook; :full_return
+        #-- propagates out of the whole dual traversal via @controlflow
+        is_result_known(tc) && return Action(:full_return, nothing)
+        return nothing
+    end
+    return nothing
+end
+
+#==========================================================================
+# Self-pair enumeration (the A×A / B×B side of JTS EdgeSetIntersector)
+#
+# When `is_self_noding_required(tc)` holds, JTS's `computeEdgesAll` puts the
+# edges of BOTH inputs into one `EdgeSetIntersector`, whose `process` visits
+# every unordered pair of distinct monotone chains exactly once (the
+# `testChain.getId() <= queryChain.getId()` guard) — i.e. all A×B pairs plus
+# the A×A and B×B self pairs. The mutual A×B pairs are handled by
+# `process_edge_intersections!` above; `process_self_intersections!` is the
+# guarded self-pair path for one side's list.
+#
+# The id-ordering guard becomes: unordered string pairs `si <= sj`, and
+# within a single string (`si == sj`) unordered segment pairs `ka < kb`
+# (never a segment with itself). Note JTS never compares a chain with
+# itself — safe there because a monotone chain cannot self-intersect; a
+# whole segment string can, so same-string segment pairs ARE enumerated
+# here. Trivial adjacent-segment endpoint touches are filtered by the same
+# canonical-incidence rule as in Java (`is_containing_segment`), so this
+# produces exactly the node sections the Java chain enumeration does.
+==========================================================================#
+
+"""
+    process_self_intersections!(computer, ss_list,
+        accelerator = AutoAccelerator(); m, exact)
+
+Enumerate all extent-interacting segment pairs *within* the segment-string
+list `ss_list` (each unordered pair once, never a segment against itself),
+feeding each through [`process_intersections!`](@ref) — the self-noding
+(A×A or B×B) counterpart of [`process_edge_intersections!`](@ref).
+
+After each processed pair `is_result_known(computer)` is consulted and the
+enumeration stops early once the predicate value is determined.
+"""
+process_self_intersections!(tc::TopologyComputer,
+        ss_list::AbstractVector{<:RelateSegmentString};
+        m::Manifold = _manifold(tc), exact = _exact(tc)) =
+    process_self_intersections!(tc, ss_list, AutoAccelerator(); m, exact)
+
+function process_self_intersections!(tc::TopologyComputer,
+        ss_list::AbstractVector{<:RelateSegmentString},
+        ::AutoAccelerator;
+        m::Manifold = _manifold(tc), exact = _exact(tc))
+    return process_self_intersections!(tc, ss_list,
+        _select_edge_set_accelerator(m, ss_list, ss_list); m, exact)
+end
+
+# NestedLoop path: unordered string pairs si <= sj; within one string the
+# segment pairs are also unordered (ka < kb).
+function process_self_intersections!(tc::TopologyComputer,
+        ss_list::AbstractVector{<:RelateSegmentString},
+        ::NestedLoop;
+        m::Manifold = _manifold(tc), exact = _exact(tc))
+    for si in eachindex(ss_list)
+        ssa = ss_list[si]
+        for sj in si:lastindex(ss_list)
+            ssb = ss_list[sj]
+            for ia in 1:(length(ssa.pts) - 1)
+                a0 = ssa.pts[ia]
+                a1 = ssa.pts[ia + 1]
+                ib0 = si == sj ? ia + 1 : 1
+                for ib in ib0:(length(ssb.pts) - 1)
+                    b0 = ssb.pts[ib]
+                    b1 = ssb.pts[ib + 1]
+                    _segment_envs_disjoint(m, a0, a1, b0, b1) && continue
+                    process_intersections!(tc, ssa, ia, ssb, ib; m, exact)
+                    #-- the Java noder's isDone() early-exit hook
+                    is_result_known(tc) && return nothing
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+# Tree path: one STRtree over the per-segment extents, dual-traversed with
+# itself; the flat-index ordering `ia < ib` is the unordered-pair guard
+# (excluding a segment against itself).
+function process_self_intersections!(tc::TopologyComputer,
+        ss_list::AbstractVector{<:RelateSegmentString},
+        ::IntersectionAccelerator;
+        m::Manifold = _manifold(tc), exact = _exact(tc))
+    extents, owners = _segment_extent_table(ss_list)
+    isempty(extents) && return nothing
+    tree = STRtree(extents)
+    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree, tree) do ia, ib
+        ia < ib || return nothing
+        (sa, ka) = owners[ia]
+        (sb, kb) = owners[ib]
+        process_intersections!(tc, ss_list[sa], ka, ss_list[sb], kb; m, exact)
         #-- the Java noder's isDone() early-exit hook; :full_return
         #-- propagates out of the whole dual traversal via @controlflow
         is_result_known(tc) && return Action(:full_return, nothing)

@@ -10,9 +10,9 @@
 # - the addX entry points for every target dimension,
 # - `add_intersection!` + `evaluate_nodes!` (symbolic node-section grouping),
 # - `updateAreaAreaCross` via `rk_is_crossing`,
-# - the D3 coincidence-merge pass for self-noding predicates (including the
-#   multi-segment-pair crossing wheel, which exercises the exact rational
-#   apex fallback in `rk_compare_edge_dir`),
+# - the D3 coincidence-merge pass (including the multi-segment-pair
+#   crossing wheel, which exercises the exact rational apex fallback in
+#   `rk_compare_edge_dir`),
 # - short-circuiting once the predicate value is known.
 
 using Test
@@ -403,9 +403,11 @@ end
     @test imstr(pred) == "0F1FFF1F2"
 end
 
-@testset "no merge without self-noding requirement" begin
-    # Same configuration as the merge test, but polygonal A/B inputs do not
-    # require self-noding — distinct keys stay distinct.
+@testset "no merge of distinct crossing points" begin
+    # The coincidence merge runs whenever crossing keys exist (Task 21:
+    # JTS merges via its coordinate-keyed node map in every mode), but it
+    # only merges keys denoting the SAME exact point — the two genuine
+    # square-boundary crossings here are distinct points and stay distinct.
     sq_a = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
     sq_b = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
     rga, rgb = rgeom(sq_a), rgeom(sq_b)
