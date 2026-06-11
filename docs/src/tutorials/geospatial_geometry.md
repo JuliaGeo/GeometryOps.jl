@@ -1,4 +1,4 @@
-# Creating Geospatial Geometry
+# Geospatial Geometry
 
 In this tutorial, we're going to: 
 1. [Plot geometries on a map using `GeoMakie` and coordinate reference system (`CRS`)](@ref plot-geometry)
