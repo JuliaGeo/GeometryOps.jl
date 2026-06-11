@@ -181,10 +181,32 @@ function kernel_conformance_suite(m; exact)
                 node = GO.crossing_node(a0, a1, b0, b1)
                 apex = GO._exact_crossing_point(a0, a1, b0, b1)
                 endpoints = (a0, a1, b0, b1)
-                for p in endpoints, q in endpoints
+                # a few random non-endpoint direction points (integer-grid,
+                # distinct from the apex and the four endpoints), so the
+                # ordered pairs below mix the symbolic fast path (endpoint
+                # directions) with the rational-apex fallback (foreign
+                # directions) in one ordering
+                extras = Tuple{Float64, Float64}[]
+                while length(extras) < 3
+                    p = rpt()
+                    (p in endpoints || p in extras) && continue
+                    (Rational{BigInt}(p[1]), Rational{BigInt}(p[2])) == apex && continue
+                    push!(extras, p)
+                end
+                pts = [endpoints..., extras...]
+                for p in pts, q in pts
                     @test _sgn(GO.rk_compare_edge_dir(m, node, p, q; exact)) ==
                           _ref_compare_angle(apex, p, q)
                 end
+                # sortperm consistency: sorting the mixed fan by the kernel
+                # comparator must equal sorting by the rational reference
+                # (both sorts are stable, so pairwise sign agreement implies
+                # identical permutations)
+                perm_kernel = sortperm(pts;
+                    lt = (p, q) -> GO.rk_compare_edge_dir(m, node, p, q; exact) < 0)
+                perm_ref = sortperm(pts;
+                    lt = (p, q) -> _ref_compare_angle(apex, p, q) < 0)
+                @test perm_kernel == perm_ref
             end
             @test n_proper > 50    # the filter kept a meaningful sample
         end
