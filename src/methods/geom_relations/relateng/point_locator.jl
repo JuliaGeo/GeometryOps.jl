@@ -414,83 +414,16 @@ end
 
 _add_rings!(m, ::GI.AbstractTrait, geom, ring_list; exact) = nothing
 
-# Port of AdjacentEdgeLocator.addRing.
+# Port of AdjacentEdgeLocator.addRing. (`_orient_ring` — the port of
+# RelateGeometry.orient — lived here until Task 13; it now resides with the
+# rest of the RelateGeometry port in relate_geometry.jl, together with its
+# helper `_ring_is_ccw`.)
 function _add_ring!(m, ring, require_cw::Bool, ring_list; exact)
     #TODO: remove repeated points?
     pts = Tuple{Float64, Float64}[_node_point(pt) for pt in GI.getpoint(ring)]
     pts = _orient_ring(m, pts, require_cw; exact)
     push!(ring_list, pts)
     return nothing
-end
-
-# Port of RelateGeometry.orient (static; needed here first, reused by the
-# RelateGeometry port in Task 13): coordinate vector of `pts` with the
-# requested orientation, reversing a copy only if needed.
-function _orient_ring(m, pts::Vector, orient_cw::Bool; exact)
-    is_flipped = orient_cw == _ring_is_ccw(m, pts; exact)
-    return is_flipped ? reverse(pts) : pts
-end
-
-#=
-Port of JTS `Orientation.isCCW(CoordinateSequence)` with the orientation
-index routed through the kernel (`rk_orient`): whether the closed `ring`
-(repeated end point required) is counterclockwise. Returns `false` for flat
-or degenerate rings. The algorithm finds the highest point reached by an
-upward segment, then the subsequent downward segment, and decides from the
-"cap" they form — using only one exact orientation test, so it is robust
-(unlike a floating signed-area sum).
-=#
-function _ring_is_ccw(m, ring::Vector; exact)
-    # number of points without closing endpoint
-    npts = length(ring) - 1
-    # return default value if ring is flat
-    npts < 3 && return false
-    pt(i) = ring[i + 1]   # 0-based access, mirroring the Java indexing
-
-    # Find first highest point after a lower point, if one exists
-    # (e.g. a rising segment). If one does not exist, i_up_hi remains 0
-    # and the ring must be flat.
-    up_hi_pt = pt(0)
-    prev_y = GI.y(up_hi_pt)
-    up_low_pt = up_hi_pt   # only read when i_up_hi != 0, i.e. after assignment
-    i_up_hi = 0
-    for i in 1:npts
-        py = GI.y(pt(i))
-        # if segment is upwards and endpoint is higher, record it
-        if py > prev_y && py >= GI.y(up_hi_pt)
-            up_hi_pt = pt(i)
-            i_up_hi = i
-            up_low_pt = pt(i - 1)
-        end
-        prev_y = py
-    end
-    # check if ring is flat and return default value if so
-    i_up_hi == 0 && return false
-
-    # Find the next lower point after the high point (e.g. a falling
-    # segment). This must exist since the ring is not flat.
-    i_down_low = i_up_hi
-    while true
-        i_down_low = (i_down_low + 1) % npts
-        (i_down_low != i_up_hi && GI.y(pt(i_down_low)) == GI.y(up_hi_pt)) || break
-    end
-
-    down_low_pt = pt(i_down_low)
-    i_down_hi = i_down_low > 0 ? i_down_low - 1 : npts - 1
-    down_hi_pt = pt(i_down_hi)
-
-    if _equals2(up_hi_pt, down_hi_pt)
-        # the high point is on a "pointed cap": its orientation decides.
-        # Degenerate A-B-A caps (coincident segments / < 3 distinct points)
-        # have orientation 0 and return false.
-        (_equals2(up_low_pt, up_hi_pt) || _equals2(down_low_pt, up_hi_pt) ||
-            _equals2(up_low_pt, down_low_pt)) && return false
-        return rk_orient(m, up_low_pt, up_hi_pt, down_low_pt; exact) > 0
-    else
-        # flat cap - direction of flat top determines orientation
-        del_x = GI.x(down_hi_pt) - GI.x(up_hi_pt)
-        return del_x < 0
-    end
 end
 
 #==========================================================================
