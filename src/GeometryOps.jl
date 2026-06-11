@@ -108,6 +108,9 @@ include("methods/geom_relations/relateng/point_locator.jl")
 # Input facade: after the point locator (RelateGeometry wraps a lazy
 # RelatePointLocator) and node sections (RelateSegmentString creates them).
 include("methods/geom_relations/relateng/relate_geometry.jl")
+# Topology computer: after the input facade and node topology (it drives
+# RelateGeometry locates, NodeSections grouping and RelateNode evaluation).
+include("methods/geom_relations/relateng/topology_computer.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")

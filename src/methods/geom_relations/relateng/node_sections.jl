@@ -65,11 +65,12 @@ symbolic node of `ns1` as apex, taking the manifold and `exact` flag the
 kernel comparison needs. Use as a sort predicate via
 `lt = (a, b) -> edge_angle_compare(m, a, b; exact) < 0`.
 
-Precondition at a crossing node (a `NodeKey` with `is_crossing`):
-`rk_compare_edge_dir` requires both sections' `v0` to be among the four
-endpoints of the node's defining segments. This holds by construction,
-since the sections incident at a crossing `NodeKey` are built from those
-defining segments themselves.
+At a crossing node (a `NodeKey` with `is_crossing`) the sections' `v0` are
+normally among the four endpoints of the node's defining segments (the
+sections are built from those segments themselves), where the comparison
+is derived from the original endpoints. Sections merged onto the node by
+the D3 coincidence pass (`TopologyComputer`) may carry foreign directions;
+`rk_compare_edge_dir` then compares around the exact rational apex.
 """
 edge_angle_compare(m::Manifold, ns1::NodeSection, ns2::NodeSection; exact) =
     rk_compare_edge_dir(m, ns1.node, get_vertex(ns1, 0), get_vertex(ns2, 0); exact)

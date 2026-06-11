@@ -95,9 +95,11 @@ direction toward `p` has angle less than / equal to / greater than the
 direction toward `q`, angles increasing CCW from the positive X-axis at the
 apex (port of JTS `PolygonNodeTopology.compareAngle` with a `NodeKey` apex).
 For vertex nodes the apex coordinate is exact and the port is direct. For
-crossing nodes `p` and `q` must be among the four endpoints of the node's
-defining segments; the comparison is derived exactly from the original
-endpoints, never from a constructed apex coordinate.
+crossing nodes, directions which are endpoints of the node's defining
+segments are compared exactly from the original endpoints, never from a
+constructed apex coordinate; foreign directions (incident edges of a D3
+coincidence-merged node, from other segment pairs crossing at the same
+point) are compared exactly around the rational apex (slow path).
 
     rk_crossing_dirs_ccw(m, a0, a1, b0, b1; exact)
 

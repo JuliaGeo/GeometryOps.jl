@@ -140,7 +140,8 @@ function _compare_between(m::Planar, origin, p, e0, e1; exact)
 end
 
 # The opposite endpoint of incident endpoint `p` on its defining segment of
-# crossing node `k`. `p` must be one of the four endpoints.
+# crossing node `k`, or `nothing` if `p` is not one of the four endpoints
+# (a direction from a foreign segment pair, on a D3 coincidence-merged node).
 # Coordinate-equality matching is unambiguous because the four endpoints of
 # a proper crossing are pairwise distinct.
 function _crossing_opposite(k::NodeKey, p)
@@ -148,14 +149,14 @@ function _crossing_opposite(k::NodeKey, p)
     _equals2(p, k.a1) && return k.pt
     _equals2(p, k.b0) && return k.b1
     _equals2(p, k.b1) && return k.b0
-    throw(ArgumentError("direction point is not an endpoint of the crossing node's defining segments"))
+    return nothing
 end
 
 function rk_compare_edge_dir(m::Planar, node::NodeKey, p, q; exact)
     node.is_crossing || return _compare_angle(m, node.pt, p, q; exact)
     #=
     Crossing apex (needed by RelateEdge/NodeSection edge ordering, where the
-    node may be a proper crossing): the directions to compare are always
+    node may be a proper crossing): the directions to compare are normally
     among the four endpoints of the defining segments. Because the symbolic
     apex lies *strictly* inside both segments (SS_PROPER), for any incident
     endpoint `x` with opposite endpoint `opp(x)` on the same segment:
@@ -169,17 +170,29 @@ function rk_compare_edge_dir(m::Planar, node::NodeKey, p, q; exact)
     =#
     popp = _crossing_opposite(node, p)
     qopp = _crossing_opposite(node, q)
-    quadrant_p = rk_quadrant(m, popp, p)
-    quadrant_q = rk_quadrant(m, qopp, q)
-    quadrant_p > quadrant_q && return 1
-    quadrant_p < quadrant_q && return -1
-    # same quadrant: orient(apex, q, p) has the sign of orient(opp(q), q, p).
-    # Zero only when p == q (distinct incident endpoints in the same quadrant
-    # are never collinear through the apex of a proper crossing).
-    o = rk_orient(m, qopp, q, p; exact)
-    o > 0 && return 1
-    o < 0 && return -1
-    return 0
+    if popp !== nothing && qopp !== nothing
+        quadrant_p = rk_quadrant(m, popp, p)
+        quadrant_q = rk_quadrant(m, qopp, q)
+        quadrant_p > quadrant_q && return 1
+        quadrant_p < quadrant_q && return -1
+        # same quadrant: orient(apex, q, p) has the sign of orient(opp(q), q, p).
+        # Zero only when p == q (distinct incident endpoints in the same quadrant
+        # are never collinear through the apex of a proper crossing).
+        o = rk_orient(m, qopp, q, p; exact)
+        o > 0 && return 1
+        o < 0 && return -1
+        return 0
+    end
+    #=
+    A direction point from a foreign segment pair: the node is a D3
+    coincidence-merged node (TopologyComputer's self-noding merge pass),
+    whose incident edges come from several segment pairs crossing at the
+    same point. The endpoint substitution above does not apply, so compare
+    around the exact rational apex instead (slow path; only reachable on
+    the rare self-noding merge path).
+    =#
+    apex = _exact_crossing_point(node.pt, node.a1, node.b0, node.b1)
+    return _compare_angle_exact(apex, p, q)
 end
 
 """
@@ -260,4 +273,29 @@ function rk_nodes_coincide(::Planar, k1::NodeKey, k2::NodeKey; exact)
     k1 == k2 && return true
     # Slow path (design D3, follow-up F1): exact rational comparison.
     return _exact_node_point(k1) == _exact_node_point(k2)
+end
+
+#=
+`_compare_angle` with an exact rational apex: the slow path of
+`rk_compare_edge_dir` for direction points incident to a D3
+coincidence-merged crossing node which are not endpoints of the node's
+defining segments. All arithmetic is over `Rational{BigInt}` (Float64
+inputs convert exactly), so the comparison is exact. Mirrors
+`_compare_angle` (quadrant first, then `orient(origin, q, p)`).
+=#
+function _compare_angle_exact(origin, p, q)
+    R = Rational{BigInt}
+    ox, oy = origin
+    px, py = R(GI.x(p)), R(GI.y(p))
+    qx, qy = R(GI.x(q)), R(GI.y(q))
+    _quad(x, y) = x >= ox ? (y >= oy ? 0 : 3) : (y >= oy ? 1 : 2)
+    quadrant_p = _quad(px, py)
+    quadrant_q = _quad(qx, qy)
+    quadrant_p > quadrant_q && return 1
+    quadrant_p < quadrant_q && return -1
+    #-- same quadrant: orient(origin, q, p) as an exact rational cross product
+    o = (qx - ox) * (py - oy) - (qy - oy) * (px - ox)
+    o > 0 && return 1
+    o < 0 && return -1
+    return 0
 end
