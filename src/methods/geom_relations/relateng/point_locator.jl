@@ -163,6 +163,12 @@ function _create_section(::AdjacentEdgeLocator, p, prev, next)
 end
 
 #=
+TODO(Task 17): replace this private slice with the real machinery once
+`NodeSections`/`RelateNode` land — `locate` becomes "build `NodeSections`,
+push sections, `create_node`, `has_exterior_edge(node, true)`" and every
+`_Ael*`/`_create_node_edges`-family helper below is deleted, with the
+ported AdjacentEdgeLocatorTest cases as the regression gate.
+
 Node-wheel construction, standing in for the Java pipeline
 `NodeSections.createNode()` → `RelateNode` until the full node-topology
 machinery lands (Tasks 15–17). This is a faithful slice of

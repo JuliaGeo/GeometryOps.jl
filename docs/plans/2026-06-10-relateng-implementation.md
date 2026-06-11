@@ -1193,6 +1193,8 @@ end
 
 Port the factory `relate_edge(node, dir_pt, is_a, dim, is_forward)`, `compare_to_edge` (via `rk_compare_edge_dir` with the symbolic node as apex), `merge!`, `set_area_interior!`, `is_known`, `is_interior`, `set_location!`, `get_location`, plus statics `find_known_edge_index` and `set_all_area_interior!`. `RelateNode` ports `add_edges!` (both arities), `add_line_edge`/`add_area_edge`/`add_edge` insertion-or-merge into the sorted wheel, and the `update_edges_in_area`/`update_if_area_prev/next` label propagation with circular `next_index`/`prev_index`.
 
+**Additional step (added after Task 11 review):** Task 11's `AdjacentEdgeLocator` shipped with a private sequential slice of the node-wheel pipeline (`_AelEdge`, `_create_node_edges`, etc. in `point_locator.jl`, marked `TODO(Task 17)`). Once the real `NodeSections`/`RelateNode` exist, rewire `locate(::AdjacentEdgeLocator, p)` onto them (build `NodeSections`, push sections, `create_node`, `has_exterior_edge(node, true)`) and delete the slice. The ported AdjacentEdgeLocatorTest cases are the regression gate.
+
 TDD steps as usual. **Commit** — `Add RelateNode and RelateEdge wheel with label propagation`
 
 ## Task 18: `TopologyComputer`
