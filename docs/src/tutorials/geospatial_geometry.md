@@ -172,10 +172,10 @@ geopoly1 = GI.Polygon([ring4], crs = source_crs1)
 And let's create a second `Polygon` by shifting the first using CoordinateTransformations
 
 ````@example geospatial_geometry
-xoffset = 20.;
-yoffset = -25.;
-f = CoordinateTransformations.Translation(xoffset, yoffset);
-geopoly2 = GO.transform(f, geopoly1);
+xoffset = 20.
+yoffset = -25.
+f = CoordinateTransformations.Translation(xoffset, yoffset)
+geopoly2 = GO.transform(f, geopoly1)
 ````
 
 ## [Creating a table with attributes and geometry](@id attributes)
