@@ -10,19 +10,23 @@ Enum for the orientation of a line with respect to a curve. A line can be
 @enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
 """
-    intersection(geom_a, geom_b, [T::Type]; target::Type, fix_multipoly = UnionIntersectingPolygons())
+    intersection(geom_a, geom_b, [T::Type];
+                 target::Type,
+                 exact = True(),
+                 fix_multipoly = UnionIntersectingPolygons())
 
 Return the intersection between two geometries as a list of geometries. Return an empty list
 if none are found. The type of the list will be constrained as much as possible given the
 input geometries. Furthermore, the user can provide a `target` type as a keyword argument and
 a list of target geometries found in the intersection will be returned. The user can also
-provide a float type that they would like the points of returned geometries to be. If the
-user is taking a intersection involving one or more multipolygons, and the multipolygon
-might be comprised of polygons that intersect, if `fix_multipoly` is set to an
-`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
-needed multipolygons will be fixed to be valid before performing the intersection to ensure
-a correct answer. Only set `fix_multipoly` to nothing if you know that the multipolygons are
-valid, as it will avoid unneeded computation. 
+provide a float type that they would like the points of returned geometries to be. Set
+`exact = false` (or `False()`) to use the inexact predicate path instead of the default
+exact one. If the user is taking a intersection involving one or more multipolygons, and
+the multipolygon might be comprised of polygons that intersect, if `fix_multipoly` is set
+to an `IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`),
+then the needed multipolygons will be fixed to be valid before performing the intersection
+to ensure a correct answer. Only set `fix_multipoly` to nothing if you know that the
+multipolygons are valid, as it will avoid unneeded computation. 
 
 ## Example
 
@@ -40,11 +44,11 @@ GI.coordinates.(inter_points)
 ```
 """
 function intersection(
-    alg::FosterHormannClipping, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
+    alg::FosterHormannClipping, geom_a, geom_b, ::Type{T}=Float64; target=nothing, exact = True(), kwargs...
 ) where {T<:AbstractFloat}
     return _intersection(
         alg, TraitTarget(target), T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b;
-        exact = True(), kwargs...,
+        exact, kwargs...,
     )
 end
 # fallback definitions
@@ -64,8 +68,8 @@ _intersection(
     alg::FosterHormannClipping, ::TraitTarget{GI.PointTrait}, ::Type{T},
     trait_a::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_a,
     trait_b::Union{GI.LineTrait, GI.LineStringTrait, GI.LinearRingTrait}, geom_b;
-    kwargs...,
-) where T = _intersection_points(alg.manifold, alg.accelerator, T, trait_a, geom_a, trait_b, geom_b)
+    exact, kwargs...,
+) where T = _intersection_points(alg.manifold, alg.accelerator, T, trait_a, geom_a, trait_b, geom_b; exact)
 
 #= Polygon-Polygon Intersections with target Polygon
 The algorithm to determine the intersection was adapted from "Efficient clipping
@@ -132,7 +136,7 @@ function _intersection(
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(alg, poly_a, poly_b; target))
+        append!(polys, intersection(alg, poly_a, poly_b; target, kwargs...))
     end
     return polys
 end
@@ -165,7 +169,7 @@ function _intersection(
     end
     polys = Vector{_get_poly_type(T)}()
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly))
+        append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly, kwargs...))
     end
     return polys
 end
@@ -200,10 +204,10 @@ function _intersection(
 end
 
 """
-    intersection_points(geom_a, geom_b, [T::Type])
+    intersection_points(geom_a, geom_b, [T::Type]; exact = True())
 
 Return a list of intersection tuple points between two geometries. If no intersection points
-exist, returns an empty list.
+exist, returns an empty list. Set `exact = false` to use the inexact predicate path.
 
 ## Example
 
@@ -218,13 +222,14 @@ inter_points = GO.intersection_points(line1, line2)
 1-element Vector{Tuple{Float64, Float64}}:
  (125.58375366067548, -14.83572303404496)
 """
-intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat = intersection_points(FosterHormannClipping(Planar()), geom_a, geom_b, T)
-function intersection_points(alg::FosterHormannClipping{M, A}, geom_a, geom_b, ::Type{T} = Float64) where {M, A, T <: AbstractFloat}
-    return _intersection_points(alg.manifold, alg.accelerator, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+intersection_points(geom_a, geom_b, ::Type{T} = Float64; exact = True()) where T <: AbstractFloat =
+    intersection_points(FosterHormannClipping(Planar()), geom_a, geom_b, T; exact)
+function intersection_points(alg::FosterHormannClipping{M, A}, geom_a, geom_b, ::Type{T} = Float64; exact = True()) where {M, A, T <: AbstractFloat}
+    return _intersection_points(alg.manifold, alg.accelerator, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; exact)
 end
 
-function intersection_points(m::Manifold, a::IntersectionAccelerator, geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat
-    return _intersection_points(m, a, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
+function intersection_points(m::Manifold, a::IntersectionAccelerator, geom_a, geom_b, ::Type{T} = Float64; exact = True()) where T <: AbstractFloat
+    return _intersection_points(m, a, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b; exact)
 end
 
 

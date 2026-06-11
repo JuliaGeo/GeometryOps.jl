@@ -12,11 +12,18 @@ l5 = GI.LineString([(19999.999, 25000.0), (19999.999, 29000.0), (39999.998999999
 l6 = GI.LineString([(0.0, 25000.0), (0.0, 29000.0), (20000.0, 29000.0), (20000.0, 25000.0), (0.0, 25000.0)])
 
 p1, p2 = GI.Polygon([l1]), GI.Polygon([l2])
+mp1 = GI.MultiPolygon([p1, GI.Polygon([l3])])
+
+struct TrackingExact end
+GO.GeometryOpsCore.booltype(::TrackingExact) = error("tracking exact forwarded")
 
 @testset_implementations begin
     # Three intersection points
     LG_l1_l2_mp = GI.MultiPoint(collect(GI.getpoint(LG.intersection($l1, $l2))))
     @test GO.equals(GI.MultiPoint(GO.intersection_points($l1, $l2)), LG_l1_l2_mp)
+    @test GO.equals(GI.MultiPoint(GO.intersection_points($l1, $l2; exact = false)), LG_l1_l2_mp)
+    @test GO.equals(GI.MultiPoint(GO.intersection_points(GO.Planar(), GO.NestedLoop(), $l1, $l2; exact = false)), LG_l1_l2_mp)
+    @test GO.equals(GI.MultiPoint(GO.intersection($l1, $l2; target = GI.PointTrait(), exact = false)), LG_l1_l2_mp)
 
     # Four intersection points with large intersection
     LG_l3_l4_mp = GI.MultiPoint(collect(GI.getpoint(LG.intersection($l3, $l4))))
@@ -31,4 +38,8 @@ p1, p2 = GI.Polygon([l1]), GI.Polygon([l2])
 
     # No intersection points between polygon and line
     @test isempty(GO.intersection_points($p1, $l6))
+
+    # Recursive polygon-multipolygon intersections should forward `exact`
+    @test_throws "tracking exact forwarded" GO.intersection($p1, $mp1; target = GI.PolygonTrait(), exact = TrackingExact())
+    @test_throws "tracking exact forwarded" GO.intersection($mp1, $mp1; target = GI.PolygonTrait(), exact = TrackingExact(), fix_multipoly = nothing)
 end
