@@ -255,23 +255,26 @@ function area(m::Spherical, geom, ::Type{T} = Float64; threaded=false, kwargs...
     area(NaiveTriangulatedSphericalArea(m), geom, T; threaded, kwargs...)
 end
 
+# Compute the area of a single polygon (exterior minus holes) on the unit sphere.
+# These must be top-level functions: a multi-method local function captured by a
+# closure gets lowered into a `Core.Box`, making `area` infer as `Any`.
+# See https://github.com/JuliaGeo/GeometryOps.jl/issues/407.
+function _naive_triangulated_spherical_polygon_area(method::SphericalTriangleAreaMethod, ::Type{T}, ::GI.PolygonTrait, poly) where T
+    GI.isempty(poly) && return zero(T)
+    ext = GI.getexterior(poly)
+    ext_area = abs(_naive_triangulated_spherical_ring_area(method, GI.trait(ext), ext, T))
+    for hole in GI.gethole(poly)
+        hole_trait = GI.trait(hole)
+        ext_area -= abs(_naive_triangulated_spherical_ring_area(method, hole_trait, hole, T))
+    end
+    return ext_area
+end
+_naive_triangulated_spherical_polygon_area(::SphericalTriangleAreaMethod, ::Type{T}, ::GI.PointTrait, point) where T = zero(T)
+
 # Main implementation for NaiveTriangulatedSphericalArea
 function area(alg::NaiveTriangulatedSphericalArea, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
-
-    function _polygon_area(trait::GI.PolygonTrait, alg::SphericalTriangleAreaMethod, poly)
-        GI.isempty(poly) && return zero(T)
-        ext = GI.getexterior(poly)
-        ext_area = abs(_naive_triangulated_spherical_ring_area(alg, GI.trait(ext), ext, T))
-        for hole in GI.gethole(poly)
-            hole_trait = GI.trait(hole)
-            ext_area -= abs(_naive_triangulated_spherical_ring_area(alg, hole_trait, hole, T))
-        end
-        return ext_area
-    end
-    _polygon_area(::GI.PointTrait, alg, geom) = zero(T)
-
     unit_area = applyreduce(
-        WithTrait((trait, g) -> _polygon_area(trait, alg.method, g)),
+        WithTrait((trait, g) -> _naive_triangulated_spherical_polygon_area(alg.method, T, trait, g)),
         +,
         TraitTarget{Union{GI.PolygonTrait, GI.PointTrait}}(),
         geom;
