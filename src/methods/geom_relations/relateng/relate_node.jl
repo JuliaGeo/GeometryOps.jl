@@ -555,7 +555,7 @@ function add_edge!(n::RelateNode, is_a::Bool, dir_pt, dim::Integer, is_forward::
             merge_edge!(e, is_a, dir_pt, dim, is_forward)
             return e
         end
-        if comp == 1
+        if comp > 0
             #-- found further edge, so insert a new edge at this position
             insert_index = i
             break
