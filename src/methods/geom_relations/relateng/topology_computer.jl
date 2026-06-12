@@ -290,7 +290,7 @@ function add_point_on_geometry!(tc::TopologyComputer, is_point_a::Bool,
         update_dim!(tc, is_point_a, LOC_EXTERIOR, LOC_BOUNDARY, DIM_L)
         return nothing
     end
-    error("Unknown target dimension: $dim_target")
+    throw(ArgumentError("unknown target dimension: $dim_target"))
 end
 
 """
@@ -323,7 +323,7 @@ function add_line_end_on_geometry!(tc::TopologyComputer, is_line_a::Bool,
         add_line_end_on_area!(tc, is_line_a, loc_line_end, loc_target, pt)
         return nothing
     end
-    error("Unknown target dimension: $dim_target")
+    throw(ArgumentError("unknown target dimension: $dim_target"))
 end
 
 # Port of TopologyComputer.addLineEndOnLine (private).
@@ -397,7 +397,7 @@ function add_area_vertex!(tc::TopologyComputer, is_area_a::Bool,
         add_area_vertex_on_area!(tc, is_area_a, loc_area, loc_target, pt)
         return nothing
     end
-    error("Unknown target dimension: $dim_target")
+    throw(ArgumentError("unknown target dimension: $dim_target"))
 end
 
 #=
