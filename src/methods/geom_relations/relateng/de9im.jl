@@ -83,7 +83,10 @@ An immutable DE-9IM intersection matrix. Entries are dimension codes
 (`DIM_FALSE`, `DIM_P`, `DIM_L`, `DIM_A`) stored row-major over
 (Interior, Boundary, Exterior) of A × B, matching the standard string
 form `"212101212"`. Construct from a 9-character string or empty
-(all-`F`) via `DE9IM()`. Index with `im[locA, locB]`.
+(all-`F`) via `DE9IM()`. Index with `im[locA, locB]`, where the indices are
+the JTS location *codes* (`0` = Interior, `1` = Boundary, `2` = Exterior — the
+internal `LOC_*` constants), **not** 1-based array positions: `im[0, 0]` is the
+Interior/Interior entry.
 """
 struct DE9IM
     entries::NTuple{9, Int8}
