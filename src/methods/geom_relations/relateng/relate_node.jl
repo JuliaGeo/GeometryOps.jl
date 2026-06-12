@@ -240,7 +240,7 @@ and the location to BOUNDARY.
 function merge_dim_edge_loc!(e::RelateEdge, is_a::Bool, loc_edge::Integer)
     #TODO: this logic needs work - ie handling A edges marked as Interior
     dim = loc_edge == LOC_BOUNDARY ? DIM_A : DIM_L
-    if dim == DIM_A && dimension(e, is_a) == DIM_L
+    if dim == DIM_A && edge_dim(e, is_a) == DIM_L
         set_dimension!(e, is_a, dim)
         set_on!(e, is_a, LOC_BOUNDARY)
     end
@@ -250,7 +250,7 @@ end
 # Port of RelateEdge.mergeSideLocation (private): INTERIOR takes precedence
 # over EXTERIOR.
 function merge_side_location!(e::RelateEdge, is_a::Bool, pos::Integer, loc::Integer)
-    curr_loc = location(e, is_a, pos)
+    curr_loc = edge_location(e, is_a, pos)
     if curr_loc != LOC_INTERIOR
         set_location!(e, is_a, pos, loc)
     end
@@ -334,7 +334,7 @@ end
 
 # Port of RelateEdge.location(isA, position). (Java asserts unreachable for
 # a bad position; here an ArgumentError.)
-function location(e::RelateEdge, is_a::Bool, position::Integer)
+function edge_location(e::RelateEdge, is_a::Bool, position::Integer)
     if is_a
         position == POS_LEFT && return e.a_loc_left
         position == POS_RIGHT && return e.a_loc_right
@@ -348,7 +348,7 @@ function location(e::RelateEdge, is_a::Bool, position::Integer)
 end
 
 # Port of RelateEdge.dimension (private).
-dimension(e::RelateEdge, is_a::Bool) = is_a ? e.a_dim : e.b_dim
+edge_dim(e::RelateEdge, is_a::Bool) = is_a ? e.a_dim : e.b_dim
 
 # Port of RelateEdge.isKnown(isA) (private): whether the geometry's
 # dimension on this edge is known.
@@ -357,11 +357,11 @@ is_known(e::RelateEdge, is_a::Bool) =
 
 # Port of RelateEdge.isKnown(isA, pos) (private): whether the location at
 # `pos` is known.
-is_known(e::RelateEdge, is_a::Bool, pos::Integer) = location(e, is_a, pos) != LOC_NONE
+is_known(e::RelateEdge, is_a::Bool, pos::Integer) = edge_location(e, is_a, pos) != LOC_NONE
 
 # Port of RelateEdge.isInterior.
 is_interior(e::RelateEdge, is_a::Bool, position::Integer) =
-    location(e, is_a, position) == LOC_INTERIOR
+    edge_location(e, is_a, position) == LOC_INTERIOR
 
 # Port of RelateEdge.setDimLocations.
 function set_dim_locations!(e::RelateEdge, is_a::Bool, dim::Integer, loc::Integer)
@@ -405,9 +405,9 @@ _label_string(e::RelateEdge) =
     string("A:", _location_string(e, true), "/B:", _location_string(e, false))
 
 _location_string(e::RelateEdge, is_a::Bool) = string(
-    _loc_symbol(location(e, is_a, POS_LEFT)),
-    _loc_symbol(location(e, is_a, POS_ON)),
-    _loc_symbol(location(e, is_a, POS_RIGHT)))
+    _loc_symbol(edge_location(e, is_a, POS_LEFT)),
+    _loc_symbol(edge_location(e, is_a, POS_ON)),
+    _loc_symbol(edge_location(e, is_a, POS_RIGHT)))
 
 # Port of Location.toLocationSymbol.
 function _loc_symbol(loc::Integer)
@@ -461,7 +461,7 @@ end
 
 # Port of RelateNode.addEdges(NodeSection).
 function add_edges!(n::RelateNode, ns::NodeSection)
-    dim = dimension(ns)
+    dim = section_dim(ns)
     isa_g = is_a(ns)
     if dim == DIM_L
         add_line_edge!(n, isa_g, get_vertex(ns, 0))
@@ -606,13 +606,13 @@ end
 # from the first known edge, filling unknown locations with the latest known
 # LEFT location (the location of the angular sector CCW of each edge).
 function propagate_side_locations!(n::RelateNode, is_a::Bool, start_index::Integer)
-    curr_loc = location(n.edges[start_index], is_a, POS_LEFT)
+    curr_loc = edge_location(n.edges[start_index], is_a, POS_LEFT)
     #-- edges are stored in CCW order
     index = next_index(n.edges, start_index)
     while index != start_index
         e = n.edges[index]
         set_unknown_locations!(e, is_a, curr_loc)
-        curr_loc = location(e, is_a, POS_LEFT)
+        curr_loc = edge_location(e, is_a, POS_LEFT)
         index = next_index(n.edges, index)
     end
     return nothing
@@ -637,8 +637,8 @@ end
 # in its exterior on either side.
 function has_exterior_edge(n::RelateNode, is_a::Bool)
     for e in n.edges
-        if LOC_EXTERIOR == location(e, is_a, POS_LEFT) ||
-                LOC_EXTERIOR == location(e, is_a, POS_RIGHT)
+        if LOC_EXTERIOR == edge_location(e, is_a, POS_LEFT) ||
+                LOC_EXTERIOR == edge_location(e, is_a, POS_RIGHT)
             return true
         end
     end

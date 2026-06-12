@@ -104,7 +104,7 @@ end
 # Port of PolygonNodeConverter.createSection: a shell (ring id 0) area
 # section of the same polygon as `ns`, with the given edge vertices.
 _create_section(ns::NodeSection, v0, v1) = NodeSection(
-    is_a(ns), DIM_A, id(ns), Int32(0), get_polygonal(ns),
+    is_a(ns), DIM_A, section_id(ns), Int32(0), get_polygonal(ns),
     is_node_at_vertex(ns), v0, node_pt(ns), v1)
 
 # Port of PolygonNodeConverter.extractUnique: drop consecutive duplicate
