@@ -296,3 +296,18 @@ end
         @test !GO.is_containing_segment(open_line, 1, (1.0, 1.0))
     end
 end
+
+@testset "GC extent cache includes point members" begin
+    # A GC whose point member lies far outside its polygon member.
+    # _union_stored_extents must include the point's coordinates in the
+    # cached wrapper extent (audit 2026-06-11: GI.extent(c, true) passed
+    # `fallback` positionally and silently returned `nothing`).
+    gc = GI.GeometryCollection([
+        GI.Point(10.0, 10.0),
+        GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]]),
+    ])
+    cached = GO._relate_cache_extents(GO.Planar(), gc)
+    ext = GI.extent(cached)
+    @test ext.X[2] == 10.0
+    @test ext.Y[2] == 10.0
+end

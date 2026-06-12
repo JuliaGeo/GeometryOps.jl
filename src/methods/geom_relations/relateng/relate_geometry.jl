@@ -172,7 +172,7 @@ function _union_stored_extents(children)
         elseif GI.isempty(c)
             nothing
         else
-            GI.extent(c, true)
+            GI.extent(c; fallback = true)
         end
         ce === nothing && continue
         ext = ext === nothing ? ce : Extents.union(ext, ce)
