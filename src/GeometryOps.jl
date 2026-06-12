@@ -103,6 +103,10 @@ include("methods/geom_relations/relateng/polygon_node_converter.jl")
 # Node-edge topology: after node sections and the converter (`create_node`
 # assembles a RelateNode from converted sections).
 include("methods/geom_relations/relateng/relate_node.jl")
+# Indexed point-in-area location: after the kernel (uses `rk_orient`,
+# `_node_points` and the `LOC_` codes), before the point locator (a prepared
+# RelatePointLocator caches these locators per polygonal element).
+include("methods/geom_relations/relateng/indexed_point_in_area.jl")
 # Point location: after the kernel (uses `_node_point` and de9im constants).
 include("methods/geom_relations/relateng/point_locator.jl")
 # Input facade: after the point locator (RelateGeometry wraps a lazy

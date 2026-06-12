@@ -232,11 +232,15 @@ Supports specifying the [`BoundaryNodeRule`](@ref) to use for line endpoints
 
 The Java constructor signature is `RelatePointLocator(geom, isPrepared,
 bnRule)`; the manifold/`exact` parameters are the only additions (consistent
-with [`AdjacentEdgeLocator`](@ref)). In JTS, prepared mode swaps the
-per-polygon `SimplePointInAreaLocator` for a cached
-`IndexedPointInAreaLocator`; here the `is_prepared` flag is stored but both
-modes currently use the direct ring loop — prepared-mode spatial indexing is
-a perf follow-up (Task 22).
+with [`AdjacentEdgeLocator`](@ref)). As in JTS, prepared mode swaps the
+per-polygon `SimplePointInAreaLocator` ring loop for a cached
+[`IndexedPointInAreaLocator`](@ref) (indexed_point_in_area.jl), created
+lazily on the first use per polygonal element (Task 22). Unprepared mode
+deviates from Java (which keys indexing on `isPrepared` alone): the first
+query on a polygonal element uses the direct ring loop, but repeat queries
+build and reuse the indexed locator — one O(n) scan beats an O(n) index
+build, while the many area-vertex locations of a multi-element relate
+amortize the index (see `locate_on_polygonal`).
 """
 mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule}
     const m::M
@@ -253,6 +257,14 @@ mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule}
     const polygons::Vector{Any}
     const line_boundary::LinearBoundary{BR, Tuple{Float64, Float64}}
     const is_empty::Bool
+    # per-polygonal-element indexed locators, created lazily by
+    # `_get_poly_locator` (Java: polyLocator, filled by getLocator).
+    # Prepared mode fills an entry on its first query; unprepared mode on
+    # its second (see `locate_on_polygonal`).
+    const poly_locator::Vector{Union{Nothing, IndexedPointInAreaLocator{M, E}}}
+    # unprepared mode: queries seen per polygonal element, driving the lazy
+    # index heuristic above
+    const poly_query_count::Vector{Int32}
     # lazily built on the first multi-boundary point (Java: adjEdgeLocator)
     adj_edge_locator::Union{Nothing, AdjacentEdgeLocator{M, E, Tuple{Float64, Float64}}}
 end
@@ -272,8 +284,15 @@ function RelatePointLocator(m::Manifold, geom; exact,
     # LinearBoundary behaves identically (no boundary, no boundary points),
     # so it is built unconditionally here.
     line_boundary = LinearBoundary(lines, boundary_rule)
+    # Java allocates `polyLocator` for both modes (Simple/Indexed); here both
+    # modes may cache indexed locator objects (unprepared lazily, on repeat
+    # queries), so it is allocated unconditionally.
+    poly_locator = Vector{Union{Nothing, IndexedPointInAreaLocator{typeof(m), typeof(exact)}}}(
+        nothing, length(polygons))
+    poly_query_count = zeros(Int32, length(polygons))
     return RelatePointLocator(m, exact, geom, is_prepared, boundary_rule,
-        points, lines, polygons, line_boundary, is_empty, nothing)
+        points, lines, polygons, line_boundary, is_empty, poly_locator,
+        poly_query_count, nothing)
 end
 
 has_boundary(loc::RelatePointLocator) = has_boundary(loc.line_boundary)
@@ -446,8 +465,8 @@ end
 function locate_on_polygons(loc::RelatePointLocator, p, is_node::Bool, parent_polygonal)
     num_bdy = 0
     #TODO: use a spatial index on the polygons
-    for polygonal in loc.polygons
-        l = locate_on_polygonal(loc, p, is_node, parent_polygonal, polygonal)
+    for i in eachindex(loc.polygons)
+        l = locate_on_polygonal(loc, p, is_node, parent_polygonal, i)
         if l == LOC_INTERIOR
             return LOC_INTERIOR
         end
@@ -467,15 +486,58 @@ function locate_on_polygons(loc::RelatePointLocator, p, is_node::Bool, parent_po
     return LOC_EXTERIOR
 end
 
-# Port of RelatePointLocator.locateOnPolygonal (+ getLocator): Java
-# dispatches to a per-polygonal PointOnGeometryLocator (indexed when
-# prepared, simple otherwise); here the SimplePointInAreaLocator ring loop
-# is used for both modes (prepared-mode indexing is Task 22 territory).
-function locate_on_polygonal(loc::RelatePointLocator, p, is_node::Bool, parent_polygonal, polygonal)
+# Queries a polygonal element absorbs via the direct ring loop before its
+# IndexedPointInAreaLocator is built. Both costs scale with the element's
+# segment count, so one threshold fits all sizes: an unsorted index build
+# costs ~10-13 ring scans (measured on Natural Earth coastlines), making
+# the worst-case regret of switching at 8 about one build. Real relates are
+# bimodal — a handful of queries (barely-touching neighbors, where indexing
+# never pays) or hundreds (one area-vertex location per polygon element of
+# the other geometry), so the threshold rarely sits near the break-even.
+const _LAZY_INDEX_QUERY_THRESHOLD = Int32(8)
+
+# Port of RelatePointLocator.locateOnPolygonal: Java dispatches to a
+# per-polygonal PointOnGeometryLocator — a cached IndexedPointInAreaLocator
+# when prepared, a SimplePointInAreaLocator otherwise. Prepared mode does
+# the same here (Task 22). Unprepared mode deviates from Java: the first
+# query on an element uses the direct SimplePointInAreaLocator ring loop
+# (one O(n) scan beats an O(n) index build + query), but repeat queries —
+# e.g. one area-vertex location per polygon element of the other geometry
+# in a multipolygon/multipolygon relate — build and amortize the index.
+function locate_on_polygonal(loc::RelatePointLocator, p, is_node::Bool, parent_polygonal, index::Int)
+    polygonal = loc.polygons[index]
     if is_node && parent_polygonal === polygonal
         return LOC_BOUNDARY
     end
+    #-- the RayCrossingCounter horizontal-ray sweep is coordinate-plane
+    #-- logic (as is all of JTS), so a future non-planar kernel falls
+    #-- through to its own rk_point_in_ring even when prepared
+    if loc.m isa Planar
+        use_index = loc.is_prepared
+        if !use_index
+            count = (loc.poly_query_count[index] += Int32(1))
+            use_index = count > _LAZY_INDEX_QUERY_THRESHOLD
+        end
+        if use_index
+            return locate(_get_poly_locator(loc, index), p)
+        end
+    end
     return _locate_point_in_polygonal(loc.m, p, GI.trait(polygonal), polygonal; exact = loc.exact)
+end
+
+# Port of RelatePointLocator.getLocator (indexed arm): lazily create and
+# cache the indexed locator for polygonal element `index`. Prepared mode
+# pays for the midpoint-sorted layout (build once, query forever); the
+# unprepared lazy index skips the sort, which dominates the build cost
+# (see `SortedPackedIntervalRTree`).
+function _get_poly_locator(loc::RelatePointLocator, index::Int)
+    locator = loc.poly_locator[index]
+    if locator === nothing
+        locator = IndexedPointInAreaLocator(loc.m, loc.polygons[index];
+            exact = loc.exact, sort_leaves = loc.is_prepared)
+        loc.poly_locator[index] = locator
+    end
+    return locator
 end
 
 #=
