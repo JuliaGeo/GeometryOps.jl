@@ -638,9 +638,9 @@ the role of the `prepare(Geometry, BoundaryNodeRule)` overload). The A-side
 caches that the Java instance accumulates across evaluations are forced
 eagerly:
 
-- the [`RelatePointLocator`](@ref) — in Java the prepared flag selects the
-  indexed point-in-area locator; here the locator is identical either way
-  and the flag is stored for parity (see `point_locator.jl`);
+- the [`RelatePointLocator`](@ref) — the prepared flag selects the
+  per-polygonal-element [`IndexedPointInAreaLocator`](@ref) caches, as in
+  Java (see `point_locator.jl` / `indexed_point_in_area.jl`);
 - the unique-point set, when `a` has effective dimension P (the only case
   the P/P fast path consults it);
 - the A segment strings, extracted ONCE **without** an interaction-envelope
