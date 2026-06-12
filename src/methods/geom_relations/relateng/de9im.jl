@@ -99,7 +99,9 @@ Base.getindex(im::DE9IM, locA::Integer, locB::Integer) = im.entries[im_index(loc
 with_entry(im::DE9IM, locA::Integer, locB::Integer, dim::Integer) =
     DE9IM(Base.setindex(im.entries, Int8(dim), im_index(locA, locB)))
 
-Base.string(im::DE9IM) = join(dim_char(d) for d in im.entries)
+# `string(im)` and `"$im"` yield the standard 9-character matrix form via
+# this `print`; `show` keeps the constructor form for the REPL.
+Base.print(io::IO, im::DE9IM) = join(io, (dim_char(d) for d in im.entries))
 Base.show(io::IO, im::DE9IM) = print(io, "DE9IM(\"", string(im), "\")")
 
 "Match a single matrix entry against a pattern code (JTS `IntersectionMatrix.matches`)."
