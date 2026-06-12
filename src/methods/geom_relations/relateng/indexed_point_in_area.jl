@@ -122,13 +122,13 @@ function (typically a `do`-block closure).
 function query_interval(f::F, tree::SortedPackedIntervalRTree, qmin::Float64, qmax::Float64) where {F}
     #-- if there are no leaves the tree is empty (Java: root == null)
     isempty(tree.items) && return nothing
-    _irt_query(f, tree, length(tree.level_min), 1, qmin, qmax)
+    _interval_rtree_query(f, tree, length(tree.level_min), 1, qmin, qmax)
     return nothing
 end
 
 # Port of IntervalRTreeBranchNode.query / IntervalRTreeLeafNode.query over
 # the packed levels: node `i` of `level`, recursing down to the leaves.
-function _irt_query(f::F, tree::SortedPackedIntervalRTree, level::Int, i::Int, qmin::Float64, qmax::Float64) where {F}
+function _interval_rtree_query(f::F, tree::SortedPackedIntervalRTree, level::Int, i::Int, qmin::Float64, qmax::Float64) where {F}
     #-- IntervalRTreeNode.intersects
     (tree.level_min[level][i] > qmax || tree.level_max[level][i] < qmin) && return nothing
     if level == 1
@@ -137,9 +137,9 @@ function _irt_query(f::F, tree::SortedPackedIntervalRTree, level::Int, i::Int, q
     else
         #-- branch node: query both children
         child = 2i - 1
-        _irt_query(f, tree, level - 1, child, qmin, qmax)
+        _interval_rtree_query(f, tree, level - 1, child, qmin, qmax)
         if child + 1 <= length(tree.level_min[level - 1])
-            _irt_query(f, tree, level - 1, child + 1, qmin, qmax)
+            _interval_rtree_query(f, tree, level - 1, child + 1, qmin, qmax)
         end
     end
     return nothing
@@ -291,7 +291,7 @@ function IndexedPointInAreaLocator(m::Manifold, geom; exact, sort_leaves::Bool =
     segs = _PIASegment[]
     n = GI.npoint(geom)
     sizehint!(mins, n); sizehint!(maxs, n); sizehint!(segs, n)
-    _iig_add_geom!(mins, maxs, segs, GI.trait(geom), geom)
+    _interval_index_add_geom!(mins, maxs, segs, GI.trait(geom), geom)
     index = SortedPackedIntervalRTree(mins, maxs, segs; sort_leaves)
     #-- IntervalIndexedGeometry.isEmpty: a (recursively) empty polygonal
     #-- geometry contributes no rings, hence no segments
@@ -319,18 +319,18 @@ end
 # (LinearComponentExtracter) and keeps the closed ones; here only polygonal
 # elements ever reach this locator (RelatePointLocator extracts Polygon /
 # MultiPolygon elements), so the rings are iterated directly.
-function _iig_add_geom!(mins, maxs, segs, ::GI.PolygonTrait, poly)
+function _interval_index_add_geom!(mins, maxs, segs, ::GI.PolygonTrait, poly)
     GI.isempty(poly) && return nothing
-    _iig_add_line!(mins, maxs, segs, GI.getexterior(poly))
+    _interval_index_add_line!(mins, maxs, segs, GI.getexterior(poly))
     for hole in GI.gethole(poly)
-        _iig_add_line!(mins, maxs, segs, hole)
+        _interval_index_add_line!(mins, maxs, segs, hole)
     end
     return nothing
 end
 
-function _iig_add_geom!(mins, maxs, segs, ::GI.MultiPolygonTrait, mp)
+function _interval_index_add_geom!(mins, maxs, segs, ::GI.MultiPolygonTrait, mp)
     for poly in GI.getgeom(mp)
-        _iig_add_geom!(mins, maxs, segs, GI.trait(poly), poly)
+        _interval_index_add_geom!(mins, maxs, segs, GI.trait(poly), poly)
     end
     return nothing
 end
@@ -341,23 +341,23 @@ end
 # repeated end point); the SimplePointInAreaLocator ring loop
 # (`rk_point_in_ring`) treats rings as closed regardless, so the closing
 # segment is added here too.
-function _iig_add_line!(mins, maxs, segs, ring)
+function _interval_index_add_line!(mins, maxs, segs, ring)
     n = GI.npoint(ring)
     n < 2 && return nothing
     first_pt = _node_point(GI.getpoint(ring, 1))
     prev = first_pt
     for i in 2:n
         pt = _node_point(GI.getpoint(ring, i))
-        _iig_add_seg!(mins, maxs, segs, prev, pt)
+        _interval_index_add_segment!(mins, maxs, segs, prev, pt)
         prev = pt
     end
     if prev != first_pt
-        _iig_add_seg!(mins, maxs, segs, prev, first_pt)
+        _interval_index_add_segment!(mins, maxs, segs, prev, first_pt)
     end
     return nothing
 end
 
-function _iig_add_seg!(mins, maxs, segs, p0, p1)
+function _interval_index_add_segment!(mins, maxs, segs, p0, p1)
     push!(mins, min(p0[2], p1[2]))
     push!(maxs, max(p0[2], p1[2]))
     push!(segs, (p0, p1))

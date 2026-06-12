@@ -127,39 +127,39 @@ _has_stored_extent(geom) =
     geom isa GI.Wrappers.WrapperGeometry && hasproperty(geom, :extent) &&
     geom.extent isa Extents.Extent
 
-_relate_cache_extents(m::Manifold, geom) = _rce(m, GI.trait(geom), geom)
+_relate_cache_extents(m::Manifold, geom) = _relate_cache_extents(m, GI.trait(geom), geom)
 
 #-- point elements: their extent is themselves, nothing to cache
-_rce(::Manifold, ::Union{GI.AbstractPointTrait, GI.AbstractMultiPointTrait}, geom) = geom
+_relate_cache_extents(::Manifold, ::Union{GI.AbstractPointTrait, GI.AbstractMultiPointTrait}, geom) = geom
 
 #-- linework leaves: lines and rings (the only level where coordinates are read)
-function _rce(m::Manifold, trait::GI.AbstractCurveTrait, line)
+function _relate_cache_extents(m::Manifold, trait::GI.AbstractCurveTrait, line)
     (GI.isempty(line) || _has_stored_extent(line)) && return line
     return GI.geointerface_geomtype(trait)(line;
         extent = rk_interaction_bounds(m, line), crs = GI.crs(line))
 end
 
-function _rce(m::Manifold, trait::GI.AbstractPolygonTrait, poly)
+function _relate_cache_extents(m::Manifold, trait::GI.AbstractPolygonTrait, poly)
     GI.isempty(poly) && return poly
     if _has_stored_extent(poly) && all(r -> GI.isempty(r) || _has_stored_extent(r), GI.getring(poly))
         return poly
     end
-    rings = [_rce(m, GI.trait(r), r) for r in GI.getring(poly)]
+    rings = [_relate_cache_extents(m, GI.trait(r), r) for r in GI.getring(poly)]
     ext = _union_stored_extents(rings)
     ext === nothing && return poly
     return GI.geointerface_geomtype(trait)(rings; extent = ext, crs = GI.crs(poly))
 end
 
 #-- collections (covers Multi* types too): recurse, union the child extents
-function _rce(m::Manifold, trait::GI.AbstractGeometryCollectionTrait, geom)
-    children = [_rce(m, GI.trait(g), g) for g in GI.getgeom(geom)]
+function _relate_cache_extents(m::Manifold, trait::GI.AbstractGeometryCollectionTrait, geom)
+    children = [_relate_cache_extents(m, GI.trait(g), g) for g in GI.getgeom(geom)]
     ext = _union_stored_extents(children)
     ext === nothing && return geom
     return GI.geointerface_geomtype(trait)(children; extent = ext, crs = GI.crs(geom))
 end
 
 #-- any other trait: leave untouched
-_rce(::Manifold, ::GI.AbstractTrait, geom) = geom
+_relate_cache_extents(::Manifold, ::GI.AbstractTrait, geom) = geom
 
 # Union of the children's extents, reading stored ones and computing only
 # for non-empty children that have none (e.g. point members of a GC);
