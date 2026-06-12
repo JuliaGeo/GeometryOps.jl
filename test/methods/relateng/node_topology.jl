@@ -679,3 +679,9 @@ end
         @test GO.has_exterior_edge(node, false)
     end
 end
+
+@testset "no GO methods on Base.merge!" begin
+    # RelateEdge label merging must not extend Base.merge! (collection
+    # semantics). It lives on the internal function `merge_edge!` instead.
+    @test !any(m -> m.module == GO, methods(Base.merge!))
+end

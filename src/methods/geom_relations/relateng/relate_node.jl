@@ -206,7 +206,7 @@ locations are simply installed; otherwise the dimension/on-location merge
 (`merge_side_location!`: INTERIOR takes precedence) apply.
 `dir_pt` is unused, as in Java (kept for signature parity).
 =#
-function Base.merge!(e::RelateEdge, is_a::Bool, dir_pt, dim::Integer, is_forward::Bool)
+function merge_edge!(e::RelateEdge, is_a::Bool, dir_pt, dim::Integer, is_forward::Bool)
     loc_edge = LOC_INTERIOR
     loc_left = LOC_EXTERIOR
     loc_right = LOC_EXTERIOR
@@ -552,7 +552,7 @@ function add_edge!(n::RelateNode, is_a::Bool, dir_pt, dim::Integer, is_forward::
     for (i, e) in pairs(n.edges)
         comp = compare_to_edge(n.m, e, dir_pt; exact = n.exact)
         if comp == 0
-            merge!(e, is_a, dir_pt, dim, is_forward)
+            merge_edge!(e, is_a, dir_pt, dim, is_forward)
             return e
         end
         if comp == 1
