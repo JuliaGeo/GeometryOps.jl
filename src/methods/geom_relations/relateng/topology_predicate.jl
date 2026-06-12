@@ -211,6 +211,9 @@ intersects_exterior_of(p::IMPredicate, is_a::Bool) = is_a ?
     (is_intersects_entry(p, LOC_INTERIOR, LOC_EXTERIOR) || is_intersects_entry(p, LOC_BOUNDARY, LOC_EXTERIOR))
 
 is_intersects_entry(p::IMPredicate, locA, locB) = p.im[locA, locB] >= DIM_P
+# NOTE: unused; kept for JTS IMPredicate API parity. As ported it can never
+# return `false`: matrix entries are initialized to DIM_FALSE and only ever
+# increase, so they never hold DIM_UNKNOWN (-3). Do not use as a real check.
 is_known_entry(p::IMPredicate, locA, locB) = p.im[locA, locB] != DIM_UNKNOWN
 is_dimension_entry(p::IMPredicate, locA, locB, dim) = p.im[locA, locB] == dim
 get_dimension(p::IMPredicate, locA, locB) = p.im[locA, locB]
