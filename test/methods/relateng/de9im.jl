@@ -39,6 +39,8 @@ end
 @testset "DE9IM" begin
     im = DE9IM("212101212")
     @test string(im) == "212101212"
+    @test sprint(print, im) == "212101212"   # print and string must agree
+    @test sprint(show, im) == "DE9IM(\"212101212\")"
     @test im[GO.LOC_INTERIOR, GO.LOC_INTERIOR] == GO.DIM_A
     @test im[GO.LOC_BOUNDARY, GO.LOC_BOUNDARY] == GO.DIM_P
     @test DE9IM() == DE9IM("FFFFFFFFF")
