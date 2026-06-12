@@ -581,8 +581,9 @@ The port of the RelateNG.prepare entry points and the prepared-mode
 branches.
 ==========================================================================#
 
-# The prebuilt A-side segment index reused across evaluations: an STRtree
-# over the per-segment extents of the cached (unfiltered) A segment strings,
+# The prebuilt A-side segment index reused across evaluations: a spatial
+# index (`_relate_edge_index`, edge_intersector.jl) over the per-segment
+# extents of the cached (unfiltered) A segment strings,
 # plus the owner table mapping each flat tree index back to
 # (string index, segment index). The stand-in for Java's cached
 # `MCIndexSegmentSetMutualIntersector`.
@@ -715,7 +716,7 @@ end
 function _make_prepared_edge_index(segs_a)
     extents, owners = _segment_extent_table(segs_a)
     isempty(extents) && return nothing
-    return PreparedEdgeIndex(STRtree(extents), owners)
+    return PreparedEdgeIndex(_relate_edge_index(extents), owners)
 end
 
 # The prepared counterpart of the mutual-pair enumeration: no prebuilt tree
@@ -731,7 +732,7 @@ function _process_prepared_edges!(tc::TopologyComputer, segs_a,
         m::Manifold = _manifold(tc), exact = _exact(tc))
     extents_b, owners_b = _segment_extent_table(edges_b)
     isempty(extents_b) && return nothing
-    tree_b = STRtree(extents_b)
+    tree_b = _relate_edge_index(extents_b)
     SpatialTreeInterface.dual_depth_first_search(Extents.intersects, eidx.tree, tree_b) do ia, ib
         (sa, ka) = eidx.owners[ia]
         (sb, kb) = owners_b[ib]
