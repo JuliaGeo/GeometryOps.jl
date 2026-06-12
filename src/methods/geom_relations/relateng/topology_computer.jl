@@ -502,39 +502,92 @@ a B-line proper crossing of one A polygon merged with its vertex touch of
 another). Here node identity is symbolic, so the merge is an explicit pass,
 run whenever any crossing key exists.
 
-Grouping is hash-based on the representative Float64 point of each key
-(`_crossing_locate_point`: the exact rational crossing point,
-deterministically rounded via 256-bit BigFloat; vertex keys use their exact
-coordinate). Coincident keys always
-round identically, so they share a bucket; within a bucket coincidence is
+Candidate grouping is by *exact bounding boxes* (the F1 follow-up to
+design D3): a vertex key's box is its exact coordinate; a crossing key's
+box is the intersection of its two defining segments' bounding boxes,
+which provably contains the exact crossing point (the point lies on both
+segments). Boxes are computed with exact Float64 comparisons — no
+rounding is involved — so coincident keys (equal exact points) always
+have overlapping boxes and always land in the same overlap cluster.
+Clusters are the sweep closure of box overlap along x, then y: a
+conservative superset of the true coincidence classes. Within a
+multi-member cluster containing at least one crossing key, coincidence is
 confirmed *exactly* via the rational `_exact_node_point` (distinct exact
-points that happen to round together are never merged). This keeps the
-merge decisions exact (design D3) at hashing cost O(N) plus one rational
-evaluation per key in a multi-member bucket.
+points whose boxes happen to overlap are never merged); vertex-only
+clusters need no check at all, since distinct vertex keys key by their
+exact coordinates and can never coincide. This keeps the merge decisions
+exact (design D3) at sorting cost O(N log N), with the rational
+arithmetic reserved for genuinely near-coincident nodes instead of every
+crossing key on every evaluation.
 
 A vertex key is preferred as the canonical merged node: its coordinate is
 exact, so the edge wheel and node location never need the rational apex.
 Otherwise the merged crossing node's wheel compares foreign directions
 around the exact rational apex (`rk_compare_edge_dir` slow path).
 =#
-# TODO(F1): every evaluation with a proper crossing pays one Rational +
-# BigFloat rounding per crossing key here, even when no coincidence exists.
-# F1 could compute a cheap floating-point representative with an error bound
-# instead, reserving the rational arithmetic for keys that fall inside
-# multi-member buckets.
 function _merge_coincident_nodes!(tc::TopologyComputer)
     nodemap = tc.node_sections
+    length(nodemap) > 1 || return nothing
     any(k -> k.is_crossing, keys(nodemap)) || return nothing
     K = keytype(nodemap)
-    #-- bucket keys by their representative (deterministically rounded) coordinate
-    buckets = Dict{Tuple{Float64, Float64}, Vector{K}}()
+    #-- collect (x interval, y interval, key) and cluster by box overlap
+    items = Vector{Tuple{NTuple{2, Float64}, NTuple{2, Float64}, K}}()
+    sizehint!(items, length(nodemap))
     for k in keys(nodemap)
-        pt = k.is_crossing ? _crossing_locate_point(k) : k.pt
-        push!(get!(() -> K[], buckets, pt), k)
+        xint, yint = _node_key_box(k)
+        push!(items, (xint, yint, k))
     end
-    for group in values(buckets)
-        length(group) > 1 || continue
-        _merge_coincident_group!(nodemap, group)
+    sort!(items; by = it -> it[1][1])
+    i = 1
+    n = length(items)
+    while i <= n
+        #-- extend the x-cluster while the next box starts inside it
+        j = i
+        xhi = items[i][1][2]
+        while j < n && items[j + 1][1][1] <= xhi
+            j += 1
+            xhi = max(xhi, items[j][1][2])
+        end
+        j > i && _merge_coincident_y_clusters!(nodemap, items[i:j])
+        i = j + 1
+    end
+    return nothing
+end
+
+# The exact coordinate box guaranteed to contain a node key's point: the
+# vertex coordinate itself, or the intersection of the defining segments'
+# bounding boxes for a proper crossing.
+function _node_key_box(k::NodeKey)
+    if !k.is_crossing
+        return (k.pt[1], k.pt[1]), (k.pt[2], k.pt[2])
+    end
+    axlo, axhi = minmax(k.pt[1], k.a1[1])
+    aylo, ayhi = minmax(k.pt[2], k.a1[2])
+    bxlo, bxhi = minmax(k.b0[1], k.b1[1])
+    bylo, byhi = minmax(k.b0[2], k.b1[2])
+    return (max(axlo, bxlo), min(axhi, bxhi)), (max(aylo, bylo), min(ayhi, byhi))
+end
+
+# Second sweep dimension: within one x-overlap cluster, cluster by y
+# overlap; multi-member y-clusters with a crossing key are the candidate
+# coincidence groups handed to exact confirmation.
+function _merge_coincident_y_clusters!(nodemap::Dict, items::Vector)
+    sort!(items; by = it -> it[2][1])
+    i = 1
+    n = length(items)
+    while i <= n
+        j = i
+        yhi = items[i][2][2]
+        while j < n && items[j + 1][2][1] <= yhi
+            j += 1
+            yhi = max(yhi, items[j][2][2])
+        end
+        if j > i
+            group = [items[t][3] for t in i:j]
+            any(k -> k.is_crossing, group) &&
+                _merge_coincident_group!(nodemap, group)
+        end
+        i = j + 1
     end
     return nothing
 end
