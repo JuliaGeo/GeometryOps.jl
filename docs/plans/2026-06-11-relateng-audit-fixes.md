@@ -15,6 +15,7 @@
 - Single test files run in ~seconds to ~2 minutes. The FULL relateng suite (`test/methods/relateng/runtests.jl`) takes ~25 minutes (JTS XML conformance + LibGEOS differential fuzz) — only run it once, at the end, in a background shell.
 - Commit style (per AGENTS.md): imperative mood, capitalized, no trailing period, **no** `feat:`/`fix:` prefixes, backticks around code identifiers.
 - The relateng port convention: files diff against their JTS Java counterparts; method order parallels the Java files. Do not reorder functions while editing.
+- **Plan reconciled to commit `2a8ad4eab`** (2026-06-11): five performance commits landed after this plan was written (extent-cache wrapper tree `_rce`/`_relate_cache_extents`, NaturalIndex edge indexes, box-overlap node clustering, `IndexedPointInAreaLocator` in the new `indexed_point_in_area.jl` + its test file). All line references below were re-verified against that commit. The new `indexed_point_in_area.jl` is already trait-dispatch style and adds no rename targets (its `locate` method joins the existing keep-list `locate` generic).
 
 ---
 
@@ -23,7 +24,7 @@
 **The bug:** `GeoInterface.extent`'s `fallback` parameter is a *keyword* (`extent(obj; fallback=true)`). Passing it positionally as `GI.extent(c, true)` dispatches to the trait-form fallback `GI.extent(::Any, x) = Extents.extent(x)` — i.e. `c` is treated as a trait and `true` as the geometry — and `Extents.extent(true)` returns `nothing`. Net effect: in `_union_stored_extents`, any non-empty child without a stored extent (e.g. a Point member of a GeometryCollection) is silently dropped from the cached union extent.
 
 **Files:**
-- Modify: `src/methods/geom_relations/relateng/relate_geometry.jl:178`
+- Modify: `src/methods/geom_relations/relateng/relate_geometry.jl:175`
 - Test: `test/methods/relateng/relate_geometry.jl` (append a testset)
 
 **Step 1: Write the failing test**
@@ -57,7 +58,7 @@ Expected: the new testset FAILS with `ext.X[2] == 1.0` (the polygon-only extent)
 
 **Step 3: Fix the call**
 
-In `src/methods/geom_relations/relateng/relate_geometry.jl`, inside `_union_stored_extents` (around line 178), change:
+In `src/methods/geom_relations/relateng/relate_geometry.jl`, inside `_union_stored_extents` (defined at line 167; the call is at line 175), change:
 
 ```julia
         else
@@ -395,7 +396,7 @@ git commit -m 'Rename collision-prone internal relateng helpers (`id`, `dimensio
 
 | Function | File |
 |---|---|
-| `_extract_elements!` | `point_locator.jl:294` |
+| `_extract_elements!` | `point_locator.jl:305` (trait-form method; the 4-arg entry at `:302` already exists) |
 | `_relate_is_empty` | `relate_geometry.jl:85` |
 | `_relate_extent` | `relate_geometry.jl:99` |
 | `_geom_dimension` | `relate_geometry.jl:187` |
@@ -475,7 +476,7 @@ Expected: ALL PASS. If the new testset fails here, the test is wrong (it mischar
 
 **Step 3: Convert `_extract_elements!` (point_locator.jl)**
 
-Replace the trait-form method (lines ~294–312) with dispatch methods. Keep the 4-argument entry point above it unchanged. The original ladder checks the polygonal union before the GC branch — dispatch specificity reproduces this (see the correctness note):
+Replace the trait-form method `_extract_elements!(points, lines, polygons, trait::GI.AbstractTrait, geom)` (lines ~305–323) with dispatch methods. Keep the 4-argument entry point above it (`point_locator.jl:302–303`) and its "Port of RelatePointLocator.extractElements" comment unchanged. The original ladder checks the polygonal union before the GC branch — dispatch specificity reproduces this (see the correctness note):
 
 ```julia
 function _extract_elements!(points, lines, polygons, ::GI.PointTrait, geom)
@@ -710,7 +711,7 @@ No code behavior changes; no tests. Four edits:
 
 **Files:**
 - Modify: `src/methods/geom_relations/relateng/de9im.jl` (DE9IM docstring, ~line 79)
-- Modify: `src/methods/geom_relations/relateng/relate_ng.jl` (RelateNG docstring ~line 103, `prepare` docstring ~line 629)
+- Modify: `src/methods/geom_relations/relateng/relate_ng.jl` (RelateNG docstring ~line 103, `prepare` docstring ~line 650, definition at `:657`)
 - Modify: `src/methods/geom_relations/relateng/topology_predicate.jl` (`is_known_entry`, ~line 214)
 
 **Step 1: DE9IM docstring — explain the index convention**
@@ -803,5 +804,5 @@ Expected: 8 commits, all changes confined to `src/methods/geom_relations/relaten
 - **Renaming `get_`/`set_` accessors, `compare_to`, `finish!`, `locate`, `is_known`, `get_geometry`, …**: deliberate port-parity names; `locate` is a proper multi-type generic. Leave them.
 - **Converting the single-trait guards and sequential walks to dispatch** (`is_polygonal`, `locate_with_dim`, `locate_node`/`is_node_in_area`, `_compute_line_ends_walk!`, `_compute_area_vertex_walk!`, `_extract_segment_strings_from_atomic!`): these mix trait checks with threaded state or are single predicates inside larger logic — Task 7 deliberately converts only the pure classification ladders.
 - **`Vector{Any}` element collections in `RelatePointLocator` / abstract `Vector{NodeSection}`**: documented, deliberate, not on hot paths. No change.
-- **Exporting `LOC_*` constants or symbol-based `DE9IM` indexing**: YAGNI for now; the docstring fix (Task 7) covers usability.
+- **Exporting `LOC_*` constants or symbol-based `DE9IM` indexing**: YAGNI for now; the docstring fix (Task 8) covers usability.
 - **`IM_PATTERN_*` constants**: NOT dead code — they are used in `test/methods/relateng/relate_ng.jl`. Keep as-is.
