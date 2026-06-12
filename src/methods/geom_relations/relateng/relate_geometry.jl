@@ -404,9 +404,38 @@ given extent (one per line, one per polygon ring). If `ext_filter` is
     must early-return on empty inputs before extraction.
 """
 function extract_segment_strings(rg::RelateGeometry, is_a::Bool, ext_filter)
-    seg_strings = RelateSegmentString[]
+    seg_strings = Vector{_segment_string_eltype(rg, rg.geom)}()
     _extract_segment_strings!(rg, is_a, ext_filter, rg.geom, seg_strings)
     return seg_strings
+end
+
+# The exact element type the extraction below can produce for `geom`:
+# `RelateSegmentString{P, G, RG}` with `P` the fixed `_node_points` point
+# type, `G` `Nothing` for lines and the parent polygonal's type for rings,
+# and `RG = typeof(rg)`. Concrete for atomic and Multi* inputs; a small
+# `Union` for mixed GeometryCollections. Typing the vector concretely up
+# front keeps the per-segment loops downstream (`_segment_extent_table`,
+# the NestedLoop enumerator) statically dispatched instead of boxing every
+# segment access.
+function _segment_string_eltype(rg::RG, geom) where {RG <: RelateGeometry}
+    P = Tuple{Float64, Float64}   # what `_node_points` always yields
+    trait = GI.trait(geom)
+    if trait isa GI.AbstractCurveTrait
+        return RelateSegmentString{P, Nothing, RG}
+    elseif trait isa GI.AbstractPolygonTrait
+        return RelateSegmentString{P, typeof(geom), RG}
+    elseif trait isa GI.AbstractMultiPolygonTrait
+        #-- rings of MultiPolygon elements carry the MultiPolygon as parent
+        return RelateSegmentString{P, typeof(geom), RG}
+    elseif trait isa GI.AbstractGeometryCollectionTrait
+        T = Union{}
+        for g in GI.getgeom(geom)
+            T = Union{T, _segment_string_eltype(rg, g)}
+        end
+        return T
+    end
+    #-- point elements produce no segment strings
+    return Union{}
 end
 
 function _extract_segment_strings!(rg::RelateGeometry, is_a::Bool, ext_filter, geom, seg_strings)
