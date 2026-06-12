@@ -117,6 +117,11 @@ JTS RelateNG algorithm by Martin Davis. Capabilities:
    Points.
 5. Support for [`BoundaryNodeRule`](@ref)s.
 
+All coordinates are evaluated as `Float64`: input coordinates are converted
+on extraction, and the exact-predicate machinery (adaptive orientation
+predicates, rational-arithmetic node coincidence) assumes `Float64` inputs.
+Non-`Float64` geometries are accepted but evaluated at `Float64` precision.
+
 Keyword arguments (all optional): `manifold` (default `Planar()`),
 `accelerator` (default [`AutoAccelerator`](@ref)), `exact` (default
 `True()`), `boundary_rule` (default [`Mod2Boundary`](@ref), the OGC SFS
@@ -628,6 +633,9 @@ end
 
 """
     prepare(alg::RelateNG, a)::PreparedRelate
+
+`prepare` is the generic entry point for prepared-geometry optimizations in
+GeometryOps; `RelateNG` is currently the only algorithm implementing it.
 
 Creates a prepared relate instance to optimize the repeated evaluation of
 relationships against the single geometry `a`.
