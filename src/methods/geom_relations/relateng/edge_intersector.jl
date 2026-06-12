@@ -180,8 +180,9 @@ recorded on `computer`.
 - `NestedLoop`: a plain double loop over
   string pairs and segment pairs, with a per-pair segment-extent
   disjointness skip (on `Planar`).
-- Any tree-backed accelerator (e.g. `DoubleSTRtree`): an `STRtree` is built
-  over the per-segment extents of each side and traversed with
+- Any tree-backed accelerator (e.g. `DoubleSTRtree`): a spatial index
+  (`_relate_edge_index`, currently a `NaturalIndex`) is built over the
+  per-segment extents of each side and traversed with
   `SpatialTreeInterface.dual_depth_first_search`
   under the `Extents.intersects` predicate.
 - [`AutoAccelerator`](@ref): picks `NestedLoop` below the clipping size
@@ -271,8 +272,18 @@ _segment_envs_disjoint(::Planar, a0, a1, b0, b1) =
     max(a0[2], a1[2]) < min(b0[2], b1[2])
 _segment_envs_disjoint(::Manifold, a0, a1, b0, b1) = false
 
-# Tree path (any other accelerator, canonically DoubleSTRtree): an STRtree
-# over the per-segment extents of each side, traversed simultaneously.
+# The spatial index built over per-segment extents for the tree-accelerated
+# paths (here and in the prepared mode of relate_ng.jl). A `NaturalIndex`
+# rather than an `STRtree`: segments arrive in ring/line order, which is
+# already spatially coherent, so the no-sort natural index (pure in-order
+# hierarchical extent reduction) builds much faster while pruning the dual
+# traversal almost as well. Both implement SpatialTreeInterface, so this is
+# the only line to change to swap index structures.
+_relate_edge_index(extents::Vector{<:Extents.Extent}) =
+    NaturalIndex(extents; nodecapacity = 16)
+
+# Tree path (any other accelerator, canonically DoubleSTRtree): a spatial
+# index over the per-segment extents of each side, traversed simultaneously.
 function process_edge_intersections!(tc::TopologyComputer,
         ssa_list::AbstractVector{<:RelateSegmentString},
         ssb_list::AbstractVector{<:RelateSegmentString},
@@ -281,8 +292,8 @@ function process_edge_intersections!(tc::TopologyComputer,
     extents_a, owners_a = _segment_extent_table(ssa_list)
     extents_b, owners_b = _segment_extent_table(ssb_list)
     (isempty(extents_a) || isempty(extents_b)) && return nothing
-    tree_a = STRtree(extents_a)
-    tree_b = STRtree(extents_b)
+    tree_a = _relate_edge_index(extents_a)
+    tree_b = _relate_edge_index(extents_b)
     SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do ia, ib
         (sa, ka) = owners_a[ia]
         (sb, kb) = owners_b[ib]
@@ -369,7 +380,7 @@ function process_self_intersections!(tc::TopologyComputer,
     return nothing
 end
 
-# Tree path: one STRtree over the per-segment extents, dual-traversed with
+# Tree path: one index over the per-segment extents, dual-traversed with
 # itself; the flat-index ordering `ia < ib` is the unordered-pair guard
 # (excluding a segment against itself).
 function process_self_intersections!(tc::TopologyComputer,
@@ -378,7 +389,7 @@ function process_self_intersections!(tc::TopologyComputer,
         m::Manifold = _manifold(tc), exact = _exact(tc))
     extents, owners = _segment_extent_table(ss_list)
     isempty(extents) && return nothing
-    tree = STRtree(extents)
+    tree = _relate_edge_index(extents)
     SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree, tree) do ia, ib
         ia < ib || return nothing
         (sa, ka) = owners[ia]
@@ -397,14 +408,23 @@ end
 function _segment_extent_table(ss_list)
     extents = Extents.Extent{(:X, :Y), NTuple{2, NTuple{2, Float64}}}[]
     owners = NTuple{2, Int}[]
+    nseg = _total_segment_count(ss_list)
+    sizehint!(extents, nseg)
+    sizehint!(owners, nseg)
     for (si, ss) in enumerate(ss_list)
-        pts = ss.pts
-        for k in 1:(length(pts) - 1)
-            p = pts[k]
-            q = pts[k + 1]
-            push!(extents, Extents.Extent(X = minmax(p[1], q[1]), Y = minmax(p[2], q[2])))
-            push!(owners, (si, k))
-        end
+        _push_segment_extents!(extents, owners, si, ss.pts)
     end
     return extents, owners
+end
+
+# Function barrier: dispatch once per segment string, so the per-segment
+# loop stays statically typed even if `ss_list` has a non-concrete eltype.
+function _push_segment_extents!(extents::Vector, owners::Vector, si::Int, pts::Vector)
+    for k in 1:(length(pts) - 1)
+        p = pts[k]
+        q = pts[k + 1]
+        push!(extents, Extents.Extent(X = minmax(p[1], q[1]), Y = minmax(p[2], q[2])))
+        push!(owners, (si, k))
+    end
+    return nothing
 end
