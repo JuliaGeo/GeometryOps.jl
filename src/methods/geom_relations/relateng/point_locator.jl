@@ -302,25 +302,35 @@ has_boundary(loc::RelatePointLocator) = has_boundary(loc.line_boundary)
 _extract_elements!(points, lines, polygons, geom) =
     _extract_elements!(points, lines, polygons, GI.trait(geom), geom)
 
-function _extract_elements!(points, lines, polygons, trait::GI.AbstractTrait, geom)
+function _extract_elements!(points, lines, polygons, ::GI.PointTrait, geom)
     GI.isempty(geom) && return nothing
-    if trait isa GI.PointTrait
-        #-- addPoint: normalized coordinate tuples, as in LinearBoundary
-        push!(points, _node_point(geom))
-    elseif trait isa GI.AbstractCurveTrait
-        #-- addLine (Java LinearRing extends LineString, hence AbstractCurve)
-        push!(lines, geom)
-    elseif trait isa Union{GI.PolygonTrait, GI.MultiPolygonTrait}
-        #-- addPolygonal: whole polygonal geometry kept as one element
-        push!(polygons, geom)
-    elseif trait isa GI.AbstractGeometryCollectionTrait
-        #-- covers GeometryCollection, MultiPoint, MultiLineString
-        for g in GI.getgeom(geom)
-            _extract_elements!(points, lines, polygons, g)
-        end
+    #-- addPoint: normalized coordinate tuples, as in LinearBoundary
+    push!(points, _node_point(geom))
+    return nothing
+end
+function _extract_elements!(points, lines, polygons, ::GI.AbstractCurveTrait, geom)
+    GI.isempty(geom) && return nothing
+    #-- addLine (Java LinearRing extends LineString, hence AbstractCurve)
+    push!(lines, geom)
+    return nothing
+end
+function _extract_elements!(points, lines, polygons,
+        ::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, geom)
+    GI.isempty(geom) && return nothing
+    #-- addPolygonal: whole polygonal geometry kept as one element
+    push!(polygons, geom)
+    return nothing
+end
+function _extract_elements!(points, lines, polygons,
+        ::GI.AbstractGeometryCollectionTrait, geom)
+    GI.isempty(geom) && return nothing
+    #-- covers GeometryCollection, MultiPoint, MultiLineString
+    for g in GI.getgeom(geom)
+        _extract_elements!(points, lines, polygons, g)
     end
     return nothing
 end
+_extract_elements!(points, lines, polygons, ::GI.AbstractTrait, geom) = nothing
 
 """
     locate(loc::RelatePointLocator, p)
