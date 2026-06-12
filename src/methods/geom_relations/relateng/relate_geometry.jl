@@ -82,30 +82,30 @@ end
 
 # Recursive emptiness (Java `Geometry.isEmpty()`): a collection is empty iff
 # every element is empty. `GI.isempty` is not recursive for collections.
-function _relate_is_empty(geom)
-    if GI.trait(geom) isa GI.AbstractGeometryCollectionTrait
-        for g in GI.getgeom(geom)
-            _relate_is_empty(g) || return false
-        end
-        return true
+_relate_is_empty(geom) = _relate_is_empty(GI.trait(geom), geom)
+function _relate_is_empty(::GI.AbstractGeometryCollectionTrait, geom)
+    for g in GI.getgeom(geom)
+        _relate_is_empty(g) || return false
     end
-    return GI.isempty(geom)
+    return true
 end
+_relate_is_empty(::GI.AbstractTrait, geom) = GI.isempty(geom)
 
 # Equivalent of Java `Geometry.getEnvelopeInternal()` as interaction bounds:
 # the union of `rk_interaction_bounds` over the non-empty atomic elements
 # (empty elements contribute nothing in Java too), or `nothing` if the
 # geometry is (recursively) empty.
-function _relate_extent(m::Manifold, geom)
-    if GI.trait(geom) isa GI.AbstractGeometryCollectionTrait
-        ext = nothing
-        for g in GI.getgeom(geom)
-            e = _relate_extent(m, g)
-            e === nothing && continue
-            ext = ext === nothing ? e : Extents.union(ext, e)
-        end
-        return ext
+_relate_extent(m::Manifold, geom) = _relate_extent(m, GI.trait(geom), geom)
+function _relate_extent(m::Manifold, ::GI.AbstractGeometryCollectionTrait, geom)
+    ext = nothing
+    for g in GI.getgeom(geom)
+        e = _relate_extent(m, g)
+        e === nothing && continue
+        ext = ext === nothing ? e : Extents.union(ext, e)
     end
+    return ext
+end
+function _relate_extent(m::Manifold, ::GI.AbstractTrait, geom)
     GI.isempty(geom) && return nothing
     return rk_interaction_bounds(m, geom)
 end
@@ -184,24 +184,19 @@ end
 # geometry type, including empty elements (an empty polygon still has
 # dimension 2); collections report the maximum over their elements
 # (`DIM_FALSE` when there are none).
-function _geom_dimension(geom)
-    trait = GI.trait(geom)
-    if trait isa Union{GI.AbstractPointTrait, GI.AbstractMultiPointTrait}
-        return DIM_P
-    elseif trait isa Union{GI.AbstractCurveTrait, GI.AbstractMultiCurveTrait}
-        return DIM_L
-    elseif trait isa Union{GI.AbstractPolygonTrait, GI.AbstractMultiPolygonTrait}
-        return DIM_A
-    elseif trait isa GI.AbstractGeometryCollectionTrait
-        dim = DIM_FALSE
-        for g in GI.getgeom(geom)
-            d = _geom_dimension(g)
-            d > dim && (dim = d)
-        end
-        return dim
+_geom_dimension(geom) = _geom_dimension(GI.trait(geom), geom)
+_geom_dimension(::Union{GI.AbstractPointTrait, GI.AbstractMultiPointTrait}, geom) = DIM_P
+_geom_dimension(::Union{GI.AbstractCurveTrait, GI.AbstractMultiCurveTrait}, geom) = DIM_L
+_geom_dimension(::Union{GI.AbstractPolygonTrait, GI.AbstractMultiPolygonTrait}, geom) = DIM_A
+function _geom_dimension(::GI.AbstractGeometryCollectionTrait, geom)
+    dim = DIM_FALSE
+    for g in GI.getgeom(geom)
+        d = _geom_dimension(g)
+        d > dim && (dim = d)
     end
-    return DIM_FALSE
+    return dim
 end
+_geom_dimension(::GI.AbstractTrait, geom) = DIM_FALSE
 
 # Port of RelateGeometry.analyzeDimensions, returning
 # `(dim, has_points, has_lines, has_areas)`. The Java `instanceof
@@ -210,42 +205,42 @@ end
 # etc.), per the Task 12 review.
 function _analyze_dimensions(geom, dim0::Int8, is_geom_empty::Bool)
     is_geom_empty && return (dim0, false, false, false)
-    trait = GI.trait(geom)
-    if trait isa Union{GI.AbstractPointTrait, GI.AbstractMultiPointTrait}
-        return (DIM_P, true, false, false)
-    elseif trait isa Union{GI.AbstractCurveTrait, GI.AbstractMultiCurveTrait}
-        return (DIM_L, false, true, false)
-    elseif trait isa Union{GI.AbstractPolygonTrait, GI.AbstractMultiPolygonTrait}
-        return (DIM_A, false, false, true)
-    end
-    #-- analyze a (possibly mixed type) collection
-    return _analyze_collection_dimensions(geom, dim0, false, false, false)
+    return _analyze_dimensions(GI.trait(geom), geom, dim0)
 end
+_analyze_dimensions(::Union{GI.AbstractPointTrait, GI.AbstractMultiPointTrait}, geom, dim0) =
+    (DIM_P, true, false, false)
+_analyze_dimensions(::Union{GI.AbstractCurveTrait, GI.AbstractMultiCurveTrait}, geom, dim0) =
+    (DIM_L, false, true, false)
+_analyze_dimensions(::Union{GI.AbstractPolygonTrait, GI.AbstractMultiPolygonTrait}, geom, dim0) =
+    (DIM_A, false, false, true)
+#-- analyze a (possibly mixed type) collection
+_analyze_dimensions(::GI.AbstractTrait, geom, dim0) =
+    _analyze_collection_dimensions(geom, dim0, false, false, false)
 
 # The recursive element walk of analyzeDimensions (Java uses a
 # GeometryCollectionIterator; only atomic elements match the checks).
 function _analyze_collection_dimensions(geom, dim, has_points, has_lines, has_areas)
     for g in GI.getgeom(geom)
-        trait = GI.trait(g)
-        if trait isa GI.AbstractGeometryCollectionTrait
-            dim, has_points, has_lines, has_areas =
-                _analyze_collection_dimensions(g, dim, has_points, has_lines, has_areas)
-            continue
-        end
-        GI.isempty(g) && continue
-        if trait isa GI.AbstractPointTrait
-            has_points = true
-            dim < DIM_P && (dim = DIM_P)
-        elseif trait isa GI.AbstractCurveTrait
-            has_lines = true
-            dim < DIM_L && (dim = DIM_L)
-        elseif trait isa GI.AbstractPolygonTrait
-            has_areas = true
-            dim < DIM_A && (dim = DIM_A)
-        end
+        dim, has_points, has_lines, has_areas = _analyze_element_dimensions(
+            GI.trait(g), g, dim, has_points, has_lines, has_areas)
     end
     return (dim, has_points, has_lines, has_areas)
 end
+_analyze_element_dimensions(::GI.AbstractGeometryCollectionTrait, g, dim, hp, hl, ha) =
+    _analyze_collection_dimensions(g, dim, hp, hl, ha)
+function _analyze_element_dimensions(::GI.AbstractPointTrait, g, dim, hp, hl, ha)
+    GI.isempty(g) && return (dim, hp, hl, ha)
+    return (max(dim, DIM_P), true, hl, ha)
+end
+function _analyze_element_dimensions(::GI.AbstractCurveTrait, g, dim, hp, hl, ha)
+    GI.isempty(g) && return (dim, hp, hl, ha)
+    return (max(dim, DIM_L), hp, true, ha)
+end
+function _analyze_element_dimensions(::GI.AbstractPolygonTrait, g, dim, hp, hl, ha)
+    GI.isempty(g) && return (dim, hp, hl, ha)
+    return (max(dim, DIM_A), hp, hl, true)
+end
+_analyze_element_dimensions(::GI.AbstractTrait, g, dim, hp, hl, ha) = (dim, hp, hl, ha)
 
 # Port of RelateGeometry.isZeroLengthLine.
 function _is_zero_length_line(geom, dim::Int8)
@@ -256,18 +251,15 @@ end
 
 # Port of RelateGeometry.isZeroLength(Geometry): tests if all linear elements
 # are zero-length. For efficiency the test avoids computing actual length.
-function _is_zero_length(geom)
-    trait = GI.trait(geom)
-    if trait isa GI.AbstractGeometryCollectionTrait
-        for g in GI.getgeom(geom)
-            _is_zero_length(g) || return false
-        end
-        return true
-    elseif trait isa GI.AbstractCurveTrait
-        return _is_zero_length_linestring(geom)
+_is_zero_length(geom) = _is_zero_length(GI.trait(geom), geom)
+function _is_zero_length(::GI.AbstractGeometryCollectionTrait, geom)
+    for g in GI.getgeom(geom)
+        _is_zero_length(g) || return false
     end
     return true
 end
+_is_zero_length(::GI.AbstractCurveTrait, geom) = _is_zero_length_linestring(geom)
+_is_zero_length(::GI.AbstractTrait, geom) = true
 
 # Port of RelateGeometry.isZeroLength(LineString): exact coordinate equality
 # of every point with the first one.
@@ -416,19 +408,25 @@ function _create_unique_points(geom)
     return set
 end
 
-function _add_component_coordinates!(set, geom)
-    trait = GI.trait(geom)
-    if trait isa GI.AbstractGeometryCollectionTrait
-        for g in GI.getgeom(geom)
-            _add_component_coordinates!(set, g)
-        end
-    elseif trait isa Union{GI.AbstractPointTrait, GI.AbstractCurveTrait}
-        GI.isempty(geom) && return nothing
-        pt = trait isa GI.AbstractPointTrait ? geom : GI.getpoint(geom, 1)
-        push!(set, _node_point(pt))
+_add_component_coordinates!(set, geom) =
+    _add_component_coordinates!(set, GI.trait(geom), geom)
+function _add_component_coordinates!(set, ::GI.AbstractGeometryCollectionTrait, geom)
+    for g in GI.getgeom(geom)
+        _add_component_coordinates!(set, g)
     end
     return nothing
 end
+function _add_component_coordinates!(set, ::GI.AbstractPointTrait, geom)
+    GI.isempty(geom) && return nothing
+    push!(set, _node_point(geom))
+    return nothing
+end
+function _add_component_coordinates!(set, ::GI.AbstractCurveTrait, geom)
+    GI.isempty(geom) && return nothing
+    push!(set, _node_point(GI.getpoint(geom, 1)))
+    return nothing
+end
+_add_component_coordinates!(set, ::GI.AbstractTrait, geom) = nothing
 
 # Port of RelateGeometry.getEffectivePoints: the point elements which are not
 # covered by an element of higher dimension. (This JTS version has no
@@ -454,17 +452,19 @@ end
 
 # Equivalent of Java PointExtracter.getPoints: every Point element, including
 # those nested in collections.
-function _extract_point_elements!(list, geom)
-    trait = GI.trait(geom)
-    if trait isa GI.AbstractPointTrait
-        push!(list, geom)
-    elseif trait isa GI.AbstractGeometryCollectionTrait
-        for g in GI.getgeom(geom)
-            _extract_point_elements!(list, g)
-        end
+_extract_point_elements!(list, geom) =
+    _extract_point_elements!(list, GI.trait(geom), geom)
+function _extract_point_elements!(list, ::GI.AbstractPointTrait, geom)
+    push!(list, geom)
+    return nothing
+end
+function _extract_point_elements!(list, ::GI.AbstractGeometryCollectionTrait, geom)
+    for g in GI.getgeom(geom)
+        _extract_point_elements!(list, g)
     end
     return nothing
 end
+_extract_point_elements!(list, ::GI.AbstractTrait, geom) = nothing
 
 """
     extract_segment_strings(rg::RelateGeometry, is_a::Bool, ext_filter)
@@ -494,26 +494,23 @@ end
 # front keeps the per-segment loops downstream (`_segment_extent_table`,
 # the NestedLoop enumerator) statically dispatched instead of boxing every
 # segment access.
-function _segment_string_eltype(rg::RG, geom) where {RG <: RelateGeometry}
-    P = Tuple{Float64, Float64}   # what `_node_points` always yields
-    trait = GI.trait(geom)
-    if trait isa GI.AbstractCurveTrait
-        return RelateSegmentString{P, Nothing, RG}
-    elseif trait isa GI.AbstractPolygonTrait
-        return RelateSegmentString{P, typeof(geom), RG}
-    elseif trait isa GI.AbstractMultiPolygonTrait
-        #-- rings of MultiPolygon elements carry the MultiPolygon as parent
-        return RelateSegmentString{P, typeof(geom), RG}
-    elseif trait isa GI.AbstractGeometryCollectionTrait
-        T = Union{}
-        for g in GI.getgeom(geom)
-            T = Union{T, _segment_string_eltype(rg, g)}
-        end
-        return T
+_segment_string_eltype(rg::RelateGeometry, geom) =
+    _segment_string_eltype(rg, GI.trait(geom), geom)
+_segment_string_eltype(rg::RG, ::GI.AbstractCurveTrait, geom) where {RG <: RelateGeometry} =
+    RelateSegmentString{Tuple{Float64, Float64}, Nothing, RG}
+#-- rings of MultiPolygon elements carry the MultiPolygon as parent
+_segment_string_eltype(rg::RG, ::Union{GI.AbstractPolygonTrait, GI.AbstractMultiPolygonTrait},
+        geom) where {RG <: RelateGeometry} =
+    RelateSegmentString{Tuple{Float64, Float64}, typeof(geom), RG}
+function _segment_string_eltype(rg::RelateGeometry, ::GI.AbstractGeometryCollectionTrait, geom)
+    T = Union{}
+    for g in GI.getgeom(geom)
+        T = Union{T, _segment_string_eltype(rg, g)}
     end
-    #-- point elements produce no segment strings
-    return Union{}
+    return T
 end
+#-- point elements produce no segment strings
+_segment_string_eltype(::RelateGeometry, ::GI.AbstractTrait, geom) = Union{}
 
 function _extract_segment_strings!(rg::RelateGeometry, is_a::Bool, ext_filter, geom, seg_strings)
     trait = GI.trait(geom)
