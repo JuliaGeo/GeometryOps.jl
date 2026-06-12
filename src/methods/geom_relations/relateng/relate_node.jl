@@ -396,9 +396,9 @@ end
 
 # Port of RelateEdge.toString (+ labelString/locationString), as a debugging
 # aid. The node is symbolic, so crossing nodes print their NodeKey segment
-# pair instead of a coordinate (`_pt_rep`, node_sections.jl).
+# pair instead of a coordinate (`_point_string`, node_sections.jl).
 function Base.show(io::IO, e::RelateEdge)
-    print(io, _pt_rep(e.node), " - ", _pt_rep(e.dir_pt), " - ", _label_string(e))
+    print(io, _point_string(e.node), " - ", _point_string(e.dir_pt), " - ", _label_string(e))
 end
 
 _label_string(e::RelateEdge) =
@@ -627,7 +627,7 @@ next_index(edges::AbstractVector, i::Integer) =
 
 # Port of RelateNode.toString, as a debugging aid.
 function Base.show(io::IO, n::RelateNode)
-    print(io, "Node[", _pt_rep(n.node), "]:")
+    print(io, "Node[", _point_string(n.node), "]:")
     for e in n.edges
         print(io, "\n", e)
     end

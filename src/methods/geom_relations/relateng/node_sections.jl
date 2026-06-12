@@ -142,15 +142,15 @@ function Base.show(io::IO, ns::NodeSection)
     at_vertex_ind = ns.is_node_at_vertex ? "-V-" : "---"
     poly_id = ns.id >= 0 ? "[$(ns.id):$(ns.ring_id)]" : ""
     print(io, geom_name(ns.is_a), ns.dim, poly_id, ": ",
-        _edge_rep(ns.v0, ns.node), " ", at_vertex_ind, " ", _edge_rep(ns.node, ns.v1))
+        _edge_string(ns.v0, ns.node), " ", at_vertex_ind, " ", _edge_string(ns.node, ns.v1))
 end
 
-_edge_rep(p0, p1) =
-    (p0 === nothing || p1 === nothing) ? "null" : string(_pt_rep(p0), " - ", _pt_rep(p1))
-_pt_rep(p) = "($(GI.x(p)) $(GI.y(p)))"
-_pt_rep(k::NodeKey) = k.is_crossing ?
-    string("X[", _pt_rep(k.pt), " - ", _pt_rep(k.a1), " × ", _pt_rep(k.b0), " - ", _pt_rep(k.b1), "]") :
-    _pt_rep(k.pt)
+_edge_string(p0, p1) =
+    (p0 === nothing || p1 === nothing) ? "null" : string(_point_string(p0), " - ", _point_string(p1))
+_point_string(p) = "($(GI.x(p)) $(GI.y(p)))"
+_point_string(k::NodeKey) = k.is_crossing ?
+    string("X[", _point_string(k.pt), " - ", _point_string(k.a1), " × ", _point_string(k.b0), " - ", _point_string(k.b1), "]") :
+    _point_string(k.pt)
 
 """
     compare_to(ns::NodeSection, other::NodeSection)
