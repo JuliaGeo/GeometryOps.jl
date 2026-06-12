@@ -311,3 +311,50 @@ end
     @test ext.X[2] == 10.0
     @test ext.Y[2] == 10.0
 end
+
+@testset "trait classification characterization" begin
+    mp    = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0)])
+    ml    = GI.MultiLineString([[(0.0, 0.0), (1.0, 0.0)], [(0.0, 1.0), (1.0, 1.0)]])
+    mpoly = GI.MultiPolygon([[[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]]])
+    zline = GI.LineString([(0.0, 0.0), (0.0, 0.0)])   # zero-length
+    gc    = GI.GeometryCollection([GI.Point(5.0, 5.0), mpoly])
+    empty_gc = GI.GeometryCollection([LG.readgeom("LINESTRING EMPTY")])  # GI wrappers cannot be empty
+
+    #-- _geom_dimension: Multi* must classify by content, not as GC
+    @test GO._geom_dimension(mp) == GO.DIM_P
+    @test GO._geom_dimension(ml) == GO.DIM_L
+    @test GO._geom_dimension(mpoly) == GO.DIM_A
+    @test GO._geom_dimension(gc) == GO.DIM_A
+
+    #-- _relate_is_empty: recursive emptiness through collections
+    @test GO._relate_is_empty(empty_gc)
+    @test !GO._relate_is_empty(gc)
+
+    #-- _is_zero_length: MultiLineString takes the collection branch
+    @test GO._is_zero_length(zline)
+    @test !GO._is_zero_length(ml)
+
+    #-- _relate_extent: union over GC elements including the bare point
+    @test GO._relate_extent(GO.Planar(), gc).X == (0.0, 5.0)
+
+    #-- _analyze_dimensions via the constructor: mixed GC
+    rg = GO.RelateGeometry(GO.Planar(), gc; exact = GO.True())
+    @test GO.get_dimension(rg) == GO.DIM_A
+    @test rg.has_points && rg.has_areas && !rg.has_lines
+
+    #-- _add_component_coordinates!: point coords + first line coords
+    pts = Set{Tuple{Float64, Float64}}()
+    GO._add_component_coordinates!(pts, GI.GeometryCollection([mp, ml]))
+    @test (0.0, 0.0) in pts
+
+    #-- _extract_point_elements!: only the Point element of the GC
+    lst = Any[]
+    GO._extract_point_elements!(lst, gc)
+    @test length(lst) == 1
+
+    #-- _extract_elements!: classification into points/lines/polygons
+    points = Set{Tuple{Float64, Float64}}(); lines = Any[]; polygons = Any[]
+    GO._extract_elements!(points, lines, polygons,
+        GI.GeometryCollection([GI.Point(0.0, 0.0), ml, mpoly]))
+    @test length(points) == 1 && length(lines) == 2 && length(polygons) == 1
+end
