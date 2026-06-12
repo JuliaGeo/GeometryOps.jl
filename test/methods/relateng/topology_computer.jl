@@ -169,7 +169,7 @@ end
 
     # unknown target dimension throws (Java IllegalStateException)
     tc, _ = im_computer(PT_A, POLY_B)
-    @test_throws ErrorException GO.add_point_on_geometry!(tc, true, GO.LOC_INTERIOR, 5, (6.0, 6.0))
+    @test_throws ArgumentError GO.add_point_on_geometry!(tc, true, GO.LOC_INTERIOR, 5, (6.0, 6.0))
 end
 
 @testset "add_line_end_on_geometry!" begin
@@ -211,7 +211,7 @@ end
 
     # unknown target dimension throws
     tc, _ = im_computer(LINE_A, POLY_B)
-    @test_throws ErrorException GO.add_line_end_on_geometry!(tc, true, GO.LOC_BOUNDARY, GO.LOC_INTERIOR, 5, (6.0, 6.0))
+    @test_throws ArgumentError GO.add_line_end_on_geometry!(tc, true, GO.LOC_BOUNDARY, GO.LOC_INTERIOR, 5, (6.0, 6.0))
 end
 
 @testset "add_area_vertex!" begin
@@ -260,7 +260,7 @@ end
 
     # unknown target dimension throws
     tc, _ = im_computer(POLY_A, POLY_B)
-    @test_throws ErrorException GO.add_area_vertex!(tc, true, GO.LOC_BOUNDARY, GO.LOC_INTERIOR, 5, (0.0, 0.0))
+    @test_throws ArgumentError GO.add_area_vertex!(tc, true, GO.LOC_BOUNDARY, GO.LOC_INTERIOR, 5, (0.0, 0.0))
 end
 
 @testset "add_intersection! + evaluate_nodes!: L/L proper crossing" begin
@@ -449,4 +449,14 @@ end
     GO.finish!(tc)
     @test GO.is_result_known(tc)
     @test !GO.get_result(tc)
+end
+
+@testset "unknown target dimension throws ArgumentError" begin
+    a = GI.Point(0.0, 0.0)
+    b = GI.Point(1.0, 1.0)
+    rga = GO.RelateGeometry(GO.Planar(), a; exact = GO.True())
+    rgb = GO.RelateGeometry(GO.Planar(), b; exact = GO.True())
+    tc = GO.TopologyComputer(GO.pred_intersects(), rga, rgb)
+    @test_throws ArgumentError GO.add_point_on_geometry!(
+        tc, true, GO.LOC_INTERIOR, Int8(9), (0.0, 0.0))
 end
