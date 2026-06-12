@@ -77,7 +77,7 @@ edge_angle_compare(m::Manifold, ns1::NodeSection, ns2::NodeSection; exact) =
 
 # Port of NodeSection.isAreaArea: whether both sections are area sections.
 is_area_area(a::NodeSection, b::NodeSection) =
-    dimension(a) == DIM_A && dimension(b) == DIM_A
+    section_dim(a) == DIM_A && section_dim(b) == DIM_A
 
 # Port of NodeSection.getVertex(i): the incident edge vertex before (0) or
 # after (1) the node, or `nothing` if that edge does not exist.
@@ -88,10 +88,10 @@ get_vertex(ns::NodeSection, i::Integer) = i == 0 ? ns.v0 : ns.v1
 node_pt(ns::NodeSection) = ns.node
 
 # Port of NodeSection.dimension.
-dimension(ns::NodeSection) = ns.dim
+section_dim(ns::NodeSection) = ns.dim
 
 # Port of NodeSection.id.
-id(ns::NodeSection) = ns.id
+section_id(ns::NodeSection) = ns.id
 
 # Port of NodeSection.ringId.
 ring_id(ns::NodeSection) = ns.ring_id
@@ -123,7 +123,7 @@ is_same_geometry(ns::NodeSection, other::NodeSection) = is_a(ns) == is_a(other)
 # element of the same input geometry. (Element ids are only unique within
 # one input geometry.)
 is_same_polygon(ns::NodeSection, other::NodeSection) =
-    is_a(ns) == is_a(other) && id(ns) == id(other)
+    is_a(ns) == is_a(other) && section_id(ns) == section_id(other)
 
 # Port of NodeSection.isNodeAtVertex.
 is_node_at_vertex(ns::NodeSection) = ns.is_node_at_vertex

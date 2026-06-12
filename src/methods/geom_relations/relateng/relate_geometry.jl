@@ -394,7 +394,7 @@ function is_polygonal(rg::RelateGeometry)
     return GI.trait(rg.geom) isa Union{GI.AbstractPolygonTrait, GI.AbstractMultiPolygonTrait}
 end
 
-is_empty(rg::RelateGeometry) = rg.is_geom_empty
+is_geom_empty(rg::RelateGeometry) = rg.is_geom_empty
 
 has_boundary(rg::RelateGeometry) = has_boundary(_get_locator(rg))
 
