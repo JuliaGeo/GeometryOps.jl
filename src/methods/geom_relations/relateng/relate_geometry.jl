@@ -64,6 +64,13 @@ function RelateGeometry(m::Manifold, geom; exact,
         is_prepared::Bool = false, boundary_rule::BoundaryNodeRule = Mod2Boundary())
     #-- cache geometry metadata
     is_geom_empty = _relate_is_empty(geom)
+    #-- Hold an extent-cached wrapper tree instead of the raw input: one
+    #-- coordinate pass here makes every downstream extent consult (the
+    #-- engine's envelope checks, extraction filters, line-end walks, point
+    #-- locator short-circuits) O(1) — the GI equivalent of the envelope
+    #-- cache JTS carries on every Geometry. Coordinates are never copied:
+    #-- the wrappers share the original linework objects.
+    geom = is_geom_empty ? geom : _relate_cache_extents(m, geom)
     extent = _relate_extent(m, geom)
     dim = _geom_dimension(geom)
     dim, has_points, has_lines, has_areas = _analyze_dimensions(geom, dim, is_geom_empty)
@@ -101,6 +108,76 @@ function _relate_extent(m::Manifold, geom)
     end
     GI.isempty(geom) && return nothing
     return rk_interaction_bounds(m, geom)
+end
+
+#==========================================================================
+## Extent caching (the stand-in for Java's per-Geometry envelope cache)
+
+Rebuild the input as a GeoInterface wrapper tree with the interaction
+bounds embedded at every level, in one coordinate pass. Wrappers share the
+original linework objects (a `GI.LinearRing(ring; extent)` around a
+same-trait geometry stores `ring`'s coordinate backing, copying nothing),
+so this costs O(#elements) small allocations plus the one extent scan the
+constructor performed anyway. Levels that already carry a stored extent
+are reused as-is, so re-wrapping an already-cached tree (or user inputs
+built with `extent = ...`) does no coordinate work.
+==========================================================================#
+
+_has_stored_extent(geom) =
+    geom isa GI.Wrappers.WrapperGeometry && hasproperty(geom, :extent) &&
+    geom.extent isa Extents.Extent
+
+_relate_cache_extents(m::Manifold, geom) = _rce(m, GI.trait(geom), geom)
+
+#-- point elements: their extent is themselves, nothing to cache
+_rce(::Manifold, ::Union{GI.AbstractPointTrait, GI.AbstractMultiPointTrait}, geom) = geom
+
+#-- linework leaves: lines and rings (the only level where coordinates are read)
+function _rce(m::Manifold, trait::GI.AbstractCurveTrait, line)
+    (GI.isempty(line) || _has_stored_extent(line)) && return line
+    return GI.geointerface_geomtype(trait)(line;
+        extent = rk_interaction_bounds(m, line), crs = GI.crs(line))
+end
+
+function _rce(m::Manifold, trait::GI.AbstractPolygonTrait, poly)
+    GI.isempty(poly) && return poly
+    if _has_stored_extent(poly) && all(r -> GI.isempty(r) || _has_stored_extent(r), GI.getring(poly))
+        return poly
+    end
+    rings = [_rce(m, GI.trait(r), r) for r in GI.getring(poly)]
+    ext = _union_stored_extents(rings)
+    ext === nothing && return poly
+    return GI.geointerface_geomtype(trait)(rings; extent = ext, crs = GI.crs(poly))
+end
+
+#-- collections (covers Multi* types too): recurse, union the child extents
+function _rce(m::Manifold, trait::GI.AbstractGeometryCollectionTrait, geom)
+    children = [_rce(m, GI.trait(g), g) for g in GI.getgeom(geom)]
+    ext = _union_stored_extents(children)
+    ext === nothing && return geom
+    return GI.geointerface_geomtype(trait)(children; extent = ext, crs = GI.crs(geom))
+end
+
+#-- any other trait: leave untouched
+_rce(::Manifold, ::GI.AbstractTrait, geom) = geom
+
+# Union of the children's extents, reading stored ones and computing only
+# for non-empty children that have none (e.g. point members of a GC);
+# `nothing` when no child contributes one.
+function _union_stored_extents(children)
+    ext = nothing
+    for c in children
+        ce = if _has_stored_extent(c)
+            c.extent
+        elseif GI.isempty(c)
+            nothing
+        else
+            GI.extent(c, true)
+        end
+        ce === nothing && continue
+        ext = ext === nothing ? ce : Extents.union(ext, ce)
+    end
+    return ext
 end
 
 # Equivalent of Java `Geometry.getDimension()`: the inherent dimension of the
@@ -451,18 +528,25 @@ function _extract_segment_strings!(rg::RelateGeometry, is_a::Bool, ext_filter, g
         if GI.trait(g) isa GI.AbstractGeometryCollectionTrait
             _extract_segment_strings!(rg, is_a, ext_filter, g, seg_strings)
         else
-            _extract_segment_strings_from_atomic!(rg, is_a, g, parent_polygonal, ext_filter, seg_strings)
+            #-- an atomic input geometry's extent is already cached on `rg`
+            #-- (Java's getEnvelopeInternal cache); don't rescan it below
+            elem_ext = g === rg.geom ? get_extent(rg) : missing
+            _extract_segment_strings_from_atomic!(rg, is_a, g, parent_polygonal,
+                ext_filter, seg_strings, elem_ext)
         end
     end
     return nothing
 end
 
 function _extract_segment_strings_from_atomic!(rg::RelateGeometry, is_a::Bool, geom,
-        parent_polygonal, ext_filter, seg_strings)
+        parent_polygonal, ext_filter, seg_strings, elem_ext = missing)
     GI.isempty(geom) && return nothing
-    do_extract = ext_filter === nothing ||
-        !rk_bounds_disjoint(ext_filter, rk_interaction_bounds(rg.m, geom))
-    do_extract || return nothing
+    if ext_filter !== nothing
+        if elem_ext === missing
+            elem_ext = rk_interaction_bounds(rg.m, geom)
+        end
+        rk_bounds_disjoint(ext_filter, elem_ext) && return nothing
+    end
 
     rg.element_id += Int32(1)
     trait = GI.trait(geom)
@@ -472,7 +556,11 @@ function _extract_segment_strings_from_atomic!(rg::RelateGeometry, is_a::Bool, g
         push!(seg_strings, ss)
     elseif trait isa GI.AbstractPolygonTrait
         parent_poly = parent_polygonal !== nothing ? parent_polygonal : geom
-        _extract_ring_to_segment_string!(rg, is_a, GI.getexterior(geom), 0, ext_filter, parent_poly, seg_strings)
+        #-- the exterior ring's extent is the element extent (for an invalid
+        #-- polygon with a hole outside its shell it is a superset, which can
+        #-- only under-prune — extracted non-interacting edges are harmless)
+        _extract_ring_to_segment_string!(rg, is_a, GI.getexterior(geom), 0, ext_filter,
+            parent_poly, seg_strings, elem_ext)
         for (i, hole) in enumerate(GI.gethole(geom))
             _extract_ring_to_segment_string!(rg, is_a, hole, i, ext_filter, parent_poly, seg_strings)
         end
@@ -481,11 +569,13 @@ function _extract_segment_strings_from_atomic!(rg::RelateGeometry, is_a::Bool, g
 end
 
 function _extract_ring_to_segment_string!(rg::RelateGeometry, is_a::Bool, ring, ring_id::Integer,
-        ext_filter, parent_poly, seg_strings)
+        ext_filter, parent_poly, seg_strings, ring_ext = missing)
     GI.isempty(ring) && return nothing
-    if ext_filter !== nothing &&
-            rk_bounds_disjoint(ext_filter, rk_interaction_bounds(rg.m, ring))
-        return nothing
+    if ext_filter !== nothing
+        if ring_ext === missing
+            ring_ext = rk_interaction_bounds(rg.m, ring)
+        end
+        rk_bounds_disjoint(ext_filter, ring_ext) && return nothing
     end
 
     #-- orient the points if required

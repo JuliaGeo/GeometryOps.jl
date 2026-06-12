@@ -228,13 +228,15 @@ equals(alg::RelateNG, g1, g2)     = relate_predicate(alg, pred_equalstopo(), g1,
 # edges/index; otherwise `nothing`.
 function evaluate!(alg::RelateNG, geom_a::RelateGeometry, b, predicate::TopologyPredicate,
         prep = nothing)
-    #-- fast envelope checks
-    if !has_required_envelope_interaction(geom_a, b, predicate)
-        return false
-    end
-
+    #-- Java performs the envelope fast-exit before building the B
+    #-- RelateGeometry, reading the envelope cached on the Geometry. Here the
+    #-- RelateGeometry constructor is what caches the extents (one coordinate
+    #-- pass either way), so B is built first and the check reads its extent.
     geom_b = RelateGeometry(geom_a.m, b; exact = geom_a.exact,
         boundary_rule = geom_a.boundary_rule)
+    if !has_required_envelope_interaction(geom_a, get_extent(geom_b), predicate)
+        return false
+    end
 
     dim_a = get_dimension_real(geom_a)
     dim_b = get_dimension_real(geom_b)
@@ -270,13 +272,12 @@ function evaluate!(alg::RelateNG, geom_a::RelateGeometry, b, predicate::Topology
     return get_result(tc)
 end
 
-# Port of RelateNG.hasRequiredEnvelopeInteraction (private). The B extent is
-# computed directly from the raw geometry, as Java reads
-# `b.getEnvelopeInternal()` before constructing the B RelateGeometry; an
-# empty geometry yields a `nothing` (null) extent, for which `ext_covers`/
+# Port of RelateNG.hasRequiredEnvelopeInteraction (private). `env_b` is the
+# B extent computed directly from the raw geometry by the caller, as Java
+# reads `b.getEnvelopeInternal()` before constructing the B RelateGeometry;
+# an empty geometry yields a `nothing` (null) extent, for which `ext_covers`/
 # `ext_intersects` return false, exactly like Java's null Envelope.
-function has_required_envelope_interaction(geom_a::RelateGeometry, b, predicate::TopologyPredicate)
-    env_b = _relate_extent(geom_a.m, b)
+function has_required_envelope_interaction(geom_a::RelateGeometry, env_b, predicate::TopologyPredicate)
     is_interacts = false
     if require_covers(predicate, GEOM_A)
         if !ext_covers(get_extent(geom_a), env_b)

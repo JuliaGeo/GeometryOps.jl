@@ -419,11 +419,16 @@ function locate_on_lines(loc::RelatePointLocator, p, is_node::Bool)
     return LOC_EXTERIOR
 end
 
-# Port of RelatePointLocator.locateOnLine. (Java first short-circuits on the
-# cached line envelope; GI geometries do not cache extents, so the check is
-# skipped — perf follow-up alongside prepared-mode indexing, Task 22.)
+# Port of RelatePointLocator.locateOnLine, including Java's short-circuit on
+# the cached line envelope (the lines come from the RelateGeometry wrapper
+# tree, which carries a stored extent on every linework element).
 # `is_node` is unused, as in Java (kept for signature parity).
 function locate_on_line(loc::RelatePointLocator, p, is_node::Bool, line)
+    #-- Java: lineEnv.intersects(p) short-circuit
+    pt_ext = Extents.Extent(X = (GI.x(p), GI.x(p)), Y = (GI.y(p), GI.y(p)))
+    if rk_bounds_disjoint(rk_interaction_bounds(loc.m, line), pt_ext)
+        return LOC_EXTERIOR
+    end
     #-- Java: PointLocation.isOnLine over the coordinate sequence
     n = GI.npoint(line)
     q0 = _tuple_point(GI.getpoint(line, 1))

@@ -159,7 +159,10 @@ end
         @test shell.dim == GO.DIM_A && hole.dim == GO.DIM_A
         @test shell.id == 1 && hole.id == 1
         @test shell.ring_id == 0 && hole.ring_id == 1
-        @test shell.parent_polygonal === poly && hole.parent_polygonal === poly
+        # the parent is the RelateGeometry's held geometry — the extent-cached
+        # wrapper of the input, not the input object itself
+        @test shell.parent_polygonal === rgeom.geom && hole.parent_polygonal === rgeom.geom
+        @test GI.trait(shell.parent_polygonal) isa GI.PolygonTrait
         @test shell.input_geom === rgeom
         # shell reoriented CW, hole reoriented CCW
         @test shell.pts[1] == (0.0, 0.0) && shell.pts[2] == (0.0, 10.0)
@@ -178,7 +181,10 @@ end
         @test length(sss) == 2
         @test !sss[1].is_a && !sss[2].is_a
         @test sss[1].id == 1 && sss[2].id == 2
-        @test sss[1].parent_polygonal === mp && sss[2].parent_polygonal === mp
+        # the parent is the MultiPolygon of the RelateGeometry's held
+        # (extent-cached wrapper) tree, shared by both elements' rings
+        @test sss[1].parent_polygonal === rgeom.geom && sss[2].parent_polygonal === rgeom.geom
+        @test GI.trait(sss[1].parent_polygonal) isa GI.MultiPolygonTrait
     end
 
     @testset "extent filter" begin
