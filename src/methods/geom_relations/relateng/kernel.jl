@@ -216,8 +216,8 @@ from `rk_classify_intersection`): the exact rational slow path in
 is nonzero precisely when the crossing is proper.
 """
 function crossing_node(a0, a1, b0, b1)
-    a0, a1 = _seg_canon(_node_point(a0), _node_point(a1))
-    b0, b1 = _seg_canon(_node_point(b0), _node_point(b1))
+    a0, a1 = _canonical_segment(_node_point(a0), _node_point(a1))
+    b0, b1 = _canonical_segment(_node_point(b0), _node_point(b1))
     if (GI.x(b0), GI.y(b0), GI.x(b1), GI.y(b1)) < (GI.x(a0), GI.y(a0), GI.x(a1), GI.y(a1))
         a0, a1, b0, b1 = b0, b1, a0, a1
     end
@@ -225,7 +225,7 @@ function crossing_node(a0, a1, b0, b1)
 end
 
 # Order a segment's endpoints lexicographically by (x, y).
-_seg_canon(p, q) = (GI.x(p), GI.y(p)) <= (GI.x(q), GI.y(q)) ? (p, q) : (q, p)
+_canonical_segment(p, q) = (GI.x(p), GI.y(p)) <= (GI.x(q), GI.y(q)) ? (p, q) : (q, p)
 
 # Whether `p` lies within the coordinate bounding box of segment `(q0, q1)`.
 # Valid as an on-segment test only when `p` is already known collinear with
