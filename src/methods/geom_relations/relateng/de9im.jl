@@ -111,7 +111,7 @@ function matches_entry(dim::Int8, pat::Int8)
     return dim == pat
 end
 
-function matches(im::DE9IM, pattern::AbstractString)
+function im_matches(im::DE9IM, pattern::AbstractString)
     length(pattern) == 9 || throw(ArgumentError("DE-9IM pattern must have 9 characters, got $(repr(pattern))"))
     return all(matches_entry(im.entries[i], dim_code(pattern[i])) for i in 1:9)
 end
@@ -121,7 +121,7 @@ end
 
 Ports of the JTS `IntersectionMatrix` named-relationship test methods
 (`isContains`, `isWithin`, `isCovers`, `isCoveredBy`, `isCrosses`,
-`isEquals`, `isOverlaps`, `isTouches`); `matches` above is the port of
+`isEquals`, `isOverlaps`, `isTouches`); `im_matches` above is the port of
 `IntersectionMatrix.matches`. These are used as the `value_im`
 implementations of the named `IMPredicate` kinds in
 `relate_predicates.jl`.

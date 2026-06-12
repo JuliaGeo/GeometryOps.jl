@@ -280,7 +280,7 @@ function is_determined(p::IMPatternMatcher)
     return false
 end
 
-value_im(p::IMPatternMatcher) = matches(p.im, p.im_pattern)
+value_im(p::IMPatternMatcher) = im_matches(p.im, p.im_pattern)
 
 Base.show(io::IO, p::IMPatternMatcher) =
     print(io, predicate_name(p), "(", p.im_pattern, ")")

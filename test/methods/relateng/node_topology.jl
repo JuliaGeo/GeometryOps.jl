@@ -28,8 +28,8 @@ make_section(; is_a = true, dim = GO.DIM_A, id = 1, ring_id = 0, poly = nothing,
     @test GO.get_vertex(ns, 0) == (1.0, 0.0)
     @test GO.get_vertex(ns, 1) == (0.0, 1.0)
     @test GO.node_pt(ns) === NODE
-    @test GO.dimension(ns) == GO.DIM_A
-    @test GO.id(ns) == 1
+    @test GO.section_dim(ns) == GO.DIM_A
+    @test GO.section_id(ns) == 1
     @test GO.ring_id(ns) == 0
     @test GO.get_polygonal(ns) === poly
     @test GO.is_shell(ns)
@@ -185,8 +185,8 @@ end
     @test node isa GO.RelateNode
     edges = GO.get_edges(node)
     @test [e.dir_pt for e in edges] == [(1.0, 0.0), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)]
-    locs(e, isa_g) = (GO.location(e, isa_g, GO.POS_LEFT),
-        GO.location(e, isa_g, GO.POS_ON), GO.location(e, isa_g, GO.POS_RIGHT))
+    locs(e, isa_g) = (GO.edge_location(e, isa_g, GO.POS_LEFT),
+        GO.edge_location(e, isa_g, GO.POS_ON), GO.edge_location(e, isa_g, GO.POS_RIGHT))
     LI, LB, LE, LN = GO.LOC_INTERIOR, GO.LOC_BOUNDARY, GO.LOC_EXTERIOR, GO.LOC_NONE
     @test locs(edges[1], true) == (LE, LB, LI) && locs(edges[2], true) == (LI, LB, LE)
     @test locs(edges[3], false) == (LI, LB, LE) && locs(edges[4], false) == (LE, LB, LI)
@@ -337,8 +337,8 @@ end
 @testset "RelateEdge + RelateNode" begin
     m = Planar()
     LI, LB, LE, LN = GO.LOC_INTERIOR, GO.LOC_BOUNDARY, GO.LOC_EXTERIOR, GO.LOC_NONE
-    locs(e, isa_g) = (GO.location(e, isa_g, GO.POS_LEFT),
-        GO.location(e, isa_g, GO.POS_ON), GO.location(e, isa_g, GO.POS_RIGHT))
+    locs(e, isa_g) = (GO.edge_location(e, isa_g, GO.POS_LEFT),
+        GO.edge_location(e, isa_g, GO.POS_ON), GO.edge_location(e, isa_g, GO.POS_RIGHT))
     dirs(node) = [e.dir_pt for e in GO.get_edges(node)]
 
     # Build a node through the full NodeSections.createNode pipeline.
@@ -378,9 +378,9 @@ end
         # set_unknown_locations!
         @test GO.is_interior(ea, true, GO.POS_RIGHT)
         @test !GO.is_interior(ea, true, GO.POS_LEFT)
-        @test_throws ArgumentError GO.location(ea, true, Int8(99))
+        @test_throws ArgumentError GO.edge_location(ea, true, Int8(99))
         GO.set_location!(ea, false, GO.POS_ON, GO.LOC_EXTERIOR)
-        @test GO.location(ea, false, GO.POS_ON) == LE
+        @test GO.edge_location(ea, false, GO.POS_ON) == LE
         GO.set_unknown_locations!(ea, false, GO.LOC_INTERIOR)
         @test locs(ea, false) == (LI, LE, LI)       # ON was known, kept
         GO.set_all_locations!(ea, false, GO.LOC_EXTERIOR)
@@ -443,8 +443,8 @@ end
             @test locs(e, !own) == (LN, LN, LN)
         end
         # no area labels: no BOUNDARY/INTERIOR side locations at all
-        @test all(e -> GO.location(e, true, GO.POS_LEFT) != LB &&
-            GO.location(e, false, GO.POS_LEFT) != LB, edges)
+        @test all(e -> GO.edge_location(e, true, GO.POS_LEFT) != LB &&
+            GO.edge_location(e, false, GO.POS_LEFT) != LB, edges)
 
         GO.finish!(node, false, false)
         for (i, e) in pairs(edges)

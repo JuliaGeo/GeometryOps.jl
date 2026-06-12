@@ -47,16 +47,16 @@ end
     im2 = GO.with_entry(DE9IM(), GO.LOC_INTERIOR, GO.LOC_BOUNDARY, GO.DIM_L)
     @test string(im2) == "F1FFFFFFF"
     # pattern matching (JTS IntersectionMatrix.matches semantics)
-    @test GO.matches(DE9IM("212101212"), "T*F**FFF*") == false
-    @test GO.matches(DE9IM("2FF1FF212"), "T*F**FFF*") == false
-    @test GO.matches(DE9IM("2FF1FFFF2"), "T*F**FFF*") == true
-    @test GO.matches(DE9IM("0FFFFFFF2"), "0FFFFFFF2") == true
+    @test GO.im_matches(DE9IM("212101212"), "T*F**FFF*") == false
+    @test GO.im_matches(DE9IM("2FF1FF212"), "T*F**FFF*") == false
+    @test GO.im_matches(DE9IM("2FF1FFFF2"), "T*F**FFF*") == true
+    @test GO.im_matches(DE9IM("0FFFFFFF2"), "0FFFFFFF2") == true
     # 'T' pattern also matches a 'T' matrix entry (JTS IntersectionMatrix.matches)
-    @test GO.matches(GO.DE9IM("TFFFFFFFF"), "TFFFFFFFF") == true
+    @test GO.im_matches(GO.DE9IM("TFFFFFFFF"), "TFFFFFFFF") == true
     # lowercase pattern codes are accepted (JTS Dimension.toDimensionValue upper-cases)
-    @test GO.matches(GO.DE9IM("2FF1FFFF2"), "t*f**fff*") == true
+    @test GO.im_matches(GO.DE9IM("2FF1FFFF2"), "t*f**fff*") == true
     @test_throws ArgumentError DE9IM("212")        # wrong length
-    @test_throws ArgumentError GO.matches(DE9IM(), "T*F**FF")  # wrong length
+    @test_throws ArgumentError GO.im_matches(DE9IM(), "T*F**FF")  # wrong length
 end
 
 @testset "BoundaryNodeRule" begin

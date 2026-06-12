@@ -268,7 +268,7 @@ function add_point_on_geometry!(tc::TopologyComputer, is_point_a::Bool,
     update_dim!(tc, is_point_a, LOC_INTERIOR, loc_target, DIM_P)
 
     #-- an empty geometry has no points to infer entries from
-    is_empty(get_geometry(tc, !is_point_a)) && return nothing
+    is_geom_empty(get_geometry(tc, !is_point_a)) && return nothing
 
     if dim_target == DIM_P
         return nothing
@@ -311,7 +311,7 @@ function add_line_end_on_geometry!(tc::TopologyComputer, is_line_a::Bool,
     update_dim!(tc, is_line_a, loc_line_end, loc_target, DIM_P)
 
     #-- an empty geometry has no points to infer entries from
-    is_empty(get_geometry(tc, !is_line_a)) && return nothing
+    is_geom_empty(get_geometry(tc, !is_line_a)) && return nothing
 
     #-- Line and Area targets may have additional topology
     if dim_target == DIM_P
@@ -655,13 +655,13 @@ function evaluate_node_edges!(tc::TopologyComputer, node::RelateNode)
     for e in get_edges(node)
         #-- An optimization to avoid updates for cases with a linear geometry
         if is_area_area(tc)
-            update_dim!(tc, location(e, GEOM_A, POS_LEFT),
-                location(e, GEOM_B, POS_LEFT), DIM_A)
-            update_dim!(tc, location(e, GEOM_A, POS_RIGHT),
-                location(e, GEOM_B, POS_RIGHT), DIM_A)
+            update_dim!(tc, edge_location(e, GEOM_A, POS_LEFT),
+                edge_location(e, GEOM_B, POS_LEFT), DIM_A)
+            update_dim!(tc, edge_location(e, GEOM_A, POS_RIGHT),
+                edge_location(e, GEOM_B, POS_RIGHT), DIM_A)
         end
-        update_dim!(tc, location(e, GEOM_A, POS_ON),
-            location(e, GEOM_B, POS_ON), DIM_L)
+        update_dim!(tc, edge_location(e, GEOM_A, POS_ON),
+            edge_location(e, GEOM_B, POS_ON), DIM_L)
     end
     return nothing
 end
