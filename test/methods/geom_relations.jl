@@ -181,26 +181,46 @@ test_pairs = [
     (ext1, p2, "ext1", "p2", "Polygon overlapping extent"),
 ]
 
-function test_geom_relation(GO_f, LG_f, f_name; swap_points=false)
-    for (g1, g2, sg1, sg2, sdesc) in test_pairs
-        @testset "$sg1 $sg2 $sdesc" begin
-            if swap_points
-                @test_implementations (GO_f($g2, $g1) == LG_f($g2, $g1))
-            else
-                @test_implementations GO_f($g1, $g2) == LG_f($g1, $g2)
-            end
-        end
-    end
-end
+# RelateNG cross-validation: map each GO predicate function to its RelateNG
+# `pred_*` factory so every existing GO-vs-LibGEOS comparison can also be
+# checked against the RelateNG engine.
+relateng_pred(::typeof(GO.intersects)) = GO.pred_intersects()
+relateng_pred(::typeof(GO.disjoint)) = GO.pred_disjoint()
+relateng_pred(::typeof(GO.contains)) = GO.pred_contains()
+relateng_pred(::typeof(GO.within)) = GO.pred_within()
+relateng_pred(::typeof(GO.covers)) = GO.pred_covers()
+relateng_pred(::typeof(GO.coveredby)) = GO.pred_coveredby()
+relateng_pred(::typeof(GO.crosses)) = GO.pred_crosses()
+relateng_pred(::typeof(GO.touches)) = GO.pred_touches()
+relateng_pred(::typeof(GO.overlaps)) = GO.pred_overlaps()
+relateng_pred(::typeof(GO.equals)) = GO.pred_equalstopo()
 
+# RelateNG operates on geometries; convert extents to polygons (the old GO
+# predicates do the same internally, see `geom_relations/common.jl`).
+relateng_geom(g) = g isa Extents.Extent ? GO.extent_to_polygon(g) : g
+relateng_predicate(GO_f, g1, g2) =
+    GO.relate_predicate(GO.RelateNG(), relateng_pred(GO_f), relateng_geom(g1), relateng_geom(g2))
+
+# Divergences where old GO disagrees with LibGEOS/RelateNG (which agree with
+# each other): the new behavior is asserted in the loop below; the old engine
+# is not consulted for these pairs. One gap IS known: old `GO.overlaps`
+# wrongly returns `true` for polygons touching along an edge (DE-9IM
+# interior/interior is F, so `overlaps` must be false; RelateNG and LibGEOS
+# agree). It is asserted in test/methods/relateng/relate_ng.jl (PublicAPI
+# testset) rather than in this list because the pair is not part of
+# `test_pairs`.
+KNOWN_OLD_GO_GAPS = Tuple{Function, String, String}[]
 
 function test_geom_relation(GO_f, alg::GO.Algorithm, f_name; swap_points=false)
     for (g1, g2, sg1, sg2, sdesc) in test_pairs
         @testset "$sg1 $sg2 $sdesc" begin
+            old_go_gap = (GO_f, sg1, sg2) in KNOWN_OLD_GO_GAPS
             if swap_points
-                @test_implementations (GO_f($g2, $g1) == GO_f(alg, $g2, $g1))
+                old_go_gap || @test_implementations (GO_f($g2, $g1) == GO_f(alg, $g2, $g1))
+                @test_implementations relateng_predicate(GO_f, $g2, $g1) == GO_f(alg, $g2, $g1)
             else
-                @test_implementations GO_f($g1, $g2) == GO_f(alg, $g1, $g2)
+                old_go_gap || @test_implementations GO_f($g1, $g2) == GO_f(alg, $g1, $g2)
+                @test_implementations relateng_predicate(GO_f, $g1, $g2) == GO_f(alg, $g1, $g2)
             end
         end
     end
@@ -214,6 +234,20 @@ end
 @testset "Touches" begin test_geom_relation(GO.touches, GO.GEOS(), "touches") end
 @testset "Within" begin test_geom_relation(GO.within, GO.GEOS(), "within") end
 
+# `equals` is not part of the relation loop above (old `GO.equals` does not
+# accept Extent inputs and is structural rather than topological equality),
+# so the RelateNG `pred_equalstopo` mapping gets its own cross-check here.
+@testset "Equals (RelateNG)" begin
+    @testset_implementations begin
+        @test relateng_predicate(GO.equals, $p2, $p2) == GO.equals($p2, $p2) == LG.equals($p2, $p2) == true
+        @test relateng_predicate(GO.equals, $p1, $p2) == GO.equals($p1, $p2) == LG.equals($p1, $p2) == false
+        @test relateng_predicate(GO.equals, $l1, $l1) == GO.equals($l1, $l1) == LG.equals($l1, $l1) == true
+        @test relateng_predicate(GO.equals, $l1, $l2) == GO.equals($l1, $l2) == LG.equals($l1, $l2) == false
+        @test relateng_predicate(GO.equals, $l10, $r1) == GO.equals($l10, $r1) == LG.equals($l10, $r1) == true
+        @test relateng_predicate(GO.equals, $pt1, $pt1) == GO.equals($pt1, $pt1) == LG.equals($pt1, $pt1) == true
+        @test relateng_predicate(GO.equals, $pt1, $pt2) == GO.equals($pt1, $pt2) == LG.equals($pt1, $pt2) == false
+    end
+end
 
 @testset "Overlaps" begin
     p1 = LG.Point([0.0, 0.0])
@@ -241,21 +275,29 @@ end
     @testset_implementations "Points/MultiPoints"  begin
         # Two points can't overlap
         @test GO.overlaps($p1, $p1) == LG.overlaps($p1, $p2)
+        @test relateng_predicate(GO.overlaps, $p1, $p1) == LG.overlaps($p1, $p2)
         # No shared points, doesn't overlap
         @test GO.overlaps($p1, $mp1) == LG.overlaps($p1, $mp1)
+        @test relateng_predicate(GO.overlaps, $p1, $mp1) == LG.overlaps($p1, $mp1)
         # One shared point, does overlap
         @test GO.overlaps($p2, $mp1) == LG.overlaps($p2, $mp1)
+        @test relateng_predicate(GO.overlaps, $p2, $mp1) == LG.overlaps($p2, $mp1)
         # All shared points, doesn't overlap
         @test GO.overlaps($mp1, $mp1) == LG.overlaps($mp1, $mp1)
+        @test relateng_predicate(GO.overlaps, $mp1, $mp1) == LG.overlaps($mp1, $mp1)
         # Not all shared points, overlaps
         @test GO.overlaps($mp1, $mp2) == LG.overlaps($mp1, $mp2)
+        @test relateng_predicate(GO.overlaps, $mp1, $mp2) == LG.overlaps($mp1, $mp2)
         # One set of points entirely inside other set, doesn't overlap
         @test GO.overlaps($mp2, $mp3) == LG.overlaps($mp2, $mp3)
+        @test relateng_predicate(GO.overlaps, $mp2, $mp3) == LG.overlaps($mp2, $mp3)
         # Not all points shared, overlaps
         @test GO.overlaps($mp1, $mp3) == LG.overlaps($mp1, $mp3)
+        @test relateng_predicate(GO.overlaps, $mp1, $mp3) == LG.overlaps($mp1, $mp3)
         # Some shared points, overlaps
         @test GO.overlaps($mp1, $mp2) == LG.overlaps($mp1, $mp2)
         @test GO.overlaps($mp1, $mp2) == GO.overlaps($mp2, $mp1)
+        @test relateng_predicate(GO.overlaps, $mp1, $mp2) == relateng_predicate(GO.overlaps, $mp2, $mp1)
     end
     
     l1 = LG.LineString([[0.0, 0.0], [0.0, 10.0]])
@@ -269,13 +311,18 @@ end
     @testset_implementations "Lines/Rings" begin
         # Line can't overlap with itself
         @test GO.overlaps($l1, $l1) == LG.overlaps($l1, $l1)
+        @test relateng_predicate(GO.overlaps, $l1, $l1) == LG.overlaps($l1, $l1)
         # Line completely within other line doesn't overlap
         @test GO.overlaps($l1, $l2) == GO.overlaps($l2, $l1) == LG.overlaps($l1, $l2)
+        @test relateng_predicate(GO.overlaps, $l1, $l2) == relateng_predicate(GO.overlaps, $l2, $l1) == LG.overlaps($l1, $l2)
         # Overlapping lines
         @test GO.overlaps($l1, $l3) == GO.overlaps($l3, $l1) == LG.overlaps($l1, $l3)
+        @test relateng_predicate(GO.overlaps, $l1, $l3) == relateng_predicate(GO.overlaps, $l3, $l1) == LG.overlaps($l1, $l3)
         # Lines that don't touch
         @test GO.overlaps($l1, $l4) == LG.overlaps($l1, $l4)
+        @test relateng_predicate(GO.overlaps, $l1, $l4) == LG.overlaps($l1, $l4)
         @test LG.overlaps($r1, $r2) == LG.overlaps($r1, $r2)
+        @test relateng_predicate(GO.overlaps, $r1, $r2) == LG.overlaps($r1, $r2)
     end
     
     p1 = LG.Polygon([[[0.0, 0.0], [0.0, 5.0], [5.0, 5.0], [5.0, 0.0], [0.0, 0.0]]])
@@ -304,22 +351,30 @@ end
     @testset_implementations "Polygons/MultiPolygons" begin
         # Test basic polygons that don't overlap
         @test GO.overlaps($p1, $p2) == LG.overlaps($p1, $p2)
+        @test relateng_predicate(GO.overlaps, $p1, $p2) == LG.overlaps($p1, $p2)
         @test !GO.overlaps($p1, (1, 1))
+        @test !relateng_predicate(GO.overlaps, $p1, (1, 1))
         @test !GO.overlaps((1, 1), $p2)
+        @test !relateng_predicate(GO.overlaps, (1, 1), $p2)
 
         # Test basic polygons that overlap
         @test GO.overlaps($p1, $p3) == LG.overlaps($p1, $p3)
+        @test relateng_predicate(GO.overlaps, $p1, $p3) == LG.overlaps($p1, $p3)
 
         # Test one polygon within the other
         @test GO.overlaps($p2, $p4) == GO.overlaps($p4, $p2) == LG.overlaps($p2, $p4)
+        @test relateng_predicate(GO.overlaps, $p2, $p4) == relateng_predicate(GO.overlaps, $p4, $p2) == LG.overlaps($p2, $p4)
 
         # Test equal polygons
         @test GO.overlaps($p5, $p5) == LG.overlaps($p5, $p5)
+        @test relateng_predicate(GO.overlaps, $p5, $p5) == LG.overlaps($p5, $p5)
 
         # Test polygon that overlaps with multipolygon
         @test GO.overlaps($m1, $p3) == LG.overlaps($m1, $p3)
+        @test relateng_predicate(GO.overlaps, $m1, $p3) == LG.overlaps($m1, $p3)
         # Test polygon in hole of multipolygon, doesn't overlap
         @test GO.overlaps($m1, $p4) == LG.overlaps($m1, $p4)
+        @test relateng_predicate(GO.overlaps, $m1, $p4) == LG.overlaps($m1, $p4)
     end
 
     # Test Line × Line overlaps (GI.Line, not LineString)
@@ -328,21 +383,25 @@ end
         line1 = GI.Line([(0.0, 0.0), (2.0, 0.0)])
         line2 = GI.Line([(1.0, 0.0), (3.0, 0.0)])
         @test GO.overlaps(line1, line2) == true
+        @test relateng_predicate(GO.overlaps, line1, line2) == true
 
         # Non-overlapping collinear lines
         line3 = GI.Line([(0.0, 0.0), (1.0, 0.0)])
         line4 = GI.Line([(2.0, 0.0), (3.0, 0.0)])
         @test GO.overlaps(line3, line4) == false
+        @test relateng_predicate(GO.overlaps, line3, line4) == false
 
         # One line fully contains the other
         line5 = GI.Line([(0.0, 0.0), (4.0, 0.0)])
         line6 = GI.Line([(1.0, 0.0), (2.0, 0.0)])
         @test GO.overlaps(line5, line6) == false
+        @test relateng_predicate(GO.overlaps, line5, line6) == false
 
         # Non-collinear lines
         line7 = GI.Line([(0.0, 0.0), (1.0, 0.0)])
         line8 = GI.Line([(0.0, 0.0), (0.0, 1.0)])
         @test GO.overlaps(line7, line8) == false
+        @test relateng_predicate(GO.overlaps, line7, line8) == false
     end
 
     # Test MultiPolygon × MultiPolygon overlaps
@@ -357,6 +416,7 @@ end
             [[[6.0, 6.0], [8.0, 6.0], [8.0, 8.0], [6.0, 8.0], [6.0, 6.0]]]
         ])
         @test GO.overlaps(mp1, mp2) == true
+        @test relateng_predicate(GO.overlaps, mp1, mp2) == true
 
         # Create two multipolygons that don't overlap
         mp3 = GI.MultiPolygon([
@@ -366,6 +426,7 @@ end
             [[[5.0, 5.0], [6.0, 5.0], [6.0, 6.0], [5.0, 6.0], [5.0, 5.0]]]
         ])
         @test GO.overlaps(mp3, mp4) == false
+        @test relateng_predicate(GO.overlaps, mp3, mp4) == false
     end
 end
 
@@ -377,10 +438,15 @@ end
 
     @testset_implementations begin
         @test GO.crosses(GI.LineString([(-2.0, 2.0), (4.0, 2.0)]), $line6) == true
+        @test relateng_predicate(GO.crosses, GI.LineString([(-2.0, 2.0), (4.0, 2.0)]), $line6) == true
         @test GO.crosses(GI.LineString([(0.5, 2.5), (1.0, 1.0)]), $poly7) == true
+        @test relateng_predicate(GO.crosses, GI.LineString([(0.5, 2.5), (1.0, 1.0)]), $poly7) == true
         @test GO.crosses(GI.MultiPoint([(1.0, 2.0), (12.0, 12.0)]), $line7) == true
+        @test relateng_predicate(GO.crosses, GI.MultiPoint([(1.0, 2.0), (12.0, 12.0)]), $line7) == true
         @test GO.crosses(GI.MultiPoint([(1.0, 0.0), (12.0, 12.0)]), $line8) == false
+        @test relateng_predicate(GO.crosses, GI.MultiPoint([(1.0, 0.0), (12.0, 12.0)]), $line8) == false
         @test GO.crosses(GI.LineString([(-2.0, 2.0), (-4.0, 2.0)]), $poly7) == false
+        @test relateng_predicate(GO.crosses, GI.LineString([(-2.0, 2.0), (-4.0, 2.0)]), $poly7) == false
     end
 end
 
