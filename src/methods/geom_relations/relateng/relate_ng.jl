@@ -712,18 +712,25 @@ relate_predicate(p::PreparedRelate, predicate::TopologyPredicate, b) =
 # `Planar` above the clipping size threshold only (B is unknown at prepare
 # time, so the decision is made on A's segment count alone); any other
 # explicit accelerator always takes the tree path.
-_build_prepared_edge_index(::Manifold, ::IntersectionAccelerator, segs_a) =
-    _make_prepared_edge_index(segs_a)
+_build_prepared_edge_index(m::Manifold, ::IntersectionAccelerator, segs_a) =
+    _make_prepared_edge_index(m, segs_a)
 _build_prepared_edge_index(::Manifold, ::NestedLoop, segs_a) = nothing
 _build_prepared_edge_index(::Manifold, ::AutoAccelerator, segs_a) = nothing
-function _build_prepared_edge_index(::Planar, ::AutoAccelerator, segs_a)
+function _build_prepared_edge_index(m::Planar, ::AutoAccelerator, segs_a)
     _total_segment_count(segs_a) >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS ||
         return nothing
-    return _make_prepared_edge_index(segs_a)
+    return _make_prepared_edge_index(m, segs_a)
+end
+#-- the Spherical tree path is valid too (3D arc extents); above the threshold
+#-- prepared mode indexes A just like Planar
+function _build_prepared_edge_index(m::Spherical, ::AutoAccelerator, segs_a)
+    _total_segment_count(segs_a) >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS ||
+        return nothing
+    return _make_prepared_edge_index(m, segs_a)
 end
 
-function _make_prepared_edge_index(segs_a)
-    extents, owners = _segment_extent_table(segs_a)
+function _make_prepared_edge_index(m::Manifold, segs_a)
+    extents, owners = _segment_extent_table(m, segs_a)
     isempty(extents) && return nothing
     return PreparedEdgeIndex(_relate_edge_index(extents), owners)
 end
@@ -739,7 +746,7 @@ _process_prepared_edges!(tc::TopologyComputer, segs_a, ::Nothing, edges_b) =
 function _process_prepared_edges!(tc::TopologyComputer, segs_a,
         eidx::PreparedEdgeIndex, edges_b;
         m::Manifold = _manifold(tc), exact = _exact(tc))
-    extents_b, owners_b = _segment_extent_table(edges_b)
+    extents_b, owners_b = _segment_extent_table(m, edges_b)
     isempty(extents_b) && return nothing
     tree_b = _relate_edge_index(extents_b)
     SpatialTreeInterface.dual_depth_first_search(Extents.intersects, eidx.tree, tree_b) do ia, ib
