@@ -91,6 +91,66 @@ function kernel_conformance_suite_spherical(m; exact)
         @test GO.rk_bounds_covers(big2, Extents.Extent(X = (0.5, 1.), Y = (0.5, 1.)))
         @test !GO.rk_bounds_covers(big2, Extents.Extent(X = (0.5, 3.), Y = (0.5, 1.)))
     end
+    @testset "rk_classify_intersection: symmetry and incidence consistency" begin
+        n_proper = 0; n_touch = 0; n_collinear = 0
+        for _ in 1:2000
+            a0, a1, b0, b1 = nonzero(), nonzero(), nonzero(), nonzero()
+            r = GO.rk_classify_intersection(m, a0, a1, b0, b1; exact)
+            # swapping A and B: kind invariant, flag pairs permuted
+            s = GO.rk_classify_intersection(m, b0, b1, a0, a1; exact)
+            @test s.kind == r.kind
+            @test (s.a0_on_b, s.a1_on_b, s.b0_on_a, s.b1_on_a) ==
+                  (r.b0_on_a, r.b1_on_a, r.a0_on_b, r.a1_on_b)
+            # reversing a segment: kind invariant, its two flags swapped
+            v = GO.rk_classify_intersection(m, a1, a0, b0, b1; exact)
+            @test v.kind == r.kind
+            @test (v.a0_on_b, v.a1_on_b, v.b0_on_a, v.b1_on_a) ==
+                  (r.a1_on_b, r.a0_on_b, r.b0_on_a, r.b1_on_a)
+            w = GO.rk_classify_intersection(m, a0, a1, b1, b0; exact)
+            @test w.kind == r.kind
+            @test (w.a0_on_b, w.a1_on_b, w.b0_on_a, w.b1_on_a) ==
+                  (r.a0_on_b, r.a1_on_b, r.b1_on_a, r.b0_on_a)
+            if r.kind == GO.SS_PROPER
+                n_proper += 1
+                @test !(r.a0_on_b || r.a1_on_b || r.b0_on_a || r.b1_on_a)
+                # proper: each endpoint strictly off the other arc's great circle
+                @test GO.rk_orient(m, b0, b1, a0; exact) != 0
+                @test GO.rk_orient(m, b0, b1, a1; exact) != 0
+                @test GO.rk_orient(m, a0, a1, b0; exact) != 0
+                @test GO.rk_orient(m, a0, a1, b1; exact) != 0
+            end
+            r.kind == GO.SS_TOUCH && (n_touch += 1)
+            r.kind == GO.SS_COLLINEAR && (n_collinear += 1)
+            # each incidence flag agrees exactly with rk_point_on_segment
+            @test r.a0_on_b == GO.rk_point_on_segment(m, a0, b0, b1; exact)
+            @test r.a1_on_b == GO.rk_point_on_segment(m, a1, b0, b1; exact)
+            @test r.b0_on_a == GO.rk_point_on_segment(m, b0, a0, a1; exact)
+            @test r.b1_on_a == GO.rk_point_on_segment(m, b1, a0, a1; exact)
+        end
+        # proper crossings are common for two random great circles; touch and
+        # collinear (two coplanar great circles) are rare/measure-zero on the
+        # sphere, so they are exercised by the explicit cases below.
+        @test n_proper > 20
+
+        # --- hand-built decidable configurations ---
+        # proper crossing: two axis-aligned great circles meeting at +x=(1,0,0),
+        # strictly interior to both minor arcs
+        r = GO.rk_classify_intersection(m, _usp(1,0,1), _usp(1,0,-1), _usp(1,1,0), _usp(1,-1,0); exact)
+        @test r.kind == GO.SS_PROPER
+        @test !(r.a0_on_b || r.a1_on_b || r.b0_on_a || r.b1_on_a)
+        # shared-endpoint touch (non-collinear arcs sharing (1,0,0))
+        r = GO.rk_classify_intersection(m, _usp(1,0,0), _usp(0,1,0), _usp(1,0,0), _usp(0,0,1); exact)
+        @test r.kind == GO.SS_TOUCH && r.a0_on_b && r.b0_on_a
+        # collinear overlap on the equator: arcs [+x,(1,1,0)] and [(1,1,0)... ] overlapping
+        r = GO.rk_classify_intersection(m, _usp(1,0,0), _usp(0,1,0), _usp(1,1,0), _usp(-1,1,0); exact)
+        @test r.kind == GO.SS_COLLINEAR
+        # collinear disjoint on the equator: [+x, (2,1,0)] vs [(-1,2,0), -y]
+        r = GO.rk_classify_intersection(m, _usp(1,0,0), _usp(2,1,0), _usp(-1,2,0), _usp(0,-1,0); exact)
+        @test r.kind == GO.SS_DISJOINT
+        # T-touch: b0 on the interior of arc a (a on equator, b dips to the pole)
+        r = GO.rk_classify_intersection(m, _usp(1,0,0), _usp(0,1,0), _usp(1,1,0), _usp(0,0,1); exact)
+        @test r.kind == GO.SS_TOUCH && r.b0_on_a && !r.a0_on_b
+    end
     # testsets added task-by-task below
 end
 

@@ -30,19 +30,40 @@ rk_orient(::Spherical, a, b, c; exact) = _rk_orient(booltype(exact), a, b, c)
     ExactPredicates.orient(_tup3(a), _tup3(b), _tup3(c), (0.0, 0.0, 0.0))
 @inline _rk_orient(::False, a, b, c) = cross(a, b) ⋅ c
 
+# ## Exact-aware 3-vector arithmetic
+#
+# Composite predicates (arc membership, proper crossing, node coincidence)
+# reduce to signs of polynomials in the xyz components. With `exact = True()` we
+# evaluate over `Rational{BigInt}` (Float64 are dyadic rationals → exact); with
+# `False()`, Float64. `_vec3(bt, p)` lifts a point to the chosen number type; the
+# rest are plain tuple cross/dot, so one code path serves both — exactly how the
+# planar kernel threads `exact`.
+@inline _vec3(::True, u) = (Rational{BigInt}(GI.x(u)), Rational{BigInt}(GI.y(u)), Rational{BigInt}(GI.z(u)))
+@inline _vec3(::False, u) = (Float64(GI.x(u)), Float64(GI.y(u)), Float64(GI.z(u)))
+@inline _cross3(a, b) = (a[2]*b[3] - a[3]*b[2], a[3]*b[1] - a[1]*b[3], a[1]*b[2] - a[2]*b[1])
+@inline _dot3(a, b) = a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
+@inline _iszero3(a) = iszero(a[1]) && iszero(a[2]) && iszero(a[3])
+@inline _neg3(a) = (-a[1], -a[2], -a[3])
+# `w` strictly interior to the minor arc (a, b) with normal n = a×b.
+@inline _strictly_in_arc3(w, a, b, n) = _dot3(_cross3(a, w), n) > 0 && _dot3(_cross3(w, b), n) > 0
+_usp_eq(p, q) = GI.x(p) == GI.x(q) && GI.y(p) == GI.y(q) && GI.z(p) == GI.z(q)
+
 # ## rk_point_on_segment
 
 # Whether `p` lies on the closed minor arc `[q0, q1]`. Two conditions: `p` is on
-# the arc's great circle (coplanar with `q0`, `q1`, the origin — an exact orient
-# == 0), and within the minor-arc span. The span test uses dots as cos-of-angle:
-# for unit vectors `q0·p >= q0·q1` means `p` is no farther from `q0` than `q1`
-# is, and symmetrically for `q1`; together they pin `p` to the minor arc. Engine
-# inputs are unit; the conformance grid points are chosen so the dot signs are
-# exact.
+# the arc's great circle (coplanar with `q0`, `q1`, origin — an exact orient ==
+# 0), and within the minor-arc span. The span test is scale-invariant: writing
+# the coplanar `p` as `α q0 + β q1`, `p` is on the closed minor arc iff α, β ≥ 0,
+# and `sign(β) = sign((q0×p)·n)`, `sign(α) = sign((p×q1)·n)` with `n = q0×q1` — a
+# pure determinant sign, correct for unit and non-unit inputs alike.
 function rk_point_on_segment(m::Spherical, p, q0, q1; exact)
     rk_orient(m, q0, q1, p; exact) == 0 || return false
-    qq = q0 ⋅ q1
-    return (q0 ⋅ p) >= qq && (q1 ⋅ p) >= qq
+    return _on_arc_span(booltype(exact), p, q0, q1)
+end
+@inline function _on_arc_span(bt, p, q0, q1)
+    P = _vec3(bt, p); Q0 = _vec3(bt, q0); Q1 = _vec3(bt, q1)
+    n = _cross3(Q0, Q1)
+    return _dot3(_cross3(Q0, P), n) >= 0 && _dot3(_cross3(P, Q1), n) >= 0
 end
 
 # ## Ingest and interaction bounds
@@ -101,6 +122,47 @@ end
 
 @inline _point_box(u) =
     Extents.Extent(X = _widen(GI.x(u), GI.x(u)), Y = _widen(GI.y(u), GI.y(u)), Z = _widen(GI.z(u), GI.z(u)))
+
+# ## rk_classify_intersection
+#
+# The two great circles meet at ±d, d = (a0×a1)×(b0×b1). `SS_PROPER` iff one of
+# ±d is strictly interior to both minor arcs (the candidate-direct formulation —
+# planar straddle tests are NOT sufficient on the sphere, where arcs can straddle
+# each other's great circle while meeting only at the antipodal point). Endpoint
+# incidences are exact arc-membership; collinear = the arcs share a great circle
+# (d == 0). No intersection coordinate is constructed.
+function rk_classify_intersection(m::Spherical, a0, a1, b0, b1; exact)
+    a0_on_b = rk_point_on_segment(m, a0, b0, b1; exact)
+    a1_on_b = rk_point_on_segment(m, a1, b0, b1; exact)
+    b0_on_a = rk_point_on_segment(m, b0, a0, a1; exact)
+    b1_on_a = rk_point_on_segment(m, b1, a0, a1; exact)
+    return _sph_classify(booltype(exact), a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+end
+
+function _sph_classify(bt, a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    A0 = _vec3(bt, a0); A1 = _vec3(bt, a1); B0 = _vec3(bt, b0); B1 = _vec3(bt, b1)
+    na = _cross3(A0, A1); nb = _cross3(B0, B1)
+    d = _cross3(na, nb)
+    n_inc = a0_on_b + a1_on_b + b0_on_a + b1_on_a
+    if _iszero3(d)   # same great circle (or a degenerate, zero-length arc)
+        n_inc == 0 && return SegSegClass(SS_DISJOINT, false, false, false, false)
+        # a degenerate (zero-length) arc on the other is a touch, not an overlap
+        zero_len = _iszero3(na) || _iszero3(nb)
+        shared_only = n_inc == 2 && (a0_on_b || a1_on_b) && (b0_on_a || b1_on_a) &&
+            (_usp_eq(a0, b0) || _usp_eq(a0, b1) || _usp_eq(a1, b0) || _usp_eq(a1, b1))
+        kind = (shared_only || zero_len) ? SS_TOUCH : SS_COLLINEAR
+        return SegSegClass(kind, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    if a0_on_b || a1_on_b || b0_on_a || b1_on_a
+        return SegSegClass(SS_TOUCH, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    nd = _neg3(d)
+    if (_strictly_in_arc3(d, A0, A1, na) && _strictly_in_arc3(d, B0, B1, nb)) ||
+       (_strictly_in_arc3(nd, A0, A1, na) && _strictly_in_arc3(nd, B0, B1, nb))
+        return SegSegClass(SS_PROPER, false, false, false, false)
+    end
+    return SegSegClass(SS_DISJOINT, false, false, false, false)
+end
 
 # Interaction bounds on the sphere: a 3D `Extent{(:X,:Y,:Z)}` in unit-sphere xyz
 # (the engine works in xyz after ingest), as the union of `arc_extent` over the
