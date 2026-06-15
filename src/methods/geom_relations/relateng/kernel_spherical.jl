@@ -164,6 +164,90 @@ function _sph_classify(bt, a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
     return SegSegClass(SS_DISJOINT, false, false, false, false)
 end
 
+# ## Angle ordering at nodes (tangent-plane port of PolygonNodeTopology)
+#
+# Directions around an apex `n` live in the tangent plane at `n`. Pick a
+# reference axis `r` (the coordinate axis least aligned with `n`, so `r ≁ ±n`);
+# the tangent frame is `u = r - (r·n̂)n̂`, `v = n × r`, right-handed with `u×v =
+# n̂`. A direction toward `p` has tangent coordinates `(p·u, p·v)`, and we only
+# need their *signs* — both are determinant signs of `n, r, p`, exact for
+# integer inputs and scale-corrected so the apex need not be unit:
+#   sign(p·u) = sign((p·r)(n·n) - (r·n)(p·n)),   sign(p·v) = sign((n×r)·p).
+# Feeding these to the planar quadrant scheme, with the same-quadrant tiebreak
+# `rk_orient(m, n, q, p) = sign((n×q)·p)` (already the tangent-plane CCW sign),
+# reproduces PolygonNodeTopology exactly.
+
+# Coordinate axis least aligned with `n3` (smallest |component|, first-index
+# tiebreak — matches `argmin`), as a unit vector of `n3`'s element type.
+@inline function _ref_axis(n3)
+    ax, ay, az = abs(n3[1]), abs(n3[2]), abs(n3[3])
+    o = one(ax); z = zero(ax)
+    if ax <= ay && ax <= az
+        return (o, z, z)
+    elseif ay <= az
+        return (z, o, z)
+    else
+        return (z, z, o)
+    end
+end
+
+# JTS quadrant of the direction toward `P3` around apex `n3` with reference
+# `r3`: NE=0, NW=1, SW=2, SE=3, axis directions on the `>= 0` side.
+@inline function _sph_quadrant3(n3, r3, P3)
+    nn = _dot3(n3, n3); nr = _dot3(n3, r3); pn = _dot3(P3, n3); pr = _dot3(P3, r3)
+    su = pr * nn - nr * pn               # sign of P·u
+    sv = _dot3(_cross3(n3, r3), P3)      # sign of P·v
+    (su == 0 && sv == 0) &&
+        throw(ArgumentError("cannot compute the quadrant of a zero-length direction"))
+    if su >= 0
+        return sv >= 0 ? 0 : 3
+    else
+        return sv >= 0 ? 1 : 2
+    end
+end
+
+function rk_quadrant(::Spherical, origin, p)
+    n3 = _tup3(origin)
+    return _sph_quadrant3(n3, _ref_axis(n3), _tup3(p))
+end
+
+# compareAngle around an explicit apex direction `n3` (a vec3 tuple): the
+# crossing-apex slow path, where `n3` is the *constructed* crossing direction
+# and so must be compared with explicit determinant signs (not ExactPredicates,
+# which needs Float64 vertices). Mirrors `_compare_angle`: quadrant first, then
+# the orient tiebreak `sign((n×q)·p)`.
+function _sph_compare_around(bt, n3, p, q)
+    P = _vec3(bt, p); Q = _vec3(bt, q)
+    r3 = _ref_axis(n3)
+    qp = _sph_quadrant3(n3, r3, P)
+    qq = _sph_quadrant3(n3, r3, Q)
+    qp > qq && return 1
+    qp < qq && return -1
+    o = _dot3(_cross3(n3, Q), P)
+    return o > 0 ? 1 : (o < 0 ? -1 : 0)
+end
+
+# The crossing direction (the sphere point where the two arcs of a crossing
+# node meet): ±(na×nb), the candidate strictly interior to both minor arcs.
+function _sph_crossing_dir(bt, node::NodeKey)
+    A0 = _vec3(bt, node.pt); A1 = _vec3(bt, node.a1)
+    B0 = _vec3(bt, node.b0); B1 = _vec3(bt, node.b1)
+    na = _cross3(A0, A1); nb = _cross3(B0, B1)
+    d = _cross3(na, nb)
+    (_strictly_in_arc3(d, A0, A1, na) && _strictly_in_arc3(d, B0, B1, nb)) && return d
+    return _neg3(d)
+end
+
+function rk_compare_edge_dir(m::Spherical, node::NodeKey, p, q; exact)
+    node.is_crossing || return _compare_angle(m, node.pt, p, q; exact)
+    # Crossing apex: unlike the plane, the tangent direction apex→x is not
+    # parallel to opp(x)→x, so the planar endpoint substitution does not carry
+    # over. Compare around the (exact, on-arc) crossing direction instead —
+    # the slow path, only on crossing-node edge ordering.
+    bt = booltype(exact)
+    return _sph_compare_around(bt, _sph_crossing_dir(bt, node), p, q)
+end
+
 # Interaction bounds on the sphere: a 3D `Extent{(:X,:Y,:Z)}` in unit-sphere xyz
 # (the engine works in xyz after ingest), as the union of `arc_extent` over the
 # geometry's edges. Area-element interiors reach beyond their boundary slab — the

@@ -151,6 +151,74 @@ function kernel_conformance_suite_spherical(m; exact)
         r = GO.rk_classify_intersection(m, _usp(1,0,0), _usp(0,1,0), _usp(1,1,0), _usp(0,0,1); exact)
         @test r.kind == GO.SS_TOUCH && r.b0_on_a && !r.a0_on_b
     end
+    @testset "angle ordering: vertex-apex fan reproduces planar order" begin
+        # apex +x; reference axis is +y (argmin |component|), so the tangent
+        # frame is (u,v) = (+y,+z) and a direction-point (0,dx,dy) has tangent
+        # coords exactly (dx,dy) — the spherical comparator reproduces the planar
+        # fan order verbatim.
+        apex = _usp(1, 0, 0)
+        node = GO.vertex_node(apex)
+        dirs = [(1,0),(2,1),(1,1),(1,2),(0,1),
+                (-1,2),(-1,1),(-2,1),(-1,0),
+                (-2,-1),(-1,-1),(-1,-2),
+                (0,-1),(1,-2),(1,-1),(2,-1)]
+        fan = [_usp(0, dx, dy) for (dx, dy) in dirs]
+        vcmp(p, q) = GO.rk_compare_edge_dir(m, node, p, q; exact)
+        for p in fan
+            @test vcmp(p, p) == 0
+        end
+        for i in eachindex(fan), j in eachindex(fan)
+            @test vcmp(fan[i], fan[j]) == (i == j ? 0 : (i < j ? -1 : 1))
+        end
+        for i in eachindex(fan), j in eachindex(fan), k in eachindex(fan)
+            if vcmp(fan[i], fan[j]) < 0 && vcmp(fan[j], fan[k]) < 0
+                @test vcmp(fan[i], fan[k]) < 0
+            end
+        end
+        @test_throws ArgumentError GO.rk_quadrant(m, apex, apex)  # zero-length direction
+    end
+
+    @testset "isCrossing / isInteriorSegment on a spherical corner" begin
+        # apex +x, direction-point (0,dx,dy) -> planar direction (dx,dy); the
+        # planar truth table maps over verbatim.
+        nd = GO.vertex_node(_usp(1, 0, 0))
+        d(dx, dy) = _usp(0, dx, dy)
+        # X cross: a arms (1,1)/(-1,-1), b arms (-1,1)/(1,-1)
+        @test GO.rk_is_crossing(m, nd, d(-1,-1), d(1,1), d(-1,1), d(1,-1); exact)
+        # collinear b arm -> not crossing
+        @test !GO.rk_is_crossing(m, nd, d(-1,-1), d(1,1), d(-1,-1), d(1,-1); exact)
+        # both b arms same side of the a-line -> not crossing
+        @test !GO.rk_is_crossing(m, nd, d(-1,-1), d(1,1), d(-1,1), d(0,1); exact)
+        # crossing-node apex is rejected
+        cn = GO.crossing_node(_usp(1,0,1), _usp(1,0,-1), _usp(1,1,0), _usp(1,-1,0))
+        @test_throws ArgumentError GO.rk_is_crossing(m, cn, d(-1,-1), d(1,1), d(-1,1), d(1,-1); exact)
+
+        # isInteriorSegment: corner a0->node->a1, ring interior on the right
+        @test !GO.rk_is_interior_segment(m, nd, d(0,1), d(1,0), d(1,1); exact)
+        @test GO.rk_is_interior_segment(m, nd, d(0,1), d(1,0), d(-1,-1); exact)
+        @test GO.rk_is_interior_segment(m, nd, d(1,0), d(0,1), d(1,1); exact)
+        @test !GO.rk_is_interior_segment(m, nd, d(1,0), d(0,1), d(-1,-1); exact)
+    end
+
+    @testset "rk_crossing_dirs_ccw and crossing-apex comparison" begin
+        # proper crossing at +x=(1,0,0): a-arc (1,0,1)->(1,0,-1), b-arc (1,1,0)->(1,-1,0)
+        a0, a1, b0, b1 = _usp(1,0,1), _usp(1,0,-1), _usp(1,1,0), _usp(1,-1,0)
+        @test GO.rk_classify_intersection(m, a0, a1, b0, b1; exact).kind == GO.SS_PROPER
+        ccw = GO.rk_crossing_dirs_ccw(m, a0, a1, b0, b1; exact)
+        @test Set(ccw) == Set((a0, a1, b0, b1))   # a permutation of the four endpoints
+        @test ccw[1] == a1                          # starts from a1 (contract)
+        # the crossing-apex comparator is a strict weak order on the four arms
+        cn = GO.crossing_node(a0, a1, b0, b1)
+        ccmp(p, q) = GO.rk_compare_edge_dir(m, cn, p, q; exact)
+        arms = (a0, a1, b0, b1)
+        for x in arms
+            @test ccmp(x, x) == 0
+        end
+        for x in arms, y in arms
+            @test ccmp(x, y) == -ccmp(y, x)         # antisymmetry
+            x === y || @test ccmp(x, y) != 0        # distinct arms have distinct angles
+        end
+    end
     # testsets added task-by-task below
 end
 
