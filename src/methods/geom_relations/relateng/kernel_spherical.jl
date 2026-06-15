@@ -266,6 +266,62 @@ function rk_nodes_coincide(::Spherical, k1::NodeKey, k2::NodeKey; exact)
     return _iszero3(_cross3(d1, d2)) && _dot3(d1, d2) > 0
 end
 
+# ## rk_point_in_ring (meridian-crossing parity, S2 convention)
+
+const _NPOLE = UnitSphericalPoint(0.0, 0.0, 1.0)
+
+# Whether the two minor arcs (p0,p1) and (q0,q1) cross properly (interior to
+# both). The great circles meet at ±d, d = (p0×p1)×(q0×q1); a proper crossing is
+# one of ±d strictly interior to both arcs (the spike's `arcs_cross_properly`).
+function _arcs_cross_properly(bt, p0, p1, q0, q1)
+    P0 = _vec3(bt, p0); P1 = _vec3(bt, p1); Q0 = _vec3(bt, q0); Q1 = _vec3(bt, q1)
+    na = _cross3(P0, P1); nb = _cross3(Q0, Q1)
+    d = _cross3(na, nb)
+    _iszero3(d) && return false
+    (_strictly_in_arc3(d, P0, P1, na) && _strictly_in_arc3(d, Q0, Q1, nb)) && return true
+    nd = _neg3(d)
+    return _strictly_in_arc3(nd, P0, P1, na) && _strictly_in_arc3(nd, Q0, Q1, nb)
+end
+
+# Whether the north pole lies in the ring's interior (S2 interior-on-left). The
+# signed solid angle of the loop seen from the pole (sum of signed triangle
+# areas, Van Oosterom–Strackee) is +interior_area when the pole is interior and
+# interior_area − 4π when exterior — so it is positive exactly when the pole is
+# inside. Float is sufficient: a global orientation property, robust unless the
+# ring hugs a great circle (Ω ≈ 0).
+function _ring_contains_pole(pts)
+    Ω = 0.0
+    N = _NPOLE
+    for i in 1:length(pts)-1
+        a = normalize(pts[i]); b = normalize(pts[i+1])
+        Ω += 2 * atan(N ⋅ cross(a, b), 1.0 + (N ⋅ a) + (a ⋅ b) + (b ⋅ N))
+    end
+    return Ω > 0
+end
+
+# Location of `p` relative to the area enclosed by `ring`. Boundary first (exact
+# arc membership), then parity of proper crossings of the minor arc p→NPOLE with
+# the ring edges — "same region as the pole" — resolved to interior/exterior by
+# the pole's own containment.
+#
+# NOTE: the north-pole reference is degenerate when `p` is at/antipodal to the
+# pole, or a ring vertex sits exactly on the p→pole meridian. The engine inputs
+# in this work avoid those; the deterministic-perturbation / other-pole
+# treatment (mirroring planar RayCrossingCounter) is a follow-up.
+function rk_point_in_ring(m::Spherical, p, ring; exact)
+    pts = _node_points(ring)
+    @inbounds for i in 1:length(pts)-1
+        rk_point_on_segment(m, p, pts[i], pts[i+1]; exact) && return LOC_BOUNDARY
+    end
+    bt = booltype(exact)
+    crossings = 0
+    @inbounds for i in 1:length(pts)-1
+        _arcs_cross_properly(bt, p, _NPOLE, pts[i], pts[i+1]) && (crossings += 1)
+    end
+    pole_inside = _ring_contains_pole(pts)
+    return (isodd(crossings) ⊻ pole_inside) ? LOC_INTERIOR : LOC_EXTERIOR
+end
+
 # Interaction bounds on the sphere: a 3D `Extent{(:X,:Y,:Z)}` in unit-sphere xyz
 # (the engine works in xyz after ingest), as the union of `arc_extent` over the
 # geometry's edges. Area-element interiors reach beyond their boundary slab — the

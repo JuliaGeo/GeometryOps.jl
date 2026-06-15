@@ -249,6 +249,27 @@ function kernel_conformance_suite_spherical(m; exact)
         # antipodal directions are NOT the same point
         @test !GO.rk_nodes_coincide(m, GO.vertex_node(_usp(1,1,0)), GO.vertex_node(_usp(-1,-1,0)); exact)
     end
+    @testset "rk_point_in_ring: parity, boundary, S2 orientation" begin
+        # CCW-from-above diamond at z=1 encircling the north pole; integer
+        # vertices (membership decidable: boundary via exact coplanarity, the
+        # meridian-parity crossings are scale-invariant signs).
+        verts = [_usp(2,0,1), _usp(0,2,1), _usp(-2,0,1), _usp(0,-2,1), _usp(2,0,1)]
+        ring = GI.LinearRing(verts)
+        @test GO.rk_point_in_ring(m, _usp(2,0,1), ring; exact) == GO.LOC_BOUNDARY     # vertex
+        @test GO.rk_point_in_ring(m, _usp(1,1,1), ring; exact) == GO.LOC_BOUNDARY     # edge midpoint
+        @test GO.rk_point_in_ring(m, _usp(-1,1,1), ring; exact) == GO.LOC_BOUNDARY    # edge midpoint
+        @test GO.rk_point_in_ring(m, _usp(1,1,10), ring; exact) == GO.LOC_INTERIOR    # polar cap
+        @test GO.rk_point_in_ring(m, _usp(1,0,8), ring; exact) == GO.LOC_INTERIOR
+        @test GO.rk_point_in_ring(m, _usp(3,1,0), ring; exact) == GO.LOC_EXTERIOR     # equatorial
+        @test GO.rk_point_in_ring(m, _usp(3,-1,0), ring; exact) == GO.LOC_EXTERIOR
+
+        # S2 convention: reversing the ring swaps interior/exterior (the pole is
+        # no longer enclosed). Boundary is unchanged.
+        rev = GI.LinearRing(reverse(verts))
+        @test GO.rk_point_in_ring(m, _usp(1,1,10), rev; exact) == GO.LOC_EXTERIOR
+        @test GO.rk_point_in_ring(m, _usp(3,1,0), rev; exact) == GO.LOC_INTERIOR
+        @test GO.rk_point_in_ring(m, _usp(1,1,1), rev; exact) == GO.LOC_BOUNDARY
+    end
     # testsets added task-by-task below
 end
 
