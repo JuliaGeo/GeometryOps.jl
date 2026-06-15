@@ -270,6 +270,17 @@ function kernel_conformance_suite_spherical(m; exact)
         @test GO.rk_point_in_ring(m, _usp(3,1,0), rev; exact) == GO.LOC_INTERIOR
         @test GO.rk_point_in_ring(m, _usp(1,1,1), rev; exact) == GO.LOC_BOUNDARY
     end
+    @testset "area interaction bounds reach the enclosed pole" begin
+        verts = [_usp(2,0,1), _usp(0,2,1), _usp(-2,0,1), _usp(0,-2,1), _usp(2,0,1)]
+        poly = GI.Polygon([GI.LinearRing(verts)])
+        e = GO.rk_interaction_bounds(m, poly)
+        @test e.Z[2] == 1.0                # interior reaches the enclosed north pole
+        # the boundary ring (curve) bound tops out well below the pole
+        eb = GO.rk_interaction_bounds(m, GI.LinearRing(verts))
+        @test eb.Z[2] < 0.99
+        # only the enclosed +z axis is extended; the equatorial axes are not
+        @test e.X == eb.X && e.Y == eb.Y && e.Z[1] == eb.Z[1]
+    end
     # testsets added task-by-task below
 end
 
