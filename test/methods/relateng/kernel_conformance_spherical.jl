@@ -44,6 +44,14 @@ function kernel_conformance_suite_spherical(m; exact)
             @test GO.rk_orient(m, a, b, b; exact) == 0
         end
     end
+    @testset "rk_point_on_segment: endpoints, midpoint, off-arc" begin
+        a = _usp(1, 0, 0); b = _usp(0, 1, 0)
+        @test GO.rk_point_on_segment(m, a, a, b; exact)              # endpoint
+        @test GO.rk_point_on_segment(m, b, a, b; exact)              # endpoint
+        @test GO.rk_point_on_segment(m, _usp(1, 1, 0), a, b; exact)  # interior (same great circle, within span)
+        @test !GO.rk_point_on_segment(m, _usp(0, 0, 1), a, b; exact) # pole, off the circle
+        @test !GO.rk_point_on_segment(m, _usp(-1, 1, 0), a, b; exact) # on circle, outside the minor-arc span
+    end
     # testsets added task-by-task below
 end
 

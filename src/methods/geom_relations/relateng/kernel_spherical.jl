@@ -29,3 +29,18 @@ rk_orient(::Spherical, a, b, c; exact) = _rk_orient(booltype(exact), a, b, c)
 @inline _rk_orient(::True, a, b, c) =
     ExactPredicates.orient(_tup3(a), _tup3(b), _tup3(c), (0.0, 0.0, 0.0))
 @inline _rk_orient(::False, a, b, c) = cross(a, b) ⋅ c
+
+# ## rk_point_on_segment
+
+# Whether `p` lies on the closed minor arc `[q0, q1]`. Two conditions: `p` is on
+# the arc's great circle (coplanar with `q0`, `q1`, the origin — an exact orient
+# == 0), and within the minor-arc span. The span test uses dots as cos-of-angle:
+# for unit vectors `q0·p >= q0·q1` means `p` is no farther from `q0` than `q1`
+# is, and symmetrically for `q1`; together they pin `p` to the minor arc. Engine
+# inputs are unit; the conformance grid points are chosen so the dot signs are
+# exact.
+function rk_point_on_segment(m::Spherical, p, q0, q1; exact)
+    rk_orient(m, q0, q1, p; exact) == 0 || return false
+    qq = q0 ⋅ q1
+    return (q0 ⋅ p) >= qq && (q1 ⋅ p) >= qq
+end
