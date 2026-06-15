@@ -4,6 +4,7 @@
 using Test
 import GeometryOps as GO
 import GeometryOps: Planar, True, False
+import GeometryOps.UnitSpherical: UnitSphericalPoint
 import GeoInterface as GI
 
 const PT = Tuple{Float64, Float64}
@@ -261,4 +262,15 @@ end
     # crossing point with non-representable rational coordinates
     c3 = GO.crossing_node((0.,0.), (3.,1.), (0.,1.), (3.,0.))  # crosses at (1.5, 0.5)
     @test GO.rk_nodes_coincide(m, c3, GO.vertex_node((1.5, 0.5)); exact = True()) == true
+end
+
+@testset "node helpers are N-dimensional (3D round-trips)" begin
+    u = UnitSphericalPoint(0.0, -0.0, 1.0)
+    k = GO.vertex_node(u)
+    # signed zero normalized away, all three components preserved
+    @test GI.x(k.pt) == 0.0 && GI.y(k.pt) == 0.0 && GI.z(k.pt) == 1.0
+    @test !signbit(GI.y(k.pt))               # -0.0 -> +0.0
+    # planar 2-tuple path unchanged
+    k2 = GO.vertex_node((3.0, 4.0))
+    @test k2.pt == (3.0, 4.0)
 end
