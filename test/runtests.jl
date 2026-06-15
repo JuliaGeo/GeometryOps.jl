@@ -53,6 +53,7 @@ end
 @safetestset "Geometry Correction" begin include("transformations/correction/geometry_correction.jl") end
 @safetestset "Closed Rings" begin include("transformations/correction/closed_ring.jl")  end
 @safetestset "Intersecting Polygons" begin include("transformations/correction/intersecting_polygons.jl") end
+@safetestset "Antipodal Edge Split" begin include("transformations/correction/antipodal_edge_split.jl") end
 # Extensions
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end

@@ -92,14 +92,23 @@ Every predicate reduces to a sign of `det(u,v,w) = (u×v)·w`:
 ### Acceleration
 
 - 3D `Extent{(:X,:Y,:Z)}` flow through `_relate_edge_index` unchanged
-  (`NaturalIndex` is dimension-generic).
+  (`NaturalIndex` is dimension-generic). **Done**, but the per-segment extent
+  table had to be made manifold-aware too: it built a 2D endpoint box, which
+  misses a long arc's bulge and prunes real crossings — `_segment_extent`
+  now uses `arc_extent` on the sphere.
 - `edge_intersector.jl`: `_select_edge_set_accelerator(::Spherical, …)` →
   tree accelerator; `_segment_envs_disjoint(::Spherical, …)` → 3D arc-extent
-  disjoint test.
-- 3D STR ordering for prepared geometries.
-- Lon-interval indexed point locator (`SortedPackedIntervalRTree` over
-  longitude intervals; antimeridian crossers split) — an *optimization* over
-  the already-correct fall-through.
+  disjoint test. **Done.**
+- Prepared geometries: `_build_prepared_edge_index(::Spherical, …)` indexes A
+  in 3D; the dimension-generic `NaturalIndex` needs no separate STR ordering,
+  so prepared spherical relate matches unprepared. **Done.**
+- **SKIPPED (time-boxed):** the lon-interval indexed spherical point locator
+  (`SortedPackedIntervalRTree` over longitude intervals; antimeridian crossers
+  split). This is a pure *optimization* over the already-correct fall-through
+  at `point_locator.jl`'s `locate_on_polygonal` — Spherical takes the direct
+  `rk_point_in_ring` ring loop (the `loc.m isa Planar` guard skips the indexed
+  arm), which is correct but O(n) per query. Revisit if spherical point-in-area
+  becomes a hot path.
 
 ### Antipodal edges
 
