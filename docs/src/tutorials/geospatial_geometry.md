@@ -199,11 +199,11 @@ Typically, you'll also want to include attributes with your geometries. Attribut
 df = DataFrame(geometry=[geopoly1, geopoly2])
 ````
 
-Now let's add a couple of attributes to the geometries.  We do this using [DataFrames' `!` mutation syntax](https://dataframes.juliadata.org/stable/man/getting_started/#The-DataFrame-Type) that allows you to add a new column to an existing data frame.
+Now let's add a couple of attributes to the geometries by adding new columns to our existing data frame.
 
 ````@example geospatial_geometry
-df[!,:id] = ["a", "b"]
-df[!, :name] = ["polygon 1", "polygon 2"]
+df.id = ["a", "b"]
+df.name = ["polygon 1", "polygon 2"]
 df
 ````
 
