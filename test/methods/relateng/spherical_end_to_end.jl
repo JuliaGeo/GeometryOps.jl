@@ -27,3 +27,47 @@ end
     pt  = GI.Point(0., 89.)                                  # near north pole
     @test GO.relate(alg, cap, pt, "T*****FF*")               # contains
 end
+
+# Task 15: the tree accelerator must build 3D great-circle arc extents, not a
+# 2D coordinate box. A long near-equatorial arc (lon 0 → 170) bulges to y ≈ 1
+# at lon 90 while its endpoint box has y ∈ [0, 0.17]; a polygon straddling the
+# equator at lon 90 crosses it there. A 2D endpoint box prunes that pair away
+# (wrong DE-9IM); the bulge-aware `arc_extent` keeps it.
+@testset "spherical tree accelerator agrees with NestedLoop (arc bulge)" begin
+    A = GI.Polygon([GI.LinearRing([(0., 0.), (170., 0.), (85., 40.), (0., 0.)])])
+    B = GI.Polygon([GI.LinearRing([(88., -2.), (92., -2.), (92., 2.), (88., 2.), (88., -2.)])])
+    tree = RelateNG(; manifold = Spherical(), accelerator = GO.DoubleSTRtree())
+    loop = RelateNG(; manifold = Spherical(), accelerator = GO.NestedLoop())
+    @test GO.relate(tree, A, B) == GO.relate(loop, A, B)
+end
+
+# Task 15: above the 32-segment threshold AutoAccelerator picks the tree path;
+# it must give the same DE-9IM as the unindexed nested loop on a real ring.
+@testset "spherical AutoAccelerator picks the tree above threshold" begin
+    n = 48                                                   # 48 segments > threshold
+    ringpts = [(10.0 + 8cosd(t), 45.0 + 5sind(t)) for t in range(0, 360; length = n + 1)]
+    A = GI.Polygon([GI.LinearRing(ringpts)])
+    B = GI.Polygon([GI.LinearRing([(8., 43.), (20., 43.), (20., 52.), (8., 52.), (8., 43.)])])
+    loop = RelateNG(; manifold = Spherical(), accelerator = GO.NestedLoop())
+    @test GO.relate(alg, A, B) == GO.relate(loop, A, B)
+end
+
+# Task 17: prepared spherical relate (A indexed once, in 3D) must agree with
+# the unprepared nested-loop relate over several B geometries. The prepared
+# edge index is the dimension-generic `NaturalIndex` over 3D arc extents.
+@testset "spherical prepared relate agrees with unprepared" begin
+    n = 48
+    ringpts = [(10.0 + 8cosd(t), 45.0 + 5sind(t)) for t in range(0, 360; length = n + 1)]
+    A = GI.Polygon([GI.LinearRing(ringpts)])
+    prep = GO.prepare(alg, A)
+    loop = RelateNG(; manifold = Spherical(), accelerator = GO.NestedLoop())
+    Bs = (
+        GI.Polygon([GI.LinearRing([(8., 43.), (20., 43.), (20., 52.), (8., 52.), (8., 43.)])]),
+        GI.Polygon([GI.LinearRing([(11., 45.), (13., 45.), (13., 47.), (11., 47.), (11., 45.)])]),
+        GI.Point(10., 45.),
+        GI.Point(40., 80.),
+    )
+    for B in Bs
+        @test GO.relate(prep, B) == GO.relate(loop, A, B)
+    end
+end

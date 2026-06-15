@@ -232,6 +232,19 @@ function _select_edge_set_accelerator(::Planar, ssa_list, ssb_list)
         return DoubleSTRtree()
     end
 end
+# The same threshold heuristic on the sphere: the tree path is valid because
+# the segment extents are 3D great-circle arc extents (`_segment_extent`), and
+# `NaturalIndex` / the dual DFS / `Extents.intersects` are dimension-generic.
+function _select_edge_set_accelerator(::Spherical, ssa_list, ssb_list)
+    na = _total_segment_count(ssa_list)
+    nb = _total_segment_count(ssb_list)
+    if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS &&
+            nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+        return NestedLoop()
+    else
+        return DoubleSTRtree()
+    end
+end
 _select_edge_set_accelerator(::Manifold, ssa_list, ssb_list) = NestedLoop()
 
 _total_segment_count(ss_list) =
@@ -270,6 +283,11 @@ _segment_envs_disjoint(::Planar, a0, a1, b0, b1) =
     max(a0[1], a1[1]) < min(b0[1], b1[1]) ||
     min(a0[2], a1[2]) > max(b0[2], b1[2]) ||
     max(a0[2], a1[2]) < min(b0[2], b1[2])
+# On the sphere the per-segment extent is the bulge-aware 3D great-circle arc
+# extent, which is exact in xyz and has no antimeridian pathology — so this
+# prune is valid (and tighter than no pruning).
+_segment_envs_disjoint(::Spherical, a0, a1, b0, b1) =
+    !Extents.intersects(arc_extent(a0, a1), arc_extent(b0, b1))
 _segment_envs_disjoint(::Manifold, a0, a1, b0, b1) = false
 
 # The spatial index built over per-segment extents for the tree-accelerated
@@ -289,8 +307,8 @@ function process_edge_intersections!(tc::TopologyComputer,
         ssb_list::AbstractVector{<:RelateSegmentString},
         ::IntersectionAccelerator;
         m::Manifold = _manifold(tc), exact = _exact(tc))
-    extents_a, owners_a = _segment_extent_table(ssa_list)
-    extents_b, owners_b = _segment_extent_table(ssb_list)
+    extents_a, owners_a = _segment_extent_table(m, ssa_list)
+    extents_b, owners_b = _segment_extent_table(m, ssb_list)
     (isempty(extents_a) || isempty(extents_b)) && return nothing
     tree_a = _relate_edge_index(extents_a)
     tree_b = _relate_edge_index(extents_b)
@@ -387,7 +405,7 @@ function process_self_intersections!(tc::TopologyComputer,
         ss_list::AbstractVector{<:RelateSegmentString},
         ::IntersectionAccelerator;
         m::Manifold = _manifold(tc), exact = _exact(tc))
-    extents, owners = _segment_extent_table(ss_list)
+    extents, owners = _segment_extent_table(m, ss_list)
     isempty(extents) && return nothing
     tree = _relate_edge_index(extents)
     SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree, tree) do ia, ib
@@ -405,25 +423,31 @@ end
 
 # Flat per-segment extent list for a segment-string list, with the offset
 # table mapping each flat index back to (string index, segment index).
-function _segment_extent_table(ss_list)
-    extents = Extents.Extent{(:X, :Y), NTuple{2, NTuple{2, Float64}}}[]
+# Per-segment extent in the manifold's coordinate space: a planar 2D box from
+# the endpoints, or the bulge-aware 3D great-circle arc extent on the sphere
+# (the endpoint box would miss a long arc's bulge and wrongly prune crossings).
+_segment_extent(::Planar, p, q) = Extents.Extent(X = minmax(p[1], q[1]), Y = minmax(p[2], q[2]))
+_segment_extent(::Spherical, p, q) = arc_extent(p, q)
+_segment_extent_type(::Planar) = Extents.Extent{(:X, :Y), NTuple{2, NTuple{2, Float64}}}
+_segment_extent_type(::Spherical) = Extents.Extent{(:X, :Y, :Z), NTuple{3, NTuple{2, Float64}}}
+
+function _segment_extent_table(m::Manifold, ss_list)
+    extents = _segment_extent_type(m)[]
     owners = NTuple{2, Int}[]
     nseg = _total_segment_count(ss_list)
     sizehint!(extents, nseg)
     sizehint!(owners, nseg)
     for (si, ss) in enumerate(ss_list)
-        _push_segment_extents!(extents, owners, si, ss.pts)
+        _push_segment_extents!(m, extents, owners, si, ss.pts)
     end
     return extents, owners
 end
 
 # Function barrier: dispatch once per segment string, so the per-segment
 # loop stays statically typed even if `ss_list` has a non-concrete eltype.
-function _push_segment_extents!(extents::Vector, owners::Vector, si::Int, pts::Vector)
+function _push_segment_extents!(m::Manifold, extents::Vector, owners::Vector, si::Int, pts::Vector)
     for k in 1:(length(pts) - 1)
-        p = pts[k]
-        q = pts[k + 1]
-        push!(extents, Extents.Extent(X = minmax(p[1], q[1]), Y = minmax(p[2], q[2])))
+        push!(extents, _segment_extent(m, pts[k], pts[k + 1]))
         push!(owners, (si, k))
     end
     return nothing
