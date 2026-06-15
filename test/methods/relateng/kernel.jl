@@ -274,3 +274,12 @@ end
     k2 = GO.vertex_node((3.0, 4.0))
     @test k2.pt == (3.0, 4.0)
 end
+
+@testset "crossing_node canonicalizes in 3D and is order-invariant" begin
+    a0 = UnitSphericalPoint(1.0, 0.0, 0.0); a1 = UnitSphericalPoint(0.0, 1.0, 0.0)
+    b0 = UnitSphericalPoint(0.0, 0.0, 1.0); b1 = UnitSphericalPoint(1.0, 1.0, 1.0)
+    k1 = GO.crossing_node(a0, a1, b0, b1)
+    k2 = GO.crossing_node(b1, b0, a1, a0)   # same pair, every order/orientation flipped
+    @test k1 == k2
+    @test k1.pt isa UnitSphericalPoint       # USP preserved through canonicalization
+end
