@@ -180,7 +180,20 @@ end
 # Normalize signed zeros: -0.0 + 0.0 == +0.0 exactly, every other finite
 # value is unchanged. Keeps bit-pattern key equality == coordinate equality.
 @inline _pos_zero(x) = x + zero(x)
-@inline _node_point(p) = (_pos_zero(GI.x(p)), _pos_zero(GI.y(p)))
+
+# A node point is the engine's canonical, signed-zero-normalized representation
+# of a coordinate. Planar points stay 2-tuples (byte-identical to the original
+# implementation, so `NodeKey` bytes are unchanged); 3D points (e.g. a spherical
+# `UnitSphericalPoint`) keep all three components and their concrete type.
+@inline _node_point(p) = _node_point(booltype(GI.is3d(p)), p)
+@inline _node_point(::False, p) = (_pos_zero(GI.x(p)), _pos_zero(GI.y(p)))
+@inline function _node_point(::True, p)
+    return _rebuild_point(p, _pos_zero(GI.x(p)), _pos_zero(GI.y(p)), _pos_zero(GI.z(p)))
+end
+# Default rebuild: a plain 3-tuple. Concrete point types that must survive node
+# construction add their own method (e.g. `UnitSphericalPoint` in
+# `kernel_spherical.jl`).
+@inline _rebuild_point(::Any, x, y, z) = (x, y, z)
 
 # Collect a curve's coordinates as node points into a plain `Vector`. (A
 # typed comprehension over `GI.getpoint` is not enough: for geometries backed
@@ -188,7 +201,8 @@ end
 # static axes, so `collect` returns a `SizedVector`, which downstream code
 # expecting `Vector` point lists rejects.)
 function _node_points(geom)
-    pts = Vector{Tuple{Float64, Float64}}()
+    p1 = GI.getpoint(geom, 1)
+    pts = Vector{typeof(_node_point(p1))}()
     sizehint!(pts, GI.npoint(geom))
     for p in GI.getpoint(geom)
         push!(pts, _node_point(p))
