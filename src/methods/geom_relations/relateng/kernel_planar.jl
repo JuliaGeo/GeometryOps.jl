@@ -90,7 +90,16 @@ end
 # increase CCW from the positive X-axis; different quadrants decide the
 # comparison, same-quadrant ties are resolved by orientation (P > Q if P is
 # CCW of Q).
-function _compare_angle(m::Planar, origin, p, q; exact)
+#
+# This and the helpers below (`_is_angle_greater`, `_is_between`,
+# `_compare_between`, `rk_crossing_dirs_ccw`, `rk_is_crossing`,
+# `rk_is_interior_segment`) depend only on `rk_quadrant` and `rk_orient`, both
+# manifold-dispatched, so they are manifold-generic (`m::Manifold`). The
+# spherical kernel supplies a tangent-plane `rk_quadrant`; the same-quadrant
+# orient tiebreak `rk_orient(m, origin, q, p)` is already the tangent-plane CCW
+# sign there. Only `rk_quadrant` and the crossing-apex `rk_compare_edge_dir`
+# are manifold-specific.
+function _compare_angle(m::Manifold, origin, p, q; exact)
     quadrant_p = rk_quadrant(m, origin, p)
     quadrant_q = rk_quadrant(m, origin, q)
     quadrant_p > quadrant_q && return 1
@@ -103,7 +112,7 @@ function _compare_angle(m::Planar, origin, p, q; exact)
 end
 
 # Port of PolygonNodeTopology.isAngleGreater.
-function _is_angle_greater(m::Planar, origin, p, q; exact)
+function _is_angle_greater(m::Manifold, origin, p, q; exact)
     quadrant_p = rk_quadrant(m, origin, p)
     quadrant_q = rk_quadrant(m, origin, q)
     quadrant_p > quadrant_q && return true
@@ -115,7 +124,7 @@ end
 # Port of PolygonNodeTopology.isBetween: whether edge p is inside the arc
 # from e0 to e1 (the arc not including the origin direction). Edges assumed
 # distinct (non-collinear).
-function _is_between(m::Planar, origin, p, e0, e1; exact)
+function _is_between(m::Manifold, origin, p, e0, e1; exact)
     _is_angle_greater(m, origin, p, e0; exact) || return false
     return !_is_angle_greater(m, origin, p, e1; exact)
 end
@@ -123,7 +132,7 @@ end
 # Port of PolygonNodeTopology.compareBetween: 1 if p is inside the arc from
 # e0 to e1 (the arc not crossing the positive X-axis), -1 if outside, 0 if
 # collinear with either edge.
-function _compare_between(m::Planar, origin, p, e0, e1; exact)
+function _compare_between(m::Manifold, origin, p, e0, e1; exact)
     comp0 = _compare_angle(m, origin, p, e0; exact)
     comp0 == 0 && return 0
     comp1 = _compare_angle(m, origin, p, e1; exact)
@@ -194,7 +203,7 @@ proper crossing of (a0,a1) × (b0,b1), starting from a1. Since the
 crossing is proper, b0/b1 are strictly on opposite sides of line(a0,a1):
 if b1 is to the left, CCW order is (a1, b1, a0, b0), else (a1, b0, a0, b1).
 """
-function rk_crossing_dirs_ccw(m::Planar, a0, a1, b0, b1; exact)
+function rk_crossing_dirs_ccw(m::Manifold, a0, a1, b0, b1; exact)
     if rk_orient(m, a0, a1, b1; exact) > 0
         return (a1, b1, a0, b0)
     else
@@ -206,7 +215,7 @@ end
 # Crossing-node apexes are rejected: a proper crossing is a crossing by
 # construction, and the only caller (TopologyComputer.updateAreaAreaCross)
 # short-circuits proper intersections before asking.
-function rk_is_crossing(m::Planar, node::NodeKey, a0, a1, b0, b1; exact)
+function rk_is_crossing(m::Manifold, node::NodeKey, a0, a1, b0, b1; exact)
     node.is_crossing &&
         throw(ArgumentError("rk_is_crossing requires a vertex-node apex; proper crossings cross by construction"))
     nodept = node.pt
@@ -226,7 +235,7 @@ end
 # Port of PolygonNodeTopology.isInteriorSegment, apex = vertex node
 # coordinate: whether segment node→b lies in the interior of the ring corner
 # a0–node–a1 (ring interior on the right, i.e. a CW shell or CCW hole).
-function rk_is_interior_segment(m::Planar, node::NodeKey, a0, a1, b; exact)
+function rk_is_interior_segment(m::Manifold, node::NodeKey, a0, a1, b; exact)
     node.is_crossing &&
         throw(ArgumentError("rk_is_interior_segment requires a vertex-node apex"))
     nodept = node.pt
