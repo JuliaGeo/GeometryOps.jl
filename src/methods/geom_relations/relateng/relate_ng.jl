@@ -377,7 +377,7 @@ function compute_points!(tc::TopologyComputer, geom::RelateGeometry, is_a::Bool,
         #TODO: exit when all possible target locations (E,I,B) have been found?
         GI.isempty(point) && continue
 
-        pt = _node_point(point)
+        pt = _to_kernel_point(geom.m, point)
         compute_point!(tc, is_a, pt, geom_target)
         is_result_known(tc) && return true
     end
@@ -424,12 +424,12 @@ function _compute_line_ends_walk!(tc::TopologyComputer, elem, geom::RelateGeomet
         return (false, has_exterior_intersection)
     end
 
-    e0 = _node_point(GI.getpoint(elem, 1))
+    e0 = _to_kernel_point(geom.m, GI.getpoint(elem, 1))
     has_exterior_intersection |= compute_line_end!(tc, geom, is_a, e0, geom_target)
     is_result_known(tc) && return (true, has_exterior_intersection)
 
     if !_line_is_closed(elem)
-        e1 = _node_point(GI.getpoint(elem, GI.npoint(elem)))
+        e1 = _to_kernel_point(geom.m, GI.getpoint(elem, GI.npoint(elem)))
         has_exterior_intersection |= compute_line_end!(tc, geom, is_a, e1, geom_target)
         is_result_known(tc) && return (true, has_exterior_intersection)
     end
@@ -504,7 +504,7 @@ end
 function compute_area_vertex_on_ring!(tc::TopologyComputer, geom::RelateGeometry,
         is_a::Bool, ring, geom_target::RelateGeometry)
     #TODO: use extremal (highest) point to ensure one is on boundary of polygon cluster
-    pt = _node_point(GI.getpoint(ring, 1))
+    pt = _to_kernel_point(geom.m, GI.getpoint(ring, 1))
 
     loc_area = locate_area_vertex(geom, pt)
     loc_dim_target = locate_with_dim(geom_target, pt)
