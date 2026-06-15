@@ -9,7 +9,7 @@
 using Test
 import GeometryOps as GO
 import GeometryOps: Spherical, True, False
-import GeometryOps.UnitSpherical: UnitSphericalPoint
+import GeometryOps.UnitSpherical: UnitSphericalPoint, slerp
 import GeoInterface as GI
 using Random
 using LinearAlgebra: ⋅, cross
@@ -51,6 +51,32 @@ function kernel_conformance_suite_spherical(m; exact)
         @test GO.rk_point_on_segment(m, _usp(1, 1, 0), a, b; exact)  # interior (same great circle, within span)
         @test !GO.rk_point_on_segment(m, _usp(0, 0, 1), a, b; exact) # pole, off the circle
         @test !GO.rk_point_on_segment(m, _usp(-1, 1, 0), a, b; exact) # on circle, outside the minor-arc span
+    end
+    @testset "arc_extent contains the arc (bulge captured)" begin
+        rng2 = Random.MersenneTwister(42)
+        for _ in 1:500
+            p = GO.rk_normalize_usp(_usp(randn(rng2), randn(rng2), randn(rng2)))
+            q = GO.rk_normalize_usp(_usp(randn(rng2), randn(rng2), randn(rng2)))
+            e = GO.arc_extent(p, q)
+            for s in 0:0.05:1
+                u = slerp(p, q, s)
+                @test e.X[1] <= GI.x(u) <= e.X[2]
+                @test e.Y[1] <= GI.y(u) <= e.Y[2]
+                @test e.Z[1] <= GI.z(u) <= e.Z[2]
+            end
+        end
+    end
+
+    @testset "rk_interaction_bounds is 3D and contains the converted vertices" begin
+        ring = GI.LinearRing([(0.,0.), (10.,0.), (10.,10.), (0.,10.), (0.,0.)])
+        e = GO.rk_interaction_bounds(m, ring)
+        @test hasproperty(e, :Z)
+        for p in GI.getpoint(ring)
+            u = GO.rk_normalize_usp(UnitSphericalPoint((Float64(GI.x(p)), Float64(GI.y(p)))))
+            @test e.X[1] <= GI.x(u) <= e.X[2]
+            @test e.Y[1] <= GI.y(u) <= e.Y[2]
+            @test e.Z[1] <= GI.z(u) <= e.Z[2]
+        end
     end
     # testsets added task-by-task below
 end
