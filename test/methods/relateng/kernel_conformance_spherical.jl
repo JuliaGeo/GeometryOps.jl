@@ -219,6 +219,36 @@ function kernel_conformance_suite_spherical(m; exact)
             x === y || @test ccmp(x, y) != 0        # distinct arms have distinct angles
         end
     end
+    @testset "rk_nodes_coincide: reflexive, symmetric, cross-kind" begin
+        # crossing at +x via two different segment pairs
+        cx_a = GO.crossing_node(_usp(1,0,1), _usp(1,0,-1), _usp(1,1,0), _usp(1,-1,0))
+        cx_b = GO.crossing_node(_usp(2,1,0), _usp(2,-1,0), _usp(2,0,1), _usp(2,0,-1))
+        # crossing at +y
+        cy = GO.crossing_node(_usp(0,1,1), _usp(0,1,-1), _usp(1,1,0), _usp(-1,1,0))
+        vx = GO.vertex_node(_usp(1,0,0))
+        vx2 = GO.vertex_node(_usp(2,0,0))     # parallel to +x -> same sphere point
+        vy = GO.vertex_node(_usp(0,1,0))
+        keys = (cx_a, cx_b, cy, vx, vx2, vy)
+        for k in keys
+            @test GO.rk_nodes_coincide(m, k, k; exact)            # reflexive
+        end
+        for k1 in keys, k2 in keys
+            @test GO.rk_nodes_coincide(m, k1, k2; exact) ==
+                  GO.rk_nodes_coincide(m, k2, k1; exact)          # symmetric
+        end
+        # vertex coincidence by parallelism (not exact bit equality)
+        @test vx != vx2 && GO.rk_nodes_coincide(m, vx, vx2; exact)
+        @test !GO.rk_nodes_coincide(m, vx, vy; exact)
+        # cross-kind: vertex lies on a proper crossing
+        @test GO.rk_nodes_coincide(m, cx_a, vx; exact)
+        @test GO.rk_nodes_coincide(m, cx_a, vx2; exact)
+        @test !GO.rk_nodes_coincide(m, cy, vx; exact)
+        # two distinct crossing pairs meeting at the same apex (+x)
+        @test cx_a != cx_b && GO.rk_nodes_coincide(m, cx_a, cx_b; exact)
+        @test !GO.rk_nodes_coincide(m, cx_a, cy; exact)
+        # antipodal directions are NOT the same point
+        @test !GO.rk_nodes_coincide(m, GO.vertex_node(_usp(1,1,0)), GO.vertex_node(_usp(-1,-1,0)); exact)
+    end
     # testsets added task-by-task below
 end
 
