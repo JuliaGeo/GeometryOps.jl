@@ -31,8 +31,18 @@ function kernel_conformance_suite_spherical(m; exact)
         return p
     end
 
-    @testset "placeholder until rk_orient exists" begin
-        @test true
+    @testset "rk_orient: antisymmetry / cyclic invariance / degeneracy" begin
+        for _ in 1:500
+            a, b, c = nonzero(), nonzero(), nonzero()
+            o = _sgn(GO.rk_orient(m, a, b, c; exact))
+            @test o == -_sgn(GO.rk_orient(m, b, a, c; exact))
+            @test o == -_sgn(GO.rk_orient(m, a, c, b; exact))
+            @test o == _sgn(GO.rk_orient(m, b, c, a; exact))
+            @test o == _sgn(GO.rk_orient(m, c, a, b; exact))
+            @test GO.rk_orient(m, a, a, b; exact) == 0
+            @test GO.rk_orient(m, a, b, a; exact) == 0
+            @test GO.rk_orient(m, a, b, b; exact) == 0
+        end
     end
     # testsets added task-by-task below
 end
