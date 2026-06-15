@@ -248,6 +248,24 @@ function rk_compare_edge_dir(m::Spherical, node::NodeKey, p, q; exact)
     return _sph_compare_around(bt, _sph_crossing_dir(bt, node), p, q)
 end
 
+# ## rk_nodes_coincide (exact slow path)
+#
+# Whether two node keys denote the same sphere point. The point of a vertex node
+# is its coordinate direction; of a crossing node, the on-arc crossing direction
+# `±(na×nb)`. Two directions denote the same sphere point iff they are parallel
+# (cross product zero) and point into the same hemisphere (positive dot) — `-d`
+# is the antipodal point, a different node. Exact via `Rational{BigInt}` (the
+# `True()` branch of `_vec3`), mirroring the planar D3 rational slow path.
+@inline _exact_node_dir(bt, k::NodeKey) =
+    k.is_crossing ? _sph_crossing_dir(bt, k) : _vec3(bt, k.pt)
+
+function rk_nodes_coincide(::Spherical, k1::NodeKey, k2::NodeKey; exact)
+    k1 == k2 && return true
+    bt = booltype(exact)
+    d1 = _exact_node_dir(bt, k1); d2 = _exact_node_dir(bt, k2)
+    return _iszero3(_cross3(d1, d2)) && _dot3(d1, d2) > 0
+end
+
 # Interaction bounds on the sphere: a 3D `Extent{(:X,:Y,:Z)}` in unit-sphere xyz
 # (the engine works in xyz after ingest), as the union of `arc_extent` over the
 # geometry's edges. Area-element interiors reach beyond their boundary slab — the
