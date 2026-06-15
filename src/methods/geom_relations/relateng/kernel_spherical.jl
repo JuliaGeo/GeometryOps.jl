@@ -44,3 +44,98 @@ function rk_point_on_segment(m::Spherical, p, q0, q1; exact)
     qq = q0 ⋅ q1
     return (q0 ⋅ p) >= qq && (q1 ⋅ p) >= qq
 end
+
+# ## Ingest and interaction bounds
+
+# Renormalize to unit length (Float32-sourced data — e.g. Natural Earth GeoJSON
+# converted to Float64 — is ~1e-8 off unit and trips `robust_cross_product`).
+@inline rk_normalize_usp(u) = UnitSphericalPoint(normalize(u))
+
+# Canonical kernel point of a GeoInterface point: lon/lat (2D) → unit xyz, or an
+# already-3D point treated as xyz; renormalized and signed-zero normalized so
+# the same vertex always produces identical bits (NodeKey equality). The vertex
+# ingest (Phase 3 `_to_kernel_point`) and the extent computation below share
+# this, so a vertex and its extent agree exactly.
+@inline function _spherical_kernel_point(p)
+    u = GI.is3d(p) ?
+        UnitSphericalPoint(Float64(GI.x(p)), Float64(GI.y(p)), Float64(GI.z(p))) :
+        UnitSphereFromGeographic()((Float64(GI.x(p)), Float64(GI.y(p))))
+    return _node_point(rk_normalize_usp(u))
+end
+
+# 3D AABB of a minor great-circle arc (spike-proven, 0/102k fuzz escapes). A
+# great-circle arc bulges outside the coordinate box of its endpoints; the
+# extremum of coordinate i on the circle with normal n is at ±w, the normalized
+# projection of axis eᵢ onto the circle's plane. The box is extended by whichever
+# of ±w lies on the minor arc; a few ulps of widening absorb the roundoff in w.
+@inline _on_minor_arc(w, a, b, n) = (cross(a, w) ⋅ n) >= 0.0 && (cross(w, b) ⋅ n) >= 0.0
+@inline _widen(lo, hi) = (prevfloat(lo, 4), nextfloat(hi, 4))
+
+function arc_extent(a, b)
+    n = cross(a, b)
+    n2 = n ⋅ n
+    xlo, xhi = minmax(a[1], b[1]); ylo, yhi = minmax(a[2], b[2]); zlo, zhi = minmax(a[3], b[3])
+    if n2 > 0.0
+        invn2 = inv(n2)
+        @inbounds for i in 1:3
+            ei_n = n[i]
+            wx = (i == 1) - ei_n * n[1] * invn2
+            wy = (i == 2) - ei_n * n[2] * invn2
+            wz = (i == 3) - ei_n * n[3] * invn2
+            wnorm = sqrt(wx^2 + wy^2 + wz^2)
+            wnorm == 0.0 && continue   # axis ⟂ plane: coordinate constant 0, endpoints cover it
+            w = UnitSphericalPoint(wx / wnorm, wy / wnorm, wz / wnorm)
+            for ww in (w, -w)
+                if _on_minor_arc(ww, a, b, n)
+                    ci = ww[i]
+                    if i == 1; xlo = min(xlo, ci); xhi = max(xhi, ci)
+                    elseif i == 2; ylo = min(ylo, ci); yhi = max(yhi, ci)
+                    else; zlo = min(zlo, ci); zhi = max(zhi, ci)
+                    end
+                end
+            end
+        end
+    end
+    return Extents.Extent(X = _widen(xlo, xhi), Y = _widen(ylo, yhi), Z = _widen(zlo, zhi))
+end
+
+@inline _point_box(u) =
+    Extents.Extent(X = _widen(GI.x(u), GI.x(u)), Y = _widen(GI.y(u), GI.y(u)), Z = _widen(GI.z(u), GI.z(u)))
+
+# Interaction bounds on the sphere: a 3D `Extent{(:X,:Y,:Z)}` in unit-sphere xyz
+# (the engine works in xyz after ingest), as the union of `arc_extent` over the
+# geometry's edges. Area-element interiors reach beyond their boundary slab — the
+# ±eᵢ axis-point extension is added in Task 11.
+rk_interaction_bounds(m::Spherical, geom) = _sph_bounds(m, GI.trait(geom), geom)
+
+function _sph_bounds(::Spherical, ::GI.AbstractPointTrait, geom)
+    return _point_box(_spherical_kernel_point(geom))
+end
+function _sph_bounds(::Spherical, ::GI.AbstractCurveTrait, geom)
+    n = GI.npoint(geom)
+    prev = _spherical_kernel_point(GI.getpoint(geom, 1))
+    n == 1 && return _point_box(prev)
+    ext = nothing
+    for i in 2:n
+        cur = _spherical_kernel_point(GI.getpoint(geom, i))
+        e = arc_extent(prev, cur)
+        ext = ext === nothing ? e : Extents.union(ext, e)
+        prev = cur
+    end
+    return ext
+end
+function _sph_bounds(m::Spherical, ::GI.AbstractPolygonTrait, geom)
+    ext = _sph_bounds(m, GI.trait(GI.getexterior(geom)), GI.getexterior(geom))
+    for hole in GI.gethole(geom)
+        ext = Extents.union(ext, _sph_bounds(m, GI.trait(hole), hole))
+    end
+    return ext
+end
+function _sph_bounds(m::Spherical, ::GI.AbstractGeometryTrait, geom)
+    ext = nothing
+    for g in GI.getgeom(geom)
+        e = _sph_bounds(m, GI.trait(g), g)
+        ext = ext === nothing ? e : Extents.union(ext, e)
+    end
+    return ext
+end
