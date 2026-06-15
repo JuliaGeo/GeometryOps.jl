@@ -71,3 +71,20 @@ end
         @test GO.relate(prep, B) == GO.relate(loop, A, B)
     end
 end
+
+# Task 18: an exactly-antipodal edge has no unique great-circle arc; the kernel
+# refuses it at ingest with a message pointing at the AntipodalEdgeSplit remedy.
+@testset "spherical antipodal edge throws informatively" begin
+    p0   = GO._to_kernel_point(Spherical(), (0., 0.))       # (1, 0, 0)
+    p180 = GO._to_kernel_point(Spherical(), (180., 0.))     # (-1, 0, 0): antipodal
+    p90  = GO._to_kernel_point(Spherical(), (90., 0.))      # (0, 1, 0)
+    err = try; GO.arc_extent(p0, p180); nothing; catch e; e; end
+    @test err isa ArgumentError
+    @test occursin("AntipodalEdgeSplit", err.msg)
+    #-- a normal edge and a repeated (zero-length) vertex do NOT throw
+    @test (GO.arc_extent(p0, p90); true)
+    @test (GO.arc_extent(p0, p0); true)
+    #-- the whole relate rejects a polygon carrying an antipodal edge at ingest
+    bad = GI.Polygon([GI.LinearRing([(0., 0.), (180., 0.), (90., 80.), (0., 0.)])])
+    @test_throws ArgumentError GO.relate(alg, bad, GI.Point(10., 10.))
+end
