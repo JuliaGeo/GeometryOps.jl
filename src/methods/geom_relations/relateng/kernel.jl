@@ -191,9 +191,12 @@ end
     return _rebuild_point(p, _pos_zero(GI.x(p)), _pos_zero(GI.y(p)), _pos_zero(GI.z(p)))
 end
 # Default rebuild: a plain 3-tuple. Concrete point types that must survive node
-# construction add their own method (e.g. `UnitSphericalPoint` in
-# `kernel_spherical.jl`).
+# construction add their own method. The spherical kernel point type is the one
+# such type today: a `UnitSphericalPoint` must stay a `UnitSphericalPoint` so
+# `NodeKey{P}`'s `P` matches the kernel point type (the spherical kernel math
+# runs on it directly).
 @inline _rebuild_point(::Any, x, y, z) = (x, y, z)
+@inline _rebuild_point(::UnitSphericalPoint, x, y, z) = UnitSphericalPoint(x, y, z)
 
 # Collect a curve's coordinates as node points into a plain `Vector`. (A
 # typed comprehension over `GI.getpoint` is not enough: for geometries backed
@@ -232,19 +235,26 @@ is nonzero precisely when the crossing is proper.
 function crossing_node(a0, a1, b0, b1)
     a0, a1 = _canonical_segment(_node_point(a0), _node_point(a1))
     b0, b1 = _canonical_segment(_node_point(b0), _node_point(b1))
-    if (GI.x(b0), GI.y(b0), GI.x(b1), GI.y(b1)) < (GI.x(a0), GI.y(a0), GI.x(a1), GI.y(a1))
+    if (_lex(b0), _lex(b1)) < (_lex(a0), _lex(a1))
         a0, a1, b0, b1 = b0, b1, a0, a1
     end
     return NodeKey(true, a0, a1, b0, b1)
 end
 
-# Order a segment's endpoints lexicographically by (x, y).
-_canonical_segment(p, q) = (GI.x(p), GI.y(p)) <= (GI.x(q), GI.y(q)) ? (p, q) : (q, p)
+# Lexicographic key of a point: (x, y) on the plane, (x, y, z) in 3D.
+@inline _lex(p) = GI.is3d(p) ? (GI.x(p), GI.y(p), GI.z(p)) : (GI.x(p), GI.y(p))
+
+# Order a segment's endpoints lexicographically (by (x, y), or (x, y, z) in 3D).
+_canonical_segment(p, q) = _lex(p) <= _lex(q) ? (p, q) : (q, p)
 
 # Whether `p` lies within the coordinate bounding box of segment `(q0, q1)`.
 # Valid as an on-segment test only when `p` is already known collinear with
-# `(q0, q1)`; shared by manifolds whose segments are coordinate-monotone.
+# `(q0, q1)`; shared by manifolds whose segments are coordinate-monotone. The
+# spherical kernel does NOT use this for arc membership (it uses
+# `rk_point_on_segment` with dot tests); the 3D clause keeps any incidental
+# planar-style call correct.
 @inline function _collinear_between(p, q0, q1)
     (min(GI.x(q0), GI.x(q1)) <= GI.x(p) <= max(GI.x(q0), GI.x(q1))) &&
-    (min(GI.y(q0), GI.y(q1)) <= GI.y(p) <= max(GI.y(q0), GI.y(q1)))
+    (min(GI.y(q0), GI.y(q1)) <= GI.y(p) <= max(GI.y(q0), GI.y(q1))) &&
+    (!GI.is3d(p) || (min(GI.z(q0), GI.z(q1)) <= GI.z(p) <= max(GI.z(q0), GI.z(q1))))
 end
