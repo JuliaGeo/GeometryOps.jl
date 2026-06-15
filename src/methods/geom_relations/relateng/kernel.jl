@@ -231,6 +231,46 @@ function _node_points(geom)
     return pts
 end
 
+#=
+## Manifold-derived kernel point type (Phase 3 ingest)
+
+The engine stores every coordinate in the manifold's *kernel point type*. The
+planar path keeps the signed-zero-normalized 2-tuple — byte-identical to the
+pre-Phase-3 engine, so `NodeKey` bytes and the locator hash sets are unchanged.
+A non-planar manifold (e.g. `Spherical`) converts each lon/lat (or already-xyz)
+vertex to its kernel representation at ingest, so everything downstream — node
+keys, segment-string coordinate vectors, the point-locator collections, the
+kernel predicate calls — runs in the kernel coordinate space.
+
+`_kernel_point_type(m)` types those collections; `_to_kernel_point(m, p)` /
+`_to_kernel_points(m, geom)` perform the conversion. The `Spherical` methods
+live in kernel_spherical.jl next to `_spherical_kernel_point`.
+=#
+_kernel_point_type(::Planar) = Tuple{Float64, Float64}
+@inline _to_kernel_point(::Planar, p) = _node_point(p)
+
+# Manifold-aware counterpart of `_node_points` (identical to it on the planar
+# path): a curve's coordinates as a `Vector` of kernel points.
+function _to_kernel_points(m::Manifold, geom)
+    P = _kernel_point_type(m)
+    pts = Vector{P}()
+    sizehint!(pts, GI.npoint(geom))
+    for p in GI.getpoint(geom)
+        push!(pts, _to_kernel_point(m, p))
+    end
+    return pts
+end
+
+# Degenerate interaction box of a single *kernel* point, matching the
+# dimensionality of `rk_interaction_bounds` (2D for planar tuples, 3D for 3D
+# kernel points such as `UnitSphericalPoint`). Used by the point-locator line
+# envelope short-circuit, where the query point is already a kernel point.
+@inline _kernel_point_box(p) = _kernel_point_box(booltype(GI.is3d(p)), p)
+@inline _kernel_point_box(::False, p) =
+    Extents.Extent(X = (GI.x(p), GI.x(p)), Y = (GI.y(p), GI.y(p)))
+@inline _kernel_point_box(::True, p) =
+    Extents.Extent(X = (GI.x(p), GI.x(p)), Y = (GI.y(p), GI.y(p)), Z = (GI.z(p), GI.z(p)))
+
 "Node key of a vertex node: keyed exactly by its coordinate."
 function vertex_node(pt)
     p = _node_point(pt)

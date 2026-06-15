@@ -5,7 +5,7 @@
 
 using Test
 import GeometryOps as GO
-import GeometryOps: Planar, True
+import GeometryOps: Planar, Spherical, True
 import GeoInterface as GI
 import LibGEOS as LG  # only for POLYGON EMPTY — GI wrappers cannot be empty
 import Extents
@@ -344,7 +344,7 @@ end
 
     #-- _add_component_coordinates!: point coords + first line coords
     pts = Set{Tuple{Float64, Float64}}()
-    GO._add_component_coordinates!(pts, GI.GeometryCollection([mp, ml]))
+    GO._add_component_coordinates!(pts, GO.Planar(), GI.GeometryCollection([mp, ml]))
     @test (0.0, 0.0) in pts
 
     #-- _extract_point_elements!: only the Point element of the GC
@@ -354,7 +354,20 @@ end
 
     #-- _extract_elements!: classification into points/lines/polygons
     points = Set{Tuple{Float64, Float64}}(); lines = Any[]; polygons = Any[]
-    GO._extract_elements!(points, lines, polygons,
+    GO._extract_elements!(GO.Planar(), points, lines, polygons,
         GI.GeometryCollection([GI.Point(0.0, 0.0), ml, mpoly]))
     @test length(points) == 1 && length(lines) == 2 && length(polygons) == 1
+end
+
+# Task 13: the manifold-derived point type flows through ingest, so a
+# spherical `RelateGeometry` stores 3D (xyz) interaction bounds and converts
+# lon/lat vertices to the spherical kernel point type.
+@testset "Spherical RelateGeometry ingests xyz" begin
+    ring = GI.LinearRing([(0., 0.), (10., 0.), (10., 10.), (0., 10.), (0., 0.)])
+    rg = GO.RelateGeometry(Spherical(), GI.Polygon([ring]); exact = True())
+    @test rg.extent isa Extents.Extent
+    @test hasproperty(rg.extent, :Z)             # 3D interaction bounds
+    #-- the unique-point / segment-string point type is the spherical kernel point
+    @test GO._kernel_point_type(Spherical()) == GO.UnitSpherical.UnitSphericalPoint{Float64}
+    @test GO._to_kernel_point(Spherical(), (0., 0.)) isa GO.UnitSpherical.UnitSphericalPoint{Float64}
 end

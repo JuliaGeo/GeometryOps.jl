@@ -12,7 +12,7 @@ import GeoInterface as GI
 # here each WKT literal is translated by hand into GI.LineStrings and a set
 # of expected boundary coordinate tuples (nothing ⇔ Java's null = no boundary).
 function check_linear_boundary(lines, rule, expected_boundary)
-    lb = GO.LinearBoundary(lines, rule)
+    lb = GO.LinearBoundary(Planar(), lines, rule)
     has_boundary_expected = expected_boundary === nothing ? false : true
     @test GO.has_boundary(lb) == has_boundary_expected
     check_boundary_points(lb, lines, expected_boundary)
