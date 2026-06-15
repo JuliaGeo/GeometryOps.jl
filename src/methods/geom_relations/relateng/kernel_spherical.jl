@@ -99,9 +99,19 @@ _kernel_point_type(::Spherical) = UnitSphericalPoint{Float64}
 @inline _on_minor_arc(w, a, b, n) = (cross(a, w) ⋅ n) >= 0.0 && (cross(w, b) ⋅ n) >= 0.0
 @inline _widen(lo, hi) = (prevfloat(lo, 4), nextfloat(hi, 4))
 
+@noinline _throw_antipodal_edge(a, b) = throw(ArgumentError(
+    "spherical edge between antipodal vertices $(_tup3(a)) and $(_tup3(b)) has no " *
+    "unique great-circle arc; densify it first with the `AntipodalEdgeSplit` " *
+    "correction (it inserts the lon/lat midpoint)"))
+
 function arc_extent(a, b)
     n = cross(a, b)
     n2 = n ⋅ n
+    #-- a vanishing normal with the endpoints pointing opposite ways means the
+    #-- vertices are exactly antipodal: infinitely many great circles pass
+    #-- through them, so the edge has no well-defined arc. (A vanishing normal
+    #-- with a·b > 0 is a zero-length/repeated vertex, which is fine.)
+    n2 == 0.0 && (a ⋅ b) < 0.0 && _throw_antipodal_edge(a, b)
     xlo, xhi = minmax(a[1], b[1]); ylo, yhi = minmax(a[2], b[2]); zlo, zhi = minmax(a[3], b[3])
     if n2 > 0.0
         invn2 = inv(n2)
