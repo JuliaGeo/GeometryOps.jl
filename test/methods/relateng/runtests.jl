@@ -4,6 +4,7 @@ using SafeTestsets
 @safetestset "Predicates" begin include("predicates.jl") end
 @safetestset "Kernel" begin include("kernel.jl") end
 @safetestset "Kernel conformance" begin include("kernel_conformance.jl") end
+@safetestset "Spherical kernel conformance" begin include("kernel_conformance_spherical.jl") end
 @safetestset "Point locator" begin include("point_locator.jl") end
 @safetestset "Indexed point-in-area locator" begin include("indexed_point_in_area.jl") end
 @safetestset "RelateGeometry" begin include("relate_geometry.jl") end

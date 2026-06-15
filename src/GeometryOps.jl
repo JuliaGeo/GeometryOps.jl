@@ -94,6 +94,7 @@ include("methods/geom_relations/relateng/relate_predicates.jl")
 # topology-layer files (Task 6+) that will call the kernel functions.
 include("methods/geom_relations/relateng/kernel.jl")
 include("methods/geom_relations/relateng/kernel_planar.jl")
+include("methods/geom_relations/relateng/kernel_spherical.jl")
 # Node sections: after the kernel (uses `NodeKey`), before the point locator
 # (AdjacentEdgeLocator builds NodeSections).
 include("methods/geom_relations/relateng/node_sections.jl")
