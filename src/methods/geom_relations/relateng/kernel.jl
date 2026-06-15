@@ -153,6 +153,24 @@ end
 
 # Manifold-generic helpers
 
+# Conservative interaction-bounds tests (contract above): manifold-generic,
+# operating on the extents produced by `rk_interaction_bounds`.
+# `rk_bounds_disjoint` is dimension-generic already (`Extents.intersects`).
+# `rk_bounds_covers` checks X/Y on the plane and additionally Z for the 3D
+# extents the spherical kernel produces; the X/Y path is byte-identical to the
+# original planar definition. `hasproperty(_, :Z)` folds to a compile-time
+# constant for a concretely-typed `Extent`, so both paths stay allocation-free.
+rk_bounds_disjoint(extA, extB) = !Extents.intersects(extA, extB)
+
+function rk_bounds_covers(extA, extB)
+    (extA.X[1] <= extB.X[1] && extB.X[2] <= extA.X[2]) &&
+    (extA.Y[1] <= extB.Y[1] && extB.Y[2] <= extA.Y[2]) &&
+    _bounds_covers_z(extA, extB)
+end
+@inline _bounds_covers_z(extA, extB) =
+    (!hasproperty(extA, :Z) || !hasproperty(extB, :Z)) ||
+    (extA.Z[1] <= extB.Z[1] && extB.Z[2] <= extA.Z[2])
+
 # Symbolic node identity (design D2). One concrete isbits key type for both
 # node kinds so Dict{NodeKey{P}, ...} is type-stable. Equality and hashing
 # are the default bit-pattern (egal) semantics for isbits structs; this is

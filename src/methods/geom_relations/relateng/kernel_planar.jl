@@ -24,13 +24,6 @@ end
 
 rk_interaction_bounds(::Planar, geom) = GI.extent(geom, fallback = true)
 
-rk_bounds_disjoint(extA, extB) = !Extents.intersects(extA, extB)
-
-function rk_bounds_covers(extA, extB)
-    (extA.X[1] <= extB.X[1] && extB.X[2] <= extA.X[2]) &&
-    (extA.Y[1] <= extB.Y[1] && extB.Y[2] <= extA.Y[2])
-end
-
 # Exact coordinate equality of two points.
 _equals2(p, q) = GI.x(p) == GI.x(q) && GI.y(p) == GI.y(q)
 

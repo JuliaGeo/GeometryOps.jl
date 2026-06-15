@@ -10,6 +10,7 @@ using Test
 import GeometryOps as GO
 import GeometryOps: Spherical, True, False
 import GeometryOps.UnitSpherical: UnitSphericalPoint, slerp
+import GeometryOps.Extents as Extents
 import GeoInterface as GI
 using Random
 using LinearAlgebra: ⋅, cross
@@ -77,6 +78,18 @@ function kernel_conformance_suite_spherical(m; exact)
             @test e.Y[1] <= GI.y(u) <= e.Y[2]
             @test e.Z[1] <= GI.z(u) <= e.Z[2]
         end
+    end
+    @testset "rk_bounds_covers respects Z" begin
+        big = Extents.Extent(X = (0., 2.), Y = (0., 2.), Z = (0., 2.))
+        inside = Extents.Extent(X = (0.5, 1.), Y = (0.5, 1.), Z = (0.5, 1.))
+        outsideZ = Extents.Extent(X = (0.5, 1.), Y = (0.5, 1.), Z = (0.5, 3.))
+        @test GO.rk_bounds_covers(big, inside)
+        @test !GO.rk_bounds_covers(big, outsideZ)
+        @test !GO.rk_bounds_disjoint(big, inside)
+        # the 2D covering relation is unchanged
+        big2 = Extents.Extent(X = (0., 2.), Y = (0., 2.))
+        @test GO.rk_bounds_covers(big2, Extents.Extent(X = (0.5, 1.), Y = (0.5, 1.)))
+        @test !GO.rk_bounds_covers(big2, Extents.Extent(X = (0.5, 3.), Y = (0.5, 1.)))
     end
     # testsets added task-by-task below
 end
