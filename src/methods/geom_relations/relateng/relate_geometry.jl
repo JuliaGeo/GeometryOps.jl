@@ -39,7 +39,7 @@ Java caches `geomEnv = input.getEnvelopeInternal()`, here `extent` is the
 union of the interaction bounds (`rk_interaction_bounds`) of the non-empty
 elements, or `nothing` if the geometry is empty.
 """
-mutable struct RelateGeometry{M <: Manifold, E, G, BR <: BoundaryNodeRule, X}
+mutable struct RelateGeometry{M <: Manifold, E, G, BR <: BoundaryNodeRule, X, P}
     const m::M
     const exact::E
     const geom::G
@@ -55,9 +55,10 @@ mutable struct RelateGeometry{M <: Manifold, E, G, BR <: BoundaryNodeRule, X}
     # id counter for extracted elements (Java `elementId`); never reset, so
     # repeated extraction (prepared mode) keeps producing distinct ids.
     element_id::Int32
-    # lazy caches
-    unique_points::Union{Nothing, Set{Tuple{Float64, Float64}}}
-    locator::Union{Nothing, RelatePointLocator{M, E, G, BR}}
+    # lazy caches. `P` is the manifold's kernel point type (Phase 3): the
+    # coordinate type of every node point and segment-string vertex.
+    unique_points::Union{Nothing, Set{P}}
+    locator::Union{Nothing, RelatePointLocator{M, E, G, BR, P}}
 end
 
 function RelateGeometry(m::Manifold, geom; exact,
@@ -75,7 +76,12 @@ function RelateGeometry(m::Manifold, geom; exact,
     dim = _geom_dimension(geom)
     dim, has_points, has_lines, has_areas = _analyze_dimensions(geom, dim, is_geom_empty)
     is_line_zero_len = _is_zero_length_line(geom, dim)
-    return RelateGeometry(m, exact, geom, is_prepared, boundary_rule, extent,
+    #-- P (the kernel point type) cannot be inferred from the `nothing` lazy
+    #-- caches, so spell out every type parameter
+    P = _kernel_point_type(m)
+    return RelateGeometry{typeof(m), typeof(exact), typeof(geom), typeof(boundary_rule),
+            typeof(extent), P}(
+        m, exact, geom, is_prepared, boundary_rule, extent,
         dim, has_points, has_lines, has_areas, is_line_zero_len, is_geom_empty,
         Int32(0), nothing, nothing)
 end
@@ -394,7 +400,7 @@ function get_unique_points(rg::RelateGeometry)
     #-- will be re-used in prepared mode
     up = rg.unique_points
     up === nothing || return up
-    up = _create_unique_points(rg.geom)
+    up = _create_unique_points(rg.m, rg.geom)
     rg.unique_points = up
     return up
 end
@@ -402,31 +408,31 @@ end
 # Port of RelateGeometry.createUniquePoints. Only called on P geometries.
 # (Java uses ComponentCoordinateExtracter, which records the first coordinate
 # of each point/line component; for point geometries that is every point.)
-function _create_unique_points(geom)
-    set = Set{Tuple{Float64, Float64}}()
-    _add_component_coordinates!(set, geom)
+function _create_unique_points(m::Manifold, geom)
+    set = Set{_kernel_point_type(m)}()
+    _add_component_coordinates!(set, m, geom)
     return set
 end
 
-_add_component_coordinates!(set, geom) =
-    _add_component_coordinates!(set, GI.trait(geom), geom)
-function _add_component_coordinates!(set, ::GI.AbstractGeometryCollectionTrait, geom)
+_add_component_coordinates!(set, m, geom) =
+    _add_component_coordinates!(set, m, GI.trait(geom), geom)
+function _add_component_coordinates!(set, m, ::GI.AbstractGeometryCollectionTrait, geom)
     for g in GI.getgeom(geom)
-        _add_component_coordinates!(set, g)
+        _add_component_coordinates!(set, m, g)
     end
     return nothing
 end
-function _add_component_coordinates!(set, ::GI.AbstractPointTrait, geom)
+function _add_component_coordinates!(set, m, ::GI.AbstractPointTrait, geom)
     GI.isempty(geom) && return nothing
-    push!(set, _node_point(geom))
+    push!(set, _to_kernel_point(m, geom))
     return nothing
 end
-function _add_component_coordinates!(set, ::GI.AbstractCurveTrait, geom)
+function _add_component_coordinates!(set, m, ::GI.AbstractCurveTrait, geom)
     GI.isempty(geom) && return nothing
-    push!(set, _node_point(GI.getpoint(geom, 1)))
+    push!(set, _to_kernel_point(m, GI.getpoint(geom, 1)))
     return nothing
 end
-_add_component_coordinates!(set, ::GI.AbstractTrait, geom) = nothing
+_add_component_coordinates!(set, m, ::GI.AbstractTrait, geom) = nothing
 
 # Port of RelateGeometry.getEffectivePoints: the point elements which are not
 # covered by an element of higher dimension. (This JTS version has no
@@ -442,7 +448,7 @@ function get_effective_points(rg::RelateGeometry)
     pt_list = Any[]
     for p in pt_list_all
         GI.isempty(p) && continue
-        loc_dim = locate_with_dim(rg, _tuple_point(p))
+        loc_dim = locate_with_dim(rg, _to_kernel_point(rg.m, p))
         if dimloc_dimension(loc_dim) == DIM_P
             push!(pt_list, p)
         end
@@ -497,11 +503,11 @@ end
 _segment_string_eltype(rg::RelateGeometry, geom) =
     _segment_string_eltype(rg, GI.trait(geom), geom)
 _segment_string_eltype(rg::RG, ::GI.AbstractCurveTrait, geom) where {RG <: RelateGeometry} =
-    RelateSegmentString{Tuple{Float64, Float64}, Nothing, RG}
+    RelateSegmentString{_kernel_point_type(rg.m), Nothing, RG}
 #-- rings of MultiPolygon elements carry the MultiPolygon as parent
 _segment_string_eltype(rg::RG, ::Union{GI.AbstractPolygonTrait, GI.AbstractMultiPolygonTrait},
         geom) where {RG <: RelateGeometry} =
-    RelateSegmentString{Tuple{Float64, Float64}, typeof(geom), RG}
+    RelateSegmentString{_kernel_point_type(rg.m), typeof(geom), RG}
 function _segment_string_eltype(rg::RelateGeometry, ::GI.AbstractGeometryCollectionTrait, geom)
     T = Union{}
     for g in GI.getgeom(geom)
@@ -548,7 +554,7 @@ function _extract_segment_strings_from_atomic!(rg::RelateGeometry, is_a::Bool, g
     rg.element_id += Int32(1)
     trait = GI.trait(geom)
     if trait isa GI.AbstractCurveTrait
-        pts = _node_points(geom)
+        pts = _to_kernel_points(rg.m, geom)
         ss = _rss_create_line(pts, is_a, rg.element_id, rg)
         push!(seg_strings, ss)
     elseif trait isa GI.AbstractPolygonTrait
@@ -577,7 +583,7 @@ function _extract_ring_to_segment_string!(rg::RelateGeometry, is_a::Bool, ring, 
 
     #-- orient the points if required
     require_cw = ring_id == 0
-    pts = _node_points(ring)
+    pts = _to_kernel_points(rg.m, ring)
     pts = _orient_ring(rg.m, pts, require_cw; exact = rg.exact)
     ss = _rss_create_ring(pts, is_a, rg.element_id, ring_id, parent_poly, rg)
     push!(seg_strings, ss)

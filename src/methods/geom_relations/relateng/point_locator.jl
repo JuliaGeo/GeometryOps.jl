@@ -37,9 +37,9 @@ struct LinearBoundary{BR <: BoundaryNodeRule, P}
     rule::BR
 end
 
-function LinearBoundary(lines, rule::BoundaryNodeRule)
+function LinearBoundary(m::Manifold, lines, rule::BoundaryNodeRule)
     # assert: dim(geom) == 1
-    vertex_degree = _compute_boundary_points(lines)
+    vertex_degree = _compute_boundary_points(m, lines)
     has_boundary = _check_boundary(vertex_degree, rule)
     return LinearBoundary(vertex_degree, has_boundary, rule)
 end
@@ -62,13 +62,13 @@ function is_boundary(lb::LinearBoundary, pt)
     return is_in_boundary(lb.rule, degree)
 end
 
-function _compute_boundary_points(lines)
-    vertex_degree = Dict{Tuple{Float64, Float64}, Int}()
+function _compute_boundary_points(m::Manifold, lines)
+    vertex_degree = Dict{_kernel_point_type(m), Int}()
     for line in lines
         n = GI.npoint(line)
         n == 0 && continue
-        _add_endpoint!(_node_point(GI.getpoint(line, 1)), vertex_degree)
-        _add_endpoint!(_node_point(GI.getpoint(line, n)), vertex_degree)
+        _add_endpoint!(_to_kernel_point(m, GI.getpoint(line, 1)), vertex_degree)
+        _add_endpoint!(_to_kernel_point(m, GI.getpoint(line, n)), vertex_degree)
     end
     return vertex_degree
 end
@@ -110,7 +110,7 @@ struct AdjacentEdgeLocator{M <: Manifold, E, P}
 end
 
 function AdjacentEdgeLocator(m::Manifold, geom; exact)
-    ring_list = Vector{Tuple{Float64, Float64}}[]
+    ring_list = Vector{_kernel_point_type(m)}[]
     _ael_init!(m, ring_list, geom; exact)
     return AdjacentEdgeLocator(m, exact, ring_list)
 end
@@ -197,7 +197,7 @@ _add_rings!(m, ::GI.AbstractTrait, geom, ring_list; exact) = nothing
 # helper `_ring_is_ccw`.)
 function _add_ring!(m, ring, require_cw::Bool, ring_list; exact)
     #TODO: remove repeated points?
-    pts = _node_points(ring)
+    pts = _to_kernel_points(m, ring)
     pts = _orient_ring(m, pts, require_cw; exact)
     push!(ring_list, pts)
     return nothing
@@ -242,7 +242,7 @@ build and reuse the indexed locator — one O(n) scan beats an O(n) index
 build, while the many area-vertex locations of a multi-element relate
 amortize the index (see `locate_on_polygonal`).
 """
-mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule}
+mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule, P}
     const m::M
     const exact::E
     const geom::G
@@ -251,11 +251,11 @@ mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule}
     # element collections extracted from the (possibly nested-GC) input.
     # Java leaves these null when no element of that kind exists; here they
     # are simply empty. Heterogeneous GI element types force `Any` element
-    # eltypes.
-    const points::Set{Tuple{Float64, Float64}}
+    # eltypes. `P` is the manifold's kernel point type (Phase 3).
+    const points::Set{P}
     const lines::Vector{Any}
     const polygons::Vector{Any}
-    const line_boundary::LinearBoundary{BR, Tuple{Float64, Float64}}
+    const line_boundary::LinearBoundary{BR, P}
     const is_empty::Bool
     # per-polygonal-element indexed locators, created lazily by
     # `_get_poly_locator` (Java: polyLocator, filled by getLocator).
@@ -266,16 +266,17 @@ mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule}
     # index heuristic above
     const poly_query_count::Vector{Int32}
     # lazily built on the first multi-boundary point (Java: adjEdgeLocator)
-    adj_edge_locator::Union{Nothing, AdjacentEdgeLocator{M, E, Tuple{Float64, Float64}}}
+    adj_edge_locator::Union{Nothing, AdjacentEdgeLocator{M, E, P}}
 end
 
 function RelatePointLocator(m::Manifold, geom; exact,
         is_prepared::Bool = false, boundary_rule::BoundaryNodeRule = Mod2Boundary())
     #-- init(geom)
-    points = Set{Tuple{Float64, Float64}}()
+    P = _kernel_point_type(m)
+    points = Set{P}()
     lines = Any[]
     polygons = Any[]
-    _extract_elements!(points, lines, polygons, geom)
+    _extract_elements!(m, points, lines, polygons, geom)
     # Java caches `isEmpty = geom.isEmpty()` (recursive emptiness); since
     # `extractElements` skips empty elements, the input is recursively empty
     # iff nothing was extracted.
@@ -283,14 +284,18 @@ function RelatePointLocator(m::Manifold, geom; exact,
     # Java builds `lineBoundary` only when lines exist; an empty
     # LinearBoundary behaves identically (no boundary, no boundary points),
     # so it is built unconditionally here.
-    line_boundary = LinearBoundary(lines, boundary_rule)
+    line_boundary = LinearBoundary(m, lines, boundary_rule)
     # Java allocates `polyLocator` for both modes (Simple/Indexed); here both
     # modes may cache indexed locator objects (unprepared lazily, on repeat
     # queries), so it is allocated unconditionally.
     poly_locator = Vector{Union{Nothing, IndexedPointInAreaLocator{typeof(m), typeof(exact)}}}(
         nothing, length(polygons))
     poly_query_count = zeros(Int32, length(polygons))
-    return RelatePointLocator(m, exact, geom, is_prepared, boundary_rule,
+    #-- P cannot be inferred from the `nothing` adj_edge_locator, so spell out
+    #-- every type parameter
+    return RelatePointLocator{typeof(m), typeof(exact), typeof(geom),
+            typeof(boundary_rule), P}(
+        m, exact, geom, is_prepared, boundary_rule,
         points, lines, polygons, line_boundary, is_empty, poly_locator,
         poly_query_count, nothing)
 end
@@ -299,38 +304,38 @@ has_boundary(loc::RelatePointLocator) = has_boundary(loc.line_boundary)
 
 # Port of RelatePointLocator.extractElements + addPoint/addLine/addPolygonal:
 # trait-dispatched traversal of the (possibly nested) collection structure.
-_extract_elements!(points, lines, polygons, geom) =
-    _extract_elements!(points, lines, polygons, GI.trait(geom), geom)
+_extract_elements!(m, points, lines, polygons, geom) =
+    _extract_elements!(m, points, lines, polygons, GI.trait(geom), geom)
 
-function _extract_elements!(points, lines, polygons, ::GI.PointTrait, geom)
+function _extract_elements!(m, points, lines, polygons, ::GI.PointTrait, geom)
     GI.isempty(geom) && return nothing
-    #-- addPoint: normalized coordinate tuples, as in LinearBoundary
-    push!(points, _node_point(geom))
+    #-- addPoint: normalized kernel points, as in LinearBoundary
+    push!(points, _to_kernel_point(m, geom))
     return nothing
 end
-function _extract_elements!(points, lines, polygons, ::GI.AbstractCurveTrait, geom)
+function _extract_elements!(m, points, lines, polygons, ::GI.AbstractCurveTrait, geom)
     GI.isempty(geom) && return nothing
     #-- addLine (Java LinearRing extends LineString, hence AbstractCurve)
     push!(lines, geom)
     return nothing
 end
-function _extract_elements!(points, lines, polygons,
+function _extract_elements!(m, points, lines, polygons,
         ::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, geom)
     GI.isempty(geom) && return nothing
     #-- addPolygonal: whole polygonal geometry kept as one element
     push!(polygons, geom)
     return nothing
 end
-function _extract_elements!(points, lines, polygons,
+function _extract_elements!(m, points, lines, polygons,
         ::GI.AbstractGeometryCollectionTrait, geom)
     GI.isempty(geom) && return nothing
     #-- covers GeometryCollection, MultiPoint, MultiLineString
     for g in GI.getgeom(geom)
-        _extract_elements!(points, lines, polygons, g)
+        _extract_elements!(m, points, lines, polygons, g)
     end
     return nothing
 end
-_extract_elements!(points, lines, polygons, ::GI.AbstractTrait, geom) = nothing
+_extract_elements!(m, points, lines, polygons, ::GI.AbstractTrait, geom) = nothing
 
 """
     locate(loc::RelatePointLocator, p)
@@ -453,16 +458,16 @@ end
 # tree, which carries a stored extent on every linework element).
 # `is_node` is unused, as in Java (kept for signature parity).
 function locate_on_line(loc::RelatePointLocator, p, is_node::Bool, line)
-    #-- Java: lineEnv.intersects(p) short-circuit
-    pt_ext = Extents.Extent(X = (GI.x(p), GI.x(p)), Y = (GI.y(p), GI.y(p)))
+    #-- Java: lineEnv.intersects(p) short-circuit (p is already a kernel point)
+    pt_ext = _kernel_point_box(p)
     if rk_bounds_disjoint(rk_interaction_bounds(loc.m, line), pt_ext)
         return LOC_EXTERIOR
     end
     #-- Java: PointLocation.isOnLine over the coordinate sequence
     n = GI.npoint(line)
-    q0 = _tuple_point(GI.getpoint(line, 1))
+    q0 = _to_kernel_point(loc.m, GI.getpoint(line, 1))
     for i in 2:n
-        q1 = _tuple_point(GI.getpoint(line, i))
+        q1 = _to_kernel_point(loc.m, GI.getpoint(line, i))
         if rk_point_on_segment(loc.m, p, q0, q1; exact = loc.exact)
             return LOC_INTERIOR
         end

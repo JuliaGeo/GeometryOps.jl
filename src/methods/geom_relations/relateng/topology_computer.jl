@@ -48,9 +48,10 @@ function TopologyComputer(predicate::TopologyPredicate,
     #-- both inputs must have been built with the same settings
     (geom_a.m == geom_b.m && geom_a.exact == geom_b.exact) ||
         throw(ArgumentError("RelateGeometry manifold/exact settings of the A and B inputs must agree"))
-    #-- P matches relate_geometry.jl's `_node_point` normalization of all
-    #-- segment-string coordinates to Tuple{Float64, Float64}
-    P = Tuple{Float64, Float64}
+    #-- P is the manifold's kernel point type, matching the coordinate type of
+    #-- every segment string / node point produced at ingest (Tuple{Float64,
+    #-- Float64} for Planar, UnitSphericalPoint{Float64} for Spherical)
+    P = _kernel_point_type(geom_a.m)
     tc = TopologyComputer(predicate, geom_a, geom_b, Dict{NodeKey{P}, NodeSections{P}}())
     init_exterior_dims!(tc)
     return tc

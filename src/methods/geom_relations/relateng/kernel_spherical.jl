@@ -84,6 +84,13 @@ end
     return _node_point(rk_normalize_usp(u))
 end
 
+# Phase 3 ingest hooks (the planar methods live in kernel.jl). The spherical
+# kernel point type is the unit-sphere xyz point; conversion is the canonical
+# `_spherical_kernel_point` (lon/lat → unit xyz, or an already-xyz point
+# renormalized), so an ingested vertex agrees bit-for-bit with its extent.
+_kernel_point_type(::Spherical) = UnitSphericalPoint{Float64}
+@inline _to_kernel_point(::Spherical, p) = _spherical_kernel_point(p)
+
 # 3D AABB of a minor great-circle arc (spike-proven, 0/102k fuzz escapes). A
 # great-circle arc bulges outside the coordinate box of its endpoints; the
 # extremum of coordinate i on the circle with normal n is at ±w, the normalized
@@ -311,8 +318,17 @@ end
 # pole, or a ring vertex sits exactly on the p→pole meridian. The engine inputs
 # in this work avoid those; the deterministic-perturbation / other-pole
 # treatment (mirroring planar RayCrossingCounter) is a follow-up.
+# Ring vertices as spherical kernel points. A 3D ring is already in kernel
+# coordinates (e.g. the conformance suite's exact integer USP rings) and is read
+# verbatim — renormalizing would perturb the exact orient the boundary test
+# relies on. A 2D (lon/lat) ring — the engine's ingested polygon — is converted
+# to unit xyz.
+_ring_kernel_pts(ring) = _ring_kernel_pts(booltype(GI.is3d(GI.getpoint(ring, 1))), ring)
+_ring_kernel_pts(::True, ring) = _node_points(ring)
+_ring_kernel_pts(::False, ring) = _ring_usp(ring)
+
 function rk_point_in_ring(m::Spherical, p, ring; exact)
-    pts = _node_points(ring)
+    pts = _ring_kernel_pts(ring)
     @inbounds for i in 1:length(pts)-1
         rk_point_on_segment(m, p, pts[i], pts[i+1]; exact) && return LOC_BOUNDARY
     end
