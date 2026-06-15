@@ -283,21 +283,24 @@ function _arcs_cross_properly(bt, p0, p1, q0, q1)
     return _strictly_in_arc3(nd, P0, P1, na) && _strictly_in_arc3(nd, Q0, Q1, nb)
 end
 
-# Whether the north pole lies in the ring's interior (S2 interior-on-left). The
-# signed solid angle of the loop seen from the pole (sum of signed triangle
-# areas, Van Oosterom–Strackee) is +interior_area when the pole is interior and
-# interior_area − 4π when exterior — so it is positive exactly when the pole is
-# inside. Float is sufficient: a global orientation property, robust unless the
-# ring hugs a great circle (Ω ≈ 0).
-function _ring_contains_pole(pts)
-    Ω = 0.0
-    N = _NPOLE
+# Whether direction `N` lies in the ring's interior (S2 interior-on-left),
+# decided by the ring's winding around `N`: project each edge onto the plane ⊥ N
+# and sum the signed turn (each < π in magnitude, so there is no atan2 branch
+# ambiguity — unlike a per-triangle solid-angle sum). A single interior-on-left
+# enclosure sweeps +2π. Robust for rings smaller than a hemisphere (the common
+# geographic case); a super-hemisphere interior would under-report a
+# non-encircled interior axis — a documented limitation, see the design doc.
+function _ring_contains_dir(pts, N)
+    θ = 0.0
     for i in 1:length(pts)-1
-        a = normalize(pts[i]); b = normalize(pts[i+1])
-        Ω += 2 * atan(N ⋅ cross(a, b), 1.0 + (N ⋅ a) + (a ⋅ b) + (b ⋅ N))
+        a = pts[i]; b = pts[i+1]
+        ua = a - (a ⋅ N) * N
+        ub = b - (b ⋅ N) * N
+        θ += atan(N ⋅ cross(ua, ub), ua ⋅ ub)
     end
-    return Ω > 0
+    return θ > π
 end
+@inline _ring_contains_pole(pts) = _ring_contains_dir(pts, _NPOLE)
 
 # Location of `p` relative to the area enclosed by `ring`. Boundary first (exact
 # arc membership), then parity of proper crossings of the minor arc p→NPOLE with
@@ -324,32 +327,49 @@ end
 
 # Interaction bounds on the sphere: a 3D `Extent{(:X,:Y,:Z)}` in unit-sphere xyz
 # (the engine works in xyz after ingest), as the union of `arc_extent` over the
-# geometry's edges. Area-element interiors reach beyond their boundary slab — the
-# ±eᵢ axis-point extension is added in Task 11.
+# geometry's edges, plus — for area elements — an axis-point extension so the box
+# covers the interior, not just the boundary slab.
 rk_interaction_bounds(m::Spherical, geom) = _sph_bounds(m, GI.trait(geom), geom)
+
+# Converted (lon/lat → unit xyz) vertices of a ring/curve.
+_ring_usp(ring) = [_spherical_kernel_point(p) for p in GI.getpoint(ring)]
+
+# Union of arc_extents over consecutive vertices (a single point box if n == 1).
+function _arcs_extent(usp)
+    length(usp) == 1 && return _point_box(usp[1])
+    ext = arc_extent(usp[1], usp[2])
+    for i in 2:length(usp)-1
+        ext = Extents.union(ext, arc_extent(usp[i], usp[i+1]))
+    end
+    return ext
+end
 
 function _sph_bounds(::Spherical, ::GI.AbstractPointTrait, geom)
     return _point_box(_spherical_kernel_point(geom))
 end
-function _sph_bounds(::Spherical, ::GI.AbstractCurveTrait, geom)
-    n = GI.npoint(geom)
-    prev = _spherical_kernel_point(GI.getpoint(geom, 1))
-    n == 1 && return _point_box(prev)
-    ext = nothing
-    for i in 2:n
-        cur = _spherical_kernel_point(GI.getpoint(geom, i))
-        e = arc_extent(prev, cur)
-        ext = ext === nothing ? e : Extents.union(ext, e)
-        prev = cur
-    end
-    return ext
-end
-function _sph_bounds(m::Spherical, ::GI.AbstractPolygonTrait, geom)
-    ext = _sph_bounds(m, GI.trait(GI.getexterior(geom)), GI.getexterior(geom))
+_sph_bounds(::Spherical, ::GI.AbstractCurveTrait, geom) = _arcs_extent(_ring_usp(geom))
+function _sph_bounds(::Spherical, ::GI.AbstractPolygonTrait, geom)
+    exterior = _ring_usp(GI.getexterior(geom))
+    ext = _arcs_extent(exterior)
     for hole in GI.gethole(geom)
-        ext = Extents.union(ext, _sph_bounds(m, GI.trait(hole), hole))
+        ext = Extents.union(ext, _arcs_extent(_ring_usp(hole)))
     end
-    return ext
+    # An area interior reaches beyond its boundary slab (e.g. a ring around a
+    # pole has a thin boundary band but its interior reaches z = 1). Widen each
+    # axis whose ±eᵢ is interior to the exterior ring out to ±1 (conservative —
+    # over-covering can only under-prune, never miss an interaction).
+    return _widen_area_axes(ext, exterior)
+end
+
+function _widen_area_axes(ext, pts)
+    xlo, xhi = ext.X; ylo, yhi = ext.Y; zlo, zhi = ext.Z
+    _ring_contains_dir(pts, UnitSphericalPoint(1.0, 0.0, 0.0)) && (xhi = 1.0)
+    _ring_contains_dir(pts, UnitSphericalPoint(-1.0, 0.0, 0.0)) && (xlo = -1.0)
+    _ring_contains_dir(pts, UnitSphericalPoint(0.0, 1.0, 0.0)) && (yhi = 1.0)
+    _ring_contains_dir(pts, UnitSphericalPoint(0.0, -1.0, 0.0)) && (ylo = -1.0)
+    _ring_contains_dir(pts, UnitSphericalPoint(0.0, 0.0, 1.0)) && (zhi = 1.0)
+    _ring_contains_dir(pts, UnitSphericalPoint(0.0, 0.0, -1.0)) && (zlo = -1.0)
+    return Extents.Extent(X = (xlo, xhi), Y = (ylo, yhi), Z = (zlo, zhi))
 end
 function _sph_bounds(m::Spherical, ::GI.AbstractGeometryTrait, geom)
     ext = nothing
