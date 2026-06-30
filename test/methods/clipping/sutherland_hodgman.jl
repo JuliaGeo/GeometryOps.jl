@@ -357,6 +357,28 @@ import GeoInterface as GI
             )
             @test spherical_area(result) == 0.0
         end
+
+        @testset "Grazing sliver overlap is symmetric" begin
+            # Two real grid cells (OctaHEALPix × HEALPix) overlapping in a thin sliver
+            # where one corner grazes the other's edge: area must be symmetric.
+            octa = spherical_polygon([
+                (-75.59999999999997, -22.93262592760755),
+                (-76.15384615384615, -19.86735476489602),
+                (-79.2, -22.93262592760755),
+                (-78.75, -25.944479772370016),
+            ])
+            healpix = spherical_polygon([
+                (-77.34375, -24.624318352164078),
+                (-78.04687500000003, -25.282603043311997),
+                (-77.34375, -25.94447977237001),
+                (-76.64062500000003, -25.282603043311997),
+            ])
+            alg = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
+            a_oh = spherical_area(GO.intersection(alg, octa, healpix))
+            a_ho = spherical_area(GO.intersection(alg, healpix, octa))
+            @test a_oh ≈ a_ho rtol = 1e-6
+            @test 0 < a_oh < 0.1 * spherical_area(healpix)   # sliver, not the whole cell
+        end
     end
 end
 

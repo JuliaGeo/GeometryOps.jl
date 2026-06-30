@@ -206,19 +206,11 @@ function _sh_spherical_intersection(
 
     intersection_dir = intersection_dir / dir_norm
 
-    # Two candidate intersection points (antipodal)
+    # The two great circles meet at an antipodal pair; keep the crossing on the
+    # subject arc p1→p2, i.e. the one in the same hemisphere as the midpoint p1+p2.
     cand1 = UnitSpherical.UnitSphericalPoint{T}(intersection_dir)
     cand2 = UnitSpherical.UnitSphericalPoint{T}(-intersection_dir)
-
-    # Return the candidate that lies on the subject arc
-    if UnitSpherical.point_on_spherical_arc(cand1, p1, p2)
-        return cand1
-    elseif UnitSpherical.point_on_spherical_arc(cand2, p1, p2)
-        return cand2
-    end
-
-    # Fallback: neither candidate is on the arc (shouldn't happen if orient detected a crossing)
-    return UnitSpherical.UnitSphericalPoint{T}(p1)
+    return cand1 ⋅ p1 + cand1 ⋅ p2 ≥ 0 ? cand1 : cand2
 end
 
 # Clip polygon against a single edge using Sutherland-Hodgman rules (spherical version)
