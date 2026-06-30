@@ -18,13 +18,11 @@ Pkg.add(["GeoInterface", "GeometryOps", "GeoFormatTypes",
 ````
 
 ````@example geospatial_geometry
-# Geospatial packages from Julia
+# Geospatial packages
 import GeoInterface as GI
 import GeometryOps as GO
 import GeoFormatTypes as GFT
-using GeoParquet
-using GeoDataFrames
-# Packages for coordinate transformation and projection
+# Coordinate transformation and projection
 import CoordinateTransformations
 import Proj
 # Plotting
@@ -32,10 +30,9 @@ using CairoMakie
 using GeoMakie
 using DisplayAs # hide
 Makie.set_theme!(Makie.MAKIE_DEFAULT_THEME) # hide
-# Loading data
-using GeoJSON 
-using DataFrames
-import Shapefile
+# Data loading
+using GeoDataFrames, DataFrames
+import GeoParquet, GeoJSON, Shapefile # activate native IO packages
 ````
 
 
@@ -59,7 +56,7 @@ Let's add land area for context. First, download and open the [Natural Earth](ht
 Note that this will be a path on your local machine, so you could easily point it to any other `.geojson` file you have.
 
 ````@example geospatial_geometry
-land_path = GeoMakie.assetpath("ne_110m_land.geojson")
+land_geojson_path = GeoMakie.assetpath("ne_110m_land.geojson")
 ````
 
 !!! note
@@ -68,7 +65,7 @@ land_path = GeoMakie.assetpath("ne_110m_land.geojson")
 Read this dataset in as a `GeoJSON.FeatureCollection`.
 
 ````@example geospatial_geometry
-land_geo = GeoJSON.read(land_path)
+land_features = GeoDataFrames.read(land_geojson_path)
 ````
 
 We then need to create a figure with a `GeoAxis` that can handle the projection between `source` and `destination` CRS. For [`GeoMakie`](https://geo.makie.org/stable/), `source` is the CRS of the input and `dest` is the CRS you want to visualize in.
@@ -88,11 +85,11 @@ nothing #hide
 Plot `land` for context.
 
 ````@example geospatial_geometry
-poly!(ga, land_geo; color=:black)
+poly!(ga, land_features; color=:black)
 fig
 ````
 
-Now let's plot a `Polygon` like before, but this time with a CRS that differs from our `source` data
+Now let's plot a `Polygon` like before, but this time with a CRS that differs from our `source` data.
 
 ````@example geospatial_geometry
 function ring(radius)
@@ -130,17 +127,17 @@ source_crs2 = GFT.EPSG(32610)
 
 Create a polygon (we're working in meters now, not latitude and longitude)
 ````@example geospatial_geometry
-r = 1000000;
-ϴ = 0:0.01:2pi;
-x = r .* cos.(ϴ).^3 .+ 500000;
-y = r .* sin.(ϴ) .^ 3 .+5000000;
+rs = 1000000;
+ϴs = 0:0.01:2pi;
+xs = rs .* cos.(ϴs).^3 .+ 500000;
+ys = rs .* sin.(ϴs) .^ 3 .+ 5000000;
 DisplayAs.setcontext(y, :compact => true, :displaysize => (10, 40),) # hide
 ````
 
 Now create a `LinearRing` from `Points`
 
 ````@example geospatial_geometry
-ring3 = GI.LinearRing(Point.(zip(x, y)))
+ring3 = GI.LinearRing(GI.Point.(xs, ys))
 ````
 
 Now create a `Polygon` from the `LineRing` 
@@ -165,22 +162,22 @@ Great, we can make geometries and plot them on a map... now let's export the dat
 
 Let's do this for a new `Polygon`
 ````@example geospatial_geometry
-r = 3;
-k = 7;
-ϴ = 0:0.01:2pi;
-x = r .* (k + 1) .* cos.(ϴ) .- r .* cos.((k + 1) .* ϴ);
-y = r .* (k + 1) .* sin.(ϴ) .- r .* sin.((k + 1) .* ϴ);
-ring4 = GI.LinearRing(Point.(zip(x, y)))
+rs = 3;
+ks = 7;
+ϴs = 0:0.01:2pi;
+xs = rs .* (ks + 1) .* cos.(ϴs) .- rs .* cos.((ks + 1) .* ϴs);
+ys = rs .* (ks + 1) .* sin.(ϴs) .- rs .* sin.((ks + 1) .* ϴs);
+ring4 = GI.LinearRing(tuple.(xs, ys))
 ````
 
-But this time when we create the `Polygon` we need to specify the `CRS` at the time of creation, making it a geospatial polygon
+But this time when we create the `Polygon` we need to specify the `CRS` at the time of creation, associating that metadata with the geometry.
 
 ````@example geospatial_geometry
 geopoly1 = GI.Polygon([ring4], crs = source_crs1)
 ````
 
 !!! note
-    It is good practice to only include CRS information with the highest-level geometry. Not doing so can bloat the memory footprint of the geometry. CRS information _can_ be included at the individual `Point` level but is discouraged.
+    It is good practice to only include CRS information with the highest-level geometry. Not doing so can sometimes bloat the memory footprint of the geometry. CRS information _can_ be included at the individual `Point` level but is discouraged.
 
 And let's create a second `Polygon` by shifting the first using CoordinateTransformations
 
@@ -196,7 +193,7 @@ geopoly2 = GO.transform(f, geopoly1)
 Typically, you'll also want to include attributes with your geometries. Attributes are simply data that are attributed to each geometry. The easiest way to do this is to create a table with a `:geometry` column. Let's do this using [`DataFrames`](https://github.com/JuliaData/DataFrames.jl).
 
 ````@example geospatial_geometry
-df = DataFrame(geometry=[geopoly1, geopoly2])
+df = DataFrame(geometry = [geopoly1, geopoly2])
 ````
 
 Now let's add a couple of attributes to the geometries by adding new columns to our existing data frame.

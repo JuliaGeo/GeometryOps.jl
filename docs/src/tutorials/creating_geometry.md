@@ -1,6 +1,8 @@
 # Creating Geometry
 
-In this tutorial, we're going to:
+In this tutorial, we're going to build some basic 2D geometry.  
+This [follows the Simple Features hierarchy for geospatial geometry](https://juliageo.org/GeoInterface.jl/stable/background/sf/):
+
 1. [Create `Point`s and `MultiPoint`s](#create-points-and-multipoints)
 2. [Connect `Point`s into `LineString`s](#connecting-points-into-lines)
 3. [Build `LinearRing`s, `Polygon`s, and `MultiPolygon`s](#building-polygons-and-multipolygons)
@@ -44,9 +46,11 @@ fig, ax, plt = plot(point)
 Let's create a set of points, and have a bit more fun with plotting.
 
 ````@example creating_geometry
-x = [-5, 0, 5, 0];
-y = [0, -5, 0, 5];
-points = GI.Point.(zip(x,y));
+xs = [-5, 0, 5, 0]
+ys = [0, -5, 0, 5]
+
+points = GI.Point.(xs, ys)
+
 plot!(ax, points; marker = '✈', markersize = 30)
 fig
 ````
@@ -54,13 +58,13 @@ fig
 `Point`s can be combined into a single `MultiPoint` geometry. 
 
 ````@example creating_geometry
-x = [-5, -5, 5, 5];
-y = [-5, 5, 5, -5];
+xs = [-5, -5, 5, 5]
+ys = [-5, 5, 5, -5]
 
 # zip: Create (x, y) coordinates (tuples)
 # GI.Point: Turn each coordinate pair into special Point geometries
 # GI.MultiPoint: Wrap all Points into a single MultiPoint geometry object
-multipoint = GI.MultiPoint(GI.Point.(zip(x, y)));
+multipoint = GI.MultiPoint(GI.Point.(xs, ys));
 # TODO: GeoInterfaceMakie.jl can't plot multipoints due to breaking changes
 # in Makie.jl.  We should fix that.
 plot!(ax, multipoint.geom; marker = '☁', markersize = 30)
@@ -72,9 +76,9 @@ fig
 Let's create a `LineString` connecting two points.
 
 ````@example creating_geometry
-p1 = GI.Point.(-5, 0);
-p2 = GI.Point.(5, 0);
-line = GI.LineString([p1,p2])
+p1 = GI.Point.(-5, 0)
+p2 = GI.Point.(5, 0)
+line = GI.LineString([p1, p2])
 plot!(ax, line; color = :red)
 fig
 ````
@@ -83,12 +87,14 @@ Now, let's create a line connecting multiple points (i.e. a `LineString`).
 This time we get a bit more fancy with point creation.
 
 ````@example creating_geometry
-r = 2;
-k = 10;
-ϴ = 0:0.01:2pi;
-x = r .* (k + 1) .* cos.(ϴ) .- r .* cos.((k + 1) .* ϴ);
-y = r .* (k + 1) .* sin.(ϴ) .- r .* sin.((k + 1) .* ϴ);
-lines = GI.LineString(GI.Point.(zip(x,y)));
+r = 2
+k = 10
+ϴs = 0:0.01:2pi
+xs = r .* (k + 1) .* cos.(ϴs) .- r .* cos.((k + 1) .* ϴs)
+ys = r .* (k + 1) .* sin.(ϴs) .- r .* sin.((k + 1) .* ϴs)
+
+lines = GI.LineString(GI.Point.(xs, ys))
+
 plot!(ax, lines; linewidth = 5)
 fig
 ````
@@ -114,10 +120,10 @@ polygon1 = GI.Polygon([ring1]);
 Now, we can use GeometryOps and CoordinateTransformations to shift `polygon1` up, to avoid plotting over our earlier results.  This is done through the [GeometryOps.transform](@ref) function.
 
 ````@example creating_geometry
-xoffset = 0.;
-yoffset = 50.;
-f = CoordinateTransformations.Translation(xoffset, yoffset);
-polygon1 = GO.transform(f, polygon1);
+xoffset = 0.
+yoffset = 50.
+f = CoordinateTransformations.Translation(xoffset, yoffset)
+polygon1 = GO.transform(f, polygon1)
 plot!(polygon1)
 fig
 ````
@@ -134,10 +140,10 @@ polygon2 = GI.Polygon([ring1, hole])
 Shift `polygon2` to the right, to avoid plotting over our earlier results.
 
 ````@example creating_geometry
-xoffset = 50.;
-yoffset = 0.;
-f = CoordinateTransformations.Translation(xoffset, yoffset);
-polygon2 = GO.transform(f, polygon2);
+xoffset = 50.
+yoffset = 0.
+f = CoordinateTransformations.Translation(xoffset, yoffset)
+polygon2 = GO.transform(f, polygon2)
 plot!(polygon2)
 fig
 ````
@@ -146,11 +152,11 @@ Similar to `Point`s with `MultiPoint`s, `Polygon`s can also be grouped together 
 
 ````@example creating_geometry
 # Create a simple circle with a radius of 5
-r = 5;
-x = cos.(reverse(ϴ)) .* r .+ xoffset;
-y = sin.(reverse(ϴ)) .* r .+ yoffset;
-ring2 =  GI.LinearRing(GI.Point.(zip(x,y)));
-polygon3 = GI.Polygon([ring2]);
+r = 5
+xs = cos.(reverse(ϴs)) .* r .+ xoffset
+ys = sin.(reverse(ϴs)) .* r .+ yoffset
+ring2 =  GI.LinearRing(GI.Point.(xs, ys))
+polygon3 = GI.Polygon([ring2])
 
 # Group polygon2 (our shape with the square hole) and polygon3 (our circle) together into a MultiPolygon
 multipolygon = GI.MultiPolygon([polygon2, polygon3])
@@ -159,10 +165,10 @@ multipolygon = GI.MultiPolygon([polygon2, polygon3])
 Shift `multipolygon` up, to avoid plotting over our earlier results.
 
 ````@example creating_geometry
-xoffset = 0.;
-yoffset = 50.;
-f = CoordinateTransformations.Translation(xoffset, yoffset);
-multipolygon = GO.transform(f, multipolygon);
+xoffset = 0.
+yoffset = 50.
+f = CoordinateTransformations.Translation(xoffset, yoffset)
+multipolygon = GO.transform(f, multipolygon)
 plot!(multipolygon)
 fig
 ````
