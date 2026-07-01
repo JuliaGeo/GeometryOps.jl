@@ -117,3 +117,38 @@ Generic entry point for prepared-geometry optimizations. GeometryOps implements
 for algorithms (e.g. `RelateNG`).
 """
 function prepare end
+
+#-- GeoInterface forwarding: a Prepared IS-A geometry wherever GI is spoken.
+#-- The extent is served from the cached field, never recomputed.
+GI.isgeometry(::Type{<:Prepared{T, M, G}}) where {T, M, G} = GI.isgeometry(G)
+GI.trait(::Prepared{T}) where {T} = T()
+GI.geomtrait(::Prepared{T}) where {T} = T()
+
+Extents.extent(p::Prepared) = p.extent
+GI.extent(::GI.AbstractTrait, p::Prepared) = p.extent
+GI.crs(t::GI.AbstractTrait, p::Prepared) = GI.crs(t, parent(p))
+
+for f in (:coordnames, :is3d, :ismeasured, :isempty, :coordinates, :ngeom, :getgeom)
+    @eval GI.$f(t::GI.AbstractGeometryTrait, p::Prepared, args...) = GI.$f(t, parent(p), args...)
+end
+for f in (:npoint, :getpoint, :startpoint, :endpoint, :issimple, :isclosed, :isring)
+    @eval GI.$f(t::GI.AbstractCurveTrait, p::Prepared, args...) = GI.$f(t, parent(p), args...)
+end
+for f in (:nring, :getring, :getexterior, :nhole, :gethole, :npoint, :getpoint)
+    @eval GI.$f(t::GI.AbstractPolygonTrait, p::Prepared, args...) = GI.$f(t, parent(p), args...)
+end
+for f in (:nring, :getring, :npoint, :getpoint)
+    @eval GI.$f(t::GI.AbstractMultiPolygonTrait, p::Prepared, args...) = GI.$f(t, parent(p), args...)
+end
+for f in (:npoint, :getpoint, :issimple)
+    @eval GI.$f(t::GI.AbstractMultiPointTrait, p::Prepared, args...) = GI.$f(t, parent(p), args...)
+    @eval GI.$f(t::GI.AbstractMultiCurveTrait, p::Prepared, args...) = GI.$f(t, parent(p), args...)
+end
+
+#-- disambiguation against GI's trait-specific defaults (e.g. npoint(::LineTrait) = 2)
+for T in (:LineTrait, :TriangleTrait, :PentagonTrait, :HexagonTrait, :RectangleTrait, :QuadTrait)
+    @eval GI.npoint(t::GI.$T, p::Prepared) = GI.npoint(t, parent(p))
+end
+for T in (:TriangleTrait, :RectangleTrait, :QuadTrait, :PentagonTrait, :HexagonTrait)
+    @eval GI.nring(t::GI.$T, p::Prepared) = GI.nring(t, parent(p))
+end
