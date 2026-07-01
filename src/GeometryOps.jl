@@ -7,6 +7,10 @@ import GeometryOpsCore:
                 TraitTarget,
                 Manifold, Planar, Spherical, Geodesic, AutoManifold, WrongManifoldException,
                 manifold, best_manifold,
+                AbstractPreparation, AbstractPreparationTrait,
+                SpatialIndexLike, SpatialEdgeIndexLike, PointInAreaLike,
+                preptrait, PreparationSpec, Prepared, getprep, prepare,
+                appliesto, buildprep,
                 Algorithm, AutoAlgorithm, ManifoldIndependentAlgorithm, SingleManifoldAlgorithm, NoAlgorithm,
                 BoolsAsTypes, True, False, booltype, istrue,
                 TaskFunctors,
@@ -17,7 +21,8 @@ import GeometryOpsCore:
                 get_geometries,
                 APPLY_KEYWORDS, THREADED_KEYWORD, CRS_KEYWORD, CALC_EXTENT_KEYWORD
 
-export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap, get_geometries 
+export TraitTarget, Manifold, Planar, Spherical, Geodesic, apply, applyreduce, flatten, reconstruct, rebuild, unwrap, get_geometries
+export Prepared, prepare, getprep, preptrait, SpatialIndexLike, SpatialEdgeIndexLike, PointInAreaLike
 
 using GeoInterface
 using LinearAlgebra, Statistics, Random
