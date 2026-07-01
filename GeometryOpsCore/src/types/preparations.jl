@@ -152,3 +152,10 @@ end
 for T in (:TriangleTrait, :RectangleTrait, :QuadTrait, :PentagonTrait, :HexagonTrait)
     @eval GI.nring(t::GI.$T, p::Prepared) = GI.nring(t, parent(p))
 end
+
+#-- points are never wrapped by `prepare`, but a Prepared point is constructible
+#-- (e.g. by a third-party provider); forward the point-trait accessors that
+#-- collide with the AbstractGeometryTrait loop above
+for f in (:ngeom, :getgeom, :coordinates)
+    @eval GI.$f(t::GI.AbstractPointTrait, p::Prepared, args...) = GI.$f(t, parent(p), args...)
+end

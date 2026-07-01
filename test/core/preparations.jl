@@ -71,3 +71,8 @@ end
     @test GI.getexterior(ppoly) === pring
     @test get(GI.getring(ppoly, 1), SpatialEdgeIndexLike()) isa _DummyEdgeTree
 end
+
+@testset "Method hygiene" begin
+    # the Prepared forwarding must not introduce method ambiguities
+    @test isempty(Test.detect_ambiguities(GeometryOpsCore; recursive = false))
+end
