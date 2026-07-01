@@ -22,6 +22,7 @@ include("keyword_docs.jl")
 include("constants.jl")
 
 include("types/manifold.jl")
+include("types/preparations.jl")
 include("types/algorithm.jl")
 include("types/operation.jl")
 include("types/exceptions.jl")

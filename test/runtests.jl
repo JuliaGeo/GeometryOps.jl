@@ -8,6 +8,7 @@ import Test, GeoInterface, ArchGDAL, GeometryBasics, LibGEOS # enable GOTestHelp
 @testset "Core" begin
     @safetestset "Algorithm" begin include("core/algorithm.jl") end
     @safetestset "Manifold" begin include("core/manifold.jl") end
+    @safetestset "Preparations" begin include("core/preparations.jl") end
     @safetestset "Applicators" begin include("core/applicators.jl") end
     @safetestset "Geometry Utils" begin include("core/geometry_utils.jl") end
 end
