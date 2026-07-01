@@ -125,6 +125,8 @@ include("methods/geom_relations/relateng/topology_computer.jl")
 include("methods/geom_relations/relateng/edge_intersector.jl")
 # The RelateNG engine: drives all of the above through the phased evaluation.
 include("methods/geom_relations/relateng/relate_ng.jl")
+# Prepared-geometry builder: after relateng (uses the kernel's `rk_interaction_bounds`).
+include("prepared/prepared.jl")
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")
