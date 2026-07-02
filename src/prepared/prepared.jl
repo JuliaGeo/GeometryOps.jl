@@ -203,6 +203,9 @@ preptrait(::PointInAreaIndex) = PointInAreaLike()
 Spec: build an indexed point-in-area locator for a polygon or multipolygon. `Planar` only —
 the spherical point-in-area index is deliberately unimplemented (relateng falls back to an
 O(n) `rk_point_in_ring` walk on `Spherical`).
+
+Reuse note: relateng's point locator reuses this prepared locator only when the algorithm's
+`exact` type matches the prep's (both default `True()`); otherwise it builds its own.
 """
 struct PointInArea{E} <: PreparationSpec
     exact::E
@@ -215,6 +218,7 @@ appliesto(::PointInArea) = Union{GI.PolygonTrait, GI.MultiPolygonTrait}
 buildprep(spec::PointInArea, m::Planar, geom) =
     PointInAreaIndex(IndexedPointInAreaLocator(m, geom; exact = spec.exact, sort_leaves = true))
 buildprep(::PointInArea, m::Manifold, _) =
-    throw(ArgumentError("`PointInArea` requires the `Planar` manifold; got `$(typeof(m))`. \
-        The spherical point-in-area index is not implemented — spherical algorithms use an \
-        O(n) ring walk instead, so simply omit this spec."))
+    throw(ArgumentError("`PointInArea` requires the `Planar` manifold (as of now); got \
+        `$(typeof(m))`. A point-in-area index is implemented for `Planar` only — for any \
+        other manifold omit this spec (on `Spherical`, relateng falls back to an O(n) ring \
+        walk instead)."))

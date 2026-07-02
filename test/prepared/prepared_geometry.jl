@@ -266,6 +266,9 @@ end
     pia3    = (GO.RingEdgeIndex(), GO.ChildTree(), GO.PointInArea())
 
     # each row: (name, a, b, a_combos, b_prep, both_positions)
+    # `b_prep` is only read when `both_positions` is true (it preps the B side for the
+    # B-prepared / both-prepared cells); rows with `both_positions = false` never read it,
+    # so their `b_prep` entry is inert.
     planar_pairs = [
         ("poly|poly disjoint", _PG_POLY, _PG_POLY2, poly_combos, pia3, true),
         ("poly|poly overlap",  _PG_POLY, overlap,   poly_combos, pia3, true),
@@ -274,6 +277,9 @@ end
         ("mp|poly",            _PG_MP,   _PG_POLY,  poly_combos, pia3, false),
         ("poly|mp",            _PG_POLY, _PG_MP,    poly_combos, (GO.RingEdgeIndex(), GO.ChildTree()), true),
         ("gc|poly",            gc,       _PG_POLY,  nonpoly_combos, pia3, false),
+        # `a` is a bare Point and `prepare` returns points unwrapped (`pa === pt`), so the
+        # `:Aplain`/`:Aprep` cells here are pass-through-vacuous by design — they compare
+        # `relate` against itself. They auto-arm if `prepare` ever starts wrapping points.
         ("point|multipoint",   pt,       mpt,       nonpoly_combos, (), false),
     ]
 

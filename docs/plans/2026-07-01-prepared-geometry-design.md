@@ -1,6 +1,6 @@
 # Prepared geometry (F4): `Prepared{Geom, Preparations}` design
 
-**Status: DRAFT — decisions 1–2 ratified by Anshul, 3–8 provisional (made in his absence, listed in §Decisions for ratification).**
+**Status: ACCEPTED — implemented on branch `prepared-geometry`; deviations below.**
 
 This is the design for follow-up **F4** from `2026-06-10-relateng-design.md` ("Generalize
 `prepare` into a package-wide prepared-geometry mechanism"). It consolidates the ideas
@@ -114,7 +114,7 @@ point representation).
 | `SegmentIndex()` | any lineal/polygonal geometry (top level) | `SpatialEdgeIndexLike` | flattened `NaturalIndex` over all segments + `owners` table | `PreparedEdgeIndex` reuse in RelateNG |
 | `RingEdgeIndex()` | `LinearRingTrait` | `SpatialEdgeIndexLike` | `NaturalIndex` over the ring's segment extents | `NaturallyIndexedRing` (delete it) |
 | `ChildTree()` | `Multi*`, `GeometryCollection`, `PolygonTrait` (rings) | `SpatialIndexLike` | STRtree or `NaturalIndex` over child extents | clipping `AutoAccelerator` promise |
-| `PointInArea()` | `PolygonTrait` | `PointInAreaLike` | `IndexedPointInAreaLocator` (sorted leaves) | RelateNG per-polygon locators |
+| `PointInArea()` | `Union{PolygonTrait, MultiPolygonTrait}` | `PointInAreaLike` | `IndexedPointInAreaLocator` (sorted leaves) | RelateNG per-polygon locators |
 
 Notes:
 - All specs take the index implementation as a config (default `NaturalIndex`; anything
@@ -158,28 +158,36 @@ for wrapped vs plain geometries.
   superseded by capability traits.
 - **No serialization story.**
 
-## Decisions for ratification
+## Decisions (ratified)
+
+Decisions 1–2 were ratified by Anshul up front. Decisions 3–8 were provisional in the
+draft and are now resolved: recursive wrapping (3) was ratified verbally by Anshul, and
+4–8 were ratified by implementation on the `prepared-geometry` branch. The per-decision
+statuses below reflect that; see the Amendments section for the deviations encountered.
 
 1. **Eager + immutable cache model** — *ratified* (chosen over lazy-inside and
    JTS-style mutable get-or-cache).
 2. **Design F4 now, `PreparedRelate` kept with a sourcing seam** — *ratified*.
-3. **Recursive wrapping for sub-geometry preparations** — *provisional (recommended)*.
+3. **Recursive wrapping for sub-geometry preparations** — *ratified (verbally, by Anshul)
+   and implemented*.
    Alternatives considered: flat store with level tags + path bookkeeping (leaks
    `owners`-style bookkeeping into every consumer; sub-geometries can't travel with their
    preparations); top-level-only v1 (punts on the core of the idea). Flipping this
    reshapes §Core interface but not the trait/retrieval design.
-4. **Every node wrapped, extent always cached** — provisional. Unifies with
-   `_relate_cache_extents`; cost is deep (but regular) wrapper types.
+4. **Every node wrapped, extent always cached** — *ratified by implementation*. Unifies
+   with `_relate_cache_extents`; cost is deep (but regular) wrapper types.
 5. **Spec/build split** (`PreparationSpec` + `build(spec, m, geom)` vs preparations
-   doubling as their own configs) — provisional; chosen so built state and config don't
-   share a struct.
+   doubling as their own configs) — *ratified by implementation* (built as `buildprep`,
+   not `build` — see Amendments); chosen so built state and config don't share a struct.
 6. **Manifold recorded on the wrapper; mismatch = miss** (silent fallback to the
-   unindexed path rather than an error) — provisional.
+   unindexed path rather than an error) — *ratified by implementation*; the relateng seam
+   refines this (Amendments (e)): a matched-manifold `Prepared` is trusted as-is, a
+   mismatched one is stripped and its extents rebuilt from coordinates.
 7. **Placement: interface in GeometryOpsCore, concrete preparations in GeometryOps** —
-   provisional; enables third-party providers without a GO dependency.
+   *ratified by implementation*; enables third-party providers without a GO dependency.
 8. **`Base.get` overload as the retrieval verb** (vs a new exported `getprep` for
-   everything) — provisional; `get` matches the PR #278 sketch, and the manifold-checked
-   `getprep` is the algorithm-facing entry.
+   everything) — *ratified by implementation*; `get` matches the PR #278 sketch, and the
+   manifold-checked `getprep` is the algorithm-facing entry.
 
 ## References
 
@@ -192,3 +200,72 @@ for wrapped vs plain geometries.
 - Requirements inventory: `PreparedRelate` internals (`relate_ng.jl:596-676`),
   `RelatePointLocator` (`point_locator.jl:235-270`), `AutoAccelerator`
   (`clipping_processor.jl:25-40`).
+
+## Amendments (discovered during implementation, 2026-07-01)
+
+The design was implemented on branch `prepared-geometry` (Tasks 1–11, all green). The
+following deviations and clarifications were recorded during API fact-finding and code
+review. The first group narrows the scope/API from the draft; the second records details
+that surfaced in review of the individual tasks.
+
+### Scope and API deviations (from API fact-finding)
+
+- **`SegmentIndex` dropped from v1.** A flattened whole-geometry edge tree carries an
+  `owners` table whose indices are only meaningful relative to relateng's
+  `extract_segment_strings` traversal order; building it independently risks silent
+  owner mismatches. RelateNG keeps building its own `PreparedEdgeIndex` inside
+  `prepare(::RelateNG, a)`. Revisit when a second consumer needs flat segment trees.
+  (The v1 table above still lists `SegmentIndex` as the original design; it is not built.)
+- **Clipping `AutoAccelerator` seam deferred** for the same reason (clipping indexes
+  flattened edge tables, not child extents).
+- **`tuples` keyword deferred** — compose as `prepare(GO.tuples(geom); ...)`.
+- **`build` is spelled `buildprep`**; `appliesto`/`buildprep` are unexported (providers
+  extend via `import GeometryOpsCore: appliesto, buildprep`).
+- **Topmost-wins attachment:** a spec is consumed at the highest matching level and not
+  offered further down (so `ChildTree` on a MultiPolygon indexes polygons at the top
+  node only). Multi-level trees = call `prepare` with the spec on the sub-geometry.
+- **Mismatched-manifold `Prepared` inputs to relateng** take the ordinary rewrap path
+  (correct extents rebuilt; preparations shadowed) rather than erroring.
+
+### Clarifications from code review
+
+- **(a) Points and multipoints pass through `prepare` unwrapped.** A bare point or
+  multipoint is returned as-is, never wrapped in `Prepared`. The point-trait GeoInterface
+  forwarding that `Prepared` carries (in `GeometryOpsCore/src/types/preparations.jl`)
+  exists purely for method-table hygiene — to forward the point-trait accessors that would
+  otherwise collide with the `AbstractGeometryTrait` forwarding loop, and to stay correct
+  if a third party ever constructs a `Prepared` point directly — not because `prepare` ever
+  produces one. (Task 2 review.)
+- **(b) The legacy `_union_stored_extents` cache is dimensionally collapsed for a spherical
+  GC with a bare point — but contained.** For a `Spherical` GeometryCollection that
+  contains a bare point, the legacy plain-input extent path (`_union_stored_extents`)
+  unions the point's manifold-blind 2D lon/lat box with the polygon's 3D unit-sphere box;
+  `Extents.union` keeps only shared keys, so the cached extent collapses to a
+  coordinate-mixed 2D box (verified `X = (0.604…, 12.0)` — a unit-sphere coordinate unioned
+  with a raw degree value). This is **contained**: `_relate_extent` recomputes the driving
+  extent in both the plain and prepared paths (`relate_geometry.jl:75`), so the `relate`
+  output is unaffected; `prepare`'s `_union_prepared_extents` avoids the garbage cache
+  entirely (it uses `rk_interaction_bounds`); and the Task 10 sweep pins the divergence via
+  a 2D-vs-3D extent-keys tripwire. (Task 4 + Task 10 reviews.)
+- **(c) `PointInArea` attaches to `Union{PolygonTrait, MultiPolygonTrait}`, not
+  `PolygonTrait`** (the v1 table above is updated to match). This mirrors relateng's
+  `addPolygonal` element granularity: `_extract_elements!` (`point_locator.jl:322-328`)
+  keeps a whole polygonal geometry as ONE element, so a MultiPolygon input needs the
+  locator attached at the MultiPolygon node (not per-polygon). GeometryCollection inputs,
+  by contrast, decompose into per-polygon elements, and because the spec is offered
+  top-down it flows past the GC node and attaches per-polygon. (Task 7 review
+  adjudication.)
+- **(d) `Geodesic` is unsupported by `prepare`.** `prepare` fails on the `Geodesic`
+  manifold even with no preps, because it reaches `rk_interaction_bounds`, which has
+  methods for `Planar` and `Spherical` only. This is a prepare-level limitation (not
+  specific to any spec).
+- **(e) Mismatched-manifold handling is part of the relateng seam contract.** When a
+  `Prepared` input's manifold matches the algorithm's, the wrapper (and its cached extents)
+  is trusted as-is; when it mismatches, the wrapper is **stripped** and extents are rebuilt
+  from coordinates (commit `130e278cf`). Planar→spherical was already safe because the
+  spherical path recomputes, but spherical→planar leaked cached 3D extents into the planar
+  `GI.extent` fast path until the strip fix. (Task 8 review.)
+- **(f) relateng `PointInArea` reuse requires matching `exact` types.** The relate point
+  locator reuses a `Prepared` `PointInAreaLike` locator only when the algorithm's `exact`
+  type matches the preparation's; both default to `True()`, so the common case reuses.
+  (Task 9 review.)
