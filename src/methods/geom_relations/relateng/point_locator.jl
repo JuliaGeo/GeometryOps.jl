@@ -259,11 +259,12 @@ mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule, P
     const is_empty::Bool
     # per-polygonal-element indexed locators, created lazily by
     # `_get_poly_locator` (Java: polyLocator, filled by getLocator).
-    # Prepared mode fills an entry on its first query; unprepared mode on
-    # its second — but with the prepared-geometry seam an element carrying a
-    # matched `PointInAreaLike` preparation fills its slot on the FIRST query
-    # in either mode (the prep's locator is reused, not rebuilt; see
-    # `locate_on_polygonal`).
+    # Prepared mode fills an entry on its first query; unprepared mode after
+    # 8 warm-up queries (`_LAZY_INDEX_QUERY_THRESHOLD`) — but with the
+    # prepared-geometry seam an element carrying a matched `PointInAreaLike`
+    # preparation fills its slot on the FIRST query in either mode (reused
+    # when the prep's `exact` type also matches; otherwise a fresh locator is
+    # built; see `locate_on_polygonal`).
     const poly_locator::Vector{Union{Nothing, IndexedPointInAreaLocator{M, E}}}
     # unprepared mode: queries seen per polygonal element, driving the lazy
     # index heuristic above
