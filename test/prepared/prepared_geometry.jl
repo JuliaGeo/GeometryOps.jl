@@ -155,3 +155,17 @@ end
     @test_throws ArgumentError prepare(_PG_SPH_POLY;
         manifold = GO.Spherical(), preps = (GO.PointInArea(),))
 end
+
+@testset "relateng seam: Prepared extents are trusted" begin
+    m = GO.Planar()
+    pp = prepare(_PG_POLY; preps = (GO.RingEdgeIndex(),))
+    rg = GO.RelateGeometry(m, pp; exact = GO.True())
+    # matched manifold: the Prepared tree is used as-is (no rewrap)
+    @test rg.geom === pp
+
+    # mismatched manifold: falls back to the rewrap path (correctness over reuse)
+    ps = prepare(_PG_SPH_POLY)   # Planar-prepared (2D extents)
+    rgs = GO.RelateGeometry(GO.Spherical(), ps; exact = GO.True())
+    @test rgs.geom !== ps
+    @test GI.extent(rgs.geom) isa Extents.Extent{(:X, :Y, :Z)}
+end

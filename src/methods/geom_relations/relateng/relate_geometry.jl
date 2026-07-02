@@ -133,7 +133,13 @@ _has_stored_extent(geom) =
     geom isa GI.Wrappers.WrapperGeometry && hasproperty(geom, :extent) &&
     geom.extent isa Extents.Extent
 
-_relate_cache_extents(m::Manifold, geom) = _relate_cache_extents(m, GI.trait(geom), geom)
+#-- a Prepared input built on the same manifold already carries exactly the extents this
+#-- rebuild would compute (rk_interaction_bounds at every level) — use it as-is. A
+#-- mismatched manifold falls through to the rewrap: wrong-manifold extents must not leak.
+function _relate_cache_extents(m::Manifold, geom)
+    geom isa Prepared && GeometryOpsCore.manifold(geom) === m && return geom
+    return _relate_cache_extents(m, GI.trait(geom), geom)
+end
 
 #-- point elements: their extent is themselves, nothing to cache
 _relate_cache_extents(::Manifold, ::Union{GI.AbstractPointTrait, GI.AbstractMultiPointTrait}, geom) = geom
