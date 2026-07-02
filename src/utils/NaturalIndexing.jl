@@ -5,9 +5,7 @@ import Extents
 
 using ..SpatialTreeInterface
 
-import ..GeometryOps as GO # TODO: only needed for NaturallyIndexedRing, remove when that is removed.
-
-export NaturalIndex, NaturallyIndexedRing, prepare_naturally
+export NaturalIndex
 
 """
     NaturalLevel{E <: Extents.Extent}
@@ -194,52 +192,5 @@ SpatialTreeInterface.getchild(node::NaturalIndex) = SpatialTreeInterface.getchil
 SpatialTreeInterface.getchild(node::NaturalIndex, i) = SpatialTreeInterface.getchild(NaturalIndexNode(node, 0, 1, node.extent), i)
 
 SpatialTreeInterface.child_indices_extents(node::NaturalIndex) = (i_ext for i_ext in enumerate(node.levels[1].extents))
-
-"""
-    NaturallyIndexedRing(points; nodecapacity = 32)
-
-A linear ring that contains a natural index.
-
-!!! warning
-    This will be removed in favour of prepared geometry - the idea here
-    is just to test what interface works best to store things in.
-"""
-struct NaturallyIndexedRing
-    points::Vector{Tuple{Float64, Float64}}
-    index::NaturalIndex{Extents.Extent{(:X, :Y), NTuple{2, NTuple{2, Float64}}}}
-end
-
-function NaturallyIndexedRing(points::Vector{Tuple{Float64, Float64}}; nodecapacity = 32)
-    index = NaturalIndex(GO.edge_extents(GI.LinearRing(points)); nodecapacity)
-    return NaturallyIndexedRing(points, index)
-end
-NaturallyIndexedRing(ring::NaturallyIndexedRing) = ring
-
-function GI.convert(::Type{NaturallyIndexedRing}, ::GI.LinearRingTrait, geom)
-    points = GO.tuples(geom).geom
-    return NaturallyIndexedRing(points)
-end
-
-Base.show(io::IO, ::MIME"text/plain", ring::NaturallyIndexedRing) = Base.show(io, ring)
-Base.show(io::IO, ring::NaturallyIndexedRing) = print(io, "NaturallyIndexedRing($(length(ring.points)) points) with index $(sprint(show, ring.index))")
-
-GI.ncoord(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = 2
-GI.is3d(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = false
-GI.ismeasured(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = false
-
-GI.ngeom(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = length(ring.points)
-GI.getgeom(::GI.LinearRingTrait, ring::NaturallyIndexedRing) = ring.points
-GI.getgeom(::GI.LinearRingTrait, ring::NaturallyIndexedRing, i::Int) = ring.points[i]
-
-Extents.extent(ring::NaturallyIndexedRing) = ring.index.extent
-
-GI.isgeometry(::Type{<: NaturallyIndexedRing}) = true
-GI.geomtrait(::NaturallyIndexedRing) = GI.LinearRingTrait()
-
-function prepare_naturally(geom)
-    return GO.apply(GI.PolygonTrait(), geom) do poly
-        return GI.Polygon([GI.convert(NaturallyIndexedRing, GI.LinearRingTrait(), ring) for ring in GI.getring(poly)])
-    end
-end
 
 end # module NaturalIndexing
