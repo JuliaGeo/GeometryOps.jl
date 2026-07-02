@@ -10,10 +10,10 @@ tree level whose trait matches `appliesto(spec)` (topmost-wins). Modeled on rela
 Design: `docs/plans/2026-07-01-prepared-geometry-design.md`.
 =#
 
-export RingEdgeIndex
-export SpatialEdgeIndex
-# NOTE: the specs `ChildTree`/`PointInArea` and their built-prep types (`SpatialIndex`,
-# `PointInAreaIndex`) arrive in Tasks 6–7; their `export` lines are added alongside them.
+export RingEdgeIndex, ChildTree
+export SpatialEdgeIndex, SpatialIndex
+# NOTE: the spec `PointInArea` and its built-prep type (`PointInAreaIndex`) arrive in
+# Task 7; their `export` lines are added alongside them.
 
 """
     prepare(geom; preps::Tuple = (), manifold::Manifold = Planar())
@@ -140,4 +140,44 @@ function _curve_segment_extents(m::Manifold, curve)
         prev = cur
     end
     return exts
+end
+
+# ## `ChildTree` — extent tree over child elements
+
+"""
+    SpatialIndex(tree)
+
+Built preparation: an extent tree over the wrapped geometry's *child elements* (rings of a
+polygon, polygons of a multipolygon, members of a collection), in child order.
+Capability: `SpatialIndexLike`.
+"""
+struct SpatialIndex{T} <: AbstractPreparation
+    tree::T
+end
+preptrait(::SpatialIndex) = SpatialIndexLike()
+
+"""
+    ChildTree(; nodecapacity = 32)
+
+Spec: build a `NaturalIndex` over child-element extents. Attaches (topmost-wins) to
+polygons, multi-geometries, and geometry collections.
+"""
+struct ChildTree <: PreparationSpec
+    nodecapacity::Int
+end
+ChildTree(; nodecapacity::Integer = 32) = ChildTree(Int(nodecapacity))
+appliesto(::ChildTree) = Union{GI.PolygonTrait, GI.AbstractMultiPolygonTrait,
+    GI.AbstractMultiCurveTrait, GI.GeometryCollectionTrait}
+
+#-- `_segment_extent_type(m)` doubles as "the manifold's extent type" — segment and
+#-- interaction bounds share it. Empty children are skipped, so if empties make child
+#-- indices ambiguous for a caller, that caller filters; v1 keeps build simple.
+function buildprep(spec::ChildTree, m::Manifold, geom)
+    exts = _segment_extent_type(m)[]
+    for c in GI.getgeom(geom)
+        GI.isempty(c) && continue
+        push!(exts, c isa Prepared ? c.extent : rk_interaction_bounds(m, c))
+    end
+    isempty(exts) && return nothing
+    return SpatialIndex(NaturalIndex(exts; nodecapacity = spec.nodecapacity))
 end
