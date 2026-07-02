@@ -134,10 +134,14 @@ _has_stored_extent(geom) =
     geom.extent isa Extents.Extent
 
 #-- a Prepared input built on the same manifold already carries exactly the extents this
-#-- rebuild would compute (rk_interaction_bounds at every level) — use it as-is. A
-#-- mismatched manifold falls through to the rewrap: wrong-manifold extents must not leak.
+#-- rebuild would compute (rk_interaction_bounds at every level) — use it as-is. On a
+#-- manifold mismatch the wrapper is STRIPPED and the tree rebuilt from coordinates:
+#-- cached wrong-manifold extents must never reach the planar GI.extent fast path.
 function _relate_cache_extents(m::Manifold, geom)
-    geom isa Prepared && GeometryOpsCore.manifold(geom) === m && return geom
+    if geom isa Prepared
+        GeometryOpsCore.manifold(geom) === m && return geom
+        geom = Base.parent(geom)   #-- children are stripped by the recursion below
+    end
     return _relate_cache_extents(m, GI.trait(geom), geom)
 end
 
@@ -156,7 +160,7 @@ function _relate_cache_extents(m::Manifold, trait::GI.AbstractPolygonTrait, poly
     if _has_stored_extent(poly) && all(r -> GI.isempty(r) || _has_stored_extent(r), GI.getring(poly))
         return poly
     end
-    rings = [_relate_cache_extents(m, GI.trait(r), r) for r in GI.getring(poly)]
+    rings = [_relate_cache_extents(m, r) for r in GI.getring(poly)]
     ext = _union_stored_extents(rings)
     ext === nothing && return poly
     return GI.geointerface_geomtype(trait)(rings; extent = ext, crs = GI.crs(poly))
@@ -164,7 +168,7 @@ end
 
 #-- collections (covers Multi* types too): recurse, union the child extents
 function _relate_cache_extents(m::Manifold, trait::GI.AbstractGeometryCollectionTrait, geom)
-    children = [_relate_cache_extents(m, GI.trait(g), g) for g in GI.getgeom(geom)]
+    children = [_relate_cache_extents(m, g) for g in GI.getgeom(geom)]
     ext = _union_stored_extents(children)
     ext === nothing && return geom
     return GI.geointerface_geomtype(trait)(children; extent = ext, crs = GI.crs(geom))

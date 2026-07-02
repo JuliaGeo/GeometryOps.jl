@@ -168,4 +168,18 @@ end
     rgs = GO.RelateGeometry(GO.Spherical(), ps; exact = GO.True())
     @test rgs.geom !== ps
     @test GI.extent(rgs.geom) isa Extents.Extent{(:X, :Y, :Z)}
+
+    # mismatched manifold, reverse direction: spherical-prepared input to a planar
+    # relate must be stripped and rebuilt, not silently mis-pruned via cached 3D extents
+    sph_prep = prepare(_PG_SPH_POLY; manifold = GO.Spherical())
+    overlap_b = GI.Polygon([GI.LinearRing([(15.0, 45.0), (25.0, 45.0), (25.0, 55.0), (15.0, 55.0), (15.0, 45.0)])])
+    cross_line = GI.LineString([(5.0, 39.0), (25.0, 51.0)])
+    palg = GO.RelateNG()
+    @test string(GO.relate(palg, sph_prep, overlap_b)) == string(GO.relate(palg, _PG_SPH_POLY, overlap_b))
+    @test string(GO.relate(palg, sph_prep, cross_line)) == string(GO.relate(palg, _PG_SPH_POLY, cross_line))
+    @test string(GO.relate(palg, overlap_b, sph_prep)) == string(GO.relate(palg, overlap_b, _PG_SPH_POLY))
+    # the rewrap must carry freshly computed 2D extents equal to the plain rebuild's
+    rg_mm = GO.RelateGeometry(GO.Planar(), sph_prep; exact = GO.True())
+    rg_plain = GO.RelateGeometry(GO.Planar(), _PG_SPH_POLY; exact = GO.True())
+    @test GI.extent(rg_mm.geom) == GI.extent(rg_plain.geom)
 end
