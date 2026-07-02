@@ -223,3 +223,153 @@ end
         @test GO.locate(guard_loc, q) == GO.locate(plain_loc, q)
     end
 end
+
+# ============================================================================
+# Task 10 — end-to-end equality: `relate(alg, a, b)` must be string-identical
+# whether the inputs are plain or `Prepared`, for ANY preparation combination,
+# in BOTH operand positions, on BOTH manifolds. A `relate` string that changes
+# with preparation means a seam changed topological semantics — never
+# acceptable. The sweep loops over (name, a, b, preps, position) tuples;
+# `@test` expressions embed a (name, prep-label, position) tuple so a failure
+# names the exact cell.
+#
+# Axes swept:
+#   geometry type : polygon-with-hole, multipolygon, linestring, geometry
+#                   collection, point, multipoint
+#   preparation   : planar {(), ring, PointInArea, ring+child+PIA};
+#                   spherical {(), ring, ring+child}  (no PointInArea on the
+#                   sphere — it throws; PointInArea only where polygonal+planar)
+#   operand pos.  : A-plain, A-prepared-algorithm, B-plain, both, both+algorithm
+#   manifold      : Planar, Spherical
+# ============================================================================
+@testset "relate: plain == Prepared sweep" begin
+    # -- planar prep-combination axis --
+    poly_combos = [                                # polygonal a-side: PointInArea allowed
+        ("noprep", ()),
+        ("ring",   (GO.RingEdgeIndex(),)),
+        ("pia",    (GO.PointInArea(),)),
+        ("all",    (GO.RingEdgeIndex(), GO.ChildTree(), GO.PointInArea())),
+    ]
+    nonpoly_combos = [                             # non-polygonal a-side: omit PointInArea
+        ("noprep",    ()),
+        ("ring",      (GO.RingEdgeIndex(),)),
+        ("ringchild", (GO.RingEdgeIndex(), GO.ChildTree())),
+    ]
+
+    # -- planar fixtures --
+    line    = GI.LineString([(-1.0, -1.0), (5.0, 5.0), (12.0, 5.0)])  # in, through hole, out
+    line2   = GI.LineString([(0.0, 5.0), (10.0, 5.0)])               # spans _PG_POLY + its hole
+    pt      = GI.Point(5.0, 1.0)                                     # interior to _PG_POLY
+    mpt     = GI.MultiPoint([(5.0, 1.0), (30.0, 30.0)])             # one in, one far outside
+    overlap = GI.Polygon([GI.LinearRing([(5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 5.0)])])
+    gc      = GI.GeometryCollection([_PG_POLY2, line2])            # mixed-dimension collection
+    pia3    = (GO.RingEdgeIndex(), GO.ChildTree(), GO.PointInArea())
+
+    # each row: (name, a, b, a_combos, b_prep, both_positions)
+    planar_pairs = [
+        ("poly|poly disjoint", _PG_POLY, _PG_POLY2, poly_combos, pia3, true),
+        ("poly|poly overlap",  _PG_POLY, overlap,   poly_combos, pia3, true),
+        ("poly|line",          _PG_POLY, line,      poly_combos, (GO.RingEdgeIndex(),), true),
+        ("poly|point",         _PG_POLY, pt,        poly_combos, (), false),
+        ("mp|poly",            _PG_MP,   _PG_POLY,  poly_combos, pia3, false),
+        ("poly|mp",            _PG_POLY, _PG_MP,    poly_combos, (GO.RingEdgeIndex(), GO.ChildTree()), true),
+        ("gc|poly",            gc,       _PG_POLY,  nonpoly_combos, pia3, false),
+        ("point|multipoint",   pt,       mpt,       nonpoly_combos, (), false),
+    ]
+
+    palg = GO.RelateNG()
+    for (name, a, b, a_combos, b_prep, both) in planar_pairs
+        @testset "$name" begin
+            expected = string(GO.relate(palg, a, b))
+            # axis: a-side preparation × {plain path, algorithm-prepared path}
+            for (plabel, preps) in a_combos
+                pa = prepare(a; preps = preps, manifold = GO.Planar())
+                @test (name, plabel, :Aplain, string(GO.relate(palg, pa, b))) ==
+                      (name, plabel, :Aplain, expected)
+                @test (name, plabel, :Aprep, string(GO.relate(GO.prepare(palg, pa), b))) ==
+                      (name, plabel, :Aprep, expected)
+            end
+            # axis: operand position — B-prepared and both-prepared (richest a-combo)
+            if both
+                pa = prepare(a; preps = last(a_combos)[2], manifold = GO.Planar())
+                pb = prepare(b; preps = b_prep, manifold = GO.Planar())
+                @test (name, :Bplain, string(GO.relate(palg, a, pb))) ==
+                      (name, :Bplain, expected)
+                @test (name, :AB, string(GO.relate(palg, pa, pb))) ==
+                      (name, :AB, expected)
+                @test (name, :ABprep, string(GO.relate(GO.prepare(palg, pa), pb))) ==
+                      (name, :ABprep, expected)
+            end
+        end
+    end
+
+    # -- spherical sweep (no PointInArea on the sphere) --
+    salg         = GO.RelateNG(; manifold = GO.Spherical())
+    sph_overlap  = GI.Polygon([GI.LinearRing([(15.0, 45.0), (25.0, 45.0), (25.0, 55.0), (15.0, 55.0), (15.0, 45.0)])])
+    sph_disjoint = GI.Polygon([GI.LinearRing([(40.0, 40.0), (50.0, 40.0), (50.0, 50.0), (40.0, 50.0), (40.0, 40.0)])])
+    sph_line     = GI.LineString([(5.0, 39.0), (25.0, 51.0)])   # crosses _PG_SPH_POLY
+    sph_combos   = [
+        ("noprep",    ()),
+        ("ring",      (GO.RingEdgeIndex(),)),
+        ("ringchild", (GO.RingEdgeIndex(), GO.ChildTree())),
+    ]
+    spherical_pairs = [
+        ("sph poly|poly overlap",  _PG_SPH_POLY, sph_overlap,  sph_combos, (GO.RingEdgeIndex(), GO.ChildTree()), true),
+        ("sph poly|poly disjoint", _PG_SPH_POLY, sph_disjoint, sph_combos, (GO.RingEdgeIndex(),), false),
+        ("sph poly|line",          _PG_SPH_POLY, sph_line,     sph_combos, (GO.RingEdgeIndex(),), true),
+    ]
+    for (name, a, b, a_combos, b_prep, both) in spherical_pairs
+        @testset "$name" begin
+            expected = string(GO.relate(salg, a, b))
+            for (plabel, preps) in a_combos
+                pa = prepare(a; preps = preps, manifold = GO.Spherical())
+                @test (name, plabel, :Aplain, string(GO.relate(salg, pa, b))) ==
+                      (name, plabel, :Aplain, expected)
+                @test (name, plabel, :Aprep, string(GO.relate(GO.prepare(salg, pa), b))) ==
+                      (name, plabel, :Aprep, expected)
+            end
+            if both
+                pa = prepare(a; preps = last(a_combos)[2], manifold = GO.Spherical())
+                pb = prepare(b; preps = b_prep, manifold = GO.Spherical())
+                @test (name, :Bplain, string(GO.relate(salg, a, pb))) ==
+                      (name, :Bplain, expected)
+                @test (name, :AB, string(GO.relate(salg, pa, pb))) ==
+                      (name, :AB, expected)
+                @test (name, :ABprep, string(GO.relate(GO.prepare(salg, pa), pb))) ==
+                      (name, :ABprep, expected)
+            end
+        end
+    end
+
+    # -- REQUIRED: Spherical GeometryCollection with a BARE Point + a Polygon (Task 4 review).
+    # The legacy plain-input extent path (`_union_stored_extents`) reads the bare point's
+    # extent via `GI.extent(pt; fallback=true)` — a manifold-BLIND 2D lon/lat box — and unions
+    # it with the polygon's 3D unit-sphere box; `Extents.union` keeps only shared keys, so the
+    # GC WRAPPER caches a dimensionally-collapsed, coordinate-mixed 2D garbage extent.
+    # `prepare`'s `_union_prepared_extents` instead uses `rk_interaction_bounds(m, pt)` (a real
+    # 3D box), matching `_relate_extent` exactly. The relate STRING is nonetheless IDENTICAL:
+    # the garbage is shadowed — `RelateGeometry.extent` (the field driving the envelope
+    # short-circuit) is recomputed to the correct 3D box by `_relate_extent` in BOTH paths. So
+    # plain == prepared, and both are correct (ground truth `212101212`/overlap, `FF2FF1212`/
+    # disjoint verified against the GC's members related separately + planar intuition; the
+    # interior point is absorbed by the polygon, so the GC relates to b exactly as the polygon
+    # does). This is NOT the latent legacy bug reaching an output — it stays contained.
+    @testset "spherical GC{bare point, polygon}" begin
+        gc_pt = GI.GeometryCollection([GI.Point(12.0, 42.0), _PG_SPH_POLY])  # point interior to poly
+        # Pin that this fixture actually exercises the divergent extent path (else the equality
+        # below would be a vacuous no-op): legacy caches a collapsed 2D GC extent, prepare a 3D one.
+        legacy_gc_ext = GI.extent(GO._relate_cache_extents(GO.Spherical(), gc_pt))
+        prep_gc_ext   = prepare(gc_pt; manifold = GO.Spherical()).extent
+        @test keys(legacy_gc_ext) == (:X, :Y)          # legacy: dimensionally collapsed (the bug)
+        @test keys(prep_gc_ext)   == (:X, :Y, :Z)      # prepare: correct 3D unit-sphere box
+
+        for (blabel, b) in [(:overlap, sph_overlap), (:disjoint, sph_disjoint)]
+            expected = string(GO.relate(salg, gc_pt, b))
+            pgc = prepare(gc_pt; manifold = GO.Spherical(), preps = (GO.RingEdgeIndex(),))
+            pb  = prepare(b; manifold = GO.Spherical(), preps = (GO.RingEdgeIndex(),))
+            @test (blabel, :Aplain, string(GO.relate(salg, pgc, b))) == (blabel, :Aplain, expected)
+            @test (blabel, :Aprep, string(GO.relate(GO.prepare(salg, pgc), b))) == (blabel, :Aprep, expected)
+            @test (blabel, :Bprep, string(GO.relate(salg, gc_pt, pb))) == (blabel, :Bprep, expected)
+        end
+    end
+end
