@@ -183,3 +183,43 @@ end
     rg_plain = GO.RelateGeometry(GO.Planar(), _PG_SPH_POLY; exact = GO.True())
     @test GI.extent(rg_mm.geom) == GI.extent(rg_plain.geom)
 end
+
+@testset "relateng seam: PointInArea reuse" begin
+    m = GO.Planar()
+    pp = prepare(_PG_POLY; preps = (GO.PointInArea(),))
+    prep = get(pp, PointInAreaLike())
+
+    # `GO.locate(::RelatePointLocator, p)` routes locate_with_dim -> compute_dim_location
+    # -> locate_on_polygons -> locate_on_polygonal, which is the seam under test.
+
+    # unprepared locator over a Prepared element uses the preparation immediately
+    loc = GO.RelatePointLocator(m, pp; exact = GO.True())
+    @test GO.locate(loc, (1.0, 1.0)) == GO.LOC_INTERIOR   # forces the polygonal path
+    @test loc.poly_locator[1] === prep.locator             # identity: reused, not rebuilt
+
+    # and in prepared mode too
+    ploc = GO.RelatePointLocator(m, pp; exact = GO.True(), is_prepared = true)
+    GO.locate(ploc, (1.0, 1.0))
+    @test ploc.poly_locator[1] === prep.locator
+
+    # (a) MultiPolygon whole-element pin: `_extract_elements!` keeps a Polygon/MultiPolygon
+    # as ONE element, so the prepared MP's own PointInArea node (attached topmost-wins at the
+    # MP) is the element at index 1 and is reused there — not a per-polygon rebuild.
+    mp_prep = prepare(_PG_MP; preps = (GO.PointInArea(),))
+    mp_loc = GO.RelatePointLocator(m, mp_prep; exact = GO.True())
+    @test mp_loc.polygons[1] === mp_prep                   # the element IS the whole Prepared MP
+    @test GO.locate(mp_loc, (1.0, 1.0)) == GO.LOC_INTERIOR # forces the polygonal path
+    @test mp_loc.poly_locator[1] === get(mp_prep, PointInAreaLike()).locator
+
+    # (b) Type-guard fallback: a locator with `exact = False()` cannot reuse a prep whose
+    # locator was built with `exact = True()` (the `isa IndexedPointInAreaLocator{M, E}` guard
+    # fails on the E mismatch), so a fresh locator is built — but results still match plain.
+    guard_loc = GO.RelatePointLocator(m, pp; exact = GO.False())
+    @test GO.locate(guard_loc, (1.0, 1.0)) == GO.LOC_INTERIOR
+    @test guard_loc.poly_locator[1] !== prep.locator       # NOT reused: `exact` type mismatch
+    @test guard_loc.poly_locator[1] !== nothing            # but a locator WAS still built
+    plain_loc = GO.RelatePointLocator(m, _PG_POLY; exact = GO.False())
+    for q in [(1.0, 1.0), (5.0, 5.0), (5.0, 0.0), (11.0, 5.0)]
+        @test GO.locate(guard_loc, q) == GO.locate(plain_loc, q)
+    end
+end

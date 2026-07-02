@@ -528,7 +528,10 @@ function locate_on_polygonal(loc::RelatePointLocator, p, is_node::Bool, parent_p
     #-- logic (as is all of JTS), so a future non-planar kernel falls
     #-- through to its own rk_point_in_ring even when prepared
     if loc.m isa Planar
-        use_index = loc.is_prepared
+        #-- a matched-manifold PointInArea preparation on this element is a prebuilt
+        #-- indexed locator: skip the lazy ring-walk warmup and index from the first query
+        use_index = loc.is_prepared ||
+            getprep(loc.m, polygonal, PointInAreaLike()) !== nothing
         if !use_index
             count = (loc.poly_query_count[index] += Int32(1))
             use_index = count > _LAZY_INDEX_QUERY_THRESHOLD
@@ -548,8 +551,17 @@ end
 function _get_poly_locator(loc::RelatePointLocator, index::Int)
     locator = loc.poly_locator[index]
     if locator === nothing
-        locator = IndexedPointInAreaLocator(loc.m, loc.polygons[index];
-            exact = loc.exact, sort_leaves = loc.is_prepared)
+        polygonal = loc.polygons[index]
+        #-- reuse a matched-manifold PointInArea preparation whose locator matches this
+        #-- locator's manifold and `exact` types exactly; otherwise build fresh as before
+        prep = getprep(loc.m, polygonal, PointInAreaLike())
+        locator = if prep isa PointInAreaIndex &&
+                prep.locator isa IndexedPointInAreaLocator{typeof(loc.m), typeof(loc.exact)}
+            prep.locator
+        else
+            IndexedPointInAreaLocator(loc.m, polygonal;
+                exact = loc.exact, sort_leaves = loc.is_prepared)
+        end
         loc.poly_locator[index] = locator
     end
     return locator
