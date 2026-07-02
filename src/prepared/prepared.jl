@@ -148,7 +148,9 @@ end
     SpatialIndex(tree)
 
 Built preparation: an extent tree over the wrapped geometry's *child elements* (rings of a
-polygon, polygons of a multipolygon, members of a collection), in child order.
+polygon, polygons of a multipolygon, members of a collection). Empty children are skipped,
+so leaf `i` is the `i`-th *non-empty* child in `GI.getgeom` order — not necessarily original
+child `i`. Callers whose geometries may contain empty children must account for that shift.
 Capability: `SpatialIndexLike`.
 """
 struct SpatialIndex{T} <: AbstractPreparation
@@ -160,7 +162,9 @@ preptrait(::SpatialIndex) = SpatialIndexLike()
     ChildTree(; nodecapacity = 32)
 
 Spec: build a `NaturalIndex` over child-element extents. Attaches (topmost-wins) to
-polygons, multi-geometries, and geometry collections.
+polygons, multi-geometries, and geometry collections. Empty children are skipped, so leaf
+`i` in the built [`SpatialIndex`](@ref) is the `i`-th *non-empty* child in `GI.getgeom`
+order — callers with possibly-empty children must account for the shift.
 """
 struct ChildTree <: PreparationSpec
     nodecapacity::Int

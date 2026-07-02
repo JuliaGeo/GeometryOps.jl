@@ -5,6 +5,7 @@ import GeometryOps: Prepared, prepare, getprep,
 import GeometryOpsCore
 import GeoInterface as GI
 import GeoInterface: Extents
+import LibGEOS as LG  # only for EMPTY geometries — GI wrappers cannot be empty
 
 @testset "prepare is one generic function" begin
     # the algorithm method and the (future) geometry method share the Core binding
@@ -118,4 +119,19 @@ end
     @test rprep isa GO.SpatialIndex
     # the hole (ring 2) occupies (4..6, 4..6)
     @test GO.SpatialTreeInterface.query(rprep.tree, Extents.Extent(X = (4.5, 5.5), Y = (4.5, 5.5))) == [1, 2]
+
+    # `buildprep(::ChildTree, ...)` SKIPS empty children, so tree leaf `i` is the `i`-th
+    # NON-EMPTY child in `GI.getgeom` order, not original child `i`. Pin that index shift.
+    # (GI wrappers cannot be empty — `GeoInterface.isempty` falls back to `false` for every
+    # geometry trait — so the empty middle child is built with LibGEOS, matching the
+    # convention in `test/methods/area.jl` and `test/methods/relateng/topology_computer.jl`.)
+    mp_gap = prepare(GI.MultiPolygon([_PG_POLY, LG.readgeom("POLYGON EMPTY"), _PG_POLY2]);
+        preps = (GO.ChildTree(),))
+    prep_gap = get(mp_gap, SpatialIndexLike())
+    @test prep_gap isa GO.SpatialIndex
+    # the empty middle child is dropped, so the tree has exactly 2 leaves: a box over the
+    # whole extent hits both, in tree order [1, 2]
+    @test GO.SpatialTreeInterface.query(prep_gap.tree, Extents.Extent(X = (0.0, 25.0), Y = (0.0, 10.0))) == [1, 2]
+    # leaf 2 is ORIGINAL child 3 (`_PG_POLY2`, x in (20, 25)): a box over its area returns [2]
+    @test GO.SpatialTreeInterface.query(prep_gap.tree, Extents.Extent(X = (21.0, 22.0), Y = (0.0, 1.0))) == [2]
 end
