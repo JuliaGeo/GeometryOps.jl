@@ -135,3 +135,23 @@ end
     # leaf 2 is ORIGINAL child 3 (`_PG_POLY2`, x in (20, 25)): a box over its area returns [2]
     @test GO.SpatialTreeInterface.query(prep_gap.tree, Extents.Extent(X = (21.0, 22.0), Y = (0.0, 1.0))) == [2]
 end
+
+@testset "PointInArea" begin
+    p = prepare(_PG_POLY; preps = (GO.PointInArea(),))
+    prep = get(p, PointInAreaLike())
+    @test prep isa GO.PointInAreaIndex
+    # ground truth against the unindexed locator: interior, hole, boundary, exterior
+    @test GO.locate(prep.locator, (1.0, 1.0)) == GO.LOC_INTERIOR
+    @test GO.locate(prep.locator, (5.0, 5.0)) == GO.LOC_EXTERIOR   # inside the hole
+    @test GO.locate(prep.locator, (5.0, 0.0)) == GO.LOC_BOUNDARY
+    @test GO.locate(prep.locator, (11.0, 5.0)) == GO.LOC_EXTERIOR
+
+    # multipolygon input: consumed at the MP node (relateng's element granularity)
+    mp = prepare(_PG_MP; preps = (GO.PointInArea(),))
+    @test get(mp, PointInAreaLike()) isa GO.PointInAreaIndex
+    @test get(GI.getgeom(mp, 1), PointInAreaLike()) === nothing
+
+    # spherical: a clear, early error (Task 16 of the spherical plan was skipped)
+    @test_throws ArgumentError prepare(_PG_SPH_POLY;
+        manifold = GO.Spherical(), preps = (GO.PointInArea(),))
+end

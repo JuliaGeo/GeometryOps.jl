@@ -10,10 +10,8 @@ tree level whose trait matches `appliesto(spec)` (topmost-wins). Modeled on rela
 Design: `docs/plans/2026-07-01-prepared-geometry-design.md`.
 =#
 
-export RingEdgeIndex, ChildTree
-export SpatialEdgeIndex, SpatialIndex
-# NOTE: the spec `PointInArea` and its built-prep type (`PointInAreaIndex`) arrive in
-# Task 7; their `export` lines are added alongside them.
+export RingEdgeIndex, ChildTree, PointInArea
+export SpatialEdgeIndex, SpatialIndex, PointInAreaIndex
 
 """
     prepare(geom; preps::Tuple = (), manifold::Manifold = Planar())
@@ -185,3 +183,38 @@ function buildprep(spec::ChildTree, m::Manifold, geom)
     isempty(exts) && return nothing
     return SpatialIndex(NaturalIndex(exts; nodecapacity = spec.nodecapacity))
 end
+
+# ## `PointInArea` — planar point-in-polygonal-area locator
+
+"""
+    PointInAreaIndex(locator)
+
+Built preparation: an `IndexedPointInAreaLocator` (sorted leaves) over the wrapped
+polygonal geometry. Capability: `PointInAreaLike`. `Planar` only.
+"""
+struct PointInAreaIndex{L} <: AbstractPreparation
+    locator::L
+end
+preptrait(::PointInAreaIndex) = PointInAreaLike()
+
+"""
+    PointInArea(; exact = True())
+
+Spec: build an indexed point-in-area locator for a polygon or multipolygon. `Planar` only —
+the spherical point-in-area index is deliberately unimplemented (relateng falls back to an
+O(n) `rk_point_in_ring` walk on `Spherical`).
+"""
+struct PointInArea{E} <: PreparationSpec
+    exact::E
+end
+PointInArea(; exact = True()) = PointInArea(exact)
+appliesto(::PointInArea) = Union{GI.PolygonTrait, GI.MultiPolygonTrait}
+
+#-- Planar only: the rebuilt polygon/multipolygon whose rings are themselves `Prepared` is
+#-- fed straight to the locator (GI forwarding makes the prepared children transparent).
+buildprep(spec::PointInArea, m::Planar, geom) =
+    PointInAreaIndex(IndexedPointInAreaLocator(m, geom; exact = spec.exact, sort_leaves = true))
+buildprep(::PointInArea, m::Manifold, _) =
+    throw(ArgumentError("`PointInArea` requires the `Planar` manifold; got `$(typeof(m))`. \
+        The spherical point-in-area index is not implemented — spherical algorithms use an \
+        O(n) ring walk instead, so simply omit this spec."))
