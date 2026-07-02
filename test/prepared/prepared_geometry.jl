@@ -53,3 +53,28 @@ const _PG_SPH_POLY = GI.Polygon([GI.LinearRing([(10.0, 40.0), (20.0, 40.0), (20.
     @test GI.extent(ps) isa Extents.Extent{(:X, :Y, :Z)}
     @test GI.extent(GI.getring(ps, 1)) isa Extents.Extent{(:X, :Y, :Z)}
 end
+
+@testset "RingEdgeIndex" begin
+    p = prepare(_PG_POLY; preps = (GO.RingEdgeIndex(),))
+    @test p.preps === ()                       # consumed at ring level, not polygon level
+    ring = GI.getring(p, 1)
+    prep = get(ring, SpatialEdgeIndexLike())
+    @test prep isa GO.SpatialEdgeIndex
+    tree = prep.tree
+    @test tree isa GO.NaturalIndexing.NaturalIndex
+
+    # the tree indexes segments in ring order: query a box covering only segment 1
+    # (outer ring segment 1 runs (0,0)->(10,0))
+    hits = GO.SpatialTreeInterface.query(tree, Extents.Extent(X = (4.0, 5.0), Y = (-0.1, 0.1)))
+    @test hits == [1]
+
+    # spherical: builds 3D arc-extent trees without error
+    ps = prepare(_PG_SPH_POLY; manifold = GO.Spherical(), preps = (GO.RingEdgeIndex(),))
+    sprep = get(GI.getring(ps, 1), SpatialEdgeIndexLike())
+    @test sprep isa GO.SpatialEdgeIndex
+    @test GO.SpatialTreeInterface.node_extent(sprep.tree) isa Extents.Extent{(:X, :Y, :Z)}
+
+    # manifold-checked retrieval
+    @test getprep(GO.Planar(), GI.getring(p, 1), SpatialEdgeIndexLike()) === prep
+    @test getprep(GO.Spherical(), GI.getring(p, 1), SpatialEdgeIndexLike()) === nothing
+end

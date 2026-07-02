@@ -10,8 +10,10 @@ tree level whose trait matches `appliesto(spec)` (topmost-wins). Modeled on rela
 Design: `docs/plans/2026-07-01-prepared-geometry-design.md`.
 =#
 
-# NOTE (Task 4): the concrete specs `RingEdgeIndex`, `ChildTree`, `PointInArea` and the
-# built-prep types arrive in Tasks 5–7; their `export` lines are added alongside them.
+export RingEdgeIndex
+export SpatialEdgeIndex
+# NOTE: the specs `ChildTree`/`PointInArea` and their built-prep types (`SpatialIndex`,
+# `PointInAreaIndex`) arrive in Tasks 6–7; their `export` lines are added alongside them.
 
 """
     prepare(geom; preps::Tuple = (), manifold::Manifold = Planar())
@@ -90,4 +92,52 @@ function _union_prepared_extents(m::Manifold, children)
         ext = ext === nothing ? ce : Extents.union(ext, ce)
     end
     return ext
+end
+
+# ## `RingEdgeIndex` — per-ring segment extent tree
+
+"""
+    SpatialEdgeIndex(tree)
+
+Built preparation: an extent tree (anything implementing SpatialTreeInterface) over the
+segments of the wrapped curve, in traversal order. Capability: `SpatialEdgeIndexLike`.
+"""
+struct SpatialEdgeIndex{T} <: AbstractPreparation
+    tree::T
+end
+preptrait(::SpatialEdgeIndex) = SpatialEdgeIndexLike()
+
+"""
+    RingEdgeIndex(; nodecapacity = 16)
+
+Spec: build a `NaturalIndex` over each linear ring's segment extents (manifold-aware:
+3D arc extents on `Spherical`). Replaces the `NaturallyIndexedRing` experiment.
+"""
+struct RingEdgeIndex <: PreparationSpec
+    nodecapacity::Int
+end
+RingEdgeIndex(; nodecapacity::Integer = 16) = RingEdgeIndex(Int(nodecapacity))
+appliesto(::RingEdgeIndex) = GI.LinearRingTrait
+
+function buildprep(spec::RingEdgeIndex, m::Manifold, ring)
+    exts = _curve_segment_extents(m, ring)
+    isempty(exts) && return nothing
+    return SpatialEdgeIndex(NaturalIndex(exts; nodecapacity = spec.nodecapacity))
+end
+
+#-- per-segment manifold-aware extents of a curve, in point order (planar 2D boxes,
+#-- 3D great-circle arc extents on the sphere). Mirrors the kernel's segment-extent path
+#-- (`_segment_extent_table`) but per-ring and without the relateng owners table.
+function _curve_segment_extents(m::Manifold, curve)
+    exts = _segment_extent_type(m)[]
+    n = GI.npoint(curve)
+    n < 2 && return exts
+    sizehint!(exts, n - 1)
+    prev = _to_kernel_point(m, GI.getpoint(curve, 1))
+    for i in 2:n
+        cur = _to_kernel_point(m, GI.getpoint(curve, i))
+        push!(exts, _segment_extent(m, prev, cur))
+        prev = cur
+    end
+    return exts
 end
