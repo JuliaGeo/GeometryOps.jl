@@ -133,7 +133,8 @@ Notes:
    - `RelateGeometry` constructor: if the input is `Prepared`, skip
      `_relate_cache_extents` — extents are already on the wrapper.
    - `_build_prepared_edge_index`: `getprep(m, a, SpatialEdgeIndexLike())` hit ⇒ reuse
-     instead of rebuilding.
+     instead of rebuilding. *(Not built — dropped with `SegmentIndex`, see Amendments;
+     v1 ships two relateng seams: extent trust and `PointInAreaLike` reuse.)*
    - `RelatePointLocator`: a polygonal element that is `Prepared` with `PointInAreaLike`
      ⇒ use it as the indexed locator for that element.
 2. **`NaturallyIndexedRing`** is deleted; its two call sites move to
