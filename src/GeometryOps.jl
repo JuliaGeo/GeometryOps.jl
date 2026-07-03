@@ -55,6 +55,8 @@ include("utils/utils.jl")
 include("utils/NaturalIndexing.jl")
 using .NaturalIndexing
 
+include("utils/FlexibleRTrees/FlexibleRTrees.jl")
+using .FlexibleRTrees
 
 # Load utility modules in
 using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine

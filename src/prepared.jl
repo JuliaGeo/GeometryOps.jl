@@ -258,7 +258,8 @@ back to point `1`, matching the implicit-closure semantics of the plain
 point-in-polygon algorithm.
 
 `tree` picks the backend via [`build_edge_tree`](@ref): `NaturalIndex`
-(default), `STRtree`, or any callable `ring -> spatial tree`.
+(default), `STRtree`, a `FlexibleRTrees` bulk-load algorithm (`STR()`,
+`HPR()`, `Unsorted()`), or any callable `ring -> spatial tree`.
 """
 struct RingEdgeTrees{TE, TH} <: AbstractRingEdgeTrees
     exterior::TE
@@ -288,6 +289,8 @@ type — it only needs to implement SpatialTreeInterface.
 build_edge_tree(backend, ring) = backend(ring)
 build_edge_tree(::Type{<:NaturalIndex}, ring) = NaturalIndex(_ring_edge_extents(ring))
 build_edge_tree(::Type{<:STRtree}, ring) = STRtree(_ring_edge_extents(ring))
+build_edge_tree(alg::FlexibleRTrees.BulkLoadAlgorithm, ring) =
+    FlexibleRTrees.RTree(alg, _ring_edge_extents(ring))
 
 # Extents of the ring's edges, adding the implicit closing edge when the ring
 # is unclosed — mirrors how `_point_filled_curve_orientation` walks edges.
