@@ -267,6 +267,59 @@ end
     @test predicate_mismatches(multipoly, mp_prep, mp_pts) == []
 end
 
+@testset "Clipping reuses prepared ring edge trees" begin
+    ngon(c, r, n) = begin
+        pts = [(c[1] + r * cos(θ), c[2] + r * sin(θ)) for θ in range(0, 2π; length = n + 1)[1:n]]
+        push!(pts, pts[1])
+        pts
+    end
+    donut = GI.Polygon([ngon((5.0, 5.0), 5.0, 64), ngon((5.0, 5.0), 2.0, 16)])
+    blob = GI.Polygon([ngon((9.0, 5.0), 5.0, 64)])
+    small = GI.Polygon([ngon((7.0, 5.0), 3.0, 8)])
+
+    # A prepared ring's edge tree is reused as-is (indices match `eachedge`),
+    # and coordinates read from ring storage match the materialized edge list.
+    prep_ring = GI.getexterior(prepare(donut))
+    tree, coords, n = GO._edge_tree_and_coords(prep_ring, Float64)
+    @test tree === edge_tree(getprep(prep_ring, AbstractEdgeTree))   # reused, not rebuilt
+    edges = GO.to_edgelist(GI.getexterior(donut), Float64)
+    @test n == length(edges)
+    for j in (1, 2, n)
+        @test coords(j) == Tuple(edges[j].geom)
+    end
+    # Any SpatialTreeInterface tree is reused — including one that traverses
+    # out of input order, like HPR (a stand-in for e.g. a foreign-library tree).
+    hpr_ring = GI.getexterior(prepare(donut; preps = EdgeTrees(GO.FlexibleRTrees.HPR())))
+    tree_hpr, _, _ = GO._edge_tree_and_coords(hpr_ring, Float64)
+    @test tree_hpr isa GO.FlexibleRTrees.RTree
+    # Unclosed rings index the implicit closing edge, which `eachedge` doesn't
+    # walk, so their trees are not reused — the ephemeral build kicks in.
+    unclosed_ring = GI.getexterior(prepare(GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]])))
+    tree_uc, _, n_uc = GO._edge_tree_and_coords(unclosed_ring, Float64)
+    @test tree_uc isa GO.NaturalIndexing.NaturalIndex
+    @test n_uc == 3   # eachedge semantics, not the 4 edges the ring tree indexes
+
+    # Prepared clipping ≡ plain nested-loop clipping, for every combination of
+    # prepared/plain inputs and backends, including holes and small polygons
+    # (prepared inputs override the size heuristic in AutoAccelerator).
+    auto = GO.FosterHormannClipping(GO.Planar(), GO.AutoAccelerator())
+    plain_alg = GO.FosterHormannClipping()   # NestedLoop ground truth
+    prep_nat = prepare
+    prep_hpr = g -> prepare(g; preps = EdgeTrees(GO.FlexibleRTrees.HPR()))
+    for (pa, pb) in ((donut, blob), (donut, small), (small, blob))
+        for prepper in (prep_nat, prep_hpr)
+            for f in (GO.intersection, GO.union, GO.difference)
+                expected = f(plain_alg, pa, pb; target = GI.PolygonTrait())
+                for (A, B) in ((prepper(pa), pb), (pa, prepper(pb)), (prepper(pa), prepper(pb)))
+                    got = f(auto, A, B; target = GI.PolygonTrait())
+                    @test length(got) == length(expected)
+                    @test all(map(GO.equals, got, expected))
+                end
+            end
+        end
+    end
+end
+
 @testset_implementations "Prepared vs plain across implementations" begin
     # Materialization from each backend's native storage must be exact.
     prep = prepare($square_hole)
