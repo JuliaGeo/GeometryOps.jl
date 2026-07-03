@@ -1,6 +1,6 @@
 # Minimal prepared geometry — design
 
-**Status:** in progress (2026-07-03)
+**Status:** implemented & benchmarked (2026-07-03) — see Results at the bottom
 
 A clean, minimal reimplementation of prepared geometry, off `main`, entirely inside
 GeometryOps (no GeometryOpsCore changes). Supersedes the earlier
@@ -131,10 +131,33 @@ extent per call).
   state; RelateNG territory).
 - No clipping rewiring — but `getprep`'s get-or-create form is shaped for it.
 
-## Benchmark plan (profile-performance skill)
+## Results (2026-07-03, Julia 1.12.6, Apple Silicon)
 
-Regular n-gon ("circle") polygons with n ∈ 2⁶…2¹⁶ vertices; point queries in /
-out / near-boundary. Compare: plain `contains`, prepared with `NaturalIndex`,
-prepared with `STRtree`; plus `prepare` construction cost and per-query
-allocations. Report the crossover size where preparation wins and the asymptotic
-speedup.
+`GO.contains(poly, pt)` median time per query, 1000 uniform points over the
+bounding box of a regular n-gon (~78% inside):
+
+| n vertices | plain | prepared (NaturalIndex) | prepared (STRtree) | speedup (Nat) |
+|---:|---:|---:|---:|---:|
+| 64     | 0.77 µs | 73 ns  | 44 ns  | 11× |
+| 256    | 3.3 µs  | 94 ns  | 49 ns  | 36× |
+| 1 024  | 13.6 µs | 165 ns | 131 ns | 82× |
+| 4 096  | 54.3 µs | 240 ns | 209 ns | 226× |
+| 16 384 | 218 µs  | 236 ns | 363 ns | 925× |
+| 65 536 | 873 µs  | 300 ns | 779 ns | 2 916× |
+
+- **There is no crossover size** — prepared wins from n = 64 up. The plain path
+  is O(n) per query even for trivially-rejectable points, because
+  `_maybe_skip_disjoint_extents` recomputes the polygon extent per call; a
+  far-outside point costs 808 µs plain vs **10.6 ns** prepared at n = 65 536.
+- **Build cost** (`prepare`, NaturalIndex): ≈ one plain query — 16 µs / 34 KB at
+  n = 1 024, 0.93 ms / 2.2 MB at n = 65 536. STRtree builds ~7× slower and ~6×
+  bigger; it queries faster below ~8 k vertices, NaturalIndex faster above.
+  `prepare` pays for itself by the second query.
+- **Profile** (n = 65 536, NaturalIndex): zero runtime dispatch in the hot path
+  (`@inferred` clean); self-cost is tree traversal (`depth_first_search`,
+  `NaturalIndexNode` materialization, generator iteration). The only per-query
+  allocation is the 16-byte `Ref` crossing counter (1/query).
+
+Possible follow-up optimizations (not applied): a fold/reduce variant in
+SpatialTreeInterface to eliminate the `Ref`; a level-iterating query
+specialized to `NaturalIndex` to shave traversal overhead.
