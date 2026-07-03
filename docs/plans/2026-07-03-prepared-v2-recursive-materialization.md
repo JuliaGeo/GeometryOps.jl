@@ -156,6 +156,18 @@ plain 709 µs (hole-pass dominated; no regression).
 Gotcha for equivalence tests: `_intersection_point` is not bit-symmetric in
 its operands — ground truth must be computed with matching argument order.
 
+### Tightening pass (same day)
+
+`_edge_parts` now returns a concretely-typed 1-tuple for curve inputs, so
+the parts loops (`_single_parts_loop`, `_dual_pairs_loop`) serve curves and
+whole geometries alike; the duplicate `_single_tree_loop`/`_dual_tree_loop`
+are gone, along with the single-use `_prep_matches_eachedge` (inlined) and
+the `_ring_edge_extents`/`_line_edge_extents` split (merged into
+`_edge_extents`).  Kept helpers are function barriers: `_query_part!` /
+`_collect_dual_pairs!` hoist per-part dynamic dispatch out of per-edge work.
+Benchmarks unchanged (clip 43.4 µs prepared / 62.0 plain; intersection_points
+22.8 µs prepared / 70.0 plain-tree, same-session).
+
 Bugs found on the way (all fixed + regression-tested):
 - `EdgeTree(geom; backend)` overwrote the default struct constructor and
   broke precompilation → explicit inner constructor.
