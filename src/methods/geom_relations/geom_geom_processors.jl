@@ -92,12 +92,17 @@ end
 # Orientation of a point with respect to one ring: indexed when the ring
 # carries an edge-tree preparation, the sequential loop otherwise.  The
 # kernels only walk point storage, so the `Prepared` shell is stripped first.
+# A *line string's* edge tree does not index the implicit closing edge that
+# filled-curve orientation walks (see `build_edge_tree`), so its tree only
+# applies when the curve is explicitly closed; ring-trait trees always do.
 function _point_ring_orientation(point, ring; exact)
     prep = getprep(ring, AbstractEdgeTree)
     raw = _unwrap_prepared(ring)
-    return isnothing(prep) ?
-        _point_filled_curve_orientation(Planar(), point, raw; exact) :
-        _point_filled_curve_orientation(Planar(), point, raw, edge_tree(prep); exact)
+    use_tree = !isnothing(prep) && (GI.trait(raw) isa GI.LinearRingTrait ||
+        equals(GI.getpoint(raw, 1), GI.getpoint(raw, GI.npoint(raw))))
+    return use_tree ?
+        _point_filled_curve_orientation(Planar(), point, raw, edge_tree(prep); exact) :
+        _point_filled_curve_orientation(Planar(), point, raw; exact)
 end
 
 #=

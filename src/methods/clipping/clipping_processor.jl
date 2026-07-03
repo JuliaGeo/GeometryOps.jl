@@ -219,13 +219,15 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     # or -- even now -- just buffering
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
-    # Prepared rings carry their own edge trees (see `_edge_tree_and_coords`
-    # below): those are already paid for, and preparing a geometry is an
-    # explicit signal that it will be used repeatedly — so their presence
-    # overrides the size heuristic.
-    if !isnothing(getprep(poly_a, AbstractEdgeTree))  # a's tree is free, the dual traversal only pays for b's (if that)
+    # A prepared curve carries its own edge tree (see `_edge_tree_and_coords`
+    # below): that's already paid for, and preparing a geometry is an explicit
+    # signal that it will be used repeatedly — so its presence overrides the
+    # size heuristic.  This check is node-level (edge trees live on curves):
+    # whole geometries just fall through to the size heuristic, whose tree
+    # paths still reuse any prepared trees on the curves inside.
+    if hasprep(poly_a, AbstractEdgeTree)  # a's tree is free, the dual traversal only pays for b's (if that)
         return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, DoubleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
-    elseif !isnothing(getprep(poly_b, AbstractEdgeTree))  # the single-tree path is exactly "tree on b, iterate a"
+    elseif hasprep(poly_b, AbstractEdgeTree)  # the single-tree path is exactly "tree on b, iterate a"
         return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, SingleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     end
     # Switching behaviour is turned off in the patch release
@@ -326,13 +328,12 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
 end
 
 #=
-## Reusing prepared ring edge trees
+## Reusing prepared edge trees
 
-The natural-tree accelerators below need, per input ring: a spatial index
-over the ring's edge extents, and edge coordinates by index.  A ring of a
+The natural-tree accelerators below need, per input curve: a spatial index
+over the curve's edge extents, and edge coordinates by index.  A curve of a
 `Prepared` geometry already carries exactly that index — its `EdgeTree`
-preparation, whose leaf indices match `eachedge(ring)` one-to-one when the
-ring is closed — and its coordinates can be read straight from the ring,
+preparation — and its coordinates can be read straight from the curve,
 converted through `_tuple_point` like `eachedge`, so the numbers entering the
 intersection predicates are identical to the unprepared path.
 
@@ -344,13 +345,22 @@ collected and sorted before use (as the `SingleSTRtree` path always did), so
 a backend that visits leaves out of input order (HPR, or an opaque
 foreign-library tree) is just as valid as `NaturalIndex`.
 
-Reuse requires a *closed* ring: the ring trees index the implicit closing
-edge of an unclosed ring, which `eachedge` does not walk, so the index spaces
-only agree when the closing point is materialized.  Unclosed rings fall back
-to the ephemeral build, preserving current behavior exactly.
+Reuse requires the prep's index space to match `eachedge`'s, which is
+trait-keyed (see `build_edge_tree`): a line string's tree always matches,
+while a ring's tree also indexes the implicit closing edge of an unclosed
+ring — which `eachedge` does not walk — so ring trees match exactly when the
+closing point is materialized.  Mismatches fall back to the ephemeral build,
+preserving current behavior exactly.
+
+Multi-curve geometries (polygons, multipolygons, …) don't need anything new:
+`eachedge` numbers their edges as the concatenation of per-curve `eachedge`
+numberings, so `_edge_parts` decomposes the geometry into per-curve
+(tree, coords) pairs with offsets into that global numbering, and the
+candidate collect-and-sort above merges queries across curves exactly as it
+merges leaves within one tree.
 =#
 
-# Edge coordinates by `eachedge` index, read from ring point storage.
+# Edge coordinates by `eachedge` index, read from curve point storage.
 struct _RingCoords{T, R}
     ring::R
 end
@@ -363,29 +373,76 @@ struct _EdgeListCoords{E}
 end
 (c::_EdgeListCoords)(j::Int) = c.edges[j].geom
 
-# The (tree, coordinate accessor, edge count) triple for one ring: reuse the
-# ring's edge-tree preparation when its index space matches `eachedge`, else
+# Whether a curve's edge-tree prep indexes exactly the edges `eachedge`
+# walks: always for line strings, and for closed rings — an unclosed ring's
+# tree has an extra leaf for the implicit closing edge (see `build_edge_tree`).
+function _prep_matches_eachedge(curve)
+    GI.trait(curve) isa GI.LinearRingTrait || return true
+    np = GI.npoint(curve)
+    return np >= 4 && equals(GI.getpoint(curve, 1), GI.getpoint(curve, np))
+end
+
+# The (tree, coordinate accessor, edge count) triple for one curve: reuse the
+# curve's edge-tree preparation when its index space matches `eachedge`, else
 # build ephemerally.
 function _edge_tree_and_coords(curve, ::Type{T}) where T
     prep = getprep(curve, AbstractEdgeTree)
-    if !isnothing(prep)
-        np = GI.npoint(curve)
-        if np >= 4 && equals(GI.getpoint(curve, 1), GI.getpoint(curve, np))
-            raw = _unwrap_prepared(curve)
-            return edge_tree(prep), _RingCoords{T, typeof(raw)}(raw), np - 1
-        end
+    if !isnothing(prep) && _prep_matches_eachedge(curve)
+        raw = _unwrap_prepared(curve)
+        return edge_tree(prep), _RingCoords{T, typeof(raw)}(raw), GI.npoint(curve) - 1
     end
     edges = to_edgelist(curve, T)
     return NaturalIndexing.NaturalIndex(edges), _EdgeListCoords(edges), length(edges)
+end
+
+# One curve's tree and coordinate accessor, with its offset into the
+# geometry-wide `eachedge` numbering.
+struct _EdgePart{Tr, C, E}
+    tree::Tr
+    coords::C
+    offset::Int
+    n::Int
+    extent::E
+end
+
+# Decompose a geometry into per-curve edge parts.  The vector is tightened to
+# a concrete eltype when all parts match (the common all-reused or
+# all-ephemeral case); a mix costs a dynamic dispatch per curve, not per edge.
+function _edge_parts(geom, ::Type{T}) where T
+    parts = Any[]
+    offset = 0
+    for curve in flatten(GI.AbstractCurveTrait, geom)
+        tree, coords, n = _edge_tree_and_coords(curve, T)
+        push!(parts, _EdgePart(tree, coords, offset, n, SpatialTreeInterface.node_extent(tree)))
+        offset += n
+    end
+    return map(identity, parts), offset
+end
+
+# Edge coordinates by geometry-global `eachedge` index, delegating to the
+# owning part (geometries hold few curves — a linear scan is fine).
+struct _PartsCoords{P}
+    parts::P
+end
+function (c::_PartsCoords)(j::Int)
+    for part in c.parts
+        j <= part.offset + part.n && return part.coords(j - part.offset)
+    end
+    throw(BoundsError(c.parts, j))
 end
 
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::SingleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
     ext_b = GI.extent(poly_b)
-    b_tree, b_coords, _ = _edge_tree_and_coords(poly_b, T)
-    # Function barrier: `_edge_tree_and_coords` returns one of two types.
-    return _single_tree_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, ext_b, b_tree, b_coords, T)
+    if GI.trait(poly_b) isa GI.AbstractCurveTrait
+        b_tree, b_coords, _ = _edge_tree_and_coords(poly_b, T)
+        # Function barrier: `_edge_tree_and_coords` returns one of two types.
+        return _single_tree_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, ext_b, b_tree, b_coords, T)
+    else
+        parts_b, _ = _edge_parts(poly_b, T)
+        return _single_parts_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, ext_b, parts_b, T)
+    end
 end
 
 function _single_tree_loop(
@@ -415,24 +472,91 @@ function _single_tree_loop(
     return nothing
 end
 
+# As `_single_tree_loop`, but `poly_b` is a multi-curve geometry decomposed
+# into `_EdgePart`s: each part's tree is queried separately (skipping parts
+# whose extent misses the edge), and the shared sort merges the candidates
+# into geometry-global `eachedge` order.
+function _single_parts_loop(
+    f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, ext_b, parts_b, ::Type{T}
+) where {FA, FAAfter, FI, T}
+    b_coords = _PartsCoords(parts_b)
+    query_result = Int[]
+    for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
+        a1t == a2t && continue
+        ext_l = Extents.Extent(X = minmax(a1t[1], a2t[1]), Y = minmax(a1t[2], a2t[2]))
+        isnothing(f_on_each_a) || f_on_each_a(a1t, i)
+        if Extents.intersects(ext_l, ext_b)
+            empty!(query_result)
+            for part in parts_b
+                Extents.intersects(ext_l, part.extent) || continue
+                _query_part!(query_result, part, ext_l)
+            end
+            sort!(query_result)
+            for j in query_result
+                b1t, b2t = b_coords(j)
+                b1t == b2t && continue
+                LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j))
+            end
+        end
+        isnothing(f_after_each_a) || f_after_each_a(a1t, i)
+    end
+    return nothing
+end
+
+# Function barrier over the part's concrete tree type.
+function _query_part!(query_result::Vector{Int}, part::_EdgePart, ext_l)
+    offset = part.offset
+    SpatialTreeInterface.depth_first_search(j -> push!(query_result, offset + j), Base.Fix1(Extents.intersects, ext_l), part.tree)
+    return nothing
+end
+
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::DoubleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
-    tree_a, a_coords, n_a = _edge_tree_and_coords(poly_a, T)
-    tree_b, b_coords, _ = _edge_tree_and_coords(poly_b, T)
-    # Function barrier: `_edge_tree_and_coords` returns one of two types per side.
-    return _dual_tree_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, tree_a, tree_b, a_coords, b_coords, n_a)
+    if GI.trait(poly_a) isa GI.AbstractCurveTrait && GI.trait(poly_b) isa GI.AbstractCurveTrait
+        tree_a, a_coords, n_a = _edge_tree_and_coords(poly_a, T)
+        tree_b, b_coords, _ = _edge_tree_and_coords(poly_b, T)
+        # Function barrier: `_edge_tree_and_coords` returns one of two types per side.
+        return _dual_tree_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, tree_a, tree_b, a_coords, b_coords, n_a)
+    else
+        parts_a, n_a = _edge_parts(poly_a, T)
+        parts_b, _ = _edge_parts(poly_b, T)
+        # Dual-traverse each pair of curves whose extents intersect; the
+        # global sort in `_dual_pairs_loop` merges the per-pair candidates
+        # into geometry-global nested-loop order.
+        candidate_pairs = Tuple{Int, Int}[]
+        for part_a in parts_a
+            for part_b in parts_b
+                Extents.intersects(part_a.extent, part_b.extent) || continue
+                _collect_dual_pairs!(candidate_pairs, part_a, part_b)
+            end
+        end
+        return _dual_pairs_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, candidate_pairs, _PartsCoords(parts_a), _PartsCoords(parts_b), n_a)
+    end
+end
+
+# Function barrier over the parts' concrete tree types.
+function _collect_dual_pairs!(candidate_pairs::Vector{Tuple{Int, Int}}, part_a::_EdgePart, part_b::_EdgePart)
+    off_a, off_b = part_a.offset, part_b.offset
+    SpatialTreeInterface.dual_depth_first_search((i, j) -> push!(candidate_pairs, (off_a + i, off_b + j)), Extents.intersects, part_a.tree, part_b.tree)
+    return nothing
 end
 
 function _dual_tree_loop(
     f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, tree_a, tree_b, a_coords::CA, b_coords::CB, n_a::Int
 ) where {FA, FAAfter, FI, CA, CB}
-    # Collect the candidate pairs and sort them into nested-loop order, so we
-    # assume nothing about either tree's traversal order (the in-order
-    # bookkeeping below requires it, and e.g. a Hilbert-sorted or foreign
-    # tree visits leaves in its own order).
     candidate_pairs = Tuple{Int, Int}[]
     SpatialTreeInterface.dual_depth_first_search((i, j) -> push!(candidate_pairs, (i, j)), Extents.intersects, tree_a, tree_b)
+    return _dual_pairs_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, candidate_pairs, a_coords, b_coords, n_a)
+end
+
+# The in-order edge-pair walk over collected candidates.  Sorting first means
+# we assume nothing about how the candidates were produced: any tree's
+# traversal order (Hilbert-sorted, foreign, …) and any per-curve-pair
+# interleaving both land in the nested-loop order the bookkeeping requires.
+function _dual_pairs_loop(
+    f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, candidate_pairs::Vector{Tuple{Int, Int}}, a_coords::CA, b_coords::CB, n_a::Int
+) where {FA, FAAfter, FI, CA, CB}
     sort!(candidate_pairs)
 
     last_a_idx = 0

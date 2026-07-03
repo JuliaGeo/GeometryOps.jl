@@ -320,6 +320,88 @@ end
     end
 end
 
+@testset "Ring-aware foreach_pair and line-string edge trees" begin
+    ngon(c, r, n) = begin
+        pts = [(c[1] + r * cos(θ), c[2] + r * sin(θ)) for θ in range(0, 2π; length = n + 1)[1:n]]
+        push!(pts, pts[1])
+        pts
+    end
+    donut = GI.Polygon([ngon((5.0, 5.0), 5.0, 64), ngon((5.0, 5.0), 2.0, 16)])
+    blob = GI.Polygon([ngon((9.0, 5.0), 5.0, 64)])
+    auto = GO.FosterHormannClipping(GO.Planar(), GO.AutoAccelerator())
+    plain_alg = GO.FosterHormannClipping()   # NestedLoop ground truth
+
+    # `hasprep` is the node-level boolean companion to `getprep`.
+    prep = prepare(donut)
+    @test GO.hasprep(GI.getexterior(prep), AbstractEdgeTree)
+    @test !GO.hasprep(prep, AbstractEdgeTree)      # edge trees live on the curves
+    @test !GO.hasprep(donut, AbstractEdgeTree)     # plain geometries carry no preps
+
+    # Line strings get edge trees indexing exactly their `eachedge` pairs —
+    # no synthetic closing-edge leaf — so they are reused even when unclosed
+    # (unlike ring trees).
+    ls = GI.LineString([(0.0, 3.0), (4.0, 8.0), (8.0, 2.0), (12.0, 7.0)])
+    pls = prepare(ls)
+    @test GO.hasprep(pls, AbstractEdgeTree)
+    tr, coords, n = GO._edge_tree_and_coords(pls, Float64)
+    @test tr === edge_tree(getprep(pls, AbstractEdgeTree))
+    @test n == 3
+    ls_edges = GO.to_edgelist(ls, Float64)
+    @test all(coords(j) == Tuple(ls_edges[j].geom) for j in 1:n)
+    @test length(GO._edge_extents(ls)) == 3
+    @test length(GO._ring_edge_extents(GI.LinearRing(collect(GI.getpoint(ls))))) == 4  # contrast: unclosed ring wraps
+
+    # But a line string's tree must NOT accelerate point-in-polygon, which
+    # walks the implicit closing edge its tree does not index.
+    open_ls_poly = GI.Polygon([pls])   # hand-assembled; `prepare` would close this
+    for pt in ((6.0, 5.0), (1.0, 6.0), (20.0, 5.0))
+        @test GO.within(pt, open_ls_poly) == GO.within(pt, GI.Polygon([ls]))
+    end
+
+    # Whole geometries decompose into per-curve parts whose offsets match the
+    # geometry-global `eachedge` numbering.
+    parts, ntot = GO._edge_parts(prep, Float64)
+    @test length(parts) == 2 && ntot == 64 + 16
+    @test parts[1].offset == 0 && parts[2].offset == 64
+    pcoords = GO._PartsCoords(parts)
+    donut_edges = GO.to_edgelist(donut, Float64)
+    @test length(donut_edges) == ntot
+    @test all(pcoords(j) == Tuple(donut_edges[j].geom) for j in (1, 64, 65, 80))
+
+    # `intersection_points` on whole geometries: the tree accelerators (parts
+    # path) agree with the nested loop, plain and prepared, and the blob
+    # crosses the donut's hole so both rings contribute points.
+    expected = GO.intersection_points(plain_alg, donut, blob)
+    @test !isempty(expected)
+    for acc in (GO.SingleNaturalTree(), GO.DoubleNaturalTree())
+        @test GO.intersection_points(GO.FosterHormannClipping(GO.Planar(), acc), donut, blob) == expected
+    end
+    @test GO.intersection_points(auto, prepare(donut), prepare(blob)) == expected
+    @test GO.intersection_points(auto, prepare(donut), blob) == expected
+
+    # MultiPolygons too — the far-away member is pruned by part extents.
+    mp = GI.MultiPolygon([donut, GI.Polygon([ngon((-30.0, 5.0), 2.5, 32)])])
+    expected_mp = GO.intersection_points(plain_alg, mp, blob)
+    @test GO.intersection_points(auto, prepare(mp), prepare(blob)) == expected_mp
+    @test GO.intersection_points(GO.FosterHormannClipping(GO.Planar(), GO.DoubleNaturalTree()), mp, blob) == expected_mp
+
+    # Prepared line strings accelerate on either side.  Ground truth is
+    # computed with matching argument order — `_intersection_point` is not
+    # bit-symmetric in its operands.
+    expected_lp = GO.intersection_points(plain_alg, donut, ls)
+    @test !isempty(expected_lp)
+    @test GO.intersection_points(auto, donut, pls) == expected_lp                                  # b side: single-tree fast path
+    @test GO.intersection_points(auto, pls, donut) == GO.intersection_points(plain_alg, ls, donut) # a side: parts path
+
+    # `cut` goes through the same machinery with a prepared polygon.
+    circle = GI.Polygon([ngon((5.0, 5.0), 5.0, 32)])
+    cut_line = GI.Line([(-1.0, 5.0), (11.0, 5.0)])
+    expected_cut = GO.cut(plain_alg, circle, cut_line)
+    got_cut = GO.cut(auto, prepare(circle), cut_line)
+    @test length(got_cut) == length(expected_cut)
+    @test all(map(GO.equals, got_cut, expected_cut))
+end
+
 @testset_implementations "Prepared vs plain across implementations" begin
     # Materialization from each backend's native storage must be exact.
     prep = prepare($square_hole)
