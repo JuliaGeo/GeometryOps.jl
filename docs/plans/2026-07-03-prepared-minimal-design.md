@@ -199,3 +199,30 @@ right order depends on the input:
 
 Build cost at n = 65 536 edges: `NaturalIndex` 74 µs, `Unsorted` 233 µs,
 `STR` 2.8 ms, `HPR` 5.2 ms, STRtree.jl 4.0 ms.
+
+## Real-world benchmark: Natural Earth countries (2026-07-03)
+
+`benchmarks/prepared_natural_earth.jl` (run per scale:
+`julia --project=test benchmarks/prepared_natural_earth.jl {110|50|10}`)
+decomposes `admin_0_countries` into polygons, lays a 15×15 point grid over
+each polygon's bbox, gates on plain ≡ prepared correctness for every polygon,
+then times the whole workload. Findings:
+
+| scale | polygons | queries | plain ns/q | NaturalIndex ns/q | speedup |
+|---:|---:|---:|---:|---:|---:|
+| 110m | 288 | 64 800 | 239 | 47 | **5.2×** |
+| 50m | 1 620 | 364 500 | 433 | 40 | **10.9×** |
+| 10m | 4 274 | 961 650 | 942 | 49 | **19.1×** |
+
+- **Prepared per-query cost is flat (~40–58 ns) regardless of polygon size or
+  zoom level**; plain grows linearly with vertex count, so the advantage
+  tracks data complexity. Stratified by polygon size at 10m: 3.3× (<100
+  verts), 29× (100–1k), 119× (1k–10k), **481×** (>10k, i.e. detailed
+  coastlines).
+- Preparation costs ~1–2 µs/polygon and breaks even at **~2–6 queries per
+  polygon**; no backend was slower than plain in any bucket at any scale.
+- Backend ranking on this data: `NaturalIndex` best (queries and build),
+  `Unsorted` within ~10 %, `HPR` ~15 % behind on queries and much slower to
+  build — consistent with the ring-edge results above (coherent input needs
+  no sorting).
+- Correctness gate: all 6 182 polygons × 3 backends agreed with plain.
