@@ -91,9 +91,10 @@ end
         [(3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0), (3.0, 3.0)],
     ])
     for alg in (STR(), HPR(), Unsorted())
-        trees = GO.RingEdgeTrees(poly; tree = alg)   # via the build_edge_tree hook
-        @test trees.exterior isa RTree
-        prep = GO.prepare(poly; preps = (g -> GO.RingEdgeTrees(g; tree = alg),))
+        et = GO.EdgeTree(GI.getexterior(poly); backend = alg)   # via the build_edge_tree hook
+        @test GO.edge_tree(et) isa RTree
+        prep = GO.prepare(poly; preps = GO.EdgeTrees(alg))
+        @test GO.edge_tree(GO.getprep(GI.getexterior(prep), GO.AbstractEdgeTree)) isa RTree
         for x in 0.0:0.5:11.0, y in (0.0, 3.0, 5.0, 6.5, 10.0)
             pt = (x, y)
             @test GO.within(pt, prep) == GO.within(pt, poly)

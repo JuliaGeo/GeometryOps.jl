@@ -11,8 +11,10 @@
 #     julia --project=test benchmarks/prepared_natural_earth.jl 10
 #
 # Method (see the header comments in each section for the fairness rationale):
-#   * every polygon is converted once with `GO.tuples` and that same object is
-#     used for the plain and all prepared measurements;
+#   * the plain baseline uses `GO.tuples`-converted polygons (the strongest
+#     plain layout); the prepared variants are built from the RAW GeoJSON
+#     geometries, since `prepare` materializes into native layout itself —
+#     that conversion cost is part of the prepare timing;
 #   * each polygon gets a fixed 15x15 grid of points over its bbox, shared by
 #     every backend;
 #   * a correctness gate asserts the inside-count agrees across all backends
@@ -35,8 +37,8 @@ const REPS   = 3
 # build a `Prepared` wrapper whose edge trees use the named tree backend.
 # `NaturalIndex` is the default preparation, so `GO.prepare(p)` selects it.
 prepare_naturalindex(p) = GO.prepare(p)
-prepare_unsorted(p)     = GO.prepare(p; preps = (g -> GO.RingEdgeTrees(g; tree = Unsorted()),))
-prepare_hpr(p)          = GO.prepare(p; preps = (g -> GO.RingEdgeTrees(g; tree = HPR()),))
+prepare_unsorted(p)     = GO.prepare(p; preps = GO.EdgeTrees(Unsorted()))
+prepare_hpr(p)          = GO.prepare(p; preps = GO.EdgeTrees(HPR()))
 
 const PREP_BACKENDS = [
     ("NaturalIndex", prepare_naturalindex),
@@ -97,11 +99,13 @@ function main(scale)
     # --- Load and convert (once) -------------------------------------------
     fc = naturalearth("admin_0_countries", scale)
     raw = collect(GO.flatten(GI.PolygonTrait, fc))
-    polys = GO.tuples.(raw)
     # Skip degenerate polygons (need >= 4 points to form a closed ring).
-    n_before = length(polys)
-    polys = filter(p -> GI.npoint(GI.getexterior(p)) >= 4, polys)
-    n_skipped = n_before - length(polys)
+    keep = findall(p -> GI.npoint(GI.getexterior(p)) >= 4, raw)
+    n_skipped = length(raw) - length(keep)
+    raw = raw[keep]
+    # Plain baseline: tuple-converted (the strongest plain layout).  Prepared
+    # variants are built from `raw` — materialization is `prepare`'s job.
+    polys = GO.tuples.(raw)
 
     vcounts = polygon_vertices.(polys)
     grids   = [bbox_grid(p, GRID_N) for p in polys]
@@ -121,8 +125,8 @@ function main(scale)
     prepared = Dict{String,Vector}()
     prep_time = Dict{String,Float64}()
     for (name, build) in PREP_BACKENDS
-        prep_time[name] = timed(() -> build_all(build, polys))
-        prepared[name] = build_all(build, polys)
+        prep_time[name] = timed(() -> build_all(build, raw))
+        prepared[name] = build_all(build, raw)
     end
 
     # --- Correctness gate --------------------------------------------------

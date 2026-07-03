@@ -67,19 +67,18 @@ function _point_polygon_process(
 )
     skip, returnval = _maybe_skip_disjoint_extents(point, polygon; in_allow, on_allow, out_allow, on_require = false, out_require = false, in_require = false)
     skip && return returnval
-    # If the polygon is `Prepared` with edge trees, the per-ring orientation
-    # tests below use them; `nothing` selects the plain loops.
-    trees = getprep(polygon, AbstractRingEdgeTrees)
+    # The rings of a `Prepared` polygon carry their own edge-tree
+    # preparations; plain rings miss the lookup and take the sequential loop.
     # Check interaction of geom with polygon's exterior boundary
-    ext_val = _point_filled_curve_orientation(Planar(), point, GI.getexterior(polygon), _exterior_tree(trees); exact)
+    ext_val = _point_ring_orientation(point, GI.getexterior(polygon); exact)
     # If a point is outside, it isn't interacting with any holes
     ext_val == point_out && return out_allow
     # if a point is on an external boundary, it isn't interacting with any holes
     ext_val == point_on && return on_allow
 
     # If geom is within the polygon, need to check interactions with holes
-    for (i, hole) in enumerate(GI.gethole(polygon))
-        hole_val = _point_filled_curve_orientation(Planar(), point, hole, _hole_tree(trees, i); exact)
+    for hole in GI.gethole(polygon)
+        hole_val = _point_ring_orientation(point, hole; exact)
         # If a point in in a hole, it is outside of the polygon
         hole_val == point_in && return out_allow
         # If a point in on a hole edge, it is on the edge of the polygon
@@ -90,11 +89,14 @@ function _point_polygon_process(
     return in_allow
 end
 
-# Adapters between "maybe a preparation" and the per-ring tree arguments above.
-_exterior_tree(::Nothing) = nothing
-_exterior_tree(trees::AbstractRingEdgeTrees) = exterior_tree(trees)
-_hole_tree(::Nothing, i) = nothing
-_hole_tree(trees::AbstractRingEdgeTrees, i) = hole_trees(trees)[i]
+# Orientation of a point with respect to one ring: indexed when the ring
+# carries an edge-tree preparation, the sequential loop otherwise.
+function _point_ring_orientation(point, ring; exact)
+    prep = getprep(ring, AbstractEdgeTree)
+    return isnothing(prep) ?
+        _point_filled_curve_orientation(Planar(), point, ring; exact) :
+        _point_filled_curve_orientation(Planar(), point, ring, edge_tree(prep); exact)
+end
 
 #=
 Determines if a line meets the given checks with respect to a curve.
@@ -553,7 +555,7 @@ end
 
 #=
 Indexed variant, used when the ring has a prepared edge tree (see
-`AbstractRingEdgeTrees` in `prepared.jl`).  Only edges whose extent touches
+`AbstractEdgeTree` in `prepared.jl`).  Only edges whose extent touches
 the rightward ray strip `{(x′, y′) : x′ ≥ x, y′ = y}` can lie under the point
 or cross its ray, so we visit exactly those through a depth-first tree search
 with the strip as the predicate.  Crossing parity over visited edges equals
