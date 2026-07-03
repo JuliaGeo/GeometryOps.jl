@@ -106,6 +106,30 @@ the PIP seam is one per-ring `getprep` (`_point_ring_orientation`), and the
   per decision 2) — the bigger >10k speedup vs v1 (591× vs 481×) is
   consistent with halved memory traffic in the kernel.
 
+## Clipping wired to `AutoAccelerator` (2026-07-03)
+
+The clipping accelerators operate on *rings* (`_build_ab_list` receives
+`getexterior` outputs), so prepared rings' `EdgeTree`s slot in directly — no
+new preparation, no index composition. `_edge_tree_and_coords(ring, T)` is
+the whole seam: reuse the ring's tree as-is when the ring is closed (leaf
+indices match `eachedge` one-to-one), else build ephemerally as before.
+Genericity: **any** SpatialTreeInterface tree is reused — the accelerators no
+longer assume traversal order (candidates are collected and sorted into
+nested-loop order, the `SingleSTRtree` pattern), so Hilbert-sorted or
+foreign-library trees behave identically to `NaturalIndex`; tests use
+HPR-backed ring trees as the out-of-order case. `AutoAccelerator` prefers
+tree paths whenever an input ring is prepared (its long-standing TODO).
+
+Measured (1024-vertex circle pair, intersection): `NestedLoop` 22 730 µs;
+`AutoAccelerator` plain 65.5 µs; one side prepared 57 µs; both prepared
+**48.4 µs** — reuse removes the per-clip edge-list + tree build, ~26 % of the
+accelerated clip.
+
+Found by the new tests: union's hole assembly pushed raw *input* rings into
+output polygons (three sites; intersection/difference already normalized via
+`tuples`) — broken for any non-plain wrapper, `Prepared` included. Fixed by
+normalizing through `tuples`/`_linearring` consistently.
+
 Bugs found on the way (all fixed + regression-tested):
 - `EdgeTree(geom; backend)` overwrote the default struct constructor and
   broke precompilation → explicit inner constructor.
