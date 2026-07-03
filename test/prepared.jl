@@ -2,8 +2,8 @@ using Test
 
 import GeoInterface as GI
 import GeometryOps as GO
-import GeometryOps: prepare, Prepared, getprep, RingEdgeTrees, AbstractRingEdgeTrees,
-    AbstractPreparation, build_edge_tree
+import GeometryOps: prepare, Prepared, getprep, EdgeTree, EdgeTrees, AbstractEdgeTree,
+    AbstractPreparation, build_edge_tree, edge_tree
 import GeometryOps.NaturalIndexing: NaturalIndex
 import GeometryOps.SpatialTreeInterface: FlatNoTree
 import GeometryOpsCore: True, False
@@ -84,7 +84,7 @@ function predicate_mismatches(poly, prep, pts)
     return bad
 end
 
-@testset "Prepared is a transparent GeoInterface wrapper" begin
+@testset "Prepared materializes into a transparent GeoInterface wrapper" begin
     prep = prepare(square_hole)
     @test GI.geomtrait(prep) isa GI.PolygonTrait
     @test GI.isgeometry(typeof(prep))
@@ -92,15 +92,34 @@ end
     @test GI.npoint(prep) == GI.npoint(square_hole)
     @test GI.nhole(prep) == 1
     @test !GI.is3d(prep)
-    @test Base.parent(prep) === square_hole
     e1, e2 = GI.extent(prep), GI.extent(square_hole)
     @test e1.X == e2.X && e1.Y == e2.Y
     @test Extents.extent(prep) === GI.extent(prep)
     @test GO.equals(prep, square_hole)
     @test GO.area(prep) == GO.area(square_hole)
     @test GO.centroid(prep) == GO.centroid(square_hole)
-    shown = sprint(show, prep)
-    @test occursin("Prepared", shown) && occursin("RingEdgeTrees", shown)
+
+    # Materialization: `parent` is the converted geometry (tuple storage), not
+    # the original object, and the children are themselves `Prepared` nodes.
+    @test Base.parent(prep) isa GI.Polygon
+    @test Base.parent(prep) !== square_hole
+    ring = GI.getexterior(prep)
+    @test ring isa Prepared
+    @test GI.geomtrait(ring) isa GI.LinearRingTrait
+    @test GI.getpoint(ring, 1) === (0.0, 0.0)
+    @test collect(GI.gethole(prep))[1] isa Prepared
+    # Ring nodes carry their edge tree; the polygon node has no preps of its own.
+    @test getprep(ring, AbstractEdgeTree) isa EdgeTree
+    @test prep.preps === ()
+    @test occursin("Prepared", sprint(show, prep))
+    @test occursin("EdgeTree", sprint(show, ring))
+
+    # Preparedness survives decomposition of multi-geometries too.
+    prep_mp = prepare(multipoly)
+    @test GI.getgeom(prep_mp, 1) isa Prepared
+    @test getprep(GI.getexterior(GI.getgeom(prep_mp, 1)), AbstractEdgeTree) isa EdgeTree
+    e_mp = GI.extent(prep_mp)
+    @test e_mp.X == GI.extent(multipoly).X && e_mp.Y == GI.extent(multipoly).Y
 
     # Point wrapping hits the point-trait disambiguators.
     ppt = prepare(GI.Point(1.0, 2.0))
@@ -111,50 +130,78 @@ end
     # Constructor guardrails.
     @test_throws ArgumentError Prepared(prep, (), nothing)
     @test_throws ArgumentError Prepared("not a geometry", (), nothing)
+    @test_throws ArgumentError prepare("not a geometry")
+end
+
+@testset "Coordinate number types are preserved" begin
+    poly32 = GI.Polygon([[(0.0f0, 0.0f0), (10.0f0, 0.0f0), (10.0f0, 10.0f0), (0.0f0, 10.0f0), (0.0f0, 0.0f0)]])
+    prep32 = prepare(poly32)
+    @test GI.getpoint(GI.getexterior(prep32), 1) === (0.0f0, 0.0f0)
+    polyint = GI.Polygon([[(0, 0), (10, 0), (10, 10), (0, 10), (0, 0)]])
+    prepint = prepare(polyint)
+    @test GI.getpoint(GI.getexterior(prepint), 1) === (0, 0)
+    for (plain, prep) in ((poly32, prep32), (polyint, prepint))
+        for pt in ((5.0, 5.0), (0.0, 0.0), (11.0, 5.0), (5.0, 0.0), (10.0, 10.0))
+            @test GO.within(pt, prep) == GO.within(pt, plain)
+        end
+    end
 end
 
 @testset "getprep: query, get-or-else, precedence" begin
     prep = prepare(square_hole)
+    ring = GI.getexterior(prep)
     # Plain geometries always miss, so consumer code needs no special-casing.
-    @test getprep(square_hole, AbstractRingEdgeTrees) === nothing
+    @test getprep(GI.getexterior(square_hole), AbstractEdgeTree) === nothing
     @test getprep(square_hole, AbstractPreparation) === nothing
     # Concrete, abstract-kind, and root-abstract queries all find the prep.
-    @test getprep(prep, RingEdgeTrees) isa RingEdgeTrees
-    @test getprep(prep, AbstractRingEdgeTrees) isa RingEdgeTrees
-    @test getprep(prep, AbstractPreparation) isa RingEdgeTrees
-    @test getprep(prep, TagPrep) === nothing
+    @test getprep(ring, EdgeTree) isa EdgeTree
+    @test getprep(ring, AbstractEdgeTree) isa EdgeTree
+    @test getprep(ring, AbstractPreparation) isa EdgeTree
+    @test getprep(ring, TagPrep) === nothing
+    # Edge trees live on rings, not on the polygon node.
+    @test getprep(prep, AbstractEdgeTree) === nothing
     # get-or-else: `f` runs only on a miss.
     @test getprep(() -> TagPrep(:built), square_hole, TagPrep) == TagPrep(:built)
-    @test getprep(() -> error("must not build"), prep, RingEdgeTrees) isa RingEdgeTrees
+    @test getprep(() -> error("must not build"), ring, EdgeTree) isa EdgeTree
 
-    # Adding preparations to an existing Prepared: parent unchanged, new preps win.
+    # Adding preparations to an existing Prepared: storage unchanged, new preps win.
     prep2 = prepare(prep; preps = (g -> TagPrep(:added),))
-    @test Base.parent(prep2) === square_hole
+    @test Base.parent(prep2) === Base.parent(prep)
     @test getprep(prep2, TagPrep) == TagPrep(:added)
-    @test getprep(prep2, RingEdgeTrees) isa RingEdgeTrees
     @test getprep(prep2, AbstractPreparation) isa TagPrep  # prepended ⇒ found first
     @test prepare(prep) === prep  # no-op add returns the same object
 
-    # Custom specs flow through prepare: closures work with no registration.
-    prep3 = prepare(square_hole; preps = (g -> TagPrep(:spec), RingEdgeTrees))
+    # A spec tuple applies to the top node only; children still get defaults.
+    prep3 = prepare(square_hole; preps = (g -> TagPrep(:spec),))
     @test getprep(prep3, TagPrep) == TagPrep(:spec)
-    @test getprep(prep3, AbstractRingEdgeTrees) isa RingEdgeTrees
+    @test getprep(GI.getexterior(prep3), AbstractEdgeTree) isa EdgeTree
 
-    # Non-polygon defaults: extent-only wrapper, predicates still work.
+    # A callable selector applies at every node of the recursion.
+    prep4 = prepare(square_hole; preps = (t, g) -> ())
+    @test prep4.preps === ()
+    @test getprep(GI.getexterior(prep4), AbstractEdgeTree) === nothing
+
+    # Non-polygon nodes: no preps of their own, but prepared children.
     prep_mp = prepare(multipoly)
     @test prep_mp.preps === ()
-    @test getprep(prep_mp, AbstractRingEdgeTrees) === nothing
+    @test getprep(prep_mp, AbstractEdgeTree) === nothing
 end
 
-@testset "RingEdgeTrees construction and backends" begin
-    nat = RingEdgeTrees(square_hole)
-    @test nat.exterior isa NaturalIndex
-    @test length(nat.holes) == 1
-    str = RingEdgeTrees(square_hole; tree = GO.STRtree)
-    @test str.exterior isa GO.STRtree
-    flat = RingEdgeTrees(square_hole; tree = r -> FlatNoTree(GO._ring_edge_extents(r)))
-    @test flat.exterior isa FlatNoTree
-    @test_throws ArgumentError RingEdgeTrees(GI.LineString([(0.0, 0.0), (1.0, 1.0)]))
+@testset "EdgeTree construction and backends" begin
+    ring = GI.getexterior(square_hole)
+    nat = EdgeTree(ring)
+    @test edge_tree(nat) isa NaturalIndex
+    str = EdgeTree(ring; backend = GO.STRtree)
+    @test edge_tree(str) isa GO.STRtree
+    flat = EdgeTree(ring; backend = r -> FlatNoTree(GO._ring_edge_extents(r)))
+    @test edge_tree(flat) isa FlatNoTree
+    @test_throws ArgumentError EdgeTree(square_hole)
+    # The `EdgeTrees` selector: edge trees on rings, nothing elsewhere.
+    sel = EdgeTrees(GO.STRtree)
+    @test length(sel(GI.LinearRingTrait(), ring)) == 1
+    @test sel(GI.PolygonTrait(), square_hole) === ()
+    prep = prepare(square_hole; preps = sel)
+    @test edge_tree(getprep(GI.getexterior(prep), AbstractEdgeTree)) isa GO.STRtree
     # Unclosed rings index the implicit closing edge.
     @test length(GO._ring_edge_extents(GI.getexterior(square_hole))) == 4
     @test length(GO._ring_edge_extents(GI.getexterior(square_hole_unclosed))) == 4
@@ -162,9 +209,9 @@ end
 
 @testset "Indexed point-in-polygon ≡ plain point-in-polygon" begin
     backends = (
-        "NaturalIndex" => identity,  # default prepare
-        "STRtree" => g -> prepare(g; preps = (h -> RingEdgeTrees(h; tree = GO.STRtree),)),
-        "FlatNoTree" => g -> prepare(g; preps = (h -> RingEdgeTrees(h; tree = r -> FlatNoTree(GO._ring_edge_extents(r))),)),
+        "NaturalIndex" => poly -> prepare(poly),
+        "STRtree" => poly -> prepare(poly; preps = EdgeTrees(GO.STRtree)),
+        "FlatNoTree" => poly -> prepare(poly; preps = EdgeTrees(r -> FlatNoTree(GO._ring_edge_extents(r)))),
     )
     polys = (
         "square with hole" => square_hole,
@@ -175,9 +222,8 @@ end
     for (pname, poly) in polys
         pts = probe_points(poly)
         for (bname, prepper) in backends
-            prep = bname == "NaturalIndex" ? prepare(poly) : prepper(poly)
             @testset "$pname / $bname" begin
-                @test predicate_mismatches(poly, prep, pts) == []
+                @test predicate_mismatches(poly, prepper(poly), pts) == []
             end
         end
     end
@@ -194,18 +240,20 @@ end
         end
     end
 
-    # Extent-only preparations (no trees) also agree — exercises the `nothing` path.
-    prep_extent_only = prepare(square_hole; preps = ())
+    # Extent-cache-only preparations (no trees) also agree — the `nothing` path.
+    prep_extent_only = prepare(square_hole; preps = (t, g) -> ())
     @test predicate_mismatches(square_hole, prep_extent_only, probe_points(square_hole)) == []
 
-    # MultiPolygon wrappers agree (no acceleration, pure forwarding).
+    # MultiPolygons are now accelerated through their prepared children.
     mp_prep = prepare(multipoly)
-    mp_pts = probe_points(GI.getgeom(multipoly, 1))
+    mp_pts = vcat(probe_points(GI.getgeom(multipoly, 1)), probe_points(GI.getgeom(multipoly, 2)))
     @test predicate_mismatches(multipoly, mp_prep, mp_pts) == []
 end
 
 @testset_implementations "Prepared vs plain across implementations" begin
+    # Materialization from each backend's native storage must be exact.
     prep = prepare($square_hole)
+    @test GI.getexterior(prep) isa Prepared
     for pt in ((5.0, 5.0), (5.0, 3.0), (0.0, 0.0), (11.0, 5.0), (5.0, 0.0), (5.0, 4.9))
         @test GO.within(pt, prep) == GO.within(pt, $square_hole)
         @test GO.contains(prep, pt) == GO.contains($square_hole, pt)
