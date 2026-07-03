@@ -192,6 +192,12 @@ end
     first(preps) isa P ? first(preps) : _first_prep(P, Base.tail(preps))
 @inline _first_prep(::Type{P}, ::Tuple{}) where P = nothing
 
+# Strip a `Prepared` shell (a no-op on anything else).  Hot loops that walk a
+# geometry's raw point storage use this after retrieving the preparations they
+# need, saving a layer of accessor forwarding per point.
+_unwrap_prepared(g) = g
+_unwrap_prepared(p::Prepared) = parent(p)
+
 # ## Building
 
 """
@@ -345,6 +351,9 @@ implicit-closure semantics of the plain point-in-polygon algorithm.
 """
 struct EdgeTree{T} <: AbstractEdgeTree
     tree::T
+    # Explicit inner constructor: the geometry-taking outer constructor below
+    # would otherwise overwrite the default `EdgeTree(tree)` method.
+    EdgeTree{T}(tree) where T = new{T}(tree)
 end
 
 function EdgeTree(geom; backend = NaturalIndex)

@@ -90,12 +90,14 @@ function _point_polygon_process(
 end
 
 # Orientation of a point with respect to one ring: indexed when the ring
-# carries an edge-tree preparation, the sequential loop otherwise.
+# carries an edge-tree preparation, the sequential loop otherwise.  The
+# kernels only walk point storage, so the `Prepared` shell is stripped first.
 function _point_ring_orientation(point, ring; exact)
     prep = getprep(ring, AbstractEdgeTree)
+    raw = _unwrap_prepared(ring)
     return isnothing(prep) ?
-        _point_filled_curve_orientation(Planar(), point, ring; exact) :
-        _point_filled_curve_orientation(Planar(), point, ring, edge_tree(prep); exact)
+        _point_filled_curve_orientation(Planar(), point, raw; exact) :
+        _point_filled_curve_orientation(Planar(), point, raw, edge_tree(prep); exact)
 end
 
 #=
