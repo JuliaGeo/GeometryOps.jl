@@ -155,33 +155,45 @@ Extents.extent(node::NaturalIndexNode) = node.extent
 SpatialTreeInterface.isspatialtree(::Type{<: NaturalIndex}) = true
 SpatialTreeInterface.isspatialtree(::Type{<: NaturalIndexNode}) = true
 
-function SpatialTreeInterface.nchild(node::NaturalIndexNode)
+# The extents of this node's children all live in one vector at the next
+# level.  Every per-child operation below resolves that vector ONCE and then
+# indexes into it, rather than chasing `parent_index -> levels -> level ->
+# extents` again for each child — that repeated pointer chase, not the extent
+# tests, dominated traversal time in profiles.
+@inline _child_extents(node::NaturalIndexNode) = node.parent_index.levels[node.level + 1].extents
+
+@inline function _child_range(node::NaturalIndexNode, child_extents)
     start_idx = (node.index - 1) * node.parent_index.nodecapacity + 1
-    stop_idx = min(start_idx + node.parent_index.nodecapacity - 1, length(node.parent_index.levels[node.level+1].extents))
-    return stop_idx - start_idx + 1
+    stop_idx = min(start_idx + node.parent_index.nodecapacity - 1, length(child_extents))
+    return start_idx:stop_idx
 end
+
+SpatialTreeInterface.nchild(node::NaturalIndexNode) = length(_child_range(node, _child_extents(node)))
 
 function SpatialTreeInterface.getchild(node::NaturalIndexNode, i::Int)
     child_index = (node.index - 1) * node.parent_index.nodecapacity + i
     return NaturalIndexNode(
-        node.parent_index, 
+        node.parent_index,
         node.level + 1, # increment level by 1
         child_index, # index of this particular child
-        node.parent_index.levels[node.level+1].extents[child_index] # the extent of this child
+        _child_extents(node)[child_index] # the extent of this child
     )
 end
 
 # Get all children of a node
 function SpatialTreeInterface.getchild(node::NaturalIndexNode)
-    return (SpatialTreeInterface.getchild(node, i) for i in 1:SpatialTreeInterface.nchild(node))
+    extents = _child_extents(node)
+    parent, childlevel = node.parent_index, node.level + 1
+    range = _child_range(node, extents)
+    return (NaturalIndexNode(parent, childlevel, ci, @inbounds extents[ci]) for ci in range)
 end
 
 SpatialTreeInterface.isleaf(node::NaturalIndexNode) = node.level == length(node.parent_index.levels) - 1
 
 function SpatialTreeInterface.child_indices_extents(node::NaturalIndexNode)
-    start_idx = (node.index - 1) * node.parent_index.nodecapacity + 1
-    stop_idx = min(start_idx + node.parent_index.nodecapacity - 1, length(node.parent_index.levels[node.level+1].extents))
-    return ((i, node.parent_index.levels[node.level+1].extents[i]) for i in start_idx:stop_idx)
+    extents = _child_extents(node)
+    range = _child_range(node, extents)
+    return ((i, @inbounds extents[i]) for i in range)
 end
 
 # implementation for "root node" / top level tree
