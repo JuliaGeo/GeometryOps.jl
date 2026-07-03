@@ -130,6 +130,32 @@ output polygons (three sites; intersection/difference already normalized via
 `tuples`) — broken for any non-plain wrapper, `Prepared` included. Fixed by
 normalizing through `tuples`/`_linearring` consistently.
 
+## Ring-aware accelerators + line-string preps (2026-07-03, follow-up)
+
+`eachedge` numbers a geometry's edges as concatenated per-curve numberings,
+so `_edge_parts` decomposes any geometry into per-curve (tree, coords,
+offset) parts and the existing candidate collect-and-sort merges queries
+across curves — composition at the *loop* level, no synthetic tree types, no
+traversal-order assumptions (the earlier collect+sort refactor is what made
+this ~free). Whole polygons/multipolygons through `foreach_pair` (i.e.
+`intersection_points`, resolving its acceleration TODO) now reuse prepared
+trees and prune curve pairs by extents; curve inputs keep the static fast
+path. Line strings get `EdgeTree`s from `prepare` too — indexing exactly
+their `eachedge` pairs, no wrap leaf, so reusable even unclosed — with a PIP
+seam guard so a wrap-less tree never serves filled-curve orientation. Added
+public `hasprep` (node-level boolean mirror of `getprep`); `AutoAccelerator`
+uses it instead of a recursive helper — whole geometries fall to the size
+heuristic, whose tree paths reuse preps anyway.
+
+Measured (1280-vert holed donut × 1024-vert blob, `intersection_points` on
+whole polygons): NestedLoop 14 475 µs; DoubleNaturalTree plain 71.8 µs;
+DoubleNaturalTree prepared **23.6 µs** (3× over plain-tree — no edge-list or
+tree builds). Boolean intersection on the same pair: prepared 693 µs ≤
+plain 709 µs (hole-pass dominated; no regression).
+
+Gotcha for equivalence tests: `_intersection_point` is not bit-symmetric in
+its operands — ground truth must be computed with matching argument order.
+
 Bugs found on the way (all fixed + regression-tested):
 - `EdgeTree(geom; backend)` overwrote the default struct constructor and
   broke precompilation → explicit inner constructor.
