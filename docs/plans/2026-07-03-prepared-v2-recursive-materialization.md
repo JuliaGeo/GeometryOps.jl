@@ -1,8 +1,8 @@
 # Prepared v2: recursive materialization — decisions (2026-07-03)
 
-Ratified by user, written down immediately (low context). This amends
-`2026-07-03-prepared-minimal-design.md`; v1 is implemented on the
-`prepared-minimal` branch (8 commits, HEAD a85a1e33a).
+**Status: implemented & benchmarked** (commits 9dc75133b, 61d49bb5b,
+3727e40f8) — results at the bottom. This amends
+`2026-07-03-prepared-minimal-design.md`.
 
 ## Direction (agreed)
 
@@ -80,3 +80,40 @@ F4-style lazy wrapping / topmost-wins / stripping):
 - v1 results (keep for comparison): PIP 41–178 ns prepared vs 0.77–873 µs
   plain; Natural Earth 5.2×/10.9×/19.1×; FlexibleRTrees: HPR wins random
   input ~1000× over unsorted, natural order wins ring edges.
+
+## Results (implemented 2026-07-03)
+
+API as ratified: `prepare(geom; preps)` where `preps` is `nothing`
+(defaults everywhere), a `(trait, geom) -> tuple` selector called at every
+node (`EdgeTrees(backend)` is the shipped one), or a tuple applied to the top
+node only. `EdgeTree`/`AbstractEdgeTree`/`edge_tree` replace `RingEdgeTrees`;
+the PIP seam is one per-ring `getprep` (`_point_ring_orientation`), and the
+`_exterior_tree`/`_hole_tree` adapters are gone.
+
+- **Micro parity with v1**: same-session comparison shows the v2 machinery
+  costs ~10 ns/query over the bare kernel, same as v1. (Caveat for absolute
+  numbers: the benchmarking machine ran ~1.55× slower on latency-bound tree
+  traversal during the v2 session — verified on untouched code paths — so
+  only same-session ratios are meaningful.)
+- **MultiPolygon acceleration (new)**: 32 × 1024-gon multipolygon, 1000 pts —
+  plain 301 µs/q vs prepared 301 ns/q = **998×**, from forwarding alone; no
+  new algorithm code. `prepare` cost 0.49 ms ≈ 1.6 plain queries.
+- **Natural Earth from RAW GeoJSON** (no manual `GO.tuples`; the v2 point):
+  whole-dataset speedups **5.0× / 10.3× / 18.6×** at 110m/50m/10m with flat
+  ~74–88 ns/q prepared; by-size buckets at 10m: 3.2× / 30× / 141× / **591×**
+  (>10k verts). Break-even ~4–10 queries/polygon. All correctness gates pass;
+  prepared storage is Float32 end-to-end (GeoJSON's number type, preserved
+  per decision 2) — the bigger >10k speedup vs v1 (591× vs 481×) is
+  consistent with halved memory traffic in the kernel.
+
+Bugs found on the way (all fixed + regression-tested):
+- `EdgeTree(geom; backend)` overwrote the default struct constructor and
+  broke precompilation → explicit inner constructor.
+- The PIP seam handed `Prepared` rings to the kernels, paying a forwarding
+  layer per point → `_unwrap_prepared` strips the shell after prep lookup.
+- **GeoJSON polygons type their rings as LineStrings**, so ring nodes missed
+  the `LinearRingTrait` defaults and lost their edge trees — correct results,
+  silently sequential (>10k bucket collapsed to 14×). Polygon children are
+  now materialized as `LinearRingTrait` unconditionally. Lesson: a
+  correctness gate cannot catch a silent index loss; the per-size timing
+  buckets did.

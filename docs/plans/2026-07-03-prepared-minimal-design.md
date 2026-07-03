@@ -1,6 +1,11 @@
 # Minimal prepared geometry — design
 
-**Status:** implemented & benchmarked (2026-07-03) — see Results at the bottom
+**Status:** implemented & benchmarked (2026-07-03) — see Results at the bottom.
+**Superseded in part** by `2026-07-03-prepared-v2-recursive-materialization.md`:
+`prepare` now materializes into native tuple layout and builds recursive
+`Prepared` nodes, and the per-ring `EdgeTree` preparation replaces the
+polygon-level `RingEdgeTrees` described below. The `getprep` API, hooks, and
+the indexed point-in-polygon kernel are unchanged.
 
 A clean, minimal reimplementation of prepared geometry, off `main`, entirely inside
 GeometryOps (no GeometryOpsCore changes). Supersedes the earlier
