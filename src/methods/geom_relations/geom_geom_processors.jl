@@ -67,8 +67,6 @@ function _point_polygon_process(
 )
     skip, returnval = _maybe_skip_disjoint_extents(point, polygon; in_allow, on_allow, out_allow, on_require = false, out_require = false, in_require = false)
     skip && return returnval
-    # The rings of a `Prepared` polygon carry their own edge-tree
-    # preparations; plain rings miss the lookup and take the sequential loop.
     # Check interaction of geom with polygon's exterior boundary
     ext_val = _point_ring_orientation(point, GI.getexterior(polygon); exact)
     # If a point is outside, it isn't interacting with any holes
@@ -89,12 +87,9 @@ function _point_polygon_process(
     return in_allow
 end
 
-# Orientation of a point with respect to one ring: indexed when the ring
-# carries an edge-tree preparation, the sequential loop otherwise.  The
-# kernels only walk point storage, so the `Prepared` shell is stripped first.
-# A *line string's* edge tree does not index the implicit closing edge that
-# filled-curve orientation walks (see `build_edge_tree`), so its tree only
-# applies when the curve is explicitly closed; ring-trait trees always do.
+# Orientation of a point w.r.t. one ring: indexed when the ring carries an
+# edge-tree prep, sequential otherwise.  A line string's tree lacks the
+# implicit closing edge this walk needs, so it only applies when closed.
 function _point_ring_orientation(point, ring; exact)
     prep = getprep(ring, AbstractEdgeTree)
     raw = _unwrap_prepared(ring)

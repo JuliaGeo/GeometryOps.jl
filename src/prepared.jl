@@ -85,30 +85,26 @@ consumers can query by an abstract kind and accept any subtype a user hooks in.
 """
     AbstractPreparation
 
-Supertype for all geometry preparations — precomputed acceleration structures
+Supertype for geometry preparations — precomputed acceleration structures
 stored in a [`Prepared`](@ref) wrapper and retrieved with [`getprep`](@ref).
-
-Subtype this (or one of the abstract kinds below it, like
-[`AbstractEdgeTree`](@ref)) and provide a constructor `MyPrep(geom)` to
-define your own preparation.
+Subtype it (or an abstract kind like [`AbstractEdgeTree`](@ref)) and provide
+a constructor `MyPrep(geom)` to define your own.
 """
 abstract type AbstractPreparation end
 
 """
     Prepared{T, G, P, E}
 
-A geometry node bundled with a tuple of preparations `preps` and a cached
-`extent`.  Construct one with [`prepare`](@ref).
+A geometry node bundled with a tuple of preparations and a cached extent.
+Construct with [`prepare`](@ref); retrieve preparations with
+[`getprep`](@ref).
 
-The stored geometry `geom` is in GeometryOps' native layout: coordinate-tuple
-storage whose *children are themselves `Prepared` nodes* — `GI.getgeom` of a
-prepared multipolygon yields prepared polygons, `GI.getexterior` of a prepared
-polygon yields a prepared ring carrying its edge tree.  `Prepared` implements
-GeoInterface by forwarding to that storage, so it can be passed to anything
-that accepts a geometry; `GI.extent` returns the cached extent.
-
-Retrieve a preparation with [`getprep`](@ref); `Base.parent` returns the
-converted geometry (the original input object is not kept).
+The stored geometry is in GeometryOps' native layout and its children are
+themselves `Prepared` nodes, so preparedness survives decomposition —
+`GI.getexterior` of a prepared polygon is a prepared ring.  `Prepared`
+implements GeoInterface by forwarding to that storage; `GI.extent` returns
+the cached extent; `Base.parent` returns the converted geometry (the
+original input object is not kept).
 """
 struct Prepared{T <: GI.AbstractGeometryTrait, G, P <: Tuple, E}
     geom::G
@@ -135,10 +131,8 @@ end
 
 # ## GeoInterface forwarding
 #
-# `Prepared` acts as its stored geometry everywhere.  We forward the core
-# accessors that everything else (npoint, getring, gethole, coordinates, …)
-# falls back to.  Because the storage's children are themselves `Prepared`
-# nodes, forwarding `getgeom` is what makes preparedness survive decomposition.
+# Forward the core accessors everything else falls back to.  The storage's
+# children are themselves `Prepared`, so `getgeom` yields prepared nodes.
 GI.isgeometry(::Type{<:Prepared}) = true
 GI.geomtrait(::Prepared{T}) where T = T()
 
@@ -202,9 +196,8 @@ hasprep(geom, ::Type{P}) where P = !isnothing(getprep(geom, P))
     first(preps) isa P ? first(preps) : _first_prep(P, Base.tail(preps))
 @inline _first_prep(::Type{P}, ::Tuple{}) where P = nothing
 
-# Strip a `Prepared` shell (a no-op on anything else).  Hot loops that walk a
-# geometry's raw point storage use this after retrieving the preparations they
-# need, saving a layer of accessor forwarding per point.
+# Strip a `Prepared` shell (a no-op on anything else); hot kernels walk raw
+# point storage directly after retrieving the preparations they need.
 _unwrap_prepared(g) = g
 _unwrap_prepared(p::Prepared) = parent(p)
 
@@ -213,10 +206,9 @@ _unwrap_prepared(p::Prepared) = parent(p)
 """
     buildprep(spec, geom)
 
-Build one preparation for `geom` from a spec selected for a node of the
-`prepare` recursion.  The default is `spec(geom)`, so a preparation type
-(`EdgeTree`) or a closure (`g -> EdgeTree(g; backend = STRtree)`) both work as
-specs.  Overload this to make other spec objects buildable.
+Build one preparation for `geom` from a spec.  Defaults to `spec(geom)`, so
+a preparation type (`EdgeTree`) or a closure both work as specs; overload to
+make other spec objects buildable.
 """
 buildprep(spec, geom) = spec(geom)
 
@@ -224,10 +216,8 @@ buildprep(spec, geom) = spec(geom)
     default_preparations(trait, geom)
 
 The tuple of preparation specs [`prepare`](@ref) builds at a node of the
-recursion when none are given.  Defaults to [`EdgeTree`](@ref) for linear
-rings and line strings and nothing else (every `Prepared` node caches its
-extent regardless).
-Overload on a trait — or on your geometry type — to change the default.
+recursion when none are given: [`EdgeTree`](@ref) for linear rings and line
+strings, nothing else.  Overload on a trait to change the default.
 """
 default_preparations(trait, geom) = ()
 default_preparations(::GI.LinearRingTrait, geom) = (EdgeTree,)
@@ -237,11 +227,10 @@ default_preparations(::GI.LineStringTrait, geom) = (EdgeTree,)
     prepare(geom; preps = nothing)
     prepare(p::Prepared; preps::Tuple = ())
 
-Materialize `geom` into GeometryOps' native layout and build a tree of
-[`Prepared`](@ref) nodes over it: every ring becomes a vector of coordinate
-tuples (number type preserved; `m` coordinates dropped), and every level —
-ring, polygon, multi-geometry member — gets its own `Prepared` node with its
-own preparations and cached extent.
+Materialize `geom` into GeometryOps' native layout — coordinate-tuple rings,
+number type preserved, `m` coordinates dropped — and build a tree of
+[`Prepared`](@ref) nodes over it, one per level (ring, polygon, multi-geometry
+member), each with its own preparations and cached extent.
 
 `preps` controls what gets built at each node:
 
@@ -325,10 +314,9 @@ function _prepare(trait::GI.PolygonTrait, geom, preps, crs, istop)
     return _wrap(trait, GI.Polygon(children; crs, extent = ext), ext, preps, istop)
 end
 
-# Everything else with geometry children (multi-geometries, collections):
-# recurse, so the stored children are themselves `Prepared` nodes.  The
-# `map(identity, …)` tightens the child vector's eltype (heterogeneous
-# collections get a small union).
+# Multi-geometries and collections: recurse, so the stored children are
+# themselves `Prepared`.  `map(identity, …)` tightens the child vector's
+# eltype (heterogeneous collections get a small union).
 function _prepare(trait::GI.AbstractGeometryTrait, geom, preps, crs, istop)
     children = map(identity, [_prepare(GI.trait(c), c, preps, crs, false) for c in GI.getgeom(geom)])
     ext = isempty(children) ? GI.extent(geom) :
@@ -342,12 +330,10 @@ end
 """
     AbstractEdgeTree <: AbstractPreparation
 
-The preparation *kind* for "a spatial index over the edges of a curve".  It
-lives on the prepared **ring**, so any consumer holding a ring — the planar
-point-in-polygon test, line/curve processes, clipping — can discover it with
-`getprep(ring, AbstractEdgeTree)`.  Consumers access the tree through
-[`edge_tree`](@ref), so any subtype with any SpatialTreeInterface-compatible
-tree hooks in automatically.
+The preparation *kind* for a spatial index over a curve's edges.  It lives on
+prepared rings and line strings; consumers discover it with
+`getprep(curve, AbstractEdgeTree)` and read the tree through
+[`edge_tree`](@ref), so any subtype with any SpatialTreeInterface tree works.
 """
 abstract type AbstractEdgeTree <: AbstractPreparation end
 
@@ -362,16 +348,11 @@ edge_tree(p::AbstractEdgeTree) = p.tree
     EdgeTree(curve; backend = NaturalIndex)
 
 A spatial index over the edge extents of a curve — the default
-[`AbstractEdgeTree`](@ref), built for every linear ring and line string by
-`prepare`.  Edge `i` runs from point `i` to point `i + 1`.  For *ring*-trait
-curves only, an unclosed ring additionally gets the implicit closing edge
-(from the last point back to point `1`), matching the implicit-closure
-semantics of the plain point-in-polygon algorithm; a line string's tree
-indexes exactly its consecutive point pairs, like `eachedge`.
-
-`backend` picks the tree via [`build_edge_tree`](@ref): `NaturalIndex`
-(default), `STRtree`, a `FlexibleRTrees` bulk-load algorithm (`STR()`,
-`HPR()`, `Unsorted()`), or any callable `curve -> spatial tree`.
+[`AbstractEdgeTree`](@ref), built by `prepare` for every linear ring and line
+string.  The index space is trait-keyed as described in
+[`build_edge_tree`](@ref), which `backend` also selects the tree through:
+`NaturalIndex` (default), `STRtree`, a `FlexibleRTrees` bulk-load algorithm,
+or any callable `curve -> spatial tree`.
 """
 struct EdgeTree{T} <: AbstractEdgeTree
     tree::T
@@ -410,16 +391,13 @@ EdgeTrees() = EdgeTrees(NaturalIndex)
     build_edge_tree(backend, curve)
 
 Build a SpatialTreeInterface-compatible spatial index over the edges of
-`curve`, where the tree's leaf indices are edge indices (edge `i` runs from
-point `i` to point `i + 1`).  For ring-trait curves an unclosed ring gets an
-extra leaf for the implicit closing edge (last point back to point `1`);
-line strings index exactly their consecutive point pairs — consumers rely on
-this trait-keyed index space (see e.g. `_edge_tree_and_coords`).
+`curve`.  Leaf `i` is the edge from point `i` to point `i + 1`; an unclosed
+*ring* gets one extra leaf for its implicit closing edge (last point back to
+point `1`), while a line string indexes exactly its consecutive point pairs.
+Consumers rely on this trait-keyed index space.
 
 Methods exist for `NaturalIndex`, `STRtree`, and `FlexibleRTrees` bulk-load
-algorithms; the fallback calls `backend(curve)`, so any callable works.  Add a
-method to plug in a new tree type — it only needs to implement
-SpatialTreeInterface.
+algorithms; the fallback calls `backend(curve)`, so any callable works.
 """
 build_edge_tree(backend, curve) = backend(curve)
 build_edge_tree(::Type{<:NaturalIndex}, curve) = NaturalIndex(_edge_extents(curve))
@@ -428,35 +406,18 @@ build_edge_tree(alg::FlexibleRTrees.BulkLoadAlgorithm, curve) =
     FlexibleRTrees.RTree(alg, _edge_extents(curve))
 
 # Extents of a curve's edges, in the trait-keyed index space described in the
-# `build_edge_tree` docstring.  Coordinate number types are preserved.
-_edge_extents(curve) = GI.trait(curve) isa GI.LinearRingTrait ?
-    _ring_edge_extents(curve) : _line_edge_extents(curve)
-
-# Ring edges: add the implicit closing edge when the ring is unclosed —
-# mirrors how `_point_filled_curve_orientation` walks edges.
-function _ring_edge_extents(ring)
-    n = GI.npoint(ring)
-    closed = equals(GI.getpoint(ring, 1), GI.getpoint(ring, n))
-    nedges = closed ? n - 1 : n
-    return [begin
-        p1 = GI.getpoint(ring, i)
-        p2 = GI.getpoint(ring, i == n ? 1 : i + 1)
-        Extents.Extent(
-            X = minmax(GI.x(p1), GI.x(p2)),
-            Y = minmax(GI.y(p1), GI.y(p2)),
-        )
-    end for i in 1:nedges]
-end
-
-# Line-string edges: consecutive point pairs only, no implicit closure —
-# mirrors `eachedge`.
-function _line_edge_extents(curve)
+# `build_edge_tree` docstring: only an unclosed *ring* gets the extra
+# wrap-around edge.  Coordinate number types are preserved.
+function _edge_extents(curve)
+    n = GI.npoint(curve)
+    wrap = GI.trait(curve) isa GI.LinearRingTrait &&
+        !equals(GI.getpoint(curve, 1), GI.getpoint(curve, n))
     return [begin
         p1 = GI.getpoint(curve, i)
-        p2 = GI.getpoint(curve, i + 1)
+        p2 = GI.getpoint(curve, i == n ? 1 : i + 1)
         Extents.Extent(
             X = minmax(GI.x(p1), GI.x(p2)),
             Y = minmax(GI.y(p1), GI.y(p2)),
         )
-    end for i in 1:GI.npoint(curve)-1]
+    end for i in 1:(wrap ? n : n - 1)]
 end

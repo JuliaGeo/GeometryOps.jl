@@ -135,10 +135,9 @@ function _add_union_holes!(alg::FosterHormannClipping, polys, a_in_b, b_in_a, po
         repeating overlapping holes in poly_a and poly_b =#
         curr_exterior_poly = n_a_holes > 0 ? ext_poly_b : ext_poly_a
         current_poly = n_a_holes > 0 ? ext_poly_b : poly_a
-        # Loop over all holes in both original polygons.  Input holes may be
-        # any GeoInterface geometry (foreign wrappers, `Prepared` rings, …) —
-        # normalize through `tuples` before splicing into output polygons,
-        # like `_add_holes_to_polys!` does.
+        # Loop over all holes in both original polygons.  Input holes are
+        # normalized through `tuples`/`_linearring` before splicing into
+        # output polygons, like `_add_holes_to_polys!` does.
         for (i, ih) in enumerate(Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b))))
             ih = _linearring(tuples(ih))
             in_ext, _, _ = _line_polygon_interactions(#=TODO: alg.manifold=# ih, curr_exterior_poly; exact, closed_line = true)
