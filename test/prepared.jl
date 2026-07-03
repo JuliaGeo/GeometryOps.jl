@@ -11,6 +11,7 @@ import Extents
 
 import LibGEOS as LG
 import ArchGDAL as AG
+import GeoJSON
 using GeometryOpsTestHelpers
 
 # A user-defined preparation: subtype + any way to build it (here, closures).
@@ -144,6 +145,22 @@ end
         for pt in ((5.0, 5.0), (0.0, 0.0), (11.0, 5.0), (5.0, 0.0), (10.0, 10.0))
             @test GO.within(pt, prep) == GO.within(pt, plain)
         end
+    end
+end
+
+@testset "Polygon rings that report LineStringTrait still get edge trees" begin
+    # GeoJSON types polygon rings as line strings; materialization must treat
+    # polygon children as rings regardless, or they silently lose their index.
+    gj = GeoJSON.read("""{"type": "Polygon", "coordinates": [
+        [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],
+        [[3, 3], [7, 3], [7, 7], [3, 7], [3, 3]]]}""")
+    prep = prepare(gj)
+    for ring in GI.getring(prep)
+        @test GI.geomtrait(ring) isa GI.LinearRingTrait
+        @test getprep(ring, AbstractEdgeTree) isa EdgeTree
+    end
+    for pt in ((5.0, 5.0), (5.0, 4.9), (0.0, 0.0), (11.0, 5.0), (5.0, 0.0))
+        @test GO.within(pt, prep) == GO.within(pt, gj)
     end
 end
 
