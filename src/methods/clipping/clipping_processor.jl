@@ -219,6 +219,15 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     # or -- even now -- just buffering
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
+    # Prepared rings carry their own edge trees (see `_edge_tree_and_coords`
+    # below): those are already paid for, and preparing a geometry is an
+    # explicit signal that it will be used repeatedly — so their presence
+    # overrides the size heuristic.
+    if !isnothing(getprep(poly_a, AbstractEdgeTree))  # a's tree is free, the dual traversal only pays for b's (if that)
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, DoubleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
+    elseif !isnothing(getprep(poly_b, AbstractEdgeTree))  # the single-tree path is exactly "tree on b, iterate a"
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, SingleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
+    end
     # Switching behaviour is turned off in the patch release
     # This should be turned on in a GO v0.2.x
     if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
@@ -316,30 +325,89 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     return nothing
 end
 
+#=
+## Reusing prepared ring edge trees
+
+The natural-tree accelerators below need, per input ring: a spatial index
+over the ring's edge extents, and edge coordinates by index.  A ring of a
+`Prepared` geometry already carries exactly that index — its `EdgeTree`
+preparation, whose leaf indices match `eachedge(ring)` one-to-one when the
+ring is closed — and its coordinates can be read straight from the ring,
+converted through `_tuple_point` like `eachedge`, so the numbers entering the
+intersection predicates are identical to the unprepared path.
+
+`_edge_tree_and_coords` therefore reuses any edge-tree preparation as-is —
+whatever SpatialTreeInterface-compatible tree it holds — and builds the edge
+list and a `NaturalIndex` ephemerally otherwise.  The one thing we do NOT
+assume about a reused tree is its traversal order: candidate indices are
+collected and sorted before use (as the `SingleSTRtree` path always did), so
+a backend that visits leaves out of input order (HPR, or an opaque
+foreign-library tree) is just as valid as `NaturalIndex`.
+
+Reuse requires a *closed* ring: the ring trees index the implicit closing
+edge of an unclosed ring, which `eachedge` does not walk, so the index spaces
+only agree when the closing point is materialized.  Unclosed rings fall back
+to the ephemeral build, preserving current behavior exactly.
+=#
+
+# Edge coordinates by `eachedge` index, read from ring point storage.
+struct _RingCoords{T, R}
+    ring::R
+end
+(c::_RingCoords{T})(j::Int) where T =
+    (_tuple_point(GI.getpoint(c.ring, j), T), _tuple_point(GI.getpoint(c.ring, j + 1), T))
+
+# Edge coordinates from a materialized `to_edgelist` vector (the ephemeral path).
+struct _EdgeListCoords{E}
+    edges::E
+end
+(c::_EdgeListCoords)(j::Int) = c.edges[j].geom
+
+# The (tree, coordinate accessor, edge count) triple for one ring: reuse the
+# ring's edge-tree preparation when its index space matches `eachedge`, else
+# build ephemerally.
+function _edge_tree_and_coords(curve, ::Type{T}) where T
+    prep = getprep(curve, AbstractEdgeTree)
+    if !isnothing(prep)
+        np = GI.npoint(curve)
+        if np >= 4 && equals(GI.getpoint(curve, 1), GI.getpoint(curve, np))
+            raw = _unwrap_prepared(curve)
+            return edge_tree(prep), _RingCoords{T, typeof(raw)}(raw), np - 1
+        end
+    end
+    edges = to_edgelist(curve, T)
+    return NaturalIndexing.NaturalIndex(edges), _EdgeListCoords(edges), length(edges)
+end
+
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::SingleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
-    na = GI.npoint(poly_a)
-    nb = GI.npoint(poly_b)
-    ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
-    edges_b = to_edgelist(poly_b, T)
+    ext_b = GI.extent(poly_b)
+    b_tree, b_coords, _ = _edge_tree_and_coords(poly_b, T)
+    # Function barrier: `_edge_tree_and_coords` returns one of two types.
+    return _single_tree_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, ext_b, b_tree, b_coords, T)
+end
 
-    b_tree = NaturalIndexing.NaturalIndex(edges_b)
-
+function _single_tree_loop(
+    f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, ext_b, b_tree, b_coords::BC, ::Type{T}
+) where {FA, FAAfter, FI, BC, T}
+    # this is a pre-allocation that will store the results of the query into b_tree
+    query_result = Int[]
     for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
         a1t == a2t && continue
         ext_l = Extents.Extent(X = minmax(a1t[1], a2t[1]), Y = minmax(a1t[2], a2t[2]))
         isnothing(f_on_each_a) || f_on_each_a(a1t, i)
-        # Query the STRtree for any edges in b that may intersect this edge
-        # This is sorted because we want to pretend we're doing the same thing
-        # as the nested loop above, and iterating through poly_b in order.
         if Extents.intersects(ext_l, ext_b)
-            # Loop over the edges in b that might intersect the edges in a
-            SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, ext_l), b_tree) do j
-                b1t, b2t = edges_b[j].geom
-                b1t == b2t && return LoopStateMachine.Continue()
-                # LoopStateMachine control is managed outside the loop, by the depth_first_search function.
-                return f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
+            # Collect the edges in b that might intersect this edge, and sort,
+            # so that we iterate through poly_b in order like the nested loop
+            # above — without assuming anything about the tree's traversal order.
+            empty!(query_result)
+            SpatialTreeInterface.depth_first_search(Base.Fix1(push!, query_result), Base.Fix1(Extents.intersects, ext_l), b_tree)
+            sort!(query_result)
+            for j in query_result
+                b1t, b2t = b_coords(j)
+                b1t == b2t && continue
+                LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j))
             end
         end
         isnothing(f_after_each_a) || f_after_each_a(a1t, i)
@@ -350,31 +418,41 @@ end
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::DoubleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
-    na = GI.npoint(poly_a)
-    nb = GI.npoint(poly_b)
-    edges_a = to_edgelist(poly_a, T)
-    edges_b = to_edgelist(poly_b, T)
+    tree_a, a_coords, n_a = _edge_tree_and_coords(poly_a, T)
+    tree_b, b_coords, _ = _edge_tree_and_coords(poly_b, T)
+    # Function barrier: `_edge_tree_and_coords` returns one of two types per side.
+    return _dual_tree_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, tree_a, tree_b, a_coords, b_coords, n_a)
+end
 
-    tree_a = NaturalIndexing.NaturalIndex(edges_a)
-    tree_b = NaturalIndexing.NaturalIndex(edges_b)
+function _dual_tree_loop(
+    f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, tree_a, tree_b, a_coords::CA, b_coords::CB, n_a::Int
+) where {FA, FAAfter, FI, CA, CB}
+    # Collect the candidate pairs and sort them into nested-loop order, so we
+    # assume nothing about either tree's traversal order (the in-order
+    # bookkeeping below requires it, and e.g. a Hilbert-sorted or foreign
+    # tree visits leaves in its own order).
+    candidate_pairs = Tuple{Int, Int}[]
+    SpatialTreeInterface.dual_depth_first_search((i, j) -> push!(candidate_pairs, (i, j)), Extents.intersects, tree_a, tree_b)
+    sort!(candidate_pairs)
 
     last_a_idx = 0
 
-    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_edge_idx, b_edge_idx
-        a1t, a2t = edges_a[a_edge_idx].geom
-        b1t, b2t = edges_b[b_edge_idx].geom
+    for (a_edge_idx, b_edge_idx) in candidate_pairs
+        a1t, a2t = a_coords(a_edge_idx)
+        b1t, b2t = b_coords(b_edge_idx)
 
         if last_a_idx < a_edge_idx
             if !isnothing(f_on_each_a)
                 for i in (last_a_idx+1):(a_edge_idx-1)
-                    f_on_each_a((edges_a[i].geom[1]), i)
-                    !isnothing(f_after_each_a) && f_after_each_a((edges_a[i].geom[1]), i)
+                    p1 = a_coords(i)[1]
+                    f_on_each_a(p1, i)
+                    !isnothing(f_after_each_a) && f_after_each_a(p1, i)
                 end
             end
             !isnothing(f_on_each_a) && f_on_each_a(a1t, a_edge_idx)
         end
 
-        f_on_each_maybe_intersect(((a1t, a2t), a_edge_idx), ((b1t, b2t), b_edge_idx))
+        LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), a_edge_idx), ((b1t, b2t), b_edge_idx))
 
         if last_a_idx < a_edge_idx
             if !isnothing(f_after_each_a)
@@ -388,19 +466,21 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
             return
         else
-            for (i, edge) in enumerate(edges_a)
-                !isnothing(f_on_each_a) && f_on_each_a(edge.geom[1], i)
-                !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
+            for i in 1:n_a
+                p1 = a_coords(i)[1]
+                !isnothing(f_on_each_a) && f_on_each_a(p1, i)
+                !isnothing(f_after_each_a) && f_after_each_a(p1, i)
             end
         end
-    elseif last_a_idx < length(edges_a)
+    elseif last_a_idx < n_a
         # the query terminated early - this will almost always be the case.
         if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
             return
         else
-            for (i, edge) in zip(last_a_idx+1:length(edges_a), view(edges_a, last_a_idx+1:length(edges_a)))
-                !isnothing(f_on_each_a) && f_on_each_a(edge.geom[1], i)
-                !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
+            for i in (last_a_idx+1):n_a
+                p1 = a_coords(i)[1]
+                !isnothing(f_on_each_a) && f_on_each_a(p1, i)
+                !isnothing(f_after_each_a) && f_after_each_a(p1, i)
             end
         end
     end
