@@ -168,3 +168,34 @@ bounding box of a regular n-gon (~78% inside):
 
 Possible follow-up optimization (not applied): a fold/reduce variant in
 SpatialTreeInterface to eliminate the per-query `Ref`.
+
+## FlexibleRTrees (added 2026-07-03)
+
+`utils/FlexibleRTrees/` vendors a packed R-tree adapted from
+SortTileRecursiveTree.jl, restructured to be **flat and type stable** (levels
+of extent vectors + a leaf permutation, like `NaturalIndex` and JTS `HPRtree`
+— the concrete type no longer depends on tree depth) and **N-dimensional**
+(any `Extents.Extent`; verified in 2D and 3D). The bulk-load algorithm is a
+value: `RTree(STR() | HPR() | Unsorted(), data; nodecapacity = 16)`, where an
+algorithm is one singleton type plus one `loadorder` method — `HPR` uses
+Skilling's N-dimensional Hilbert encoding (bijectivity and unit-step
+adjacency are tested). It implements SpatialTreeInterface, and a
+`build_edge_tree` method makes `RingEdgeTrees(poly; tree = HPR())` work
+directly.
+
+**What testing the algorithms revealed** — leaf order is everything, and the
+right order depends on the input:
+
+- *Ring edges* (already spatially coherent): input order wins. Per-query
+  point-in-polygon at n = 65 536: `Unsorted` 157 ns, `NaturalIndex` 191 ns,
+  `HPR` 323 ns, `STR` 362 ns, pointer-based STRtree.jl 496 ns. Sorting
+  *destroys* a ring's natural coherence for thin ray-strip queries — so
+  natural indexing stays the right default for prepared rings.
+- *Spatially random input* (100 k boxes, 200 window queries): sorting is
+  everything — `HPR` 49 µs, `STR` 60 µs, `Unsorted` 57 000 µs,
+  `NaturalIndex` 53 000 µs. Hilbert beats STR by ~20 % (as JTS found), and
+  both beat unsorted packing by ~1 000×. `HPR` is the backend of choice for
+  unordered collections (feature tables, spatial joins).
+
+Build cost at n = 65 536 edges: `NaturalIndex` 74 µs, `Unsorted` 233 µs,
+`STR` 2.8 ms, `HPR` 5.2 ms, STRtree.jl 4.0 ms.
