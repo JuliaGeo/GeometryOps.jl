@@ -1,6 +1,6 @@
 # # Prepared geometry
 
-export prepare, Prepared, getprep, EdgeTree, EdgeTrees
+export prepare, Prepared, getprep, hasprep, EdgeTree, EdgeTrees
 
 #=
 ## What is prepared geometry?
@@ -188,6 +188,16 @@ function getprep(f, geom, ::Type{P}) where P
     return isnothing(prep) ? f() : prep
 end
 
+"""
+    hasprep(geom, P::Type)::Bool
+
+Whether `geom` stores a preparation that `isa P` — the boolean companion to
+[`getprep`](@ref).  Like `getprep`, this looks at `geom`'s own node only:
+`hasprep(prepared_polygon, AbstractEdgeTree)` is `false` because edge trees
+live on the polygon's *rings*.
+"""
+hasprep(geom, ::Type{P}) where P = !isnothing(getprep(geom, P))
+
 @inline _first_prep(::Type{P}, preps::Tuple) where P =
     first(preps) isa P ? first(preps) : _first_prep(P, Base.tail(preps))
 @inline _first_prep(::Type{P}, ::Tuple{}) where P = nothing
@@ -215,11 +225,13 @@ buildprep(spec, geom) = spec(geom)
 
 The tuple of preparation specs [`prepare`](@ref) builds at a node of the
 recursion when none are given.  Defaults to [`EdgeTree`](@ref) for linear
-rings and nothing else (every `Prepared` node caches its extent regardless).
+rings and line strings and nothing else (every `Prepared` node caches its
+extent regardless).
 Overload on a trait — or on your geometry type — to change the default.
 """
 default_preparations(trait, geom) = ()
 default_preparations(::GI.LinearRingTrait, geom) = (EdgeTree,)
+default_preparations(::GI.LineStringTrait, geom) = (EdgeTree,)
 
 """
     prepare(geom; preps = nothing)
@@ -234,7 +246,7 @@ own preparations and cached extent.
 `preps` controls what gets built at each node:
 
 - `nothing` (default): [`default_preparations`](@ref) at every node — rings
-  get a `NaturalIndex` [`EdgeTree`](@ref).
+  and line strings get a `NaturalIndex` [`EdgeTree`](@ref).
 - a function `(trait, geom) -> Tuple` of specs, called at every node of the
   recursion.  [`EdgeTrees`](@ref) is a ready-made one for choosing the
   edge-tree backend: `prepare(poly; preps = EdgeTrees(HPR()))`.
@@ -350,10 +362,12 @@ edge_tree(p::AbstractEdgeTree) = p.tree
     EdgeTree(curve; backend = NaturalIndex)
 
 A spatial index over the edge extents of a curve — the default
-[`AbstractEdgeTree`](@ref), built for every linear ring by `prepare`.  Edge
-`i` of an `n`-point ring runs from point `i` to point `i + 1`, except that an
-unclosed ring's last edge wraps back to point `1`, matching the
-implicit-closure semantics of the plain point-in-polygon algorithm.
+[`AbstractEdgeTree`](@ref), built for every linear ring and line string by
+`prepare`.  Edge `i` runs from point `i` to point `i + 1`.  For *ring*-trait
+curves only, an unclosed ring additionally gets the implicit closing edge
+(from the last point back to point `1`), matching the implicit-closure
+semantics of the plain point-in-polygon algorithm; a line string's tree
+indexes exactly its consecutive point pairs, like `eachedge`.
 
 `backend` picks the tree via [`build_edge_tree`](@ref): `NaturalIndex`
 (default), `STRtree`, a `FlexibleRTrees` bulk-load algorithm (`STR()`,
@@ -377,7 +391,8 @@ end
     EdgeTrees(backend = NaturalIndex)
 
 A ready-made `preps` selector for [`prepare`](@ref) that puts an
-[`EdgeTree`](@ref) with the given `backend` on every linear ring:
+[`EdgeTree`](@ref) with the given `backend` on every linear ring and line
+string:
 
 ```julia
 prep = prepare(poly; preps = EdgeTrees(STRtree))
@@ -389,30 +404,36 @@ struct EdgeTrees{B}
 end
 EdgeTrees() = EdgeTrees(NaturalIndex)
 (s::EdgeTrees)(trait, geom) =
-    trait isa GI.LinearRingTrait ? (g -> EdgeTree(g; backend = s.backend),) : ()
+    trait isa Union{GI.LinearRingTrait, GI.LineStringTrait} ? (g -> EdgeTree(g; backend = s.backend),) : ()
 
 """
     build_edge_tree(backend, curve)
 
 Build a SpatialTreeInterface-compatible spatial index over the edges of
 `curve`, where the tree's leaf indices are edge indices (edge `i` runs from
-point `i` to point `i + 1`, wrapping to point `1` from the last point of an
-unclosed ring).
+point `i` to point `i + 1`).  For ring-trait curves an unclosed ring gets an
+extra leaf for the implicit closing edge (last point back to point `1`);
+line strings index exactly their consecutive point pairs — consumers rely on
+this trait-keyed index space (see e.g. `_edge_tree_and_coords`).
 
 Methods exist for `NaturalIndex`, `STRtree`, and `FlexibleRTrees` bulk-load
 algorithms; the fallback calls `backend(curve)`, so any callable works.  Add a
 method to plug in a new tree type — it only needs to implement
 SpatialTreeInterface.
 """
-build_edge_tree(backend, ring) = backend(ring)
-build_edge_tree(::Type{<:NaturalIndex}, ring) = NaturalIndex(_ring_edge_extents(ring))
-build_edge_tree(::Type{<:STRtree}, ring) = STRtree(_ring_edge_extents(ring))
-build_edge_tree(alg::FlexibleRTrees.BulkLoadAlgorithm, ring) =
-    FlexibleRTrees.RTree(alg, _ring_edge_extents(ring))
+build_edge_tree(backend, curve) = backend(curve)
+build_edge_tree(::Type{<:NaturalIndex}, curve) = NaturalIndex(_edge_extents(curve))
+build_edge_tree(::Type{<:STRtree}, curve) = STRtree(_edge_extents(curve))
+build_edge_tree(alg::FlexibleRTrees.BulkLoadAlgorithm, curve) =
+    FlexibleRTrees.RTree(alg, _edge_extents(curve))
 
-# Extents of the ring's edges, adding the implicit closing edge when the ring
-# is unclosed — mirrors how `_point_filled_curve_orientation` walks edges.
-# Coordinate number types are preserved.
+# Extents of a curve's edges, in the trait-keyed index space described in the
+# `build_edge_tree` docstring.  Coordinate number types are preserved.
+_edge_extents(curve) = GI.trait(curve) isa GI.LinearRingTrait ?
+    _ring_edge_extents(curve) : _line_edge_extents(curve)
+
+# Ring edges: add the implicit closing edge when the ring is unclosed —
+# mirrors how `_point_filled_curve_orientation` walks edges.
 function _ring_edge_extents(ring)
     n = GI.npoint(ring)
     closed = equals(GI.getpoint(ring, 1), GI.getpoint(ring, n))
@@ -425,4 +446,17 @@ function _ring_edge_extents(ring)
             Y = minmax(GI.y(p1), GI.y(p2)),
         )
     end for i in 1:nedges]
+end
+
+# Line-string edges: consecutive point pairs only, no implicit closure —
+# mirrors `eachedge`.
+function _line_edge_extents(curve)
+    return [begin
+        p1 = GI.getpoint(curve, i)
+        p2 = GI.getpoint(curve, i + 1)
+        Extents.Extent(
+            X = minmax(GI.x(p1), GI.x(p2)),
+            Y = minmax(GI.y(p1), GI.y(p2)),
+        )
+    end for i in 1:GI.npoint(curve)-1]
 end
