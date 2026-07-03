@@ -303,7 +303,17 @@ function _prepare(trait::Union{GI.AbstractCurveTrait, GI.MultiPointTrait}, geom,
     return _wrap(trait, T(pts; crs, extent = ext), ext, preps, istop)
 end
 
-# Everything with geometry children (polygons, multi-geometries, collections):
+# Polygons: the children are rings *by construction*, even when the backend
+# types them as line strings (GeoJSON does) — materialize them as linear
+# rings so they pick up ring defaults like `EdgeTree`.
+function _prepare(trait::GI.PolygonTrait, geom, preps, crs, istop)
+    children = map(identity, [_prepare(GI.LinearRingTrait(), r, preps, crs, false) for r in GI.getring(geom)])
+    ext = isempty(children) ? GI.extent(geom) :
+        mapreduce(c -> c.extent, Extents.union, children)
+    return _wrap(trait, GI.Polygon(children; crs, extent = ext), ext, preps, istop)
+end
+
+# Everything else with geometry children (multi-geometries, collections):
 # recurse, so the stored children are themselves `Prepared` nodes.  The
 # `map(identity, …)` tightens the child vector's eltype (heterogeneous
 # collections get a small union).
