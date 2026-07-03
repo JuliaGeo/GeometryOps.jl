@@ -210,7 +210,7 @@ end
     @test edge_tree(nat) isa NaturalIndex
     str = EdgeTree(ring; backend = GO.STRtree)
     @test edge_tree(str) isa GO.STRtree
-    flat = EdgeTree(ring; backend = r -> FlatNoTree(GO._ring_edge_extents(r)))
+    flat = EdgeTree(ring; backend = r -> FlatNoTree(GO._edge_extents(r)))
     @test edge_tree(flat) isa FlatNoTree
     @test_throws ArgumentError EdgeTree(square_hole)
     # The `EdgeTrees` selector: edge trees on rings, nothing elsewhere.
@@ -220,15 +220,15 @@ end
     prep = prepare(square_hole; preps = sel)
     @test edge_tree(getprep(GI.getexterior(prep), AbstractEdgeTree)) isa GO.STRtree
     # Unclosed rings index the implicit closing edge.
-    @test length(GO._ring_edge_extents(GI.getexterior(square_hole))) == 4
-    @test length(GO._ring_edge_extents(GI.getexterior(square_hole_unclosed))) == 4
+    @test length(GO._edge_extents(GI.getexterior(square_hole))) == 4
+    @test length(GO._edge_extents(GI.getexterior(square_hole_unclosed))) == 4
 end
 
 @testset "Indexed point-in-polygon ≡ plain point-in-polygon" begin
     backends = (
         "NaturalIndex" => poly -> prepare(poly),
         "STRtree" => poly -> prepare(poly; preps = EdgeTrees(GO.STRtree)),
-        "FlatNoTree" => poly -> prepare(poly; preps = EdgeTrees(r -> FlatNoTree(GO._ring_edge_extents(r)))),
+        "FlatNoTree" => poly -> prepare(poly; preps = EdgeTrees(r -> FlatNoTree(GO._edge_extents(r)))),
     )
     polys = (
         "square with hole" => square_hole,
@@ -349,7 +349,7 @@ end
     ls_edges = GO.to_edgelist(ls, Float64)
     @test all(coords(j) == Tuple(ls_edges[j].geom) for j in 1:n)
     @test length(GO._edge_extents(ls)) == 3
-    @test length(GO._ring_edge_extents(GI.LinearRing(collect(GI.getpoint(ls))))) == 4  # contrast: unclosed ring wraps
+    @test length(GO._edge_extents(GI.LinearRing(collect(GI.getpoint(ls))))) == 4  # contrast: unclosed ring wraps
 
     # But a line string's tree must NOT accelerate point-in-polygon, which
     # walks the implicit closing edge its tree does not index.

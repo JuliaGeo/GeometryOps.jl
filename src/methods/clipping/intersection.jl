@@ -235,14 +235,10 @@ function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.Abstr
     result = Tuple{T, T}[]
     # Check if the geometries extents even overlap
     Extents.intersects(GI.extent(a), GI.extent(b)) || return result
-    # Create a list of edges from the two input geometries
-    # edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
-    # Loop over pairs of edges and add any unique intersection points to results
-    # TODO: add intersection acceleration here.
 
     function f_on_each_maybe_intersect((a_edge, a_idx), (b_edge, b_idx))
         line_orient, intr1, intr2 = _intersection_point(manifold, T, a_edge, b_edge; exact)
-        line_orient == line_out && return LoopStateMachine.Action(:continue) # use LoopStateMachine.Continue() to skip this edge - in this case it doesn't matter but you could use it to e.g. break once you found the first intersecting point.
+        line_orient == line_out && return LoopStateMachine.Action(:continue)
         pt1, _ = intr1
         push!(result, pt1)  # if not line_out, there is at least one intersection point
         if line_orient == line_over # if line_over, there are two intersection points
@@ -251,9 +247,6 @@ function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.Abstr
         end
     end
 
-    # iterate over each pair of intersecting edges only,
-    # calling `f_on_each_maybe_intersect` for each pair 
-    # that may intersect.
     foreach_pair_of_maybe_intersecting_edges_in_order(
         manifold, accelerator, 
         nothing, # f_on_each_a
