@@ -138,12 +138,12 @@ bounding box of a regular n-gon (~78% inside):
 
 | n vertices | plain | prepared (NaturalIndex) | prepared (STRtree) | speedup (Nat) |
 |---:|---:|---:|---:|---:|
-| 64     | 0.77 µs | 73 ns  | 44 ns  | 11× |
-| 256    | 3.3 µs  | 94 ns  | 49 ns  | 36× |
-| 1 024  | 13.6 µs | 165 ns | 131 ns | 82× |
-| 4 096  | 54.3 µs | 240 ns | 209 ns | 226× |
-| 16 384 | 218 µs  | 236 ns | 363 ns | 925× |
-| 65 536 | 873 µs  | 300 ns | 779 ns | 2 916× |
+| 64     | 0.77 µs | 41 ns  | 44 ns  | 19× |
+| 256    | 3.3 µs  | 54 ns  | 49 ns  | 61× |
+| 1 024  | 13.6 µs | 95 ns  | 131 ns | 143× |
+| 4 096  | 54.3 µs | 141 ns | 209 ns | 385× |
+| 16 384 | 218 µs  | 142 ns | 363 ns | 1 535× |
+| 65 536 | 873 µs  | 178 ns | 779 ns | 4 906× |
 
 - **There is no crossover size** — prepared wins from n = 64 up. The plain path
   is O(n) per query even for trivially-rejectable points, because
@@ -154,10 +154,17 @@ bounding box of a regular n-gon (~78% inside):
   bigger; it queries faster below ~8 k vertices, NaturalIndex faster above.
   `prepare` pays for itself by the second query.
 - **Profile** (n = 65 536, NaturalIndex): zero runtime dispatch in the hot path
-  (`@inferred` clean); self-cost is tree traversal (`depth_first_search`,
-  `NaturalIndexNode` materialization, generator iteration). The only per-query
+  (`@inferred` clean); self-cost is tree traversal. The only per-query
   allocation is the 16-byte `Ref` crossing counter (1/query).
+- **Traversal profile → interface fix, not a specialized query.** Profiling
+  initially showed traversal machinery dominating the prepared query. The cause
+  was in `NaturalIndexNode`'s SpatialTreeInterface implementation: every
+  per-child operation re-chased `parent_index → levels → level → extents`.
+  Hoisting that vector once per node inside `getchild`/`child_indices_extents`
+  (no struct or interface change) made the *generic* query ~1.7× faster across
+  all sizes — the numbers in the table above include this. `NaturalIndex`
+  stays a plain SpatialTreeInterface citizen, and clipping's
+  `dual_depth_first_search` walks the same accessors, so it benefits too.
 
-Possible follow-up optimizations (not applied): a fold/reduce variant in
-SpatialTreeInterface to eliminate the `Ref`; a level-iterating query
-specialized to `NaturalIndex` to shave traversal overhead.
+Possible follow-up optimization (not applied): a fold/reduce variant in
+SpatialTreeInterface to eliminate the per-query `Ref`.
