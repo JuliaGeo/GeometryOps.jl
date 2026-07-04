@@ -105,3 +105,42 @@ green on the first run.
   analysis), robustified cap–cap intersection, and arc AABB production
   code (`_edge_extents` analog on the sphere) — that lands with spherical
   `prepare`.
+
+## Arc extents and robust cap predicates (same day, follow-up)
+
+Review feedback: `arc_extent` is a UnitSpherical primitive, not a
+`prepare` concern (only the trait-keyed edge enumeration belongs there),
+and the angle-space cap–cap/cap–point predicates were unsound — no error
+control on `atan`-space comparisons, ~`√eps` error near identical or
+antipodal centers, and `radius`-based decisions disagreeing with the
+`radiuslike`-based ones at the rim.
+
+- `arc_extent(a, b)`: endpoints' box padded by the arc's sagitta
+  `1 − cos(θ/2)` plus rounding slack; antipodal endpoints degrade to a
+  cover of every candidate arc.  Exact axis-extrema tightening deferred.
+- Cap predicates re-decided in cosine space over the one canonical
+  definition (the raw half-space `{p : ‖p‖ = 1, p ⋅ c ≥ k}`, shared with
+  the cap–box filter): a float screen at `1e-7` (worst rounding of these
+  expressions is ~4e-8, from `√` of cancellation-prone products), then
+  exact `Rational{BigInt}` case analysis.  Radicals reduce to one
+  squaring level; `rx + ry ≥ π` and `d + rs ≤ π` guards use dedicated
+  radical-pair sign helpers.
+- Sharp edge found by the consistency tests (and asserted, not hidden):
+  `radiuslike = −1` with a center of float norm just over 1 is *not* the
+  full sphere — it excludes a ~`√eps` disk at the antipode.  Robust full
+  caps need `k ≤ −‖c‖` by margin.
+- Benchmarks (M-series laptop, per call over 1000 random pairs):
+  cap–cap intersects old 14.6 ns → **new 5.8 ns** (no `atan`); cap–cap
+  contains old 14.8 ns → new ~9 ns; cap–point old 14.2 ns → new 7.1 ns.
+  Exact fallback costs 4.3 µs (intersects) / 6.8 µs (contains) and is hit
+  on ~1e-4 of random pairs (only via the `|k| ≈ 1` degenerate-cap screen
+  edge) — sub-ns amortized.  Cap–box filter: 19.5 ns as a sanitized tree
+  predicate (25.9 ns self-contained); `arc_extent` 3.4 ns;
+  `Extents.extent(cap)` 10.3 ns.
+- S2 testing methodology notes (from the reference checkout) recorded in
+  `2026-07-04-s2-cap-testing-notes.md`; adopted: two-sided per-axis
+  tightness for the cap AABB, adversarial axis-crushed coordinates,
+  ±ulp tangency sweeps solved at 512-bit precision against an independent
+  angle-space ground truth, log-uniform radii, explicit arc-midpoint
+  (max sagitta) checks, degenerate/exactly-proportional arc endpoints.
+  ~25.5k assertions added; all suites green.
