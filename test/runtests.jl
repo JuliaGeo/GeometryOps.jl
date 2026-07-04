@@ -22,6 +22,7 @@ end
 @safetestset "SpatialTreeInterface" begin include("utils/SpatialTreeInterface.jl") end
 @safetestset "FlexibleRTrees" begin include("utils/FlexibleRTrees.jl") end
 @safetestset "UnitSpherical" begin include("utils/unitspherical.jl") end
+@safetestset "SphericalCap–extent intersection" begin include("utils/cap_extents.jl") end
 @safetestset "RobustCrossProduct" begin include("utils/robustcrossproduct.jl") end
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end

@@ -3,6 +3,9 @@ module UnitSpherical
 using CoordinateTransformations
 using StaticArrays, LinearAlgebra
 import GeoInterface as GI, GeoFormatTypes as GFT
+import Extents
+
+import ..SpatialTreeInterface
 
 import Random
 
@@ -18,6 +21,7 @@ export robust_cross_product
 include("coordinate_transforms.jl")
 include("slerp.jl")
 include("cap.jl")
+include("cap_extents.jl")
 include("predicates.jl")
 include("arc_intersection.jl")
 
