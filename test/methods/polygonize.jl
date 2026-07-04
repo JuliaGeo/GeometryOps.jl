@@ -24,7 +24,7 @@ Random.seed!(123)
     data_mp_range200 = polygonize(2:2:200, 2:2:200, data)
     # KNOWN BROKEN: `polygonize`'s ring tracing is coordinate-magnitude-dependent, so
     # rescaling the coordinates changes the decomposition (and hence the coordinate
-    # count). See the PR discussion; remove `_broken` once that is fixed.
+    # count). See issue #430; remove `_broken` once that is fixed.
     @test_broken length(GI.coordinates(data_mp_range200)) == length(GI.coordinates(data_mp))
 
     # this is an example that could throw floating point error
@@ -90,7 +90,7 @@ end
         # equivalent to passing those ranges explicitly on the parent array.
         @test GO.equals(evil_mp, polygonize(axes(evil, 1), axes(evil, 2), parent(evil)))
         # KNOWN BROKEN: it is *not* equal to a translation of `polygonize(data)` —
-        # `polygonize`'s decomposition depends on coordinate magnitude (see line ~20).
+        # `polygonize`'s decomposition depends on coordinate magnitude (see issue #430).
         data_mp = polygonize(data)
         shifted = GO.transform(p -> p .- evil.offsets, evil_mp)
         @test_broken GO.equals(data_mp, shifted)
