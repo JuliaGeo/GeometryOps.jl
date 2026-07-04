@@ -148,6 +148,31 @@ end
     end
 end
 
+@testset "Materialization closes rings and preserves UnitSphericalPoints" begin
+    # An unclosed input ring is closed during materialization, so every
+    # preparation can rely on point 1 == point n.
+    unclosed = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]])
+    ring = GI.getexterior(prepare(unclosed))
+    @test GI.npoint(ring) == 5
+    @test GI.getpoint(ring, 1) == GI.getpoint(ring, 5)
+    @test GO.area(prepare(unclosed)) == GO.area(unclosed)
+
+    # Points already in unit-spherical representation are stored as-is, not
+    # destructured to coordinate tuples; prepare takes the manifold first,
+    # like other GeometryOps functions.
+    USP = GO.UnitSpherical.UnitSphericalPoint
+    pts = [USP(1.0, 0.0, 0.0), USP(0.0, 1.0, 0.0), USP(0.0, 0.0, 1.0)]
+    usp_prep = prepare(GO.Spherical(), GI.LinearRing(pts))
+    stored = collect(GI.getpoint(parent(usp_prep)))
+    @test eltype(stored) <: USP
+    @test length(stored) == 4 && stored[end] == stored[1]   # also closed
+    # Edge trees are a planar default; the spherical ones land later.
+    @test isnothing(getprep(usp_prep, AbstractEdgeTree))
+    @test GO.hasprep(GI.getexterior(prepare(GO.Planar(), unclosed)), AbstractEdgeTree)
+    # A bare unit-spherical point round-trips as itself.
+    @test parent(prepare(GO.Spherical(), USP(0.0, 0.0, 1.0))) isa USP
+end
+
 @testset "Polygon rings that report LineStringTrait still get edge trees" begin
     # GeoJSON types polygon rings as line strings; materialization must treat
     # polygon children as rings regardless, or they silently lose their index.
@@ -292,12 +317,14 @@ end
     hpr_ring = GI.getexterior(prepare(donut; preps = EdgeTrees(GO.FlexibleRTrees.HPR())))
     tree_hpr, _, _ = GO._edge_tree_and_coords(hpr_ring, Float64)
     @test tree_hpr isa GO.FlexibleRTrees.RTree
-    # Unclosed rings index the implicit closing edge, which `eachedge` doesn't
-    # walk, so their trees are not reused — the ephemeral build kicks in.
+    # Unclosed input rings are closed during materialization, so a prepared
+    # ring's tree always matches the `eachedge` space and is reused as-is —
+    # the closing edge is explicit, never implicit.
     unclosed_ring = GI.getexterior(prepare(GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]])))
+    @test GI.npoint(unclosed_ring) == 5   # the first point was repeated at the end
     tree_uc, _, n_uc = GO._edge_tree_and_coords(unclosed_ring, Float64)
-    @test tree_uc isa GO.NaturalIndexing.NaturalIndex
-    @test n_uc == 3   # eachedge semantics, not the 4 edges the ring tree indexes
+    @test tree_uc === edge_tree(getprep(unclosed_ring, AbstractEdgeTree))   # reused
+    @test n_uc == 4   # the closing edge is an explicit `eachedge` edge now
 
     # Prepared clipping ≡ plain nested-loop clipping, for every combination of
     # prepared/plain inputs and backends, including holes and small polygons
@@ -338,8 +365,7 @@ end
     @test !GO.hasprep(donut, AbstractEdgeTree)     # plain geometries carry no preps
 
     # Line strings get edge trees indexing exactly their `eachedge` pairs —
-    # no synthetic closing-edge leaf — so they are reused even when unclosed
-    # (unlike ring trees).
+    # there is no closing edge to index.
     ls = GI.LineString([(0.0, 3.0), (4.0, 8.0), (8.0, 2.0), (12.0, 7.0)])
     pls = prepare(ls)
     @test GO.hasprep(pls, AbstractEdgeTree)
@@ -349,13 +375,15 @@ end
     ls_edges = GO.to_edgelist(ls, Float64)
     @test all(coords(j) == Tuple(ls_edges[j].geom) for j in 1:n)
     @test length(GO._edge_extents(ls)) == 3
-    @test length(GO._edge_extents(GI.LinearRing(collect(GI.getpoint(ls))))) == 4  # contrast: unclosed ring wraps
+    @test length(GO._edge_extents(GI.LinearRing(collect(GI.getpoint(ls))))) == 4  # a raw unclosed ring still wraps
 
-    # But a line string's tree must NOT accelerate point-in-polygon, which
-    # walks the implicit closing edge its tree does not index.
-    open_ls_poly = GI.Polygon([pls])   # hand-assembled; `prepare` would close this
+    # Point-in-polygon consumers rely on the materialization contract: a
+    # polygon prepared whole gets closed rings, so PIP through its (formerly
+    # open) boundary matches the plain polygon.
+    open_poly = GI.Polygon([collect(GI.getpoint(ls))])
+    prep_open_poly = prepare(open_poly)
     for pt in ((6.0, 5.0), (1.0, 6.0), (20.0, 5.0))
-        @test GO.within(pt, open_ls_poly) == GO.within(pt, GI.Polygon([ls]))
+        @test GO.within(pt, prep_open_poly) == GO.within(pt, open_poly)
     end
 
     # Whole geometries decompose into per-curve parts whose offsets match the

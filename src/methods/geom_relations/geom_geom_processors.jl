@@ -67,8 +67,11 @@ function _point_polygon_process(
 )
     skip, returnval = _maybe_skip_disjoint_extents(point, polygon; in_allow, on_allow, out_allow, on_require = false, out_require = false, in_require = false)
     skip && return returnval
-    # Check interaction of geom with polygon's exterior boundary
-    ext_val = _point_ring_orientation(point, GI.getexterior(polygon); exact)
+    # Check interaction of geom with polygon's exterior boundary.  Prepared
+    # rings carry an edge tree (`_ring_edge_tree` returns `nothing` otherwise,
+    # which selects the plain sequential walk).
+    ext = GI.getexterior(polygon)
+    ext_val = _point_filled_curve_orientation(Planar(), point, _unwrap_prepared(ext), _ring_edge_tree(ext); exact)
     # If a point is outside, it isn't interacting with any holes
     ext_val == point_out && return out_allow
     # if a point is on an external boundary, it isn't interacting with any holes
@@ -76,7 +79,7 @@ function _point_polygon_process(
 
     # If geom is within the polygon, need to check interactions with holes
     for hole in GI.gethole(polygon)
-        hole_val = _point_ring_orientation(point, hole; exact)
+        hole_val = _point_filled_curve_orientation(Planar(), point, _unwrap_prepared(hole), _ring_edge_tree(hole); exact)
         # If a point in in a hole, it is outside of the polygon
         hole_val == point_in && return out_allow
         # If a point in on a hole edge, it is on the edge of the polygon
@@ -87,17 +90,12 @@ function _point_polygon_process(
     return in_allow
 end
 
-# Orientation of a point w.r.t. one ring: indexed when the ring carries an
-# edge-tree prep, sequential otherwise.  A line string's tree lacks the
-# implicit closing edge this walk needs, so it only applies when closed.
-function _point_ring_orientation(point, ring; exact)
+# The prepared edge tree of a ring, or `nothing` if it doesn't carry one.
+# Preparations are always built against materialized (closed) rings, so the
+# tree can be used without checking ring closure.
+function _ring_edge_tree(ring)
     prep = getprep(ring, AbstractEdgeTree)
-    raw = _unwrap_prepared(ring)
-    use_tree = !isnothing(prep) && (GI.trait(raw) isa GI.LinearRingTrait ||
-        equals(GI.getpoint(raw, 1), GI.getpoint(raw, GI.npoint(raw))))
-    return use_tree ?
-        _point_filled_curve_orientation(Planar(), point, raw, edge_tree(prep); exact) :
-        _point_filled_curve_orientation(Planar(), point, raw; exact)
+    return isnothing(prep) ? nothing : edge_tree(prep)
 end
 
 #=

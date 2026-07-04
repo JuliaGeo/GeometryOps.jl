@@ -37,10 +37,20 @@ cached extent.  Two consequences:
   that tears a geometry apart through GeoInterface accessors keeps its
   acceleration all the way down.
 
-Coordinate *number types are preserved* (a `Float32` polygon stays `Float32`);
-only the memory layout changes.  Measure (`m`) coordinates are dropped, like
-`GO.tuples`.  `Base.parent(prep)` returns the converted geometry — the
-original object is not kept.
+Coordinate *number types are preserved* (a `Float32` polygon stays `Float32`),
+and so are points already in a native representation (a curve of
+`UnitSphericalPoint`s keeps them); only the memory layout changes.  Measure
+(`m`) coordinates are dropped, like `GO.tuples`.  Materialized linear rings
+are always **closed** (the first point is repeated at the end if the input
+was unclosed), so preparations built against materialized storage never need
+to handle an implicit closing edge.  `Base.parent(prep)` returns the
+converted geometry — the original object is not kept.
+
+`prepare` takes the manifold as its first argument, like other GeometryOps
+functions: `prepare(geom)` means `prepare(Planar(), geom)`.  The manifold
+decides what gets built where — e.g. edge trees are a planar default —
+and flows into every preparation via [`buildprep`](@ref) and
+[`build_edge_tree`](@ref).
 
 ## Consuming preparations
 
@@ -66,12 +76,13 @@ idx = GO.getprep(ring, GO.EdgeTree)
 
 Every joint here is a function you can overload:
 
-- `buildprep(spec, geom)` — how a spec becomes a preparation.  Defaults to
-  `spec(geom)`, so types and closures already work.
-- `default_preparations(trait, geom)` — what `prepare` builds at each node of
-  the recursion when you don't say.
-- `build_edge_tree(backend, ring)` — how an edge tree is built for a ring; add
-  a method to plug in a new spatial tree backend.
+- `buildprep(manifold, spec, geom)` — how a spec becomes a preparation.
+  Defaults to `spec(geom)`, so types and closures already work; overload the
+  manifold-taking form for manifold-aware preparations.
+- `default_preparations(manifold, trait, geom)` — what `prepare` builds at
+  each node of the recursion when you don't say.
+- `build_edge_tree(manifold, backend, ring)` — how an edge tree is built for
+  a ring; add a method to plug in a new spatial tree backend.
 - `edge_tree(p)` — accessor consumers use, so a custom `AbstractEdgeTree`
   subtype may store its tree however it likes.
 
@@ -105,6 +116,11 @@ themselves `Prepared` nodes, so preparedness survives decomposition —
 implements GeoInterface by forwarding to that storage; `GI.extent` returns
 the cached extent; `Base.parent` returns the converted geometry (the
 original input object is not kept).
+
+Invariant consumers may rely on: every preparation stored in a `Prepared`
+node was built against the stored (materialized) geometry, and materialized
+linear rings are closed.  An edge tree retrieved from a prepared ring
+therefore indexes exactly the `GI.npoint(ring) - 1` explicit edges.
 """
 struct Prepared{T <: GI.AbstractGeometryTrait, G, P <: Tuple, E}
     geom::G
@@ -204,38 +220,48 @@ _unwrap_prepared(p::Prepared) = parent(p)
 # ## Building
 
 """
+    buildprep(manifold, spec, geom)
     buildprep(spec, geom)
 
 Build one preparation for `geom` from a spec.  Defaults to `spec(geom)`, so
 a preparation type (`EdgeTree`) or a closure both work as specs; overload to
-make other spec objects buildable.
+make other spec objects buildable.  Manifold-aware preparations overload the
+three-argument form — the two-argument form is the manifold-oblivious
+fallback it reaches by default.
 """
+buildprep(m::Manifold, spec, geom) = buildprep(spec, geom)
 buildprep(spec, geom) = spec(geom)
 
 """
-    default_preparations(trait, geom)
+    default_preparations(manifold, trait, geom)
 
 The tuple of preparation specs [`prepare`](@ref) builds at a node of the
-recursion when none are given: [`EdgeTree`](@ref) for linear rings and line
-strings, nothing else.  Overload on a trait to change the default.
+recursion when none are given: [`EdgeTree`](@ref) for curves (linear rings
+and line strings) on the planar manifold, nothing else.  Overload on the
+manifold and/or trait to change the default.
 """
-default_preparations(trait, geom) = ()
-default_preparations(::GI.LinearRingTrait, geom) = (EdgeTree,)
-default_preparations(::GI.LineStringTrait, geom) = (EdgeTree,)
+default_preparations(m::Manifold, trait, geom) = ()
+default_preparations(::Planar, ::GI.AbstractCurveTrait, geom) = (EdgeTree,)
 
 """
-    prepare(geom; preps = nothing)
-    prepare(p::Prepared; preps::Tuple = ())
+    prepare([manifold::Manifold], geom; preps = nothing)
+    prepare([manifold::Manifold], p::Prepared; preps::Tuple = ())
 
-Materialize `geom` into GeometryOps' native layout — coordinate-tuple rings,
-number type preserved, `m` coordinates dropped — and build a tree of
-[`Prepared`](@ref) nodes over it, one per level (ring, polygon, multi-geometry
-member), each with its own preparations and cached extent.
+Materialize `geom` into GeometryOps' native layout — coordinate-tuple rings
+(closed, number type preserved, `m` coordinates dropped) — and build a tree
+of [`Prepared`](@ref) nodes over it, one per level (ring, polygon,
+multi-geometry member), each with its own preparations and cached extent.
+
+The `manifold` defaults to `Planar()` and flows into every preparation —
+it decides both what gets built by default and how (see
+[`default_preparations`](@ref), [`buildprep`](@ref),
+[`build_edge_tree`](@ref)).
 
 `preps` controls what gets built at each node:
 
-- `nothing` (default): [`default_preparations`](@ref) at every node — rings
-  and line strings get a `NaturalIndex` [`EdgeTree`](@ref).
+- `nothing` (default): [`default_preparations`](@ref) at every node — on
+  `Planar()`, rings and line strings get a `NaturalIndex`
+  [`EdgeTree`](@ref).
 - a function `(trait, geom) -> Tuple` of specs, called at every node of the
   recursion.  [`EdgeTrees`](@ref) is a ready-made one for choosing the
   edge-tree backend: `prepare(poly; preps = EdgeTrees(HPR()))`.
@@ -254,75 +280,91 @@ prep = prepare(poly; preps = (t, g) -> ())            # extent caches only
 prep = prepare(poly; preps = (MyPrep,))               # custom prep on the top node
 ```
 """
-function prepare(geom; preps = nothing)
+prepare(geom; preps = nothing) = prepare(Planar(), geom; preps)
+
+function prepare(m::Manifold, geom; preps = nothing)
     trait = GI.trait(geom)
     trait isa GI.AbstractGeometryTrait || throw(ArgumentError(
         "`prepare` requires a geometry (an object with a GeoInterface geometry trait), got $(typeof(geom))"))
-    return _prepare(trait, geom, preps, GI.crs(geom), true)
+    return _prepare(m, trait, geom, preps, GI.crs(geom), true)
 end
 
-function prepare(p::Prepared; preps::Tuple = ())
+prepare(p::Prepared; preps::Tuple = ()) = prepare(Planar(), p; preps)
+
+function prepare(m::Manifold, p::Prepared; preps::Tuple = ())
     isempty(preps) && return p
-    built = map(spec -> buildprep(spec, p.geom), preps)
+    built = map(spec -> buildprep(m, spec, p.geom), preps)
     return Prepared(p.geom, (built..., p.preps...), p.extent)
 end
 
 # Which specs apply at a node: `nothing` = defaults everywhere; a tuple =
 # top node only; anything callable = `preps(trait, geom)` at every node.
-_node_preps(::Nothing, trait, geom, istop) = default_preparations(trait, geom)
-_node_preps(specs::Tuple, trait, geom, istop) = istop ? specs : default_preparations(trait, geom)
-_node_preps(f, trait, geom, istop) = f(trait, geom)
+_node_preps(m, ::Nothing, trait, geom, istop) = default_preparations(m, trait, geom)
+_node_preps(m, specs::Tuple, trait, geom, istop) = istop ? specs : default_preparations(m, trait, geom)
+_node_preps(m, f, trait, geom, istop) = f(trait, geom)
 
 # Build the preps for a node and close the `Prepared` shell over it.
-function _wrap(trait, geom, extent, preps, istop)
-    built = map(spec -> buildprep(spec, geom), _node_preps(preps, trait, geom, istop))
+function _wrap(m::Manifold, trait, geom, extent, preps, istop)
+    built = map(spec -> buildprep(m, spec, geom), _node_preps(m, preps, trait, geom, istop))
     return Prepared{typeof(trait), typeof(geom), typeof(built), typeof(extent)}(geom, built, extent)
 end
 
-# Leaf storage: coordinate tuples with the input's number types.  Measures are
-# dropped (a 3-tuple must mean x/y/z to GeoInterface), matching `GO.tuples`.
-function _tuple_points(geom)
-    if GI.is3d(geom)
+# Leaf storage: coordinate tuples with the input's number types — except
+# points already in a native representation (`UnitSphericalPoint`), which are
+# stored as-is.  Measures are dropped (a 3-tuple must mean x/y/z to
+# GeoInterface), matching `GO.tuples`.
+function _materialize_points(geom)
+    if GI.npoint(geom) > 0 && first(GI.getpoint(geom)) isa UnitSpherical.UnitSphericalPoint
+        return collect(GI.getpoint(geom))
+    elseif GI.is3d(geom)
         return [(GI.x(p), GI.y(p), GI.z(p)) for p in GI.getpoint(geom)]
     else
         return [(GI.x(p), GI.y(p)) for p in GI.getpoint(geom)]
     end
 end
 
-# Points: stored as a bare coordinate tuple.
-function _prepare(trait::GI.PointTrait, geom, preps, crs, istop)
-    pt = GI.is3d(geom) ? (GI.x(geom), GI.y(geom), GI.z(geom)) : (GI.x(geom), GI.y(geom))
-    ext = Extents.Extent(X = (pt[1], pt[1]), Y = (pt[2], pt[2]))
-    return _wrap(trait, pt, ext, preps, istop)
+# Points: stored as a bare coordinate tuple (or kept as a `UnitSphericalPoint`).
+function _prepare(m::Manifold, trait::GI.PointTrait, geom, preps, crs, istop)
+    pt = geom isa UnitSpherical.UnitSphericalPoint ? geom :
+        GI.is3d(geom) ? (GI.x(geom), GI.y(geom), GI.z(geom)) : (GI.x(geom), GI.y(geom))
+    ext = pt isa UnitSpherical.UnitSphericalPoint ?
+        Extents.Extent(X = (pt[1], pt[1]), Y = (pt[2], pt[2]), Z = (pt[3], pt[3])) :
+        Extents.Extent(X = (pt[1], pt[1]), Y = (pt[2], pt[2]))
+    return _wrap(m, trait, pt, ext, preps, istop)
 end
 
-# Curves and multipoints: a GeoInterface wrapper over tuple storage.
-function _prepare(trait::Union{GI.AbstractCurveTrait, GI.MultiPointTrait}, geom, preps, crs, istop)
-    pts = _tuple_points(geom)
+# Curves and multipoints: a GeoInterface wrapper over materialized point storage.
+function _prepare(m::Manifold, trait::Union{GI.AbstractCurveTrait, GI.MultiPointTrait}, geom, preps, crs, istop)
+    pts = _materialize_points(geom)
+    # Materialized rings are always closed — the invariant preparations and
+    # their consumers rely on (see the `Prepared` docstring).
+    if trait isa GI.LinearRingTrait && !isempty(pts) && first(pts) != last(pts)
+        push!(pts, first(pts))
+    end
     T = GI.geointerface_geomtype(trait)
     ext = GI.extent(T(pts; crs))
-    return _wrap(trait, T(pts; crs, extent = ext), ext, preps, istop)
+    return _wrap(m, trait, T(pts; crs, extent = ext), ext, preps, istop)
 end
 
 # Polygons: the children are rings *by construction*, even when the backend
 # types them as line strings (GeoJSON does) — materialize them as linear
 # rings so they pick up ring defaults like `EdgeTree`.
-function _prepare(trait::GI.PolygonTrait, geom, preps, crs, istop)
-    children = map(identity, [_prepare(GI.LinearRingTrait(), r, preps, crs, false) for r in GI.getring(geom)])
+function _prepare(m::Manifold, trait::GI.PolygonTrait, geom, preps, crs, istop)
+    children = map(identity, [_prepare(m, GI.LinearRingTrait(), r, preps, crs, false) for r in GI.getring(geom)])
     ext = isempty(children) ? GI.extent(geom) :
         mapreduce(c -> c.extent, Extents.union, children)
-    return _wrap(trait, GI.Polygon(children; crs, extent = ext), ext, preps, istop)
+    return _wrap(m, trait, GI.Polygon(children; crs, extent = ext), ext, preps, istop)
 end
 
 # Multi-geometries and collections: recurse, so the stored children are
 # themselves `Prepared`.  `map(identity, …)` tightens the child vector's
 # eltype (heterogeneous collections get a small union).
-function _prepare(trait::GI.AbstractGeometryTrait, geom, preps, crs, istop)
-    children = map(identity, [_prepare(GI.trait(c), c, preps, crs, false) for c in GI.getgeom(geom)])
+function _prepare(m::Manifold, trait::GI.AbstractGeometryTrait, geom, preps, crs, istop)
+    children = map(identity, [_prepare(m, GI.trait(c), c, preps, crs, false) for c in GI.getgeom(geom)])
     ext = isempty(children) ? GI.extent(geom) :
         mapreduce(c -> c.extent, Extents.union, children)
     T = GI.geointerface_geomtype(trait)
-    return _wrap(trait, T(children; crs, extent = ext), ext, preps, istop)
+    return _wrap(m, trait, T(children; crs, extent = ext), ext, preps, istop)
 end
 
 # ## Edge-tree preparations
@@ -345,12 +387,12 @@ The spatial index stored by an edge-tree preparation.  Defaults to `p.tree`.
 edge_tree(p::AbstractEdgeTree) = p.tree
 
 """
-    EdgeTree(curve; backend = NaturalIndex)
+    EdgeTree(curve; backend = NaturalIndex, manifold = Planar())
 
 A spatial index over the edge extents of a curve — the default
 [`AbstractEdgeTree`](@ref), built by `prepare` for every linear ring and line
-string.  The index space is trait-keyed as described in
-[`build_edge_tree`](@ref), which `backend` also selects the tree through:
+string on the planar manifold.  The index space is trait-keyed as described
+in [`build_edge_tree`](@ref), which `backend` also selects the tree through:
 `NaturalIndex` (default), `STRtree`, a `FlexibleRTrees` bulk-load algorithm,
 or any callable `curve -> spatial tree`.
 """
@@ -361,12 +403,16 @@ struct EdgeTree{T} <: AbstractEdgeTree
     EdgeTree{T}(tree) where T = new{T}(tree)
 end
 
-function EdgeTree(geom; backend = NaturalIndex)
+function EdgeTree(geom; backend = NaturalIndex, manifold::Manifold = Planar())
     GI.trait(geom) isa GI.AbstractCurveTrait || throw(ArgumentError(
         "`EdgeTree` requires a curve (linear ring or line string), got $(typeof(GI.trait(geom)))"))
-    tree = build_edge_tree(backend, geom)
+    tree = build_edge_tree(manifold, backend, geom)
     return EdgeTree{typeof(tree)}(tree)
 end
+
+# `prepare` reaches `EdgeTree` through this seam so the tree is built on the
+# manifold being prepared for, not the planar default.
+buildprep(m::Manifold, ::Type{EdgeTree}, geom) = EdgeTree(geom; manifold = m)
 
 """
     EdgeTrees(backend = NaturalIndex)
@@ -388,22 +434,27 @@ EdgeTrees() = EdgeTrees(NaturalIndex)
     trait isa Union{GI.LinearRingTrait, GI.LineStringTrait} ? (g -> EdgeTree(g; backend = s.backend),) : ()
 
 """
-    build_edge_tree(backend, curve)
+    build_edge_tree(manifold, backend, curve)
 
 Build a SpatialTreeInterface-compatible spatial index over the edges of
 `curve`.  Leaf `i` is the edge from point `i` to point `i + 1`; an unclosed
 *ring* gets one extra leaf for its implicit closing edge (last point back to
 point `1`), while a line string indexes exactly its consecutive point pairs.
-Consumers rely on this trait-keyed index space.
+Consumers rely on this trait-keyed index space.  (Curves inside a `Prepared`
+geometry never exercise the unclosed-ring case — materialized rings are
+closed — so it only matters for trees built over raw geometry.)
 
-Methods exist for `NaturalIndex`, `STRtree`, and `FlexibleRTrees` bulk-load
-algorithms; the fallback calls `backend(curve)`, so any callable works.
+Only `Planar()` methods exist so far, for `NaturalIndex`, `STRtree`, and
+`FlexibleRTrees` bulk-load algorithms; the fallback calls `backend(curve)`,
+so any callable works.  Spherical edge trees (arc-extent leaves over
+`UnitSphericalPoint` storage) are the intended extension point.
 """
-build_edge_tree(backend, curve) = backend(curve)
-build_edge_tree(::Type{<:NaturalIndex}, curve) = NaturalIndex(_edge_extents(curve))
-build_edge_tree(::Type{<:STRtree}, curve) = STRtree(_edge_extents(curve))
-build_edge_tree(alg::FlexibleRTrees.BulkLoadAlgorithm, curve) =
+build_edge_tree(::Planar, backend, curve) = backend(curve)
+build_edge_tree(::Planar, ::Type{<:NaturalIndex}, curve) = NaturalIndex(_edge_extents(curve))
+build_edge_tree(::Planar, ::Type{<:STRtree}, curve) = STRtree(_edge_extents(curve))
+build_edge_tree(::Planar, alg::FlexibleRTrees.BulkLoadAlgorithm, curve) =
     FlexibleRTrees.RTree(alg, _edge_extents(curve))
+build_edge_tree(backend, curve) = build_edge_tree(Planar(), backend, curve)
 
 # Extents of a curve's edges, in the trait-keyed index space described in the
 # `build_edge_tree` docstring: only an unclosed *ring* gets the extra
