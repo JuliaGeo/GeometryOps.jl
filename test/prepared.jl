@@ -410,6 +410,10 @@ end
     for acc in (GO.SingleNaturalTree(), GO.DoubleNaturalTree())
         @test GO.intersection_points(GO.FosterHormannClipping(GO.Planar(), acc), donut, blob) == expected
     end
+    # Every per-side policy shares the `TreePolicy` supertype, and side `b`
+    # must carry a tree-building one.
+    @test all(p isa GO.TreePolicy for p in (GO.IterateEdges(), GO.BuildTree(), GO.ReuseTree()))
+    @test_throws ArgumentError GO.TreeAccelerator(GO.ReuseTree(), GO.IterateEdges())
     @test GO.intersection_points(auto, prepare(donut), prepare(blob)) == expected
     @test GO.intersection_points(auto, prepare(donut), blob) == expected
 

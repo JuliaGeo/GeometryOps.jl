@@ -26,6 +26,15 @@ struct ThinnedDoubleNaturalTree <: IntersectionAccelerator end
 # ## Per-side tree policies
 
 """
+    TreePolicy
+
+Abstract supertype for the per-side policies of a [`TreeAccelerator`](@ref):
+[`IterateEdges`](@ref), [`BuildTree`](@ref), and [`ReuseTree`](@ref) each
+state where (or whether) one side's edge tree comes from.
+"""
+abstract type TreePolicy end
+
+"""
     IterateEdges()
 
 Per-side policy for a [`TreeAccelerator`](@ref): build no tree on this side.
@@ -33,7 +42,7 @@ Only meaningful for side `a`, whose edges the callback contract walks in
 `eachedge` order anyway; side `b` always needs an index to query into (for a
 tree-free `b`, use [`NestedLoop`](@ref) instead).
 """
-struct IterateEdges end
+struct IterateEdges <: TreePolicy end
 
 """
     BuildTree(backend = NaturalIndex)
@@ -43,7 +52,7 @@ tree over this side's edges with `backend` — `NaturalIndex`, `STRtree`, a
 `FlexibleRTrees` bulk-load algorithm, or any callable `edges -> tree` —
 ignoring any prepared tree the side may carry.
 """
-struct BuildTree{B}
+struct BuildTree{B} <: TreePolicy
     backend::B
 end
 BuildTree() = BuildTree(NaturalIndexing.NaturalIndex)
@@ -55,7 +64,7 @@ Per-side policy for a [`TreeAccelerator`](@ref): reuse the prepared edge
 tree of each curve on this side (`getprep(curve, AbstractEdgeTree)`),
 applying `fallback` to any curve that carries none.
 """
-struct ReuseTree{F}
+struct ReuseTree{F <: TreePolicy} <: TreePolicy
     fallback::F
 end
 ReuseTree() = ReuseTree(BuildTree())
@@ -75,12 +84,12 @@ The historical accelerator names construct the common combinations:
 - `SingleNaturalTree()` = `TreeAccelerator(IterateEdges(), ReuseTree())`
 - `DoubleNaturalTree()` = `TreeAccelerator(ReuseTree(), ReuseTree())`
 """
-struct TreeAccelerator{PA, PB} <: IntersectionAccelerator
+struct TreeAccelerator{PA <: TreePolicy, PB <: TreePolicy} <: IntersectionAccelerator
     a::PA
     b::PB
-    function TreeAccelerator(a::PA, b::PB) where {PA, PB}
+    function TreeAccelerator(a::PA, b::PB) where {PA <: TreePolicy, PB <: TreePolicy}
         b isa IterateEdges && throw(ArgumentError(
-            "side `b` of a `TreeAccelerator` must carry a tree policy; use `NestedLoop()` for tree-free iteration"))
+            "side `b` of a `TreeAccelerator` must carry a tree-building policy; use `NestedLoop()` for tree-free iteration"))
         return new{PA, PB}(a, b)
     end
 end
