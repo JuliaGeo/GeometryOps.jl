@@ -270,3 +270,37 @@ Decisions confirmed with review (2026-07-04): Themes A–D as written; old
 accelerator names kept as aliases; Theme E via curried constructors
 (`EdgeTree(HPR())`), no pair syntax; Theme G executed this round; Themes
 F(:588)/H deferred as above.
+
+## Results (2026-07-04, same day)
+
+Executed as planned, one commit per theme:
+
+- **A** — comment restores + register rewrites (comments only).
+- **D** — `prepare(m::Manifold, geom)`; materialization closes rings and
+  preserves `UnitSphericalPoint` storage; `default_preparations` /
+  `buildprep` / `build_edge_tree` take the manifold;
+  `_point_ring_orientation` deleted in favor of `_ring_edge_tree` at the
+  call sites.  Two tests asserting the *old* unclosed-ring behavior were
+  updated to assert the new invariant (a prepared unclosed ring is closed,
+  its tree reused; hand-assembling a polygon from an open prepared
+  linestring is out of contract).
+- **B** — `TreeAccelerator{PA, PB}` with `IterateEdges` / `BuildTree` /
+  `ReuseTree` per-side policies; `SingleNaturalTree()` /
+  `DoubleNaturalTree()` kept as constructors; `AutoAccelerator` is a
+  commented decision table and the both-prepared case now dual-traverses
+  reusing both trees.  Side `b` rejects `IterateEdges` at construction.
+- **C** — `_EdgeListCoords`/`to_edgelist` detour deleted (ephemeral path
+  materializes via `tuples` and reads in place); `_CurveTree`,
+  `_ConcatCoords`, `_single_tree_loop`/`_dual_tree_loop` names; barriers
+  kept and labeled as such; `_OffsetPush`/`_OffsetPairPush` callables
+  replace the offset-capturing closures; typed decomposition vector.
+- **G** — `@generated getprep` over the preps type-tuple (constant field
+  access or `nothing`); `_first_prep` deleted; `@inferred` tests for
+  hit/miss/abstract queries.
+- **E** — `EdgeTrees` deleted; `EdgeTree(backend)` curried spec;
+  `appliesto(spec, trait, istop)` protocol (default top-only, curves for
+  `EdgeTree`), defaults filling non-applicable nodes.
+
+Gates: prepared + polygon-clipping suites after each theme (9828
+assertions across the 3-implementation matrix), full `Pkg.test()` and the
+Natural Earth benchmark at the end.
