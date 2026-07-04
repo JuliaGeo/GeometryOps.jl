@@ -195,11 +195,14 @@ end
     # Plain geometries always miss, so consumer code needs no special-casing.
     @test getprep(GI.getexterior(square_hole), AbstractEdgeTree) === nothing
     @test getprep(square_hole, AbstractPreparation) === nothing
-    # Concrete, abstract-kind, and root-abstract queries all find the prep.
-    @test getprep(ring, EdgeTree) isa EdgeTree
-    @test getprep(ring, AbstractEdgeTree) isa EdgeTree
-    @test getprep(ring, AbstractPreparation) isa EdgeTree
-    @test getprep(ring, TagPrep) === nothing
+    # Concrete, abstract-kind, and root-abstract queries all find the prep —
+    # and resolve at compile time from the preparation tuple's type, so hits
+    # and misses both infer concretely.
+    @test @inferred(getprep(ring, EdgeTree)) isa EdgeTree
+    @test @inferred(getprep(ring, AbstractEdgeTree)) isa EdgeTree
+    @test @inferred(getprep(ring, AbstractPreparation)) isa EdgeTree
+    @test @inferred(getprep(ring, TagPrep)) === nothing
+    @test @inferred(GO.hasprep(ring, AbstractEdgeTree))
     # Edge trees live on rings, not on the polygon node.
     @test getprep(prep, AbstractEdgeTree) === nothing
     # get-or-else: `f` runs only on a miss.

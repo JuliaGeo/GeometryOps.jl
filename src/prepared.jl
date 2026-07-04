@@ -189,9 +189,16 @@ prep = getprep(ring, AbstractEdgeTree) do
     EdgeTree(ring)    # built ephemerally when `ring` wasn't prepared
 end
 ```
+
+The lookup is resolved at compile time from the preparation tuple's type —
+the generated body is a constant field access (or `nothing`), so there is
+no runtime search.
 """
 getprep(geom, ::Type{P}) where P = nothing
-getprep(p::Prepared, ::Type{P}) where P = _first_prep(P, p.preps)
+@generated function getprep(p::Prepared{T, G, PT, E}, ::Type{P}) where {T, G, PT, E, P}
+    i = findfirst(t -> t <: P, collect(PT.parameters))
+    return isnothing(i) ? :(nothing) : :(p.preps[$i])
+end
 
 function getprep(f, geom, ::Type{P}) where P
     prep = getprep(geom, P)
@@ -207,10 +214,6 @@ Whether `geom` stores a preparation that `isa P` — the boolean companion to
 live on the polygon's *rings*.
 """
 hasprep(geom, ::Type{P}) where P = !isnothing(getprep(geom, P))
-
-@inline _first_prep(::Type{P}, preps::Tuple) where P =
-    first(preps) isa P ? first(preps) : _first_prep(P, Base.tail(preps))
-@inline _first_prep(::Type{P}, ::Tuple{}) where P = nothing
 
 # Strip a `Prepared` shell (a no-op on anything else); hot kernels walk raw
 # point storage directly after retrieving the preparations they need.
