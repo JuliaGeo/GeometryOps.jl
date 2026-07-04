@@ -1,10 +1,10 @@
-# # Cap–extent intersection
+# # Cap and arc extents
 
 #=
-Conservative intersection between a [`SphericalCap`](@ref) and a 3D
-`Extents.Extent` in unit-spherical ℝ³ space, plus the cap's own bounding
-box, so caps can drive `SpatialTreeInterface` queries over trees whose
-leaves are boxes around spherical geometry (e.g. edge arcs).
+3D `Extents.Extent`s of spherical objects — caps and great-circle arcs —
+and conservative intersection between a [`SphericalCap`](@ref) and a 3D
+box in unit-spherical ℝ³ space, so caps can drive `SpatialTreeInterface`
+queries over trees whose leaves are boxes around spherical geometry.
 
 The cap is the closed region `{p : ‖p‖ = 1, p ⋅ center ≥ radiuslike}`,
 defined by the *stored* floats.  `Extents.intersects(cap, ext)` is a
@@ -56,6 +56,28 @@ function _cap_axis_bounds(ci::F, k::F) where F
     lo = -ci >= k ? -one(F) : max(muladd(ci, k, -s) - pad, -one(F))
     return (lo, hi)
 end
+
+"""
+    arc_extent(a, b)
+
+The 3D axis-aligned bounding box of the minor great-circle arc from `a`
+to `b` (unit vectors), as an `Extents.Extent{(:X, :Y, :Z)}`.
+Conservative: the endpoints' box is padded by the arc's sagitta
+`1 − cos(θ/2)` — the arc's maximum deviation from its chord — plus
+rounding slack.  Exactly antipodal endpoints (where the minor arc is
+ambiguous) get a pad of 1, covering every candidate arc.
+"""
+function arc_extent(a::UnitSphericalPoint, b::UnitSphericalPoint)
+    F = float(promote_type(eltype(a), eltype(b)))
+    d = clamp(F(a ⋅ b), -one(F), one(F))                        # cos θ
+    pad = one(F) - sqrt((one(F) + d) / 2) + 4 * sqrt(eps(F))    # sagitta + slack
+    return Extents.Extent(
+        X = (min(a[1], b[1]) - pad, max(a[1], b[1]) + pad),
+        Y = (min(a[2], b[2]) - pad, max(a[2], b[2]) + pad),
+        Z = (min(a[3], b[3]) - pad, max(a[3], b[3]) + pad),
+    )
+end
+arc_extent(a, b) = arc_extent(UnitSphericalPoint(a), UnitSphericalPoint(b))
 
 """
     Extents.intersects(cap::SphericalCap, ext::Extents.Extent)
@@ -123,7 +145,8 @@ arithmetic when inconclusive.  Floats convert to rationals exactly, so the
 fallback — and therefore the sign — is exact.
 =#
 
-_rat(x::Float64) = Rational{BigInt}(x)
+# Exact rational lift; `Float64(x)` is exact for the float types we take.
+_rat(x::Real) = Rational{BigInt}(Float64(x))
 
 # sign(s ⋅ c − k), exact.
 function _sign_dot3mk(sx, sy, sz, cx, cy, cz, k)

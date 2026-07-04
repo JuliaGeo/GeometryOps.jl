@@ -92,25 +92,126 @@ end
 # That will require a minimum bounding circle implementation.
 # TODO: add implementations for multitraits based on this
 
-# TODO: this returns an approximately antipodal point...
+#=
+## Cap predicates
 
-# TODO: exact-predicate intersection
-# This is all inexact and thus subject to floating point error
+The cap is the closed region `{p : ‖p‖ = 1, p ⋅ c ≥ k}` for the stored
+center `c` and `k = radiuslike` — a geodesic ball of angular radius
+`arccos(k/‖c‖)` around `c/‖c‖`.  The predicates decide relations between
+these regions exactly: a float evaluation with a `1e-7` screen (two
+orders above the worst rounding error of these expressions, which the
+`√` of cancellation-prone products caps at ~4e-8), then exact
+`Rational{BigInt}` case analysis on the same closed-form conditions.
+Everything is closed-set — tangency counts as intersecting/contained,
+matching S2's `S2Cap` conventions.
+
+With `Sx = cx ⋅ cx`, `D = cx ⋅ cy`, and radii `rᵢ = arccos(kᵢ/‖cᵢ‖)`:
+- empty(X) ⟺ kx > ‖cx‖;  full(X) ⟺ kx ≤ −‖cx‖
+- intersects(X, Y) ⟺ d ≤ rx + ry: always true when `rx + ry ≥ π`
+  (⟺ kx‖cy‖ + ky‖cx‖ ≤ 0), else
+  `(D − kx ky) + √((Sx − kx²)(Sy − ky²)) ≥ 0`.
+- contains(B, S) ⟺ d + rs ≤ rb: needs `D + ks‖cb‖ ≥ 0` (else
+  `d + rs > π`) and `D ks − kb Ss ≥ √((Sb Ss − D²)(Ss − ks²))`.
+=#
+
+const _CAP_SCREEN_TOL = 1e-7
+
 function _intersects(x::SphericalCap, y::SphericalCap)
-    spherical_distance(x.point, y.point) <= x.radius + y.radius
+    cx, cy = Float64.(Tuple(x.point)), Float64.(Tuple(y.point))
+    kx, ky = Float64(x.radiuslike), Float64(y.radiuslike)
+    Sx, Sy = sum(abs2, cx), sum(abs2, cy)
+    nx, ny = sqrt(Sx), sqrt(Sy)
+    τ = _CAP_SCREEN_TOL
+    if kx < nx - τ && ky < ny - τ               # both certainly nonempty
+        g = kx * ny + ky * nx
+        g < -τ && return true                   # rx + ry certainly > π
+        if g > τ
+            D = sum(cx .* cy)
+            e = (D - kx * ky) + sqrt(max((Sx - kx^2) * (Sy - ky^2), 0.0))
+            abs(e) > τ && return e > 0
+        end
+    elseif kx > nx + τ || ky > ny + τ
+        return false                            # certainly empty
+    end
+    return _intersects_exact(x, y)
 end
 
 _disjoint(x::SphericalCap, y::SphericalCap) = !_intersects(x, y)
 
-function _contains(big::SphericalCap, small::SphericalCap)
-    dist = spherical_distance(big.point, small.point)
-    # small circle fits in big circle; `<=` so internally-tangent small
-    # caps count as contained, matching the point overload below and
-    # S2's `S2Cap::Contains(const S2Cap&)` convention.
-    return dist + small.radius <= big.radius
+function _intersects_exact(x::SphericalCap, y::SphericalCap)
+    cx, cy = _rat.(Tuple(x.point)), _rat.(Tuple(y.point))
+    kx, ky = _rat(x.radiuslike), _rat(y.radiuslike)
+    Sx, Sy = sum(abs2, cx), sum(abs2, cy)
+    (kx > 0 && kx^2 > Sx) && return false       # X empty
+    (ky > 0 && ky^2 > Sy) && return false       # Y empty
+    _sign_sqrtpair(kx, Sy, ky, Sx) <= 0 && return true   # rx + ry ≥ π
+    G = sum(cx .* cy) - kx * ky
+    G >= 0 && return true
+    return (Sx - kx^2) * (Sy - ky^2) >= G^2
 end
-function _contains(cap::SphericalCap, point::UnitSphericalPoint)
-    spherical_distance(cap.point, point) <= cap.radius
+
+function _contains(big::SphericalCap, small::SphericalCap)
+    cb, cs = Float64.(Tuple(big.point)), Float64.(Tuple(small.point))
+    kb, ks = Float64(big.radiuslike), Float64(small.radiuslike)
+    Sb, Ss = sum(abs2, cb), sum(abs2, cs)
+    nb, ns = sqrt(Sb), sqrt(Ss)
+    τ = _CAP_SCREEN_TOL
+    if ks > ns + τ
+        return true                             # small certainly empty
+    elseif ks < ns - τ && abs(kb) < nb - τ      # small nonempty, big neither empty nor full
+        D = sum(cb .* cs)
+        g = D + ks * nb
+        g < -τ && return false                  # d + rs certainly > π
+        if g > τ
+            H = D * ks - kb * Ss
+            e = H - sqrt(max((Sb * Ss - D^2) * (Ss - ks^2), 0.0))
+            abs(e) > τ && return e > 0
+        end
+    end
+    return _contains_exact(big, small)
+end
+
+function _contains_exact(big::SphericalCap, small::SphericalCap)
+    cb, cs = _rat.(Tuple(big.point)), _rat.(Tuple(small.point))
+    kb, ks = _rat(big.radiuslike), _rat(small.radiuslike)
+    Sb, Ss = sum(abs2, cb), sum(abs2, cs)
+    (ks > 0 && ks^2 > Ss) && return true        # small empty
+    (kb > 0 && kb^2 > Sb) && return false       # big empty
+    (kb <= 0 && kb^2 >= Sb) && return true      # big is the whole sphere
+    D = sum(cb .* cs)
+    _sign_a_plus_bsqrt(D, ks, Sb) < 0 && return false    # d + rs > π
+    H = D * ks - kb * Ss
+    H < 0 && return false
+    return H^2 >= (Sb * Ss - D^2) * (Ss - ks^2)
+end
+
+# Half-space membership of the point taken as-is (its norm is not
+# checked), exact w.r.t. the stored floats.
+_contains(cap::SphericalCap, point::UnitSphericalPoint) =
+    _sign_dot3mk(Float64(point[1]), Float64(point[2]), Float64(point[3]),
+        Float64(cap.point[1]), Float64(cap.point[2]), Float64(cap.point[3]),
+        Float64(cap.radiuslike)) >= 0
+
+# sign(u√A + v√B) for A, B ≥ 0 — exact on rationals.
+function _sign_sqrtpair(u, A, v, B)
+    su = (u == 0 || A == 0) ? 0 : Int(sign(u))
+    sv = (v == 0 || B == 0) ? 0 : Int(sign(v))
+    su == 0 && return sv
+    sv == 0 && return su
+    su == sv && return su
+    c = u^2 * A - v^2 * B
+    return c == 0 ? 0 : (c > 0 ? su : sv)
+end
+
+# sign(a + b√S) for S ≥ 0 — exact on rationals.
+function _sign_a_plus_bsqrt(a, b, S)
+    sb = (b == 0 || S == 0) ? 0 : Int(sign(b))
+    sa = Int(sign(a))
+    sb == 0 && return sa
+    sa == 0 && return sb
+    sa == sb && return sa
+    c = a^2 - b^2 * S
+    return c == 0 ? 0 : (c > 0 ? sa : sb)
 end
 
 #Comment by asinghvi: this could be transformed to GO.union
