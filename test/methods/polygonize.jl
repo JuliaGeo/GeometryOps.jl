@@ -94,6 +94,12 @@ end
         data_mp = polygonize(data)
         shifted = GO.transform(p -> p .- evil.offsets, evil_mp)
         @test_broken GO.equals(data_mp, shifted)
+
+        # Regression test for boundary handling with *different* per-axis offsets and
+        # true pixels touching the array edges (used to throw a `BoundsError`).
+        edgy = OffsetArrays.Origin(-100, -50)(fill(true, 5, 7))
+        edgy_mp = @test_nowarn polygonize(edgy)
+        @test GO.equals(edgy_mp, polygonize(axes(edgy, 1), axes(edgy, 2), parent(edgy)))
     end
     # These use offset, non-square lookups so that the result only matches
     # `polygonize(xs, ys, data)` if the extension actually uses the X/Y lookup

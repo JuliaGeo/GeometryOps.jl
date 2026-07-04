@@ -377,9 +377,13 @@ end
 
 function _pixel_edges(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A) where T<:Tuple
     edges = Dict{T,Tuple{T,T}}()
-    # First we collect all the edges around target pixels
-    fi, fj = map(first, axes(A))
-    li, lj = map(last, axes(A))
+    # First we collect all the edges around target pixels.
+    # `i` indexes rows (axis 1), `j` indexes columns (axis 2); name the boundary
+    # indices accordingly so the neighbour guards below match the axis they check
+    # (previously the first-row/first-column indices were swapped, which threw a
+    # `BoundsError` for arrays whose two axes start at different offsets).
+    firstrow, firstcol = map(first, axes(A))
+    lastrow, lastcol = map(last, axes(A))
     # `xs` and `ys` are always 1-based bound vectors, while `A` may have offset
     # axes (e.g. an `OffsetArray`), so index `A` by its native axes but index the
     # bound vectors positionally.  `length(xs) == size(A, 1)` is guaranteed by the
@@ -392,10 +396,10 @@ function _pixel_edges(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A) where 
                 x1, x2 = xs[xi]
                 # We check the Von Neumann neighborhood to
                 # decide what edges are needed, if any.
-                (j == fi || !f(A[i, j-1])) && update_edge!(edges, (x1, y1), (x2, y1)) # S
-                (i == fj || !f(A[i-1, j])) && update_edge!(edges, (x1, y2), (x1, y1)) # W
-                (j == lj || !f(A[i, j+1])) && update_edge!(edges, (x2, y2), (x1, y2)) # N
-                (i == li || !f(A[i+1, j])) && update_edge!(edges, (x2, y1), (x2, y2)) # E
+                (j == firstcol || !f(A[i, j-1])) && update_edge!(edges, (x1, y1), (x2, y1)) # S
+                (i == firstrow || !f(A[i-1, j])) && update_edge!(edges, (x1, y2), (x1, y1)) # W
+                (j == lastcol  || !f(A[i, j+1])) && update_edge!(edges, (x2, y2), (x1, y2)) # N
+                (i == lastrow  || !f(A[i+1, j])) && update_edge!(edges, (x2, y1), (x2, y2)) # E
             end
         end
     end
