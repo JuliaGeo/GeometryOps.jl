@@ -37,8 +37,8 @@ const REPS   = 3
 # build a `Prepared` wrapper whose edge trees use the named tree backend.
 # `NaturalIndex` is the default preparation, so `GO.prepare(p)` selects it.
 prepare_naturalindex(p) = GO.prepare(p)
-prepare_unsorted(p)     = GO.prepare(p; preps = GO.EdgeTrees(Unsorted()))
-prepare_hpr(p)          = GO.prepare(p; preps = GO.EdgeTrees(HPR()))
+prepare_unsorted(p)     = GO.prepare(p; preps = (GO.EdgeTree(Unsorted()),))
+prepare_hpr(p)          = GO.prepare(p; preps = (GO.EdgeTree(HPR()),))
 
 const PREP_BACKENDS = [
     ("NaturalIndex", prepare_naturalindex),

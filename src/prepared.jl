@@ -1,6 +1,6 @@
 # # Prepared geometry
 
-export prepare, Prepared, getprep, hasprep, EdgeTree, EdgeTrees
+export prepare, Prepared, getprep, hasprep, EdgeTree
 
 #=
 ## What is prepared geometry?
@@ -79,6 +79,9 @@ Every joint here is a function you can overload:
 - `buildprep(manifold, spec, geom)` — how a spec becomes a preparation.
   Defaults to `spec(geom)`, so types and closures already work; overload the
   manifold-taking form for manifold-aware preparations.
+- `appliesto(spec, trait, istop)` — where a spec given in the `preps` tuple
+  applies during the recursion (default: the top node only; `EdgeTree`
+  declares itself for every curve).
 - `default_preparations(manifold, trait, geom)` — what `prepare` builds at
   each node of the recursion when you don't say.
 - `build_edge_tree(manifold, backend, ring)` — how an edge tree is built for
@@ -265,22 +268,24 @@ it decides both what gets built by default and how (see
 - `nothing` (default): [`default_preparations`](@ref) at every node — on
   `Planar()`, rings and line strings get a `NaturalIndex`
   [`EdgeTree`](@ref).
+- a tuple of specs: each spec applies at the nodes it declares via
+  [`appliesto`](@ref) — the top node only by default, every curve for
+  `EdgeTree` (bare or curried, `EdgeTree(HPR())` picking the backend) —
+  and nodes where no given spec applies still get defaults.  Each spec is
+  built via [`buildprep`](@ref), so preparation types and closures both
+  work.
 - a function `(trait, geom) -> Tuple` of specs, called at every node of the
-  recursion.  [`EdgeTrees`](@ref) is a ready-made one for choosing the
-  edge-tree backend: `prepare(poly; preps = EdgeTrees(HPR()))`.
-- a tuple of specs: applied to the **top node only** (children still get
-  defaults).  Each spec is built via [`buildprep`](@ref), so preparation
-  types and closures both work.
+  recursion, overriding defaults everywhere.
 
 On an already-`Prepared` input, build the given `preps` tuple against the
 stored geometry and prepend them (so newly added preparations win
 [`getprep`](@ref) lookups); nothing is re-materialized.
 
 ```julia
-prep = prepare(poly)                                  # defaults
-prep = prepare(poly; preps = EdgeTrees(STRtree))      # pick the tree backend
-prep = prepare(poly; preps = (t, g) -> ())            # extent caches only
-prep = prepare(poly; preps = (MyPrep,))               # custom prep on the top node
+prep = prepare(poly)                                   # defaults
+prep = prepare(poly; preps = (EdgeTree(STRtree),))     # pick the tree backend
+prep = prepare(poly; preps = (t, g) -> ())             # extent caches only
+prep = prepare(poly; preps = (MyPrep,))                # custom prep on the top node
 ```
 """
 prepare(geom; preps = nothing) = prepare(Planar(), geom; preps)
@@ -301,10 +306,22 @@ function prepare(m::Manifold, p::Prepared; preps::Tuple = ())
 end
 
 # Which specs apply at a node: `nothing` = defaults everywhere; a tuple =
-# top node only; anything callable = `preps(trait, geom)` at every node.
+# each spec where it declares itself via `appliesto`, with defaults filling
+# the nodes where none applies; anything callable = `preps(trait, geom)` at
+# every node.
 _node_preps(m, ::Nothing, trait, geom, istop) = default_preparations(m, trait, geom)
-_node_preps(m, specs::Tuple, trait, geom, istop) = istop ? specs : default_preparations(m, trait, geom)
+function _node_preps(m, specs::Tuple, trait, geom, istop)
+    applicable = _filter_specs(specs, trait, istop)
+    return isempty(applicable) ? default_preparations(m, trait, geom) : applicable
+end
 _node_preps(m, f, trait, geom, istop) = f(trait, geom)
+
+# Tuple-recursive filter, so the applicable-spec tuple stays concretely typed.
+_filter_specs(specs::Tuple, trait, istop) =
+    appliesto(first(specs), trait, istop) ?
+        (first(specs), _filter_specs(Base.tail(specs), trait, istop)...) :
+        _filter_specs(Base.tail(specs), trait, istop)
+_filter_specs(::Tuple{}, trait, istop) = ()
 
 # Build the preps for a node and close the `Prepared` shell over it.
 function _wrap(m::Manifold, trait, geom, extent, preps, istop)
@@ -418,23 +435,39 @@ end
 buildprep(m::Manifold, ::Type{EdgeTree}, geom) = EdgeTree(geom; manifold = m)
 
 """
-    EdgeTrees(backend = NaturalIndex)
+    EdgeTree(backend)
 
-A ready-made `preps` selector for [`prepare`](@ref) that puts an
-[`EdgeTree`](@ref) with the given `backend` on every linear ring and line
-string:
+The curried spec form: applying the `EdgeTree` constructor to a backend
+(instead of a geometry) returns a spec for [`prepare`](@ref)'s `preps`
+tuple.  Like the bare `EdgeTree` type, it applies to every curve of the
+recursion (see [`appliesto`](@ref)), building
+`EdgeTree(curve; backend, manifold)` there:
 
 ```julia
-prep = prepare(poly; preps = EdgeTrees(STRtree))
-prep = prepare(poly; preps = EdgeTrees(FlexibleRTrees.HPR()))
+prep = prepare(poly; preps = (EdgeTree(STRtree),))
+prep = prepare(poly; preps = (EdgeTree(FlexibleRTrees.HPR()),))
 ```
 """
-struct EdgeTrees{B}
+EdgeTree(backend::Union{Base.Callable, FlexibleRTrees.BulkLoadAlgorithm}) = _EdgeTreeSpec(backend)
+
+struct _EdgeTreeSpec{B}
     backend::B
 end
-EdgeTrees() = EdgeTrees(NaturalIndex)
-(s::EdgeTrees)(trait, geom) =
-    trait isa Union{GI.LinearRingTrait, GI.LineStringTrait} ? (g -> EdgeTree(g; backend = s.backend),) : ()
+buildprep(m::Manifold, s::_EdgeTreeSpec, geom) = EdgeTree(geom; backend = s.backend, manifold = m)
+
+"""
+    appliesto(spec, trait, istop)::Bool
+
+Where a spec given in `prepare`'s `preps` tuple applies during the
+recursion.  The fallback is the top node only, so an unadorned custom spec
+means "this preparation, on the geometry I called `prepare` on".
+`EdgeTree` (bare or curried) declares itself for every curve instead.
+Nodes where no given spec applies fall back to
+[`default_preparations`](@ref).
+"""
+appliesto(spec, trait, istop) = istop
+appliesto(::Type{EdgeTree}, trait, istop) = trait isa GI.AbstractCurveTrait
+appliesto(::_EdgeTreeSpec, trait, istop) = trait isa GI.AbstractCurveTrait
 
 """
     build_edge_tree(manifold, backend, curve)

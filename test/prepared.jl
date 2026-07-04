@@ -2,7 +2,7 @@ using Test
 
 import GeoInterface as GI
 import GeometryOps as GO
-import GeometryOps: prepare, Prepared, getprep, EdgeTree, EdgeTrees, AbstractEdgeTree,
+import GeometryOps: prepare, Prepared, getprep, EdgeTree, AbstractEdgeTree,
     AbstractPreparation, build_edge_tree, edge_tree
 import GeometryOps.NaturalIndexing: NaturalIndex
 import GeometryOps.SpatialTreeInterface: FlatNoTree
@@ -216,7 +216,8 @@ end
     @test getprep(prep2, AbstractPreparation) isa TagPrep  # prepended ⇒ found first
     @test prepare(prep) === prep  # no-op add returns the same object
 
-    # A spec tuple applies to the top node only; children still get defaults.
+    # A spec without an `appliesto` declaration applies to the top node only;
+    # nodes where no given spec applies still get defaults.
     prep3 = prepare(square_hole; preps = (g -> TagPrep(:spec),))
     @test getprep(prep3, TagPrep) == TagPrep(:spec)
     @test getprep(GI.getexterior(prep3), AbstractEdgeTree) isa EdgeTree
@@ -241,12 +242,14 @@ end
     flat = EdgeTree(ring; backend = r -> FlatNoTree(GO._edge_extents(r)))
     @test edge_tree(flat) isa FlatNoTree
     @test_throws ArgumentError EdgeTree(square_hole)
-    # The `EdgeTrees` selector: edge trees on rings, nothing elsewhere.
-    sel = EdgeTrees(GO.STRtree)
-    @test length(sel(GI.LinearRingTrait(), ring)) == 1
-    @test sel(GI.PolygonTrait(), square_hole) === ()
-    prep = prepare(square_hole; preps = sel)
+    # The curried spec form: `EdgeTree(backend)` applies to every curve of
+    # the recursion and nowhere else.
+    sel = EdgeTree(GO.STRtree)
+    @test GO.appliesto(sel, GI.LinearRingTrait(), false)
+    @test !GO.appliesto(sel, GI.PolygonTrait(), true)
+    prep = prepare(square_hole; preps = (sel,))
     @test edge_tree(getprep(GI.getexterior(prep), AbstractEdgeTree)) isa GO.STRtree
+    @test prep.preps === ()   # the polygon node itself gets no prep from it
     # Unclosed rings index the implicit closing edge.
     @test length(GO._edge_extents(GI.getexterior(square_hole))) == 4
     @test length(GO._edge_extents(GI.getexterior(square_hole_unclosed))) == 4
@@ -255,8 +258,8 @@ end
 @testset "Indexed point-in-polygon ≡ plain point-in-polygon" begin
     backends = (
         "NaturalIndex" => poly -> prepare(poly),
-        "STRtree" => poly -> prepare(poly; preps = EdgeTrees(GO.STRtree)),
-        "FlatNoTree" => poly -> prepare(poly; preps = EdgeTrees(r -> FlatNoTree(GO._edge_extents(r)))),
+        "STRtree" => poly -> prepare(poly; preps = (EdgeTree(GO.STRtree),)),
+        "FlatNoTree" => poly -> prepare(poly; preps = (EdgeTree(r -> FlatNoTree(GO._edge_extents(r))),)),
     )
     polys = (
         "square with hole" => square_hole,
@@ -317,7 +320,7 @@ end
     end
     # Any SpatialTreeInterface tree is reused — including one that traverses
     # out of input order, like HPR (a stand-in for e.g. a foreign-library tree).
-    hpr_ring = GI.getexterior(prepare(donut; preps = EdgeTrees(GO.FlexibleRTrees.HPR())))
+    hpr_ring = GI.getexterior(prepare(donut; preps = (EdgeTree(GO.FlexibleRTrees.HPR()),)))
     tree_hpr, _, _ = GO._edge_tree_and_coords(hpr_ring, Float64)
     @test tree_hpr isa GO.FlexibleRTrees.RTree
     # Unclosed input rings are closed during materialization, so a prepared
@@ -335,7 +338,7 @@ end
     auto = GO.FosterHormannClipping(GO.Planar(), GO.AutoAccelerator())
     plain_alg = GO.FosterHormannClipping()   # NestedLoop ground truth
     prep_nat = prepare
-    prep_hpr = g -> prepare(g; preps = EdgeTrees(GO.FlexibleRTrees.HPR()))
+    prep_hpr = g -> prepare(g; preps = (EdgeTree(GO.FlexibleRTrees.HPR()),))
     for (pa, pb) in ((donut, blob), (donut, small), (small, blob))
         for prepper in (prep_nat, prep_hpr)
             for f in (GO.intersection, GO.union, GO.difference)
