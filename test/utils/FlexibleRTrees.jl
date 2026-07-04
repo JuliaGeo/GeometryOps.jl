@@ -23,7 +23,7 @@ brute_force(ext, extents) = findall(e -> Extents.intersects(ext, e), extents)
 grow(ext, d) = Extents.buffer(ext, NamedTuple{keys(ext)}(ntuple(_ -> d, length(keys(ext)))))
 
 @testset "query ≡ brute force ($(N)D, $alg, n = $n)" for
-        N in (2, 3),
+        N in (1, 2, 3, 4),
         alg in (STR(), HPR(), Unsorted()),
         n in (1, 5, 16, 17, 100, 256, 1000)
     rng = Xoshiro(hash((N, n)))
@@ -57,6 +57,12 @@ end
     tiny = RTree(STR(), extents[1:3])
     @test typeof(tiny) === typeof(tree)
 
+    # Construction and query are just as inferrable in 3D.
+    extents3 = random_extents(rng, 100, 3)
+    tree3 = @inferred RTree(STR(), extents3)
+    @inferred RTree(HPR(), extents3)
+    @inferred query(tree3, Extents.Extent(X = (0.2, 0.4), Y = (0.2, 0.4), Z = (0.2, 0.4)))
+
     # Geometries as input work through GI.extent.
     lines = GO.to_edgelist(GI.LinearRing([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]))
     gtree = RTree(HPR(), lines)
@@ -75,13 +81,22 @@ end
     @test keys1 == [0, 1, 2, 3]
     # In any dimension: the curve visits every grid cell exactly once
     # (bijectivity), and consecutive cells are adjacent (unit Manhattan step).
-    for (N, bits) in ((2, 4), (3, 2))
+    for (N, bits) in ((1, 6), (2, 4), (3, 2), (4, 2))
         side = 2^bits
         cells = vec(collect(Iterators.product(ntuple(_ -> 0:(side - 1), N)...)))
         keys = [hilbert_key(UInt32.(c), bits) for c in cells]
         @test allunique(keys)
         path = cells[sortperm(keys)]
         @test all(sum(abs.(path[i + 1] .- path[i])) == 1 for i in 1:(length(path) - 1))
+    end
+end
+
+@testset "NaturalIndex is dimension-agnostic too" begin
+    rng = Xoshiro(11)
+    extents = random_extents(rng, 300, 3)
+    idx = GO.NaturalIndexing.NaturalIndex(extents)
+    for q in random_extents(rng, 20, 3)
+        @test STI.query(idx, q) == brute_force(q, extents)
     end
 end
 

@@ -45,7 +45,7 @@ using StaticArrays: MVector
 
 using ..SpatialTreeInterface
 import ..SpatialTreeInterface: isspatialtree, isleaf, nchild, getchild,
-    child_indices_extents, node_extent, depth_first_search
+    child_indices_extents, node_extent
 
 export RTree, BulkLoadAlgorithm, STR, HPR, Unsorted, query
 
@@ -260,20 +260,10 @@ getchild(tree::RTree, i) = getchild(_rootnode(tree), i)
 child_indices_extents(tree::RTree) = child_indices_extents(_rootnode(tree))
 
 # ## Queries
-
-"""
-    query(tree::RTree, extent_or_geom)
-
-Indices (into the collection the tree was built from) of every leaf whose
-extent intersects the given extent — or the extent of the given geometry —
-in ascending order.
-"""
-query(tree::RTree, ext::Extents.Extent) =
-    sort!(depth_first_search(Base.Fix1(Extents.intersects, ext), tree))
-function query(tree::RTree, geom)
-    ext = GI.extent(geom)
-    isnothing(ext) && throw(ArgumentError("no extent found on $(typeof(geom))"))
-    return query(tree, ext)
-end
+#
+# `query` here is SpatialTreeInterface's, re-exported: its
+# `sanitize_predicate` normalization already covers extents, geometries,
+# callables, and anything with a `sanitize_predicate` method (e.g.
+# `UnitSpherical.SphericalCap`).
 
 end # module FlexibleRTrees
