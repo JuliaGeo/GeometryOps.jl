@@ -304,3 +304,21 @@ Executed as planned, one commit per theme:
 Gates: prepared + polygon-clipping suites after each theme (9828
 assertions across the 3-implementation matrix), full `Pkg.test()` and the
 Natural Earth benchmark at the end.
+
+All gates passed:
+
+- Full `Pkg.test()` green (Prepared geometry 330, Polygon Clipping 12 691,
+  everything else unchanged).
+- Clipping micro-benchmark (1280-vert holed donut × 1024-vert blob,
+  `intersection_points` on whole polygons): NestedLoop 9 588 µs;
+  DoubleNaturalTree plain 40.9 µs; DoubleNaturalTree prepared **15.0 µs**;
+  Auto on prepared inputs 14.3 µs — the Theme B change makes
+  `AutoAccelerator` hit the dual-reuse path, matching the explicit dual
+  accelerator.  Prepared:plain-tree ratio ≈ 2.7×, same shape as the
+  recorded 22.8 µs vs 70 µs (absolute numbers machine-load dependent).
+  Boolean intersection: prepared 446 µs ≤ plain 465 µs; results verified
+  equal against NestedLoop ground truth.
+- Natural Earth 110m PIP: NaturalIndex 4.6× whole-dataset vs plain
+  (52 ns/q prepared vs 239 ns/q plain), 21× on the 100–1k bucket,
+  break-even ≈ 12 queries/polygon; all backends agree on all 288 polygons;
+  no backend slower than plain.  In line with the recorded 5.0× / 30×.
