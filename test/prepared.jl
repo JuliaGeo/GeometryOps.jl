@@ -311,25 +311,24 @@ end
     # A prepared ring's edge tree is reused as-is (indices match `eachedge`),
     # and coordinates read from ring storage match the materialized edge list.
     prep_ring = GI.getexterior(prepare(donut))
-    tree, coords, n = GO._edge_tree_and_coords(prep_ring, Float64)
-    @test tree === edge_tree(getprep(prep_ring, AbstractEdgeTree))   # reused, not rebuilt
+    ct, n = GO._curve_trees(prep_ring)
+    @test only(ct).tree === edge_tree(getprep(prep_ring, AbstractEdgeTree))   # reused, not rebuilt
     edges = GO.to_edgelist(GI.getexterior(donut), Float64)
     @test n == length(edges)
     for j in (1, 2, n)
-        @test coords(j) == Tuple(edges[j].geom)
+        @test GO._edge_coords(ct, j, Float64) == Tuple(edges[j].geom)
     end
     # Any SpatialTreeInterface tree is reused — including one that traverses
     # out of input order, like HPR (a stand-in for e.g. a foreign-library tree).
     hpr_ring = GI.getexterior(prepare(donut; preps = (EdgeTree(GO.FlexibleRTrees.HPR()),)))
-    tree_hpr, _, _ = GO._edge_tree_and_coords(hpr_ring, Float64)
-    @test tree_hpr isa GO.FlexibleRTrees.RTree
+    @test only(first(GO._curve_trees(hpr_ring))).tree isa GO.FlexibleRTrees.RTree
     # Unclosed input rings are closed during materialization, so a prepared
     # ring's tree always matches the `eachedge` space and is reused as-is —
     # the closing edge is explicit, never implicit.
     unclosed_ring = GI.getexterior(prepare(GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]])))
     @test GI.npoint(unclosed_ring) == 5   # the first point was repeated at the end
-    tree_uc, _, n_uc = GO._edge_tree_and_coords(unclosed_ring, Float64)
-    @test tree_uc === edge_tree(getprep(unclosed_ring, AbstractEdgeTree))   # reused
+    ct_uc, n_uc = GO._curve_trees(unclosed_ring)
+    @test only(ct_uc).tree === edge_tree(getprep(unclosed_ring, AbstractEdgeTree))   # reused
     @test n_uc == 4   # the closing edge is an explicit `eachedge` edge now
 
     # Prepared clipping ≡ plain nested-loop clipping, for every combination of
@@ -375,11 +374,11 @@ end
     ls = GI.LineString([(0.0, 3.0), (4.0, 8.0), (8.0, 2.0), (12.0, 7.0)])
     pls = prepare(ls)
     @test GO.hasprep(pls, AbstractEdgeTree)
-    tr, coords, n = GO._edge_tree_and_coords(pls, Float64)
-    @test tr === edge_tree(getprep(pls, AbstractEdgeTree))
+    ct, n = GO._curve_trees(pls)
+    @test only(ct).tree === edge_tree(getprep(pls, AbstractEdgeTree))
     @test n == 3
     ls_edges = GO.to_edgelist(ls, Float64)
-    @test all(coords(j) == Tuple(ls_edges[j].geom) for j in 1:n)
+    @test all(GO._edge_coords(ct, j, Float64) == Tuple(ls_edges[j].geom) for j in 1:n)
     @test length(GO._edge_extents(ls)) == 3
     @test length(GO._edge_extents(GI.LinearRing(collect(GI.getpoint(ls))))) == 4  # a raw unclosed ring still wraps
 
@@ -394,13 +393,12 @@ end
 
     # Whole geometries decompose into per-curve trees whose offsets match the
     # geometry-global `eachedge` numbering.
-    parts, ntot = GO._curve_trees(prep, Float64)
+    parts, ntot = GO._curve_trees(prep)
     @test length(parts) == 2 && ntot == 64 + 16
     @test parts[1].offset == 0 && parts[2].offset == 64
-    pcoords = GO._ConcatCoords(parts)
     donut_edges = GO.to_edgelist(donut, Float64)
     @test length(donut_edges) == ntot
-    @test all(pcoords(j) == Tuple(donut_edges[j].geom) for j in (1, 64, 65, 80))
+    @test all(GO._edge_coords(parts, j, Float64) == Tuple(donut_edges[j].geom) for j in (1, 64, 65, 80))
 
     # `intersection_points` on whole geometries: the tree accelerators (parts
     # path) agree with the nested loop, plain and prepared, and the blob
@@ -412,8 +410,8 @@ end
     end
     # Every per-side policy shares the `TreePolicy` supertype, and side `b`
     # must carry a tree-building one.
-    @test all(p isa GO.TreePolicy for p in (GO.IterateEdges(), GO.BuildTree(), GO.ReuseTree()))
-    @test_throws ArgumentError GO.TreeAccelerator(GO.ReuseTree(), GO.IterateEdges())
+    @test all(p isa GO.TreePolicy for p in (GO.IterateEdges(), GO.BuildTree()))
+    @test_throws ArgumentError GO.TreeAccelerator(GO.BuildTree(), GO.IterateEdges())
     @test GO.intersection_points(auto, prepare(donut), prepare(blob)) == expected
     @test GO.intersection_points(auto, prepare(donut), blob) == expected
 

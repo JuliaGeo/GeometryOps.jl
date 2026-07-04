@@ -322,3 +322,32 @@ All gates passed:
   (52 ns/q prepared vs 239 ns/q plain), 21× on the 100–1k bucket,
   break-even ≈ 12 queries/polygon; all backends agree on all 288 polygons;
   no backend slower than plain.  In line with the recorded 5.0× / 30×.
+
+## Follow-up: tree traversal over prepared storage only (2026-07-04)
+
+Review discussion after the themes landed: the `_CurveCoords`/`_CurveTree`
+adapter family existed to serve unprepared inputs *inside* the traversal,
+and that flexibility wasn't worth its structure — unprepared inputs may be
+slower; the solution is `prepare`.  So the tree loops now run against
+prepared storage only:
+
+- `_ingest(policy, manifold, geom)` at the traversal entry: `Prepared`
+  inputs pass through (trees reused), anything else is prepared
+  ephemerally with the side's backend.
+- `BuildTree(backend)` is the one tree policy (per side, as requested):
+  reuse when prepared, build with `backend` otherwise.  `ReuseTree`,
+  `_CurveCoords`, `_ConcatCoords`, `_edge_tree_and_coords`, and
+  `_extents_tree` are deleted; `_CurveTree` flattens to
+  (tree, storage, offset, n, extent) with a plain `_edge_coords(ct, j, T)`
+  reader.
+- What remains is only the irreducible part: random access to edge
+  coordinates (tree queries return indices in tree order) and the
+  per-ring-tree → geometry-global `eachedge` offset routing.
+
+Cost, measured on the donut×blob micro-benchmark (run ~1.56× slower than
+the morning run per the unchanged NestedLoop baseline; numbers below
+load-adjusted): prepared paths unchanged (~15 µs `intersection_points`,
+~450 µs boolean); plain-input tree setup roughly doubles (~41 → ~75 µs
+equivalent) since it now pays a full `prepare` per call; plain boolean
+intersection ~7% slower (compute-dominated).  Accepted per review stance:
+unprepared inputs may be slower — call `prepare`.
