@@ -10,8 +10,11 @@
 The abstract supertype for all intersection accelerator types.
 
 These speed up the edge-edge intersection checking process, perhaps at the
-cost of memory.  `NestedLoop` is the naive O(n*m) loop; the tree accelerators
-index one or both inputs' edges; [`AutoAccelerator`](@ref) chooses among them.
+cost of memory.
+
+- `NestedLoop` is the naive O(n*m) loop
+- the tree accelerators `SingleSTRtree` and `SingleNaturalTree`, and `DoubleSTRtree` and `DoubleNaturalTree`, index one or both inputs' edges
+- [`AutoAccelerator`](@ref) chooses among them depending on the size of the inputs, as well as what preparations already exist on them.
 """
 abstract type IntersectionAccelerator end
 struct NestedLoop <: IntersectionAccelerator end
@@ -191,9 +194,9 @@ for (a_edge, i) in enumerate(eachedge(geom_a))
 end
 ```
 
-The `accelerator` determines how candidate pairs are found — an
-[`AutoAccelerator`](@ref) picks one from the inputs — but the callbacks
-observe this same logical iteration order regardless.
+The `accelerator` determines how candidate pairs are found.  For example,
+[`AutoAccelerator`](@ref) picks the tree structure based on the inputs.
+But the callbacks are always invoked in this logical order of iteration.
 """
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::AutoAccelerator, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
@@ -238,7 +241,10 @@ end
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::SingleSTRtree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
-    # Index only poly_b (thinned to poly_a's extent); iterate poly_a's edges.
+    # This is the "middle ground" case - run only a strtree
+    # on poly_b (thinned to poly_a's extent) without doing so on poly_a.
+    # This is less complex than running a dual tree traversal,
+    # and reduces the overhead of constructing an edge list and tree on poly_a.
     ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
     edges_b, indices_b = to_edgelist(ext_a, poly_b, T)
     if isempty(edges_b) && !isnothing(f_on_each_a) && !isnothing(f_after_each_a)
@@ -251,23 +257,33 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         return nothing
     end
 
+    # This is the STRtree generated from the edges of poly_b
     tree_b = STRtree(edges_b)
+    # This is a pre-allocated array that we'll use to store query results
+    # so that they can be sorted.
     query_result = Int[]
+    # Loop over each edge in poly_a
     for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
         a1t == a2t && continue
         l1 = GI.Line(SVector{2}(a1t, a2t))
         ext_l = GI.extent(l1)
         isnothing(f_on_each_a) || f_on_each_a(a1t, i)
+        # Query the STRtree for any edges in b that may intersect this edge
+        # This is sorted because we want to pretend we're doing the same thing
+        # as the nested loop above, and iterating through poly_b in order.
         if Extents.intersects(ext_l, ext_b)
             empty!(query_result)
             SortTileRecursiveTree.query!(query_result, tree_b.rootnode, ext_l)
-            # Sort into nested-loop order (STRTree's query! does not sort).
-            sort!(query_result)
+            sort!(query_result) # STRTree.jl's query! does not sort!, even though query does...
+            # Loop over the edges in b that might intersect the edges in a
             for j in query_result
                 b1t, b2t = edges_b[j].geom
                 b1t == b2t && continue
-                # indices_b[j] maps back to the un-thinned edge numbering.
-                LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), indices_b[j]))
+                # Manage control flow if the function returns a LoopStateMachine.Action
+                # like Break(), Continue(), or Return()
+                # This allows the function to break out of the loop early if it wants
+                # without being syntactically inside the loop.
+                LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), indices_b[j])) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
             end
         end
         isnothing(f_after_each_a) || f_after_each_a(a1t, i)
@@ -377,6 +393,10 @@ function _single_parts_loop(
         a1t == a2t && continue
         ext_l = Extents.Extent(X = minmax(a1t[1], a2t[1]), Y = minmax(a1t[2], a2t[2]))
         isnothing(f_on_each_a) || f_on_each_a(a1t, i)
+        # Query the trees for any edges in b that may intersect this edge.
+        # The results are sorted because we want to pretend we're doing the
+        # same thing as the nested loop above, and iterating through poly_b
+        # in order — without assuming anything about the trees' traversal order.
         if Extents.intersects(ext_l, ext_b)
             empty!(query_result)
             for part in parts_b
@@ -384,9 +404,14 @@ function _single_parts_loop(
                 _query_part!(query_result, part, ext_l)
             end
             sort!(query_result)
+            # Loop over the edges in b that might intersect the edges in a
             for j in query_result
                 b1t, b2t = b_coords(j)
                 b1t == b2t && continue
+                # Manage control flow if the function returns a LoopStateMachine.Action
+                # like Break(), Continue(), or Return()
+                # This allows the function to break out of the loop early if it wants
+                # without being syntactically inside the loop.
                 LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j))
             end
         end
@@ -617,7 +642,19 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
         return nothing
     end
 
-    # Run the (possibly accelerated) logical nested loop over edge pairs.
+    # do the iteration but in an accelerated way
+    # this is equivalent to (but faster than)
+    #=
+    ```julia
+    for ((a1, a2), i) in eachedge(poly_a)
+        on_each_a(a1, i)
+        for ((b1, b2), j) in eachedge(poly_b)
+            on_each_maybe_intersect(((a1, a2), i), ((b1, b2), j))
+        end
+        after_each_a(a1, i)
+    end
+    ```
+    =#
     foreach_pair_of_maybe_intersecting_edges_in_order(alg, on_each_a, after_each_a, on_each_maybe_intersect, poly_a, poly_b, T)
 
     return a_list, a_idx_list, n_b_intrs
