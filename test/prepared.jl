@@ -386,12 +386,12 @@ end
         @test GO.within(pt, prep_open_poly) == GO.within(pt, open_poly)
     end
 
-    # Whole geometries decompose into per-curve parts whose offsets match the
+    # Whole geometries decompose into per-curve trees whose offsets match the
     # geometry-global `eachedge` numbering.
-    parts, ntot = GO._edge_parts(prep, Float64)
+    parts, ntot = GO._curve_trees(prep, Float64)
     @test length(parts) == 2 && ntot == 64 + 16
     @test parts[1].offset == 0 && parts[2].offset == 64
-    pcoords = GO._PartsCoords(parts)
+    pcoords = GO._ConcatCoords(parts)
     donut_edges = GO.to_edgelist(donut, Float64)
     @test length(donut_edges) == ntot
     @test all(pcoords(j) == Tuple(donut_edges[j].geom) for j in (1, 64, 65, 80))
