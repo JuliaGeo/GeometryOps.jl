@@ -380,12 +380,16 @@ function _pixel_edges(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A) where 
     # First we collect all the edges around target pixels
     fi, fj = map(first, axes(A))
     li, lj = map(last, axes(A))
-    for j in axes(A, 2)
-        y1, y2 = ys[j]
-        for i in axes(A, 1) 
+    # `xs` and `ys` are always 1-based bound vectors, while `A` may have offset
+    # axes (e.g. an `OffsetArray`), so index `A` by its native axes but index the
+    # bound vectors positionally.  `length(xs) == size(A, 1)` is guaranteed by the
+    # caller, so the positional counters stay in bounds.
+    for (yj, j) in enumerate(axes(A, 2))
+        y1, y2 = ys[yj]
+        for (xi, i) in enumerate(axes(A, 1))
             if f(A[i, j]) # This is a pixel inside a polygon
                 # xs and ys hold pixel bounds
-                x1, x2 = xs[i]
+                x1, x2 = xs[xi]
                 # We check the Von Neumann neighborhood to
                 # decide what edges are needed, if any.
                 (j == fi || !f(A[i, j-1])) && update_edge!(edges, (x1, y1), (x2, y1)) # S
