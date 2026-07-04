@@ -157,17 +157,22 @@ and edge extents are manifold-appropriate:
 ## Theme E — one spec concept, no separate selector (:377, :224)
 
 `EdgeTrees` (a selector) vs `EdgeTree` (a preparation) is two names for one
-idea.  Unify:
+idea.  Unify (decision: **curried constructors**, not pair syntax):
 
 - Delete `EdgeTrees`.  A `preps` tuple entry is a *spec*: a preparation
-  type (`EdgeTree`), a `spec => config` pair (`EdgeTree => HPR()` picks
-  the backend), or a closure.
+  type (`EdgeTree`), a curried constructor (`EdgeTree(HPR())` — the
+  `EdgeTree` constructor applied to a backend returns a spec that builds
+  `EdgeTree(geom; backend)` when applied to a geometry), or a closure.
+  The `EdgeTree{HPR}` type-param spelling is *not* supported: `EdgeTree`'s
+  type parameter is the stored tree type, and overloading it to mean
+  "backend" in spec position would make one parameter mean two things.
 - Each spec declares where it applies:
-  `appliesto(::Type{EdgeTree}, trait) = trait isa GI.AbstractCurveTrait`.
-  Specs without a declaration keep today's semantics (top node only), so
-  `prepare(poly; preps = (MyPrep,))` still means "custom prep on the top
-  node" — but `preps = (EdgeTree => HPR(),)` now flows to every curve,
-  replacing `preps = EdgeTrees(HPR())`.
+  `appliesto(::Type{EdgeTree}, trait) = trait isa GI.AbstractCurveTrait`
+  (likewise for the curried form).  Specs without a declaration keep
+  today's semantics (top node only), so `prepare(poly; preps = (MyPrep,))`
+  still means "custom prep on the top node" — but
+  `preps = (EdgeTree(HPR()),)` now flows to every curve, replacing
+  `preps = EdgeTrees(HPR())`.
 - This also answers "how do you indicate what kind of edge tree?": the
   spec carries the backend; the manifold comes from `prepare`'s manifold
   argument (Theme D), not from the spec.
@@ -176,14 +181,16 @@ idea.  Unify:
 
 - Replace `j -> push!(query_result, offset + j)` and the dual
   `(i, j) -> push!(candidate_pairs, (off_a + i, off_b + j))` with a small
-  callable struct (`_OffsetPush`), per the review's suggestion.
-- The indexed PIP kernel (:588): a `let` block would *not* remove the
-  allocation — the `Ref` exists because the closure mutates shared state,
-  and any boxed/mutable captured counter allocates.  Instead, drop the
+  callable struct (`_OffsetPush`), per the review's suggestion.  (Done as
+  part of Theme C's rework, this round.)
+- The indexed PIP kernel (:588) — **deferred to the next iteration**, design
+  recorded here: a `let` block would *not* remove the allocation — the
+  `Ref` exists because the closure mutates shared state, and any
+  boxed/mutable captured counter allocates.  The fix is to drop the
   closure entirely: hand-roll the recursive tree walk as a plain function
   returning `(on_hit, crossings)`, with early return on `on`.  This also
-  deletes the `Action(:full_return, …)` unwinding.  Add an `@allocated
-  == 0` test for the indexed path.
+  deletes the `Action(:full_return, …)` unwinding.  Land with an
+  `@allocated == 0` test for the indexed path.
 
 ## Theme G — prep lookup from the type tuple (:193, :197)
 
@@ -197,11 +204,17 @@ tests for hit, miss, and abstract-type queries.
 
 ## Theme H — stop reallocating already-native rings (union :142, :194)
 
+**Deferred to the next iteration**, design recorded here.
 `_linearring(tuples(ih))` copies every hole even when it is already native
-tuple storage (which prepared inputs always are, post-Theme D).  Add a
-normalization helper (working name `_native_ring(ih)`): `Prepared` ring →
-its stored ring; a ring already backed by `Vector{NTuple{2,T}}` → itself;
-anything else → materialize.  Use it at the three union.jl sites.
+tuple storage (which prepared inputs always are, post-Theme D).  Decision:
+the deep clipping helpers should not each worry about storage at all —
+normalization belongs at the **top-level ingestion layer**: the clipping
+entry points (`union`/`intersection`/`difference`) convert each input once
+into fast-access form, and everything below assumes it.  The helper is
+named `fast_access_ring` (`Prepared` ring → its stored ring; a ring
+already backed by `Vector{NTuple{2,T}}` → itself; anything else →
+materialize).  The per-site `_linearring(tuples(ih))` calls then become
+plain `_linearring(ih)` because ingestion already guaranteed the storage.
 Verification step before landing: confirm clipping never mutates hole ring
 point-vectors in place (it appends rings to `poly.geom` vectors, which is
 fine — aliasing the *ring vector* is only safe if nobody `push!`es points
@@ -240,20 +253,20 @@ otherwise copy exactly at the mutation site.
    reuse; aliases for old names.
 4. **Parts machinery** (Theme C + F): single accessor, inlined loops,
    domain names, `_OffsetPush`.
-5. **Static prep lookup** (Theme G) + **PIP walker** (Theme F) + **native
-   rings** (Theme H), each with its allocation/inference tests.
-6. **Spec unification** (Theme E): delete `EdgeTrees`, spec protocol,
-   docs.
+5. **Static prep lookup** (Theme G) with inference tests.
+6. **Spec unification** (Theme E): delete `EdgeTrees`, curried
+   `EdgeTree(backend)` specs, `appliesto` protocol, docs.
 7. **Validation**: full test suite; re-run
    `benchmarks/prepared_natural_earth.jl` and the clipping benchmark
    against pre-change numbers — the ring-reuse and accelerator speedups
    must not regress.  Update design docs; draft a reply to each of the 27
    comments pointing at the commit that addresses it.
 
-Open questions to confirm before executing:
-- Theme B: keep old accelerator names as aliases (recommended) or break
-  them pre-0.2?
-- Theme E: is `EdgeTree => HPR()` pair-spec syntax acceptable, or would a
-  kwarg (`prepare(geom; edgetree = HPR())`) be preferred?
-- Theme H: if the aliasing audit finds mutation of hole rings, fall back
-  to copy-on-normalize (status quo cost) for those sites only.
+Next iteration (written down, not this round): the indexed-PIP walker
+replacing the `Ref` closure (Theme F, :588) and the `fast_access_ring`
+top-level ingestion for clipping (Theme H).
+
+Decisions confirmed with review (2026-07-04): Themes A–D as written; old
+accelerator names kept as aliases; Theme E via curried constructors
+(`EdgeTree(HPR())`), no pair syntax; Theme G executed this round; Themes
+F(:588)/H deferred as above.
