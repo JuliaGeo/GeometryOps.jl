@@ -78,4 +78,30 @@ construction and testable against big-rational ground truth.
 
 ## Results
 
-(filled in after implementation)
+Implemented in commits b7561f816 (trees) and ad234a804 (caps); all suites
+green on the first run.
+
+- Tree coverage: query ≡ brute force passes at N ∈ (1, 2, 3, 4) for
+  `STR`/`HPR`/`Unsorted` across 7 collection sizes; construction and query
+  are inferrable in 3D; Hilbert bijectivity + unit-step adjacency hold at
+  N ∈ (1, 2, 3, 4); `NaturalIndex` answers 3D queries correctly.  No code
+  fixes were needed — the loaders really were dimension-agnostic already.
+  `FlexibleRTrees.query` became a re-export of `SpatialTreeInterface.query`
+  (they were duplicate implementations), which routes all predicates
+  through `sanitize_predicate`.
+- Cap–extent: 14 003 sign-kernel assertions match exact rational ground
+  truth, including k within ±ulps of the float dot product; 4 002
+  witness-soundness checks (no false negative ever); 300 cap/box pairs
+  against a 200k-point spherical lattice (margin-certified witnesses all
+  detected, 100+ disjoint pairs proven); one-ulp boundary discrimination
+  around the shell and the cap plane behaves exactly; cap queries through
+  `RTree{STR}`, `RTree{HPR}`, and `NaturalIndex` equal a linear scan of
+  the same predicate.
+- Deviation from the plan: rather than routing `FlexibleRTrees.query`
+  through `sanitize_predicate` as its own method, the duplicate function
+  was deleted outright and STI's re-exported.
+- Not done here (future work): an exactly *tight* cap–box test
+  (`max {p ⋅ c : p ∈ box ∩ 𝕊²}` vs `radiuslike` via face/edge case
+  analysis), robustified cap–cap intersection, and arc AABB production
+  code (`_edge_extents` analog on the sphere) — that lands with spherical
+  `prepare`.
