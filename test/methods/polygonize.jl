@@ -77,17 +77,26 @@ end
         end
         @test GO.equals(data_mp, evil_in_data_space_mp)
     end
+    # These use offset, non-square lookups so that the result only matches
+    # `polygonize(xs, ys, data)` if the extension actually uses the X/Y lookup
+    # values (via `GeometryOpsDimensionalDataExt`) rather than the integer axes.
     @testset "DimensionalData" begin
-        data = rand(1:4, 100, 100) .== 1
-        evil = DimensionalData.DimArray(data, (DimensionalData.X(1:100), DimensionalData.Y(1:100)))
-        data_mp = polygonize(data)
-        evil_mp = @test_nowarn polygonize(evil)
+        data = rand(1:4, 100, 50) .== 1
+        evil = DimensionalData.DimArray(data, (DimensionalData.X(51:150), DimensionalData.Y(151:200)))
+        data_mp = polygonize(51:150, 151:200, data)
+        # A plain `DimArray` has `Points` sampling, so polygonize warns that it is
+        # treating the lookups as `Intervals`.
+        evil_mp = @test_warn "Points" polygonize(evil)
         @test GO.equals(data_mp, evil_mp)
     end
     @testset "Rasters" begin
-        data = rand(1:4, 100, 100) .== 1
-        evil = Rasters.Raster(data; dims = (DimensionalData.X(1:100), DimensionalData.Y(1:100)), crs = Rasters.GeoFormatTypes.EPSG(4326))
-        data_mp = polygonize(data)
+        data = rand(1:4, 100, 50) .== 1
+        # A raster's cells cover area, so use `Intervals` sampling: no warning.
+        evil = DimensionalData.set(
+            Rasters.Raster(data; dims = (DimensionalData.X(51:150), DimensionalData.Y(151:200)), crs = Rasters.GeoFormatTypes.EPSG(4326)),
+            DimensionalData.X => DimensionalData.Intervals(), DimensionalData.Y => DimensionalData.Intervals(),
+        )
+        data_mp = polygonize(51:150, 151:200, data)
         evil_mp = @test_nowarn polygonize(evil)
         @test GO.equals(data_mp, evil_mp)
         @test GI.crs(evil_mp) == GI.crs(evil)
