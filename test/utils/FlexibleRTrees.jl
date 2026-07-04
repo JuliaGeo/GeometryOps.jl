@@ -93,7 +93,7 @@ end
     for alg in (STR(), HPR(), Unsorted())
         et = GO.EdgeTree(GI.getexterior(poly); backend = alg)   # via the build_edge_tree hook
         @test GO.edge_tree(et) isa RTree
-        prep = GO.prepare(poly; preps = GO.EdgeTrees(alg))
+        prep = GO.prepare(poly; preps = (GO.EdgeTree(alg),))
         @test GO.edge_tree(GO.getprep(GI.getexterior(prep), GO.AbstractEdgeTree)) isa RTree
         for x in 0.0:0.5:11.0, y in (0.0, 3.0, 5.0, 6.5, 10.0)
             pt = (x, y)
