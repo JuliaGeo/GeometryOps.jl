@@ -9,10 +9,9 @@ work: the approach, the checks, and the commands.
 
 ## How to approach design and implementation
 
-These rules are distilled from real review cycles in this repo. Nearly every
-correction an agent has needed here was design judgment, not a bug — and almost
-all of them guard against the same failure: **adding machinery where none was
-needed**.
+The recurring temptation these guard against is **adding machinery where none
+was needed**. They are defaults with reasons attached, not commandments — when
+a real exception comes up, take it, and say why.
 
 ### When two pieces don't fit, don't reach for a bridge
 
@@ -28,10 +27,13 @@ Work through these in order and stop at the first that works:
 3. **Accept the mismatch.** Slow paths are allowed; `prepare` and friends are
    the escape hatch (see ARCHITECTURE.md design principles).
 
-Only if all three fail is a new connecting structure (adapter, composed tree,
-parallel index, bespoke traversal helper) on the table — and that is a design
-conversation to surface, not a commit to make. Beware the near-miss: avoiding a
-new *type* but building new *composition machinery* is the same mistake.
+A new connecting structure (adapter, composed tree, parallel index, bespoke
+traversal helper) is the last resort — not forbidden, but expensive: it forks
+maintenance and helps only its own call site, where a fix to the shared
+abstraction helps every consumer. If you conclude one is genuinely needed,
+build it, but say so prominently and state the tradeoff rather than burying it
+in a larger change. Beware the near-miss: avoiding a new *type* but building
+new *composition machinery* is the same thing.
 
 ### Test genericity against the hardest case
 
@@ -50,21 +52,23 @@ default is the most literal interpretation of what was passed in.
 
 No unwired "forward-looking" components, no trait hierarchies nothing
 exercises, no type parameters for out-of-scope cases. If generality seems
-architecturally tempting, surface it as a question ("wire X now, or stop at
-Y?") instead of building it.
+architecturally tempting, note it as an option in your summary ("this could
+grow to support X") instead of building it now.
 
 ### After generalizing, subtract
 
 When a new mechanism subsumes an old special case, delete the old path in the
-same change. Every helper function must justify its existence (performance
-barrier, real reuse) or be inlined. Don't leave cleanup for a later pass.
+same change rather than leaving cleanup for a later pass. Lean against
+single-use helpers: keep one when it earns its place (a performance barrier,
+real reuse, a genuine readability win), inline it otherwise.
 
 ### Audit yourself for self-consistency
 
 Before presenting a design, check it against principles already established —
 in ARCHITECTURE.md, earlier in the session, or in the very file being edited
-(e.g. an existing abstract supertype convention). Most corrections here are
-"you already know this rule"; run that audit before the reviewer has to.
+(e.g. an existing abstract supertype convention). It is much cheaper to catch
+"this contradicts a convention I already follow elsewhere" yourself than in
+review.
 
 ### Report honestly
 
@@ -76,9 +80,10 @@ in ARCHITECTURE.md, earlier in the session, or in the very file being edited
 
 ### Comments describe what, not the story of why
 
-Aim for 1–3 lines of ≤80 chars. State the constraint or behavior the code
-can't show; design rationale lives in `docs/plans/` or commit messages, not
-inline narration.
+Inline comments briefly state the constraint or behavior the code can't show.
+Longer exposition has better homes — the literate header at the top of the
+file (see ARCHITECTURE.md), docstrings, `docs/plans/`, or the commit message —
+so design history and rationale don't end up narrated between lines of code.
 
 ## What consistently works
 

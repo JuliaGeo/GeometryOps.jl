@@ -71,7 +71,8 @@ Extensions provide `GEOS()` (LibGEOS), `PROJ()` (reprojection/geodesic), and
 
 ## Design principles
 
-These are enforced in review; code that violates them gets reworked.
+Deliberate choices the codebase tries to stay consistent with. Deviating is
+sometimes right — but do it knowingly, with the reason stated.
 
 1. **Genericity lives in the shared interface, not in special cases.** If a
    generic path is slow for one backend, fix the generic implementation so
