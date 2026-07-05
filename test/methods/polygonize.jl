@@ -1,8 +1,12 @@
 using GeometryOps, GeoInterface, Test
 using GeometryOpsTestHelpers
+using Random
 
-import GeometryOps as GO 
+import GeometryOps as GO
 import GeoInterface as GI
+
+# Seed so the coordinate-dependent assertions below (see #430) stay deterministic.
+Random.seed!(123)
 
 @testset "Polygonize with xs and ys, without offsetarrays" begin
     @test !(@isdefined OffsetArrays) # to make sure this isn't loaded somewhere else
@@ -17,7 +21,8 @@ import GeoInterface as GI
     end
     # ideally we'd have a better test to make sure this returns what we think it does
     data_mp_range200 = polygonize(2:2:200, 2:2:200, data)
-    @test length(GI.coordinates(data_mp_range200)) == length(GI.coordinates(data_mp))
+    # Broken: rescaling coordinates changes the decomposition (#430).
+    @test_broken length(GI.coordinates(data_mp_range200)) == length(GI.coordinates(data_mp))
 
     # this is an example that could throw floating point error
     range_floats = -1.333333333333343:0.041666666666666664:0.374999999999986
@@ -33,7 +38,7 @@ import OffsetArrays, DimensionalData, Rasters
 for i in (100, 300), j in (100, 300)
     @testset "bool arrays without a function return MultiPolygon" begin
         A = rand(Bool, i, j)
-        @test_nowarn multipolygon = polygonize(A);
+        multipolygon = @test_nowarn polygonize(A);
         @test multipolygon isa GeoInterface.MultiPolygon
         @test GeoInterface.ngeom(multipolygon) > 0
     end
@@ -68,26 +73,43 @@ end
 
 @testset "Polygonize with exotic arrays" begin
     @testset "OffsetArrays" begin
-        data = rand(1:4, 100, 100) .== 1
+        # Fixed pattern (blocks + a hole) so the result is deterministic.
+        data = fill(false, 12, 14)
+        data[2:6, 2:5]   .= true
+        data[8:11, 7:12] .= true
+        data[3:5, 9:12]  .= true
+        data[4, 10:11]   .= false
         evil = OffsetArrays.Origin(-100, -100)(data)
+        evil_mp = @test_nowarn polygonize(evil)  # regression: used to throw a `BoundsError`
+        # An offset array uses its axis values as coordinates.
+        @test GO.equals(evil_mp, polygonize(axes(evil, 1), axes(evil, 2), parent(evil)))
+        # Broken: not a translation of `polygonize(data)` (#430).
         data_mp = polygonize(data)
-        evil_mp = @test_nowarn polygonize(evil)
-        evil_in_data_space_mp = GO.transform(evil_mp) do point
-            point .- evil.offsets # undo the offset from the OffsetArray
-        end
-        @test GO.equals(data_mp, evil_in_data_space_mp)
+        shifted = GO.transform(p -> p .- evil.offsets, evil_mp)
+        @test_broken GO.equals(data_mp, shifted)
+
+        # Regression: edge pixels + different per-axis offsets used to throw a `BoundsError`.
+        edgy = OffsetArrays.Origin(-100, -50)(fill(true, 5, 7))
+        edgy_mp = @test_nowarn polygonize(edgy)
+        @test GO.equals(edgy_mp, polygonize(axes(edgy, 1), axes(edgy, 2), parent(edgy)))
     end
+    # Offset, non-square lookups: these only match `polygonize(xs, ys, data)` if the
+    # extension uses the lookup values rather than the integer axes.
     @testset "DimensionalData" begin
-        data = rand(1:4, 100, 100) .== 1
-        evil = DimensionalData.DimArray(data, (DimensionalData.X(1:100), DimensionalData.Y(1:100)))
-        data_mp = polygonize(data)
-        evil_mp = @test_nowarn polygonize(evil)
+        data = rand(1:4, 100, 50) .== 1
+        evil = DimensionalData.DimArray(data, (DimensionalData.X(51:150), DimensionalData.Y(151:200)))
+        data_mp = polygonize(51:150, 151:200, data)
+        evil_mp = @test_warn "Points" polygonize(evil)  # `Points` sampling warns
         @test GO.equals(data_mp, evil_mp)
     end
     @testset "Rasters" begin
-        data = rand(1:4, 100, 100) .== 1
-        evil = Rasters.Raster(data; dims = (DimensionalData.X(1:100), DimensionalData.Y(1:100)), crs = Rasters.GeoFormatTypes.EPSG(4326))
-        data_mp = polygonize(data)
+        data = rand(1:4, 100, 50) .== 1
+        # `Intervals` sampling (a raster's cells cover area): no warning.
+        evil = DimensionalData.set(
+            Rasters.Raster(data; dims = (DimensionalData.X(51:150), DimensionalData.Y(151:200)), crs = Rasters.GeoFormatTypes.EPSG(4326)),
+            DimensionalData.X => DimensionalData.Intervals(), DimensionalData.Y => DimensionalData.Intervals(),
+        )
+        data_mp = polygonize(51:150, 151:200, data)
         evil_mp = @test_nowarn polygonize(evil)
         @test GO.equals(data_mp, evil_mp)
         @test GI.crs(evil_mp) == GI.crs(evil)
