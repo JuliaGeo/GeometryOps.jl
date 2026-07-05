@@ -311,7 +311,7 @@ end
     # A prepared ring's edge tree is reused as-is (indices match `eachedge`),
     # and coordinates read from ring storage match the materialized edge list.
     prep_ring = GI.getexterior(prepare(donut))
-    ct, n = GO._curve_trees(prep_ring)
+    ct, n = GO._curve_trees(GO.BuildTree(), prep_ring, Float64)
     @test only(ct).tree === edge_tree(getprep(prep_ring, AbstractEdgeTree))   # reused, not rebuilt
     edges = GO.to_edgelist(GI.getexterior(donut), Float64)
     @test n == length(edges)
@@ -321,13 +321,13 @@ end
     # Any SpatialTreeInterface tree is reused — including one that traverses
     # out of input order, like HPR (a stand-in for e.g. a foreign-library tree).
     hpr_ring = GI.getexterior(prepare(donut; preps = (EdgeTree(GO.FlexibleRTrees.HPR()),)))
-    @test only(first(GO._curve_trees(hpr_ring))).tree isa GO.FlexibleRTrees.RTree
+    @test only(first(GO._curve_trees(GO.BuildTree(), hpr_ring, Float64))).tree isa GO.FlexibleRTrees.RTree
     # Unclosed input rings are closed during materialization, so a prepared
     # ring's tree always matches the `eachedge` space and is reused as-is —
     # the closing edge is explicit, never implicit.
     unclosed_ring = GI.getexterior(prepare(GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]])))
     @test GI.npoint(unclosed_ring) == 5   # the first point was repeated at the end
-    ct_uc, n_uc = GO._curve_trees(unclosed_ring)
+    ct_uc, n_uc = GO._curve_trees(GO.BuildTree(), unclosed_ring, Float64)
     @test only(ct_uc).tree === edge_tree(getprep(unclosed_ring, AbstractEdgeTree))   # reused
     @test n_uc == 4   # the closing edge is an explicit `eachedge` edge now
 
@@ -374,7 +374,7 @@ end
     ls = GI.LineString([(0.0, 3.0), (4.0, 8.0), (8.0, 2.0), (12.0, 7.0)])
     pls = prepare(ls)
     @test GO.hasprep(pls, AbstractEdgeTree)
-    ct, n = GO._curve_trees(pls)
+    ct, n = GO._curve_trees(GO.BuildTree(), pls, Float64)
     @test only(ct).tree === edge_tree(getprep(pls, AbstractEdgeTree))
     @test n == 3
     ls_edges = GO.to_edgelist(ls, Float64)
@@ -393,7 +393,7 @@ end
 
     # Whole geometries decompose into per-curve trees whose offsets match the
     # geometry-global `eachedge` numbering.
-    parts, ntot = GO._curve_trees(prep)
+    parts, ntot = GO._curve_trees(GO.BuildTree(), prep, Float64)
     @test length(parts) == 2 && ntot == 64 + 16
     @test parts[1].offset == 0 && parts[2].offset == 64
     donut_edges = GO.to_edgelist(donut, Float64)
@@ -405,9 +405,17 @@ end
     # crosses the donut's hole so both rings contribute points.
     expected = GO.intersection_points(plain_alg, donut, blob)
     @test !isempty(expected)
-    for acc in (GO.SingleNaturalTree(), GO.DoubleNaturalTree())
+    for acc in (GO.SingleNaturalTree(), GO.DoubleNaturalTree(),
+                GO.SingleNaturalTree(prepare = true), GO.DoubleNaturalTree(prepare = true),
+                GO.AutoAccelerator(prepare = true))
         @test GO.intersection_points(GO.FosterHormannClipping(GO.Planar(), acc), donut, blob) == expected
     end
+    # Raw inputs are indexed as they are: the tree over an unprepared ring is
+    # built fresh, and its coordinates read from the input's own storage.
+    raw_ct, raw_n = GO._curve_trees(GO.BuildTree(), GI.getexterior(donut), Float64)
+    @test raw_n == 64
+    @test only(raw_ct).curve === GI.getexterior(donut)
+    @test all(GO._edge_coords(raw_ct, j, Float64) == Tuple(GO.to_edgelist(GI.getexterior(donut), Float64)[j].geom) for j in (1, 32, 64))
     # Every per-side policy shares the `TreePolicy` supertype, and side `b`
     # must carry a tree-building one.
     @test all(p isa GO.TreePolicy for p in (GO.IterateEdges(), GO.BuildTree()))

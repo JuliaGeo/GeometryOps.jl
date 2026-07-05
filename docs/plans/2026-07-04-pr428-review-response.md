@@ -351,3 +351,19 @@ load-adjusted): prepared paths unchanged (~15 µs `intersection_points`,
 equivalent) since it now pays a full `prepare` per call; plain boolean
 intersection ~7% slower (compute-dominated).  Accepted per review stance:
 unprepared inputs may be slower — call `prepare`.
+
+### Amendment: let raw inputs in (same day)
+
+Review follow-up: the traversal should *not* silently `prepare` unprepared
+inputs.  `BuildTree(backend; prepare = false)` now lets raw geometry in as
+it is — an ephemeral tree is built over its `eachedge` extents (never
+`_edge_extents`, whose closing-edge wrap would desync the shared numbering
+on unclosed rings) and coordinates are read from the input's own storage in
+place, so geometries with expensive point access are simply slower.
+`prepare = true` (also exposed on `AutoAccelerator`, `SingleNaturalTree`,
+`DoubleNaturalTree`) opts into the full ephemeral `prepare` at the
+traversal entry; `Prepared` inputs pass through and reuse their trees
+either way.  Micro-benchmark, same load regime as the force-prepare
+numbers: plain-input `DoubleNaturalTree` setup back to lean
+(116 → 64 µs, ≈ the pre-refactor 41 µs load-adjusted); prepared paths
+unchanged; results exact.
