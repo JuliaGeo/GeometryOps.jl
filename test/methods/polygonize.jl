@@ -5,8 +5,7 @@ using Random
 import GeometryOps as GO
 import GeoInterface as GI
 
-# Seed for determinism: some assertions below depend on `polygonize`'s (currently
-# coordinate-magnitude-dependent) output, so fix the RNG to keep them stable.
+# Seed so the coordinate-dependent assertions below (see #430) stay deterministic.
 Random.seed!(123)
 
 @testset "Polygonize with xs and ys, without offsetarrays" begin
@@ -22,9 +21,7 @@ Random.seed!(123)
     end
     # ideally we'd have a better test to make sure this returns what we think it does
     data_mp_range200 = polygonize(2:2:200, 2:2:200, data)
-    # KNOWN BROKEN: `polygonize`'s ring tracing is coordinate-magnitude-dependent, so
-    # rescaling the coordinates changes the decomposition (and hence the coordinate
-    # count). See issue #430; remove `_broken` once that is fixed.
+    # Broken: rescaling coordinates changes the decomposition (#430).
     @test_broken length(GI.coordinates(data_mp_range200)) == length(GI.coordinates(data_mp))
 
     # this is an example that could throw floating point error
@@ -76,46 +73,38 @@ end
 
 @testset "Polygonize with exotic arrays" begin
     @testset "OffsetArrays" begin
-        # Fixed pattern (blocks + a hole) so the result is fully deterministic.
+        # Fixed pattern (blocks + a hole) so the result is deterministic.
         data = fill(false, 12, 14)
         data[2:6, 2:5]   .= true
         data[8:11, 7:12] .= true
         data[3:5, 9:12]  .= true
         data[4, 10:11]   .= false
         evil = OffsetArrays.Origin(-100, -100)(data)
-        # Regression test for a `BoundsError`: `polygonize` used to index its 1-based
-        # pixel-bound vectors with the array's (offset) axes.
-        evil_mp = @test_nowarn polygonize(evil)
-        # Polygonizing an offset array uses its axis *values* as coordinates, which is
-        # equivalent to passing those ranges explicitly on the parent array.
+        evil_mp = @test_nowarn polygonize(evil)  # regression: used to throw a `BoundsError`
+        # An offset array uses its axis values as coordinates.
         @test GO.equals(evil_mp, polygonize(axes(evil, 1), axes(evil, 2), parent(evil)))
-        # KNOWN BROKEN: it is *not* equal to a translation of `polygonize(data)` —
-        # `polygonize`'s decomposition depends on coordinate magnitude (see issue #430).
+        # Broken: not a translation of `polygonize(data)` (#430).
         data_mp = polygonize(data)
         shifted = GO.transform(p -> p .- evil.offsets, evil_mp)
         @test_broken GO.equals(data_mp, shifted)
 
-        # Regression test for boundary handling with *different* per-axis offsets and
-        # true pixels touching the array edges (used to throw a `BoundsError`).
+        # Regression: edge pixels + different per-axis offsets used to throw a `BoundsError`.
         edgy = OffsetArrays.Origin(-100, -50)(fill(true, 5, 7))
         edgy_mp = @test_nowarn polygonize(edgy)
         @test GO.equals(edgy_mp, polygonize(axes(edgy, 1), axes(edgy, 2), parent(edgy)))
     end
-    # These use offset, non-square lookups so that the result only matches
-    # `polygonize(xs, ys, data)` if the extension actually uses the X/Y lookup
-    # values (via `GeometryOpsDimensionalDataExt`) rather than the integer axes.
+    # Offset, non-square lookups: these only match `polygonize(xs, ys, data)` if the
+    # extension uses the lookup values rather than the integer axes.
     @testset "DimensionalData" begin
         data = rand(1:4, 100, 50) .== 1
         evil = DimensionalData.DimArray(data, (DimensionalData.X(51:150), DimensionalData.Y(151:200)))
         data_mp = polygonize(51:150, 151:200, data)
-        # A plain `DimArray` has `Points` sampling, so polygonize warns that it is
-        # treating the lookups as `Intervals`.
-        evil_mp = @test_warn "Points" polygonize(evil)
+        evil_mp = @test_warn "Points" polygonize(evil)  # `Points` sampling warns
         @test GO.equals(data_mp, evil_mp)
     end
     @testset "Rasters" begin
         data = rand(1:4, 100, 50) .== 1
-        # A raster's cells cover area, so use `Intervals` sampling: no warning.
+        # `Intervals` sampling (a raster's cells cover area): no warning.
         evil = DimensionalData.set(
             Rasters.Raster(data; dims = (DimensionalData.X(51:150), DimensionalData.Y(151:200)), crs = Rasters.GeoFormatTypes.EPSG(4326)),
             DimensionalData.X => DimensionalData.Intervals(), DimensionalData.Y => DimensionalData.Intervals(),

@@ -378,16 +378,12 @@ end
 function _pixel_edges(f, xs::AbstractVector{T}, ys::AbstractVector{T}, A) where T<:Tuple
     edges = Dict{T,Tuple{T,T}}()
     # First we collect all the edges around target pixels.
-    # `i` indexes rows (axis 1), `j` indexes columns (axis 2); name the boundary
-    # indices accordingly so the neighbour guards below match the axis they check
-    # (previously the first-row/first-column indices were swapped, which threw a
-    # `BoundsError` for arrays whose two axes start at different offsets).
+    # `i`/`j` index rows/columns; the boundary guards below must match their axis
+    # (matters when the two axes start at different offsets).
     firstrow, firstcol = map(first, axes(A))
     lastrow, lastcol = map(last, axes(A))
-    # `xs` and `ys` are always 1-based bound vectors, while `A` may have offset
-    # axes (e.g. an `OffsetArray`), so index `A` by its native axes but index the
-    # bound vectors positionally.  `length(xs) == size(A, 1)` is guaranteed by the
-    # caller, so the positional counters stay in bounds.
+    # `xs`/`ys` are 1-based but `A` may have offset axes: index `A` natively, the
+    # bounds positionally (`length(xs) == size(A, 1)` holds).
     for (yj, j) in enumerate(axes(A, 2))
         y1, y2 = ys[yj]
         for (xi, i) in enumerate(axes(A, 1))

@@ -4,9 +4,8 @@ import DimensionalData as DD
 import GeometryOps as GO
 import GeoInterface as GI
 
-# Polygonize a `DimArray` (or any `AbstractDimArray`, e.g. a `Raster`) using its
-# `X`/`Y` lookup values rather than the raw integer axes.  We build interval
-# bounds from the lookups so that the resulting polygons live in coordinate space.
+# Polygonize an `AbstractDimArray` in the coordinate space of its `X`/`Y` lookups
+# (via their interval bounds) rather than the raw integer axes.
 function GO.polygonize(A::DD.AbstractDimArray; dims=(DD.X(), DD.Y()), crs=GI.crs(A), kw...)
     lookups = DD.lookup(A, dims)
     bounds_vecs = if all(DD.isintervals, lookups)
