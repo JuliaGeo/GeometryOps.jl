@@ -34,10 +34,6 @@ import GeoInterface as GI
 import Extents
 using StaticArrays: MVector
 
-using ..SpatialTreeInterface
-import ..SpatialTreeInterface: isspatialtree, isleaf, nchild, getchild,
-    child_indices_extents, node_extent, depth_first_search
-
 export RTree, BulkLoadAlgorithm, STR, HPR, Unsorted, query
 
 include("types.jl")         # `BulkLoadAlgorithm`s and the `RTree` type

@@ -1,5 +1,9 @@
 # # SpatialTreeInterface
 
+using ..SpatialTreeInterface
+import ..SpatialTreeInterface: isspatialtree, isleaf, nchild, getchild,
+    child_indices_extents, depth_first_search
+
 """
     RTreeNode{A, E}
 
