@@ -2,6 +2,7 @@ using Test
 
 import GeometryOps as GO, GeoInterface as GI
 import Extents
+using GeometryOps.UnitSpherical
 
 point = GI.Point(1.0, 1.0)
 linestring = GI.LineString([(1.0, 1.0), (2.0, 2.0)])
@@ -190,3 +191,39 @@ end
     @test_throws ArgumentError collect(GO.lazy_edge_extents(GI.MultiPoint([(1.0, 1.0), (2.0, 2.0)])))
 end
 
+
+@testset "eachedge and to_edgelist on the sphere" begin
+    lonlat_ring = GI.LinearRing([(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)])
+
+    edges = collect(GO.eachedge(GO.Spherical(), lonlat_ring, Float64))
+    @test length(edges) == 3
+    @test all(ps -> ps isa Tuple{UnitSphericalPoint{Float64}, UnitSphericalPoint{Float64}}, edges)
+    # Planar() is the manifold-less behavior
+    @test collect(GO.eachedge(GO.Planar(), lonlat_ring, Float64)) == collect(GO.eachedge(lonlat_ring, Float64))
+
+    el = GO.to_edgelist(GO.Spherical(), lonlat_ring)
+    @test length(el) == 3
+    @test all(l -> GI.extent(l) isa Extents.Extent{(:X, :Y, :Z)}, el)
+    # rings of UnitSphericalPoints take the spherical path with no manifold argument
+    usp_ring = GI.LinearRing(to_unit_spherical_points(lonlat_ring))
+    @test GI.extent.(GO.to_edgelist(usp_ring)) == GI.extent.(el)
+    # the lazy variant agrees
+    @test GI.extent.(collect(GO.lazy_edgelist(GO.Spherical(), lonlat_ring))) == GI.extent.(el)
+
+    # spatial trees over spherical edges index in 3D
+    ni = GO.NaturalIndexing.NaturalIndex(el)
+    rt = GO.FlexibleRTrees.RTree(GO.FlexibleRTrees.STR(), el)
+    @test Extents.extent(ni) isa Extents.Extent{(:X, :Y, :Z)}
+    @test Extents.extent(rt) isa Extents.Extent{(:X, :Y, :Z)}
+
+    # The arc's bulge is indexed: an edge between two points at z = 0.9 arcs
+    # over the pole, so a query box touching only the polar region must find
+    # it, even though the endpoints' own box tops out at z = 0.9
+    z = 0.9; s = sqrt(1 - z^2)
+    seg = GI.LineString([UnitSphericalPoint(0.0, -s, z), UnitSphericalPoint(0.0, s, z)])
+    tree = GO.FlexibleRTrees.RTree(GO.FlexibleRTrees.STR(), GO.to_edgelist(seg))
+    bulge_only = Extents.Extent(X = (-0.01, 0.01), Y = (-0.01, 0.01), Z = (0.95, 1.05))
+    @test GO.FlexibleRTrees.query(tree, bulge_only) == [1]
+    endpoint_box = Extents.union(GI.extent(UnitSphericalPoint(0.0, -s, z)), GI.extent(UnitSphericalPoint(0.0, s, z)))
+    @test !Extents.intersects(endpoint_box, bulge_only)
+end
