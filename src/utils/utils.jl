@@ -168,9 +168,9 @@ Returns some iterator, which yields tuples of points.  Each tuple is an edge.
 
 It goes `(p1, p2), (p2, p3), (p3, p4), ...` etc.
 
-On `Planar()` (the manifold-less default) points are 2D coordinate tuples.
-On `Spherical()` they are `UnitSphericalPoint`s: geographic (longitude,
-latitude) input is converted, and `UnitSphericalPoint`s pass through as-is.
+On `Planar()` (the default) points are 2D coordinate tuples.  On
+`Spherical()` they are `UnitSphericalPoint`s: geographic (longitude,
+latitude) input is converted, `UnitSphericalPoint`s pass through.
 """
 eachedge(geom) = eachedge(GI.trait(geom), geom, Float64)
 function eachedge(geom, ::Type{T}) where T
@@ -202,10 +202,8 @@ end
 Convert a geometry into a vector of `GI.Line` objects with attached extents.
 
 On `Spherical()` — or whenever the geometry's points are already
-`UnitSphericalPoint`s — each edge is a great-circle arc of
-`UnitSphericalPoint`s carrying its 3D [`UnitSpherical.spherical_arc_extent`](@ref),
-so spatial indices built over the edges (e.g. `NaturalIndex`, `RTree`)
-bound the arcs correctly.
+`UnitSphericalPoint`s — each edge carries the 3D
+[`UnitSpherical.spherical_arc_extent`](@ref) of its great-circle arc.
 """
 to_edgelist(geom, ::Type{T} = Float64) where T =
     [_lineedge(ps, T) for ps in eachedge(geom, T)]
@@ -240,8 +238,6 @@ function _lineedge(ps::Tuple, ::Type{T}) where T
     e = GI.extent(l)
     return GI.Line(l.geom; extent=e)
 end
-# On the unit sphere, an edge is a great-circle arc: its extent is 3D and
-# must cover the arc's bulge past the endpoints, not just the endpoints.
 function _lineedge(ps::Tuple{<:UnitSpherical.UnitSphericalPoint, <:UnitSpherical.UnitSphericalPoint}, ::Type{T}) where T
     a, b = UnitSpherical.UnitSphericalPoint{T}.(ps)
     return GI.Line(StaticArrays.SVector((a, b)); extent = UnitSpherical.spherical_arc_extent(a, b))
