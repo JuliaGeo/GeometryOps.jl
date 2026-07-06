@@ -587,3 +587,50 @@ end
         end
     end
 end
+
+@testset "spherical_arc_extent" begin
+    # Quarter arc along the equator: x and y peak at the endpoints, z is flat
+    ext = spherical_arc_extent(UnitSphericalPoint(1.0, 0.0, 0.0), UnitSphericalPoint(0.0, 1.0, 0.0))
+    @test ext isa Extents.Extent{(:X, :Y, :Z)}
+    @test ext.X[1] ≈ 0 atol = 1e-14
+    @test ext.X[2] ≈ 1 atol = 1e-14
+    @test ext.Y[1] ≈ 0 atol = 1e-14
+    @test ext.Y[2] ≈ 1 atol = 1e-14
+    @test ext.Z[1] ≈ 0 atol = 1e-14
+    @test ext.Z[2] ≈ 0 atol = 1e-14
+
+    # The arc bulges out of the endpoints' box: two points at z = 0.9 on
+    # either side of the x = 0 great circle, joined over the pole
+    z = 0.9; s = sqrt(1 - z^2)
+    bulging = spherical_arc_extent(UnitSphericalPoint(0.0, -s, z), UnitSphericalPoint(0.0, s, z))
+    @test bulging.Z[2] ≈ 1 atol = 1e-14   # the pole, not the endpoints' z = 0.9
+    @test bulging.Z[2] > z
+    @test bulging.Z[1] ≈ z atol = 1e-14
+    @test bulging.Y[1] ≈ -s atol = 1e-14
+    @test bulging.Y[2] ≈ s atol = 1e-14
+
+    # Geographic (lon, lat) input takes the same path
+    @test spherical_arc_extent((0.0, 0.0), (90.0, 0.0)) ==
+        spherical_arc_extent(UnitSphericalPoint(1.0, 0.0, 0.0), UnitSphericalPoint(0.0, 1.0, 0.0))
+
+    # Degenerate arc: a point
+    p = UnitSphericalPoint(1.0, 0.0, 0.0)
+    degenerate = spherical_arc_extent(p, p)
+    @test degenerate.X[1] <= 1 <= degenerate.X[2]
+    @test degenerate.X[2] - degenerate.X[1] < 1e-14
+
+    @testset "Containment of dense arc samples" begin
+        using Random: Xoshiro
+        rng = Xoshiro(999)
+        inext(q, e) = e.X[1] <= q[1] <= e.X[2] && e.Y[1] <= q[2] <= e.Y[2] && e.Z[1] <= q[3] <= e.Z[2]
+        for _ in 1:100
+            a, b = rand(rng, UnitSphericalPoint{Float64}), rand(rng, UnitSphericalPoint{Float64})
+            e = spherical_arc_extent(a, b)
+            @test all(t -> inext(slerp(a, b, t), e), range(0.0, 1.0, length = 101))
+            # nearly-degenerate arcs stay stable through robust_cross_product
+            b2 = UnitSphericalPoint(normalize(a + 1e-12 * rand(rng, UnitSphericalPoint{Float64})))
+            e2 = spherical_arc_extent(a, b2)
+            @test all(t -> inext(slerp(a, b2, t), e2), range(0.0, 1.0, length = 11))
+        end
+    end
+end
