@@ -9,7 +9,7 @@ work: the approach, the checks, and the commands.
 
 ## Guidelines
 
-Defaults, not commandments — take a real exception when warranted, and say
+These are defaults, not commandments — take a real exception when warranted, and say
 why. The common failure they guard against is adding machinery where none was
 needed.
 
@@ -20,17 +20,17 @@ needed.
   tradeoff prominently.
 - Generic means generic: a design should survive the hardest case (an opaque
   C-library tree, a foreign geometry with expensive accessors).
-- Never transform user data silently; expensive or semantics-changing behavior
-  is an explicit opt-in keyword.
-- Build only what has a consumer in the same change; note future generality
-  instead of building it.
-- After generalizing, delete what it subsumed in the same change.
+- Try not to transform user data silently; expensive or semantics-changing behavior
+  should be an explicit opt-in keyword generally.  Toplevel functions should handle
+  input sanitization, low level helpers shouldn't need to.
+- Build what has a consumer in the same change; don't add extra complexity for generality which won't have a use.
+- After generalizing, delete what it subsumed in the same change.  Keep the codebase clean.
 - Check new designs against conventions already in the file/codebase before
   presenting them.
 - Report plainly: no scope decisions dressed as architecture, a one-line "why"
   on every deferred item, no coined jargon.
 - Comments say what, not the story of why — exposition belongs in the literate
-  header, docstrings, or commit messages.
+  header, or commit messages.
 - Read the relevant code before designing; run the affected tests (and
   benchmarks for perf-sensitive changes) before committing.
 - Don't push, open PRs, or merge unless asked.
