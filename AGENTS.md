@@ -7,93 +7,32 @@ the package structure, core abstractions, design principles, and the
 step-by-step pattern for adding a new algorithm. This file is about how to
 work: the approach, the checks, and the commands.
 
-## How to approach design and implementation
+## Guidelines
 
-The recurring temptation these guard against is **adding machinery where none
-was needed**. They are defaults with reasons attached, not commandments — when
-a real exception comes up, take it, and say why.
+Defaults, not commandments — take a real exception when warranted, and say
+why. The common failure they guard against is adding machinery where none was
+needed.
 
-### When two pieces don't fit, don't reach for a bridge
-
-Work through these in order and stop at the first that works:
-
-1. **Fix or extend the shared abstraction at its source.** If a generic
-   interface is slow or missing a method for your case, improve the generic
-   implementation (or grow a small sibling method, e.g. `getprep` →
-   `hasprep`) so every consumer benefits.
-2. **Adapt the consumer.** Map, offset, sort, or iterate at the call site.
-   A consumer-side adaptation is cheaper and more honest than a producer-side
-   duplicate structure.
-3. **Accept the mismatch.** Slow paths are allowed; `prepare` and friends are
-   the escape hatch (see ARCHITECTURE.md design principles).
-
-A new connecting structure (adapter, composed tree, parallel index, bespoke
-traversal helper) is the last resort — not forbidden, but expensive: it forks
-maintenance and helps only its own call site, where a fix to the shared
-abstraction helps every consumer. If you conclude one is genuinely needed,
-build it, but say so prominently and state the tradeoff rather than burying it
-in a larger change. Beware the near-miss: avoiding a new *type* but building
-new *composition machinery* is the same thing.
-
-### Test genericity against the hardest case
-
-Before proposing a design that claims to be generic, check it against the most
-hostile instantiation: an opaque C-library tree, a foreign geometry with
-expensive accessors, an unclosed ring. If the design only works for backends
-already in the codebase, it isn't generic.
-
-### Don't transform user data silently
-
-No silent copying, re-materializing, ring-closing, or number-type conversion.
-Anything expensive or semantics-changing is an explicit opt-in keyword. The
-default is the most literal interpretation of what was passed in.
-
-### Build only what has a consumer
-
-No unwired "forward-looking" components, no trait hierarchies nothing
-exercises, no type parameters for out-of-scope cases. If generality seems
-architecturally tempting, note it as an option in your summary ("this could
-grow to support X") instead of building it now.
-
-### After generalizing, subtract
-
-When a new mechanism subsumes an old special case, delete the old path in the
-same change rather than leaving cleanup for a later pass. Lean against
-single-use helpers: keep one when it earns its place (a performance barrier,
-real reuse, a genuine readability win), inline it otherwise.
-
-### Audit yourself for self-consistency
-
-Before presenting a design, check it against principles already established —
-in ARCHITECTURE.md, earlier in the session, or in the very file being edited
-(e.g. an existing abstract supertype convention). It is much cheaper to catch
-"this contradicts a convention I already follow elsewhere" yourself than in
-review.
-
-### Report honestly
-
-- Don't launder scope decisions as architecture ("X belongs elsewhere" when the
-  truth is "I didn't get to X").
-- Every deferred item carries a one-line justification of why it's real work.
-- No coined jargon in summaries; every claim should survive one round of
-  "why?" without a follow-up.
-
-### Comments describe what, not the story of why
-
-Inline comments briefly state the constraint or behavior the code can't show.
-Longer exposition has better homes — the literate header at the top of the
-file (see ARCHITECTURE.md), docstrings, `docs/plans/`, or the commit message —
-so design history and rationale don't end up narrated between lines of code.
-
-## What consistently works
-
-- Read the relevant code before proposing a design; verify claims against
-  source rather than memory.
-- After every structural change: run the affected test suites and benchmark
-  against recorded baselines before committing.
-- Surface genuinely open API choices as explicit questions instead of guessing.
-- When challenged on a design, respond with a transparent tradeoff breakdown
-  (what's irreducible vs. removable), not defensiveness or blind rework.
+- When two pieces don't fit, prefer in order: fix the shared abstraction at
+  its source → adapt the consumer at the call site → accept the mismatch
+  (slow paths are fine; `prepare` is the escape hatch). A new adapter/index/
+  composition layer is the last resort — if truly needed, flag it and its
+  tradeoff prominently.
+- Generic means generic: a design should survive the hardest case (an opaque
+  C-library tree, a foreign geometry with expensive accessors).
+- Never transform user data silently; expensive or semantics-changing behavior
+  is an explicit opt-in keyword.
+- Build only what has a consumer in the same change; note future generality
+  instead of building it.
+- After generalizing, delete what it subsumed in the same change.
+- Check new designs against conventions already in the file/codebase before
+  presenting them.
+- Report plainly: no scope decisions dressed as architecture, a one-line "why"
+  on every deferred item, no coined jargon.
+- Comments say what, not the story of why — exposition belongs in the literate
+  header, docstrings, or commit messages.
+- Read the relevant code before designing; run the affected tests (and
+  benchmarks for perf-sensitive changes) before committing.
 - Don't push, open PRs, or merge unless asked.
 
 ## Development commands
