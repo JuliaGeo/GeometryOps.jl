@@ -599,17 +599,16 @@ end
     @test ext.Z[1] ≈ 0 atol = 1e-14
     @test ext.Z[2] ≈ 0 atol = 1e-14
 
-    # The arc bulges out of the endpoints' box: two points at z = 0.9 on
-    # either side of the x = 0 great circle, joined over the pole
+    # Two points at z = 0.9 joined over the pole: the arc reaches z = 1
     z = 0.9; s = sqrt(1 - z^2)
     bulging = spherical_arc_extent(UnitSphericalPoint(0.0, -s, z), UnitSphericalPoint(0.0, s, z))
-    @test bulging.Z[2] ≈ 1 atol = 1e-14   # the pole, not the endpoints' z = 0.9
+    @test bulging.Z[2] ≈ 1 atol = 1e-14
     @test bulging.Z[2] > z
     @test bulging.Z[1] ≈ z atol = 1e-14
     @test bulging.Y[1] ≈ -s atol = 1e-14
     @test bulging.Y[2] ≈ s atol = 1e-14
 
-    # Geographic (lon, lat) input takes the same path
+    # Geographic (lon, lat) input
     @test spherical_arc_extent((0.0, 0.0), (90.0, 0.0)) ==
         spherical_arc_extent(UnitSphericalPoint(1.0, 0.0, 0.0), UnitSphericalPoint(0.0, 1.0, 0.0))
 
@@ -627,7 +626,7 @@ end
             a, b = rand(rng, UnitSphericalPoint{Float64}), rand(rng, UnitSphericalPoint{Float64})
             e = spherical_arc_extent(a, b)
             @test all(t -> inext(slerp(a, b, t), e), range(0.0, 1.0, length = 101))
-            # nearly-degenerate arcs stay stable through robust_cross_product
+            # nearly-degenerate arc
             b2 = UnitSphericalPoint(normalize(a + 1e-12 * rand(rng, UnitSphericalPoint{Float64})))
             e2 = spherical_arc_extent(a, b2)
             @test all(t -> inext(slerp(a, b2, t), e2), range(0.0, 1.0, length = 11))
