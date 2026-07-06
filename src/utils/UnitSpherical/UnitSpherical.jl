@@ -3,6 +3,7 @@ module UnitSpherical
 using CoordinateTransformations
 using StaticArrays, LinearAlgebra
 import GeoInterface as GI, GeoFormatTypes as GFT
+import Extents
 
 import Random
 

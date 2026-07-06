@@ -113,6 +113,39 @@ function _contains(cap::SphericalCap, point::UnitSphericalPoint)
     spherical_distance(cap.point, point) <= cap.radius
 end
 
+# ## Cap–extent intersection
+
+"""
+    Extents.intersects(cap::SphericalCap, ext::Extents.Extent{(:X, :Y, :Z)})
+    Extents.intersects(ext::Extents.Extent{(:X, :Y, :Z)}, cap::SphericalCap)
+
+Whether `cap` intersects the part of the unit sphere covered by the 3D
+Cartesian bounding box `ext`.
+
+A point on the sphere lies in the cap iff its Euclidean (chord) distance to
+the cap's center is at most `2sin(radius/2)`, so this tests whether the box
+comes within that distance of the center — the same comparison as S2's
+`S2Cap::Contains(S2Point)`, which compares squared chord lengths
+(`S1ChordAngle`s), extended to a box by clamping the center into it.  The
+on-sphere contents of the box are a subset of the box, so the test never
+returns a false negative, though it can return `true` for a box that only
+approaches the cap away from the sphere's surface — the safe direction for
+pruning searches over spatial trees built on 3D extents of unit-sphere
+geometry.
+"""
+function Extents.intersects(cap::SphericalCap, ext::Extents.Extent{(:X, :Y, :Z)})
+    c = cap.point
+    dx = c.x - clamp(c.x, ext.X[1], ext.X[2])
+    dy = c.y - clamp(c.y, ext.Y[1], ext.Y[2])
+    dz = c.z - clamp(c.z, ext.Z[1], ext.Z[2])
+    # the chord radius as S2's `S1ChordAngle(S1Angle)` computes it: accurate
+    # for small radii, where `2 - 2 * radiuslike` cancels to 0
+    chord = 2 * sin(0.5 * min(cap.radius, π))
+    return dx^2 + dy^2 + dz^2 <= chord^2
+end
+Extents.intersects(ext::Extents.Extent{(:X, :Y, :Z)}, cap::SphericalCap) =
+    Extents.intersects(cap, ext)
+
 #Comment by asinghvi: this could be transformed to GO.union
 function _merge(x::SphericalCap, y::SphericalCap)
 
