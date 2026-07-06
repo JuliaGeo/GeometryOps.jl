@@ -3,7 +3,9 @@ using LinearAlgebra
 
 using GeometryOps.UnitSpherical
 
+import GeometryOps as GO
 import GeoInterface as GI
+import Extents
 
 @testset "spherical_distance" begin
     @testset "Basic correctness" begin
@@ -544,4 +546,44 @@ end
     result = spherical_arc_intersection(a7, b7, a8, b8)
     @test result.type == arc_overlap
     @test length(result.points) == 2
+end
+
+@testset "Cap–extent intersection" begin
+    cap = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), π/4)
+    around_center = Extents.Extent(X = (0.9, 1.1), Y = (-0.1, 0.1), Z = (-0.1, 0.1))
+    antipodal = Extents.Extent(X = (-1.1, -0.9), Y = (-0.1, 0.1), Z = (-0.1, 0.1))
+    @test Extents.intersects(cap, around_center)
+    @test Extents.intersects(around_center, cap)
+    @test !Extents.intersects(cap, antipodal)
+    @test !Extents.intersects(antipodal, cap)
+
+    # Degenerate (point) extents straddling the cap boundary
+    just_inside = UnitSphericalPoint(cos(π/4 - 1e-3), sin(π/4 - 1e-3), 0.0)
+    just_outside = UnitSphericalPoint(cos(π/4 + 1e-3), sin(π/4 + 1e-3), 0.0)
+    @test Extents.intersects(cap, GI.extent(just_inside))
+    @test !Extents.intersects(cap, GI.extent(just_outside))
+
+    # A whole-sphere cap reaches the antipodal box; radii past π clamp to full
+    @test Extents.intersects(SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), π), antipodal)
+    @test Extents.intersects(SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), 3π/2), antipodal)
+
+    # Tiny radii keep full precision (the chord radius is computed as
+    # `2sin(radius/2)`, not from `radiuslike = cos(radius)`, which rounds
+    # to 1 below radius ≈ 1.5e-8 and would empty the cap)
+    tinycap = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), 1e-9)
+    @test Extents.intersects(tinycap, GI.extent(UnitSphericalPoint(cos(0.9e-9), sin(0.9e-9), 0.0)))
+    @test !Extents.intersects(tinycap, GI.extent(UnitSphericalPoint(cos(1.1e-9), sin(1.1e-9), 0.0)))
+
+    @testset "Spatial tree pruning against brute force" begin
+        using Random: Xoshiro
+        rng = Xoshiro(1312)
+        points = rand(rng, UnitSphericalPoint{Float64}, 1000)
+        tree = GO.FlexibleRTrees.RTree(GO.FlexibleRTrees.HPR(), points)
+        for radius in (0.05, 0.5, 2.0, π)
+            querycap = SphericalCap(rand(rng, UnitSphericalPoint{Float64}), radius)
+            hits = sort!(GO.SpatialTreeInterface.depth_first_search(
+                Base.Fix1(Extents.intersects, querycap), tree))
+            @test hits == findall(p -> spherical_distance(querycap.point, p) <= querycap.radius, points)
+        end
+    end
 end
