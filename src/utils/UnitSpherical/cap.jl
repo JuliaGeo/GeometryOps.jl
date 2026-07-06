@@ -120,18 +120,13 @@ end
     Extents.intersects(ext::Extents.Extent{(:X, :Y, :Z)}, cap::SphericalCap)
 
 Whether `cap` intersects the part of the unit sphere covered by the 3D
-Cartesian bounding box `ext`.
+Cartesian bounding box `ext` (also in unit-spherical space).
 
 A point on the sphere lies in the cap iff its Euclidean (chord) distance to
-the cap's center is at most `2sin(radius/2)`, so this tests whether the box
-comes within that distance of the center — the same comparison as S2's
-`S2Cap::Contains(S2Point)`, which compares squared chord lengths
-(`S1ChordAngle`s), extended to a box by clamping the center into it.  The
-on-sphere contents of the box are a subset of the box, so the test never
-returns a false negative, though it can return `true` for a box that only
-approaches the cap away from the sphere's surface — the safe direction for
-pruning searches over spatial trees built on 3D extents of unit-sphere
-geometry.
+the cap's center is at most ``2 * sin(radius/2)``, so this tests whether the box
+comes within that distance of the center.
+
+This is a fail-safe comparison, so may have false positives but never false negatives.
 """
 function Extents.intersects(cap::SphericalCap, ext::Extents.Extent{(:X, :Y, :Z)})
     c = cap.point
