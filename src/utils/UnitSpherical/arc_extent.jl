@@ -5,32 +5,22 @@
 spherical_arc_extent
 ```
 
-## Why not the extent of the endpoints?
-
 A great-circle arc bulges away from the chord between its endpoints, so the
-axis-aligned bounding box of the endpoints does not, in general, contain the
-arc.  The classic case is two points at the same latitude: the arc between
-them passes closer to the pole than either endpoint, e.g. two points at
+endpoints' bounding box does not in general contain the arc: two points at
 `z = 0.9` on either side of the prime meridian are joined by an arc whose
-midpoint has `z = 0.9 / cos(θ/2) > 0.9`.  A spatial index built on endpoint
-boxes would silently miss queries that touch only the bulge.
-
-## How the extremum is found
+midpoint has `z = 0.9 / cos(θ/2) > 0.9`.  [`spherical_arc_extent`](@ref)
+computes a box that contains the whole arc.
 
 With `t̂ₐ` the unit tangent at `a` pointing along the arc, the arc is
 `p(φ) = a cos(φ) + t̂ₐ sin(φ)` for `φ ∈ [0, θ]`, so each Cartesian
 coordinate is a sinusoid `pᵢ(φ) = Rᵢ cos(φ - φᵢ)` with amplitude
-`Rᵢ = hypot(aᵢ, t̂ₐᵢ)`.  Since `θ ≤ π`, at most one interior maximum and one
-interior minimum exist per axis, and the endpoint derivatives decide: an
-interior maximum exists iff `pᵢ` is increasing at `a` and decreasing at `b`
-(`t̂ₐᵢ > 0 > t̂ᵦᵢ`), where it attains `Rᵢ`; likewise a minimum attains `-Rᵢ`.
-No trigonometric calls are needed, and the tangents come from
-[`robust_cross_product`](@ref), so nearly-degenerate and nearly-antipodal
-arcs stay stable.
-
-Bounds are padded by a few ulps so that the extent is guaranteed to contain
-the arc despite floating point error, in the same spirit as S2's
-`S2LatLngRectBounder`, which widens its bounds by their maximum error.
+`Rᵢ = hypot(aᵢ, t̂ₐᵢ)`.  Since `θ ≤ π` there is at most one interior maximum
+and one interior minimum per axis: a maximum exists iff `pᵢ` increases at
+`a` and decreases at `b` (`t̂ₐᵢ > 0 > t̂ᵦᵢ`), where it attains `Rᵢ`; minima
+mirror.  The tangents come from [`robust_cross_product`](@ref), which keeps
+nearly-degenerate and nearly-antipodal arcs stable.  Bounds are padded by a
+few ulps to absorb floating point error, as S2's `S2LatLngRectBounder` pads
+by its maximum error.
 =#
 
 """
