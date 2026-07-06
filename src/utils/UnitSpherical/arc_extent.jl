@@ -41,11 +41,9 @@ on the unit sphere.  Accepts `UnitSphericalPoint`s, or any GeoInterface
 point (interpreted geographically, as longitude/latitude, like the
 `UnitSphericalPoint` constructor itself).
 
-The extent is exact up to floating point error and padded by a few ulps, so
-it always contains the arc — unlike the extent of the endpoints, which the
-arc bulges out of wherever a coordinate attains its extremum between them.
-For antipodal endpoints the arc's plane is ambiguous; the one chosen by
-[`robust_cross_product`](@ref) is used.
+The extent is exact up to floating point error, padded by a few ulps so it
+always contains the arc.  For antipodal endpoints the arc's plane is
+ambiguous; the one chosen by [`robust_cross_product`](@ref) is used.
 
 ## Example
 

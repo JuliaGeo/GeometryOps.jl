@@ -198,7 +198,7 @@ end
     edges = collect(GO.eachedge(GO.Spherical(), lonlat_ring, Float64))
     @test length(edges) == 3
     @test all(ps -> ps isa Tuple{UnitSphericalPoint{Float64}, UnitSphericalPoint{Float64}}, edges)
-    # Planar() is the manifold-less behavior
+    # Planar() matches the manifold-less form
     @test collect(GO.eachedge(GO.Planar(), lonlat_ring, Float64)) == collect(GO.eachedge(lonlat_ring, Float64))
 
     el = GO.to_edgelist(GO.Spherical(), lonlat_ring)
@@ -216,9 +216,8 @@ end
     @test Extents.extent(ni) isa Extents.Extent{(:X, :Y, :Z)}
     @test Extents.extent(rt) isa Extents.Extent{(:X, :Y, :Z)}
 
-    # The arc's bulge is indexed: an edge between two points at z = 0.9 arcs
-    # over the pole, so a query box touching only the polar region must find
-    # it, even though the endpoints' own box tops out at z = 0.9
+    # An edge between two points at z = 0.9 arcs over the pole; a query box
+    # touching only the polar region must still find it
     z = 0.9; s = sqrt(1 - z^2)
     seg = GI.LineString([UnitSphericalPoint(0.0, -s, z), UnitSphericalPoint(0.0, s, z)])
     tree = GO.FlexibleRTrees.RTree(GO.FlexibleRTrees.STR(), GO.to_edgelist(seg))
