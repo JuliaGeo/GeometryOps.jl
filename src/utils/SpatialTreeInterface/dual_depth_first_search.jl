@@ -33,21 +33,27 @@ function dual_depth_first_search(f::F, predicate::P, node1::N1, node2::N2) where
             end
         end
     elseif isleaf(node1) # node2 is not a leaf, node1 is - recurse further into node2
+        # Hoist loop-invariant extents out of the child loops: `node_extent` may be
+        # expensive (e.g. computed from a grid's perimeter points on the fly), and
+        # recomputing it per inner iteration multiplies that cost by the fanout.
+        extent1 = node_extent(node1)
         for child in getchild(node2)
-            if predicate(node_extent(node1), node_extent(child))
+            if predicate(extent1, node_extent(child))
                 @controlflow dual_depth_first_search(f, predicate, node1, child)
             end
         end
     elseif isleaf(node2) # node1 is not a leaf, node2 is - recurse further into node1
+        extent2 = node_extent(node2)
         for child in getchild(node1)
-            if predicate(node_extent(child), node_extent(node2))
+            if predicate(node_extent(child), extent2)
                 @controlflow dual_depth_first_search(f, predicate, child, node2)
             end
         end
     else # neither node is a leaf, recurse into both children
         for child1 in getchild(node1)
+            extent1 = node_extent(child1)
             for child2 in getchild(node2)
-                if predicate(node_extent(child1), node_extent(child2))
+                if predicate(extent1, node_extent(child2))
                     @controlflow dual_depth_first_search(f, predicate, child1, child2)
                 end
             end
