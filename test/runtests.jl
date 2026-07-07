@@ -34,6 +34,7 @@ end
 @safetestset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end
+@safetestset "Extent" begin include("methods/extent.jl") end
 @safetestset "Minimum Bounding Circle" begin include("methods/minimum_bounding_circle.jl") end
 @safetestset "Polygonize" begin include("methods/polygonize.jl") end
 # Clipping
