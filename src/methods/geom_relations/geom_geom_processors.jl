@@ -67,24 +67,35 @@ function _point_polygon_process(
 )
     skip, returnval = _maybe_skip_disjoint_extents(point, polygon; in_allow, on_allow, out_allow, on_require = false, out_require = false, in_require = false)
     skip && return returnval
-    # Check interaction of geom with polygon's exterior boundary
-    ext_val = _point_filled_curve_orientation(point, GI.getexterior(polygon); exact)
+    # Check interaction of geom with polygon's exterior boundary.  Prepared
+    # rings carry an edge tree (`_ring_edge_tree` returns `nothing` otherwise,
+    # which selects the plain sequential walk).
+    ext = GI.getexterior(polygon)
+    ext_val = _point_filled_curve_orientation(Planar(), point, _unwrap_prepared(ext), _ring_edge_tree(ext); exact)
     # If a point is outside, it isn't interacting with any holes
     ext_val == point_out && return out_allow
     # if a point is on an external boundary, it isn't interacting with any holes
     ext_val == point_on && return on_allow
-    
+
     # If geom is within the polygon, need to check interactions with holes
     for hole in GI.gethole(polygon)
-        hole_val = _point_filled_curve_orientation(point, hole; exact)
+        hole_val = _point_filled_curve_orientation(Planar(), point, _unwrap_prepared(hole), _ring_edge_tree(hole); exact)
         # If a point in in a hole, it is outside of the polygon
         hole_val == point_in && return out_allow
         # If a point in on a hole edge, it is on the edge of the polygon
         hole_val == point_on && return on_allow
     end
-    
+
     # Point is within external boundary and on in/on any holes
     return in_allow
+end
+
+# The prepared edge tree of a ring, or `nothing` if it doesn't carry one.
+# Preparations are always built against materialized (closed) rings, so the
+# tree can be used without checking ring closure.
+function _ring_edge_tree(ring)
+    prep = getprep(ring, AbstractEdgeTree)
+    return isnothing(prep) ? nothing : edge_tree(prep)
 end
 
 #=
@@ -492,6 +503,37 @@ passes through an odd number of edges, it is within the curve, else outside of
 of the curve if it didn't return 'on'.
 See paper for more information on cases denoted in comments.
 =#
+#=
+Per-edge kernel of the Hao–Sun algorithm: classify one edge against the point
+`(x, y)`.  Returns `(ison, crossed)` — `ison` is true when the point lies on
+the edge, `crossed` when the rightward ray from the point crosses it.  Each
+edge is independent, which is what lets the indexed variant below visit edges
+in any order and skip edges that can't interact with the ray.
+=#
+@inline function _hao_sun_edge(x, y, p_start, p_end; exact)
+    v1 = GI.y(p_start) - y
+    v2 = GI.y(p_end) - y
+    if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
+        u1, u2 = GI.x(p_start) - x, GI.x(p_end) - x
+        f = Predicates.orient(p_start, p_end, (x, y); exact)
+        if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
+            f == 0 && return (true, false)     # Case 16 or 21
+            f > 0 && return (false, true)      # Case 3 or 9
+        elseif v1 > 0 && v2 ≤ 0            # Case 4, 10, 19, 20, 12, or 25
+            f == 0 && return (true, false)     # Case 19 or 20
+            f < 0 && return (false, true)      # Case 4 or 10
+        elseif v2 == 0 && v1 < 0           # Case 7, 14, or 17
+            f == 0 && return (true, false)     # Case 17
+        elseif v1 == 0 && v2 < 0           # Case 8, 15, or 18
+            f == 0 && return (true, false)     # Case 18
+        elseif v1 == 0 && v2 == 0          # Case 1, 2, 5, 6, 22, or 23
+            u2 ≤ 0 && u1 ≥ 0 && return (true, false)  # Case 1
+            u1 ≤ 0 && u2 ≥ 0 && return (true, false)  # Case 2
+        end
+    end
+    return (false, false)
+end
+
 function _point_filled_curve_orientation(
     ::Planar, point, curve;
     in::T = point_in, on::T = point_on, out::T = point_out, exact,
@@ -503,29 +545,45 @@ function _point_filled_curve_orientation(
     p_start = GI.getpoint(curve, n)
     for (i, p_end) in enumerate(GI.getpoint(curve))
         i > n && break
-        v1 = GI.y(p_start) - y
-        v2 = GI.y(p_end) - y
-        if !((v1 < 0 && v2 < 0) || (v1 > 0 && v2 > 0)) # if not cases 11 or 26
-            u1, u2 = GI.x(p_start) - x, GI.x(p_end) - x
-            f = Predicates.orient(p_start, p_end, (x, y); exact)
-            if v2 > 0 && v1 ≤ 0                # Case 3, 9, 16, 21, 13, or 24
-                f == 0 && return on         # Case 16 or 21
-                f > 0 && (k += 1)              # Case 3 or 9
-            elseif v1 > 0 && v2 ≤ 0            # Case 4, 10, 19, 20, 12, or 25
-                f == 0 && return on         # Case 19 or 20
-                f < 0 && (k += 1)              # Case 4 or 10
-            elseif v2 == 0 && v1 < 0           # Case 7, 14, or 17
-                f == 0 && return on         # Case 17
-            elseif v1 == 0 && v2 < 0           # Case 8, 15, or 18
-                f == 0 && return on         # Case 18
-            elseif v1 == 0 && v2 == 0          # Case 1, 2, 5, 6, 22, or 23
-                u2 ≤ 0 && u1 ≥ 0 && return on  # Case 1
-                u1 ≤ 0 && u2 ≥ 0 && return on  # Case 2
-            end
-        end
+        ison, crossed = _hao_sun_edge(x, y, p_start, p_end; exact)
+        ison && return on
+        crossed && (k += 1)
         p_start = p_end
     end
     return iseven(k) ? out : in
+end
+
+#=
+Indexed variant, used when the ring has a prepared edge tree (see
+`AbstractEdgeTree` in `prepared.jl`).  Only edges whose extent touches
+the rightward ray strip `{(x′, y′) : x′ ≥ x, y′ = y}` can lie under the point
+or cross its ray, so we visit exactly those through a depth-first tree search
+with the strip as the predicate.  Crossing parity over visited edges equals
+parity over all edges, and an `on` hit anywhere decides the result immediately
+(`Action(:full_return, on)` unwinds the whole traversal), so the result is
+identical to the sequential loop above.  `tree === nothing` means "no
+preparation" and falls back to that loop.
+=#
+_point_filled_curve_orientation(m::Planar, point, curve, ::Nothing; kw...) =
+    _point_filled_curve_orientation(m, point, curve; kw...)
+function _point_filled_curve_orientation(
+    ::Planar, point, curve, tree;
+    in::T = point_in, on::T = point_on, out::T = point_out, exact,
+) where {T}
+    x, y = GI.x(point), GI.y(point)
+    n = GI.npoint(curve)
+    k = Ref(0)  # ray crossing counter; a Ref so the closure below doesn't box it
+    ray_strip = ext -> ext.X[2] >= x && ext.Y[1] <= y <= ext.Y[2]
+    result = SpatialTreeInterface.depth_first_search(ray_strip, tree) do i
+        p_start = GI.getpoint(curve, i)
+        p_end = GI.getpoint(curve, i == n ? 1 : i + 1)  # the last edge of an unclosed ring wraps around
+        ison, crossed = _hao_sun_edge(x, y, p_start, p_end; exact)
+        ison && return Action(:full_return, on)
+        crossed && (k[] += 1)
+        return nothing
+    end
+    result isa Action && return result.x
+    return iseven(k[]) ? out : in
 end
 _point_filled_curve_orientation(
     point, curve;

@@ -9,35 +9,102 @@
 
 The abstract supertype for all intersection accelerator types.
 
-The idea is that these speed up the edge-edge intersection checking process,
-perhaps at the cost of memory.
+These speed up the edge-edge intersection checking process, perhaps at the
+cost of memory.
 
-The naive case is `NestedLoop`, which is just a nested loop, running in O(n*m) time.
-
-Then we have `SingleSTRtree`, which is a single STRtree, running in O(n*log(m)) time.
-
-Then we have `DoubleSTRtree`, which is a simultaneous double-tree traversal of two STRtrees.
-
-Finally, we have `AutoAccelerator`, which chooses the best
-accelerator based on the size of the input polygons.  This gets materialized in `build_a_list` for now.
-`AutoAccelerator` should also try to respect existing spatial indices, if they exist.
+- `NestedLoop` is the naive O(n*m) loop
+- the tree accelerators `SingleSTRtree` and `SingleNaturalTree`, and `DoubleSTRtree` and `DoubleNaturalTree`, index one or both inputs' edges
+- [`TreeAccelerator`](@ref) is the general form the `NaturalTree` names construct: it states per side whether edges are traversed through a tree or iterated in order; tree sides reuse a `Prepared` input's trees and index anything else as it is (or `prepare` it first, with `prepare = true`)
+- [`AutoAccelerator`](@ref) chooses among them depending on the size of the inputs, as well as what preparations already exist on them.
 """
 abstract type IntersectionAccelerator end
 struct NestedLoop <: IntersectionAccelerator end
 struct SingleSTRtree <: IntersectionAccelerator end
 struct DoubleSTRtree <: IntersectionAccelerator end
-struct SingleNaturalTree <: IntersectionAccelerator end
-struct DoubleNaturalTree <: IntersectionAccelerator end
 struct ThinnedDoubleNaturalTree <: IntersectionAccelerator end
 
-"""
-    AutoAccelerator()
+# ## Per-side tree policies
 
-Let the algorithm choose the best accelerator based on the size of the input polygons.
-
-Once we have prepared geometry, this will also consider the existing preparations on the geoms.
 """
-struct AutoAccelerator <: IntersectionAccelerator end
+    TreePolicy
+
+Abstract supertype for the per-side policies of a [`TreeAccelerator`](@ref):
+[`IterateEdges`](@ref) and [`BuildTree`](@ref) state how one side's edges
+are traversed.
+"""
+abstract type TreePolicy end
+
+"""
+    IterateEdges()
+
+Per-side policy for a [`TreeAccelerator`](@ref): no tree on this side.
+Only meaningful for side `a`, whose edges the callback contract walks in
+`eachedge` order anyway; side `b` always needs an index to query into (for a
+tree-free `b`, use [`NestedLoop`](@ref) instead).
+"""
+struct IterateEdges <: TreePolicy end
+
+"""
+    BuildTree(backend = NaturalIndex; prepare = false)
+
+Per-side policy for a [`TreeAccelerator`](@ref): traverse this side through
+an edge tree.  A [`Prepared`](@ref) input brings its own trees, which are
+reused as-is.  Any other input is let in as it is: an ephemeral tree is
+built over its `eachedge` extents with `backend` (anything
+[`EdgeTree`](@ref) accepts) and coordinates are read from its storage in
+place — geometries with expensive point access (e.g. foreign-library
+storage) pay that price per read.  Pass `prepare = true` to instead run a
+full ephemeral [`prepare`](@ref) on such inputs at the traversal entry, or
+call `prepare` yourself to pay it once across calls.
+"""
+struct BuildTree{B} <: TreePolicy
+    backend::B
+    prepare::Bool
+end
+BuildTree(backend = NaturalIndexing.NaturalIndex; prepare::Bool = false) = BuildTree(backend, prepare)
+
+"""
+    TreeAccelerator(a, b)
+
+An accelerator that states, per side, how edges are traversed: each of `a`
+and `b` is an [`IterateEdges`](@ref) or [`BuildTree`](@ref) policy.  With
+`IterateEdges` on side `a`, `a`'s edges are walked in order and `b`'s tree
+is queried per edge; when both sides carry a tree policy, the two trees are
+traversed simultaneously (a dual-tree join).
+
+The historical accelerator names construct the common combinations:
+
+- `SingleNaturalTree()` = `TreeAccelerator(IterateEdges(), BuildTree())`
+- `DoubleNaturalTree()` = `TreeAccelerator(BuildTree(), BuildTree())`
+"""
+struct TreeAccelerator{PA <: TreePolicy, PB <: TreePolicy} <: IntersectionAccelerator
+    a::PA
+    b::PB
+    function TreeAccelerator(a::PA, b::PB) where {PA <: TreePolicy, PB <: TreePolicy}
+        b isa IterateEdges && throw(ArgumentError(
+            "side `b` of a `TreeAccelerator` must carry a tree-building policy; use `NestedLoop()` for tree-free iteration"))
+        return new{PA, PB}(a, b)
+    end
+end
+
+# The historical names, as constructors for the equivalent explicit
+# `TreeAccelerator`s.
+SingleNaturalTree(; prepare::Bool = false) = TreeAccelerator(IterateEdges(), BuildTree(; prepare))
+DoubleNaturalTree(; prepare::Bool = false) = TreeAccelerator(BuildTree(; prepare), BuildTree(; prepare))
+
+"""
+    AutoAccelerator(; prepare = false)
+
+Choose an accelerator from the size of the input geometries, preferring the
+tree paths when an input curve carries a prepared edge tree.  `prepare` is
+passed through to the [`BuildTree`](@ref) sides: whether unprepared inputs
+on tree paths get a full ephemeral [`prepare`](@ref) or are indexed as they
+are.
+"""
+struct AutoAccelerator <: IntersectionAccelerator
+    prepare::Bool
+end
+AutoAccelerator(; prepare::Bool = false) = AutoAccelerator(prepare)
 
 """
     FosterHormannClipping{M <: Manifold, A <: Union{Nothing, Accelerator}} <: GeometryOpsCore.Algorithm{M} 
@@ -201,77 +268,76 @@ for (a_edge, i) in enumerate(eachedge(geom_a))
 end
 ```
 
-This may not be the exact acceleration that is performed - but it is 
-the logical sequence of events.  It also uses the `accelerator`, 
-and can automatically choose the best one based on an internal heuristic
-if you pass in an [`AutoAccelerator`](@ref).  
-
-For example, the `SingleSTRtree` accelerator is used along
-with extent thinning to avoid unnecessary edge intersection 
-checks in the inner loop.
-
+The `accelerator` determines how candidate pairs are found.  For example,
+[`AutoAccelerator`](@ref) picks the tree structure based on the inputs.
+But the callbacks are always invoked in this logical order of iteration.
 """
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::AutoAccelerator, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
-    # this is suitable for planar
-    # but spherical / geodesic will need s2 support at some point,
-    # or -- even now -- just buffering
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
-    # Switching behaviour is turned off in the patch release
-    # This should be turned on in a GO v0.2.x
+    #=
+    The decision table.  Tree sides always reuse a `Prepared` input's trees
+    and index anything else as it is, so the branches only pick the *shape*
+    of the iteration.  `hasprep` sees just the node itself
+    (edge trees live on curves), so the prep checks fire for curve inputs;
+    whole geometries fall through to the size heuristic, whose tree paths
+    still reuse any prepared trees on the curves inside.
+
+    - `a` prepared: its tree is already paid for, so the dual traversal only
+      pays for `b`'s — and if `b` is prepared too (the both-prepared case),
+      it pays for nothing.
+    - only `b` prepared: the single-tree path is exactly "tree on b,
+      iterate a".
+    - neither prepared, both small: the nested loop's zero setup cost wins
+      (e.g. regridding, where polygons have only a few vertices).
+    - neither prepared, one small: index only `b`, iterate the small `a`.
+    - neither prepared, both large: dual traversal.
+    =#
+    if hasprep(poly_a, AbstractEdgeTree)
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, TreeAccelerator(BuildTree(; prepare = accelerator.prepare), BuildTree(; prepare = accelerator.prepare)), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
+    elseif hasprep(poly_b, AbstractEdgeTree)
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, TreeAccelerator(IterateEdges(), BuildTree(; prepare = accelerator.prepare)), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
+    end
     if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS && nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
         return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, NestedLoop(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     elseif na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS || nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
-        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, SingleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, TreeAccelerator(IterateEdges(), BuildTree(; prepare = accelerator.prepare)), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     else
-        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, DoubleNaturalTree(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, TreeAccelerator(BuildTree(; prepare = accelerator.prepare), BuildTree(; prepare = accelerator.prepare)), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
     end
 end
 
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::NestedLoop, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
-    # this is suitable for planar
-    # but spherical / geodesic will need s2 support at some point,
-    # or -- even now -- just buffering
-    na = GI.npoint(poly_a)
-    nb = GI.npoint(poly_b)
-    # if we don't have enough vertices in either of the polygons to merit a tree,
-    # then we can just do a simple nested loop
-    # this becomes extremely useful in e.g. regridding, 
-    # where we know the polygon will only ever have a few vertices.
-    # This is also applicable to any manifold, since the checking is done within
-    # the loop.
-    # First, loop over "each edge" in poly_a
+    # A plain nested loop over every edge pair: no setup cost, so it wins for
+    # small inputs (e.g. regridding), and it works on any manifold since all
+    # checking happens inside the callbacks.
     for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
         a1t == a2t && continue
         isnothing(f_on_each_a) || f_on_each_a(a1t, i)
         for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
             b1t == b2t && continue
-            LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # this should be aware of manifold by construction.
+            LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j))
         end
         isnothing(f_after_each_a) || f_after_each_a(a1t, i)
     end
-    # And we're done!  This is the super simple implementation.
     return nothing
 end
 
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::SingleSTRtree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
-    na = GI.npoint(poly_a)
-    nb = GI.npoint(poly_b)
-    # This is the "middle ground" case - run only a strtree 
-    # on poly_b without doing so on poly_a.
+    # This is the "middle ground" case - run only a strtree
+    # on poly_b (thinned to poly_a's extent) without doing so on poly_a.
     # This is less complex than running a dual tree traversal,
     # and reduces the overhead of constructing an edge list and tree on poly_a.
     ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
     edges_b, indices_b = to_edgelist(ext_a, poly_b, T)
     if isempty(edges_b) && !isnothing(f_on_each_a) && !isnothing(f_after_each_a)
-        # shortcut - nothing can possibly intersect
-        # so we just call f_on_each_a for each edge in poly_a
+        # Nothing can intersect - just run the per-a-edge callbacks.
         for i in 1:GI.npoint(poly_a)-1
             pt = _tuple_point(GI.getpoint(poly_a, i), T)
             f_on_each_a(pt, i)
@@ -282,16 +348,14 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
 
     # This is the STRtree generated from the edges of poly_b
     tree_b = STRtree(edges_b)
-
-    # this is a pre-allocation that will store the resuits of the query into tree_b
-    query_result = Int[] 
-    
-    # Loop over each vertex in poly_a
+    # This is a pre-allocated array that we'll use to store query results
+    # so that they can be sorted.
+    query_result = Int[]
+    # Loop over each edge in poly_a
     for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
         a1t == a2t && continue
         l1 = GI.Line(SVector{2}(a1t, a2t))
         ext_l = GI.extent(l1)
-        # l = GI.Line(SVector{2}(a1t, a2t); extent=ext_l) # this seems to be unused - TODO remove
         isnothing(f_on_each_a) || f_on_each_a(a1t, i)
         # Query the STRtree for any edges in b that may intersect this edge
         # This is sorted because we want to pretend we're doing the same thing
@@ -316,30 +380,140 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     return nothing
 end
 
+#=
+## Tree traversal
+
+`_ingest` runs at the traversal entry: `Prepared` geometries pass straight
+through and their trees are reused; with `prepare = true` on the side's
+[`BuildTree`](@ref), anything else gets a full ephemeral `prepare`;
+otherwise raw inputs are let in as they are, and `_CurveTree` builds an
+ephemeral tree over their `eachedge` extents.  Either way, coordinates are
+read from the curve's storage in place, so the loops below see exactly one
+shape.
+
+Two structural needs drive that shape.  Tree queries return candidate edge
+indices in tree order, not `eachedge` order, so edge coordinates must be
+readable *by index* (`_edge_coords`); candidates are always collected and
+sorted before use, so nothing is assumed about a tree's traversal order.
+And edge trees are per-ring preps while the callback contract numbers edges
+over the whole geometry, so multi-curve geometries decompose into
+`_CurveTree`s whose offsets recover `eachedge`'s concatenated numbering.
+=#
+
+_ingest(policy::BuildTree, m::Manifold, geom) =
+    policy.prepare && !(geom isa Prepared) ? prepare(m, geom; preps = (EdgeTree(policy.backend),)) : geom
+
+# One curve's tree and point-indexable storage, with its offset into the
+# geometry-wide `eachedge` numbering and its total extent.
+struct _CurveTree{Tr, C, E}
+    tree::Tr
+    curve::C
+    offset::Int
+    n::Int        # edge count
+    extent::E
+end
+
+function _CurveTree(policy::BuildTree, curve, offset::Int, ::Type{T}) where T
+    prep = getprep(curve, AbstractEdgeTree)
+    if isnothing(prep)
+        # An unprepared curve is indexed as it is: an ephemeral tree over its
+        # `eachedge` extents.  Not `_edge_extents` — its closing-edge wrap on
+        # unclosed rings would break the shared `eachedge` numbering.
+        exts = [Extents.Extent(X = minmax(p1[1], p2[1]), Y = minmax(p1[2], p2[2])) for (p1, p2) in eachedge(curve, T)]
+        tree = _extents_tree(policy.backend, exts)
+        return _CurveTree(tree, curve, offset, length(exts), SpatialTreeInterface.node_extent(tree))
+    end
+    tree = edge_tree(prep)
+    # A prepared curve's tree indexes exactly the edges `eachedge` walks:
+    # preparations are built against materialized storage, and materialized
+    # rings are closed (see the `Prepared` docstring).
+    return _CurveTree(tree, _unwrap_prepared(curve), offset, GI.npoint(curve) - 1, SpatialTreeInterface.node_extent(tree))
+end
+
+# Ephemeral trees over a vector of edge extents, keyed by backend the same
+# way `build_edge_tree` is.
+_extents_tree(::Type{<:NaturalIndexing.NaturalIndex}, exts) = NaturalIndexing.NaturalIndex(exts)
+_extents_tree(::Type{<:STRtree}, exts) = STRtree(exts)
+_extents_tree(alg::FlexibleRTrees.BulkLoadAlgorithm, exts) = FlexibleRTrees.RTree(alg, exts)
+_extents_tree(backend, exts) = backend(exts)
+
+# Decompose an ingested geometry into per-curve trees, returning
+# (curve trees, total edge count).  A curve gives a concretely-typed
+# 1-tuple (the static hot path); a multi-curve geometry gives a vector,
+# costing a dispatch per curve, not per edge.
+function _curve_trees(policy::BuildTree, geom, ::Type{T}) where T
+    if GI.trait(geom) isa GI.AbstractCurveTrait
+        ct = _CurveTree(policy, geom, 0, T)
+        return (ct,), ct.n
+    end
+    offset = 0
+    trees = map(collect(flatten(GI.AbstractCurveTrait, geom))) do curve
+        ct = _CurveTree(policy, curve, offset, T)
+        offset += ct.n
+        ct
+    end
+    return trees, offset
+end
+
+# Edge coordinates by index, read in place from curve point storage: edge
+# `j` runs from point `j` to point `j + 1`.  The geometry-global form
+# routes to the owning curve tree (few curves per geometry, so a linear
+# scan).
+_edge_coords(ct::_CurveTree, j::Int, ::Type{T}) where T =
+    (_tuple_point(GI.getpoint(ct.curve, j), T), _tuple_point(GI.getpoint(ct.curve, j + 1), T))
+function _edge_coords(curve_trees, j::Int, ::Type{T}) where T
+    for ct in curve_trees
+        j <= ct.offset + ct.n && return _edge_coords(ct, j - ct.offset, T)
+    end
+    throw(BoundsError(curve_trees, j))
+end
+
 function foreach_pair_of_maybe_intersecting_edges_in_order(
-    manifold::M, accelerator::SingleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+    manifold::M, accelerator::TreeAccelerator{IterateEdges}, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
-    na = GI.npoint(poly_a)
-    nb = GI.npoint(poly_b)
-    ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
-    edges_b = to_edgelist(poly_b, T)
+    ing_b = _ingest(accelerator.b, manifold, poly_b)
+    trees_b, _ = _curve_trees(accelerator.b, ing_b, T)
+    return _single_tree_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, GI.extent(ing_b), trees_b, T)
+end
 
-    b_tree = NaturalIndexing.NaturalIndex(edges_b)
-
+# Iterate `eachedge(poly_a)` in order; per edge, query each of b's curve
+# trees whose extent overlaps, then sort the collected candidates into
+# `eachedge` order.  This is a separate function rather than being inlined
+# into the method above because it is a function barrier: `_curve_trees`
+# returns differently-typed containers for curves vs multi-curve geometries,
+# and this boundary is where Julia re-specializes, so the per-edge work
+# below dispatches statically.
+function _single_tree_loop(
+    f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, ext_b, trees_b, ::Type{T}
+) where {FA, FAAfter, FI, T}
+    # This is a pre-allocated array that we'll use to store query results
+    # so that they can be sorted.
+    query_result = Int[]
+    # Loop over each edge in poly_a
     for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
         a1t == a2t && continue
         ext_l = Extents.Extent(X = minmax(a1t[1], a2t[1]), Y = minmax(a1t[2], a2t[2]))
         isnothing(f_on_each_a) || f_on_each_a(a1t, i)
-        # Query the STRtree for any edges in b that may intersect this edge
-        # This is sorted because we want to pretend we're doing the same thing
-        # as the nested loop above, and iterating through poly_b in order.
+        # Query the trees for any edges in b that may intersect this edge.
+        # The results are sorted because we want to pretend we're doing the
+        # same thing as the nested loop above, and iterating through poly_b
+        # in order — without assuming anything about the trees' traversal order.
         if Extents.intersects(ext_l, ext_b)
+            empty!(query_result)
+            for ct in trees_b
+                Extents.intersects(ext_l, ct.extent) || continue
+                _query_curve_tree!(query_result, ct, ext_l)
+            end
+            sort!(query_result)
             # Loop over the edges in b that might intersect the edges in a
-            SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, ext_l), b_tree) do j
-                b1t, b2t = edges_b[j].geom
-                b1t == b2t && return LoopStateMachine.Continue()
-                # LoopStateMachine control is managed outside the loop, by the depth_first_search function.
-                return f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
+            for j in query_result
+                b1t, b2t = _edge_coords(trees_b, j, T)
+                b1t == b2t && continue
+                # Manage control flow if the function returns a LoopStateMachine.Action
+                # like Break(), Continue(), or Return()
+                # This allows the function to break out of the loop early if it wants
+                # without being syntactically inside the loop.
+                LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j))
             end
         end
         isnothing(f_after_each_a) || f_after_each_a(a1t, i)
@@ -347,34 +521,85 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     return nothing
 end
 
-function foreach_pair_of_maybe_intersecting_edges_in_order(
-    manifold::M, accelerator::DoubleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
-) where {FA, FAAfter, FI, T, M <: Manifold}
-    na = GI.npoint(poly_a)
-    nb = GI.npoint(poly_b)
-    edges_a = to_edgelist(poly_a, T)
-    edges_b = to_edgelist(poly_b, T)
+# Pushes tree-local leaf indices into a shared result vector, offset into
+# the geometry-global `eachedge` numbering.  A named callable rather than a
+# closure, so the traversal callback is a concrete, capture-free object.
+struct _OffsetPush
+    offset::Int
+    out::Vector{Int}
+end
+(p::_OffsetPush)(j::Int) = (push!(p.out, p.offset + j); nothing)
 
-    tree_a = NaturalIndexing.NaturalIndex(edges_a)
-    tree_b = NaturalIndexing.NaturalIndex(edges_b)
+# Function barrier over the curve tree's concrete type.
+function _query_curve_tree!(query_result::Vector{Int}, ct::_CurveTree, ext_l)
+    SpatialTreeInterface.depth_first_search(_OffsetPush(ct.offset, query_result), Base.Fix1(Extents.intersects, ext_l), ct.tree)
+    return nothing
+end
+
+function foreach_pair_of_maybe_intersecting_edges_in_order(
+    manifold::M, accelerator::TreeAccelerator, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+) where {FA, FAAfter, FI, T, M <: Manifold}
+    ing_a = _ingest(accelerator.a, manifold, poly_a)
+    ing_b = _ingest(accelerator.b, manifold, poly_b)
+    trees_a, n_a = _curve_trees(accelerator.a, ing_a, T)
+    trees_b, _ = _curve_trees(accelerator.b, ing_b, T)
+    # Simultaneously traverse each pair of curve trees whose extents overlap,
+    # collecting the candidate (a edge, b edge) index pairs; `_dual_tree_loop`
+    # then sorts them and replays them in nested-loop order.
+    candidate_pairs = Tuple{Int, Int}[]
+    for ct_a in trees_a, ct_b in trees_b
+        Extents.intersects(ct_a.extent, ct_b.extent) || continue
+        _collect_candidate_pairs!(candidate_pairs, ct_a, ct_b)
+    end
+    return _dual_tree_loop(f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, candidate_pairs, trees_a, trees_b, n_a, T)
+end
+
+# Pushes a pair of tree-local leaf indices into the shared candidate vector,
+# offset into each geometry's `eachedge` numbering (`_OffsetPush`'s pair
+# sibling).
+struct _OffsetPairPush
+    off_a::Int
+    off_b::Int
+    out::Vector{Tuple{Int, Int}}
+end
+(p::_OffsetPairPush)(i::Int, j::Int) = (push!(p.out, (p.off_a + i, p.off_b + j)); nothing)
+
+# Function barrier over the two curve trees' concrete types.
+function _collect_candidate_pairs!(candidate_pairs::Vector{Tuple{Int, Int}}, ct_a::_CurveTree, ct_b::_CurveTree)
+    SpatialTreeInterface.dual_depth_first_search(_OffsetPairPush(ct_a.offset, ct_b.offset, candidate_pairs), Extents.intersects, ct_a.tree, ct_b.tree)
+    return nothing
+end
+
+# Walk the collected candidate pairs in nested-loop order, calling the
+# per-a-edge callbacks exactly once per edge (including edges the query
+# skipped, before, between, and after the candidates).  Sorting first makes
+# any candidate production order valid, so nothing is assumed about the
+# trees' traversal order.  A separate function for the same reason as
+# `_single_tree_loop`: it is the function barrier where the container types
+# from `_curve_trees` become concrete.
+function _dual_tree_loop(
+    f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, candidate_pairs::Vector{Tuple{Int, Int}}, trees_a::TA, trees_b::TB, n_a::Int, ::Type{T}
+) where {FA, FAAfter, FI, TA, TB, T}
+    sort!(candidate_pairs)
 
     last_a_idx = 0
 
-    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_edge_idx, b_edge_idx
-        a1t, a2t = edges_a[a_edge_idx].geom
-        b1t, b2t = edges_b[b_edge_idx].geom
+    for (a_edge_idx, b_edge_idx) in candidate_pairs
+        a1t, a2t = _edge_coords(trees_a, a_edge_idx, T)
+        b1t, b2t = _edge_coords(trees_b, b_edge_idx, T)
 
         if last_a_idx < a_edge_idx
             if !isnothing(f_on_each_a)
                 for i in (last_a_idx+1):(a_edge_idx-1)
-                    f_on_each_a((edges_a[i].geom[1]), i)
-                    !isnothing(f_after_each_a) && f_after_each_a((edges_a[i].geom[1]), i)
+                    p1 = _edge_coords(trees_a, i, T)[1]
+                    f_on_each_a(p1, i)
+                    !isnothing(f_after_each_a) && f_after_each_a(p1, i)
                 end
             end
             !isnothing(f_on_each_a) && f_on_each_a(a1t, a_edge_idx)
         end
 
-        f_on_each_maybe_intersect(((a1t, a2t), a_edge_idx), ((b1t, b2t), b_edge_idx))
+        LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), a_edge_idx), ((b1t, b2t), b_edge_idx))
 
         if last_a_idx < a_edge_idx
             if !isnothing(f_after_each_a)
@@ -384,24 +609,15 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
         end
     end
 
-    if last_a_idx == 0 # the query did not find any intersections
+    # Visit the a-edges past the last candidate (all of them if there were none).
+    if last_a_idx < n_a
         if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
-            return
-        else
-            for (i, edge) in enumerate(edges_a)
-                !isnothing(f_on_each_a) && f_on_each_a(edge.geom[1], i)
-                !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
-            end
+            return nothing
         end
-    elseif last_a_idx < length(edges_a)
-        # the query terminated early - this will almost always be the case.
-        if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
-            return
-        else
-            for (i, edge) in zip(last_a_idx+1:length(edges_a), view(edges_a, last_a_idx+1:length(edges_a)))
-                !isnothing(f_on_each_a) && f_on_each_a(edge.geom[1], i)
-                !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
-            end
+        for i in (last_a_idx+1):n_a
+            p1 = _edge_coords(trees_a, i, T)[1]
+            !isnothing(f_on_each_a) && f_on_each_a(p1, i)
+            !isnothing(f_after_each_a) && f_after_each_a(p1, i)
         end
     end
     return nothing
