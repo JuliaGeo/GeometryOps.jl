@@ -24,14 +24,13 @@ side of the edges.  This implies that a clockwise loop enclosing a small
 area is interpreted to be a CCW loop enclosing a very large area."
 
 The enclosure test is crossing parity, the way `S2Loop::InitBound` decides
-pole containment (`s2loop.cc`).  Pick an anchor edge whose great circle
-does not pass through the query point `q`: which side of that edge `q`
-lies on says whether the arc from the edge's midpoint to `q` *departs*
-into the interior (the left side) or the exterior, and each transversal
-boundary crossing along the arc flips that.  The departure side is exactly
-`q`'s side because the arc can meet the anchor's great circle again only
-at the midpoint's antipode, which an arc shorter than a half turn never
-reaches.
+pole containment (`s2loop.cc`).  For an anchor edge whose great circle
+misses the query point `q`, the side of that edge `q` falls on is the side
+the arc from the edge's midpoint to `q` departs into — left is the
+interior — and each transversal boundary crossing along the arc flips it.
+The departure side equals `q`'s side because the arc can meet the anchor's
+great circle again only at the midpoint's antipode, which an arc shorter
+than a half turn never reaches.
 
 Where S2 resolves degenerate configurations with exact predicates and
 symbolic perturbation, this test detects them — a vertex within
@@ -98,7 +97,7 @@ function _spherical_region_extent(pts::Vector{<:UnitSpherical.UnitSphericalPoint
     for i in 1:3, s in (1.0, -1.0)
         q = UnitSpherical.UnitSphericalPoint(ntuple(j -> j == i ? s : 0.0, 3))
         inside = _spherical_ring_contains(pts, n, q)
-        # nothing = undecidable: extend anyway so the box never under-covers
+        # nothing (undecidable) extends too; the box must never under-cover
         if inside === nothing || inside
             s > 0 ? (hi[i] = one(hi[i])) : (lo[i] = -one(lo[i]))
         end
@@ -146,18 +145,18 @@ end
 # transversal crossing, 0 for none, -1 for too close to degenerate to call.
 function _arc_crossing_parity(q, m, a, b)
     # a vertex exactly antipodal to `q` lies on every great circle through
-    # `q`, but its edges can reach the test arc only at `q` itself, which
-    # the on-boundary check has already excluded
+    # `q`; its edges can reach the test arc only at `q` itself, excluded by
+    # the on-boundary check
     (a == -q || b == -q) && return 0
     sa = UnitSpherical.spherical_orient(q, m, a)
     sb = UnitSpherical.spherical_orient(q, m, b)
     (sa == 0 || sb == 0) && return -1
     sa == sb && return 0
-    # `q` on this edge's great circle (but not on the edge — checked
-    # upfront): the two circles meet only at `±q`, and the test arc reaches
-    # neither, so the edge cannot cross it.  This is systematic, not rare —
-    # a lonlat grid's meridian edges pass through `±eₓ`/`±e_y` exactly —
-    # and no anchor changes it, so it must resolve rather than retry.
+    # `q` on this edge's great circle but off the edge (checked upfront):
+    # the circles meet only at `±q`, both out of the test arc's reach — no
+    # crossing.  This degeneracy is anchor-independent (a lonlat grid's
+    # meridian edges hold `±eₓ`/`±e_y` exactly), so it resolves instead of
+    # returning -1.
     sq = UnitSpherical.spherical_orient(a, b, q)
     sq == 0 && return 0
     sm = UnitSpherical.spherical_orient(a, b, m)
