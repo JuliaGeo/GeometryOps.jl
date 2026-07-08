@@ -46,8 +46,16 @@ end
     end
 
     @testset "No enclosure: region extent equals curve extent" begin
-        pts = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]
+        pts = [(5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0), (5.0, 5.0)]
         @test GO.extent(m, GI.Polygon([pts])) == GO.extent(m, GI.LineString(pts))
+    end
+
+    @testset "Axis point on the boundary clamps, and extends nothing else" begin
+        pts = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]  # corner at +eₓ
+        ext = GO.extent(m, GI.Polygon([pts]))
+        @test ext.X[2] == 1.0
+        @test ext.X[1] > 0.9 && ext.Y[2] < 0.2 && ext.Z[2] < 0.2
+        @test ext.Y[1] > -0.1 && ext.Z[1] > -0.1
     end
 
     @testset "Vertex exactly at the pole" begin
@@ -66,6 +74,30 @@ end
         @test ext.X == (-1.0, 1.0)  # ±eₓ and ±e_y are interior
         @test ext.Y == (-1.0, 1.0)
         @test ext.Z[1] < cosd(100)  # arcs bulge below the vertex circle
+    end
+
+    @testset "Dumbbell: both poles through a thin corridor" begin
+        # two polar caps (above ±85°) joined by a corridor over lon ∈ (355°, 5°);
+        # small area, no winding about any axis — only a containment test sees
+        # that both poles and (1, 0, 0) are interior
+        north = [(lon, 85.0) for lon in range(5.0, 355.0; length = 15)]    # eastward, pole on the left
+        south = [(lon, -85.0) for lon in range(355.0, 5.0; length = 15)]   # westward, pole on the left
+        ext = GO.extent(m, GI.Polygon([vcat(north, south, [north[1]])]))
+        @test ext.Z == (-1.0, 1.0)
+        @test ext.X[2] == 1.0       # (1, 0, 0) is inside the corridor
+        @test ext.X[1] > -1         # (-1, 0, 0) is outside
+        @test -0.2 < ext.Y[1] && ext.Y[2] < 0.2
+    end
+
+    @testset "Lonlat polar cells: exact pole vertex, no far-pole leak" begin
+        for lon0 in 0.0:30.0:330.0
+            cell = GI.Polygon([[(lon0, 80.0), (lon0 + 30.0, 80.0),
+                                (lon0 + 30.0, 90.0), (lon0, 90.0), (lon0, 80.0)]])
+            ext = GO.extent(m, cell)
+            @test ext.Z[2] == 1.0   # the pole is a vertex
+            @test ext.Z[1] > 0.9    # the south pole must not leak in
+            @test ext.X[1] > -1 && ext.X[2] < 1 && ext.Y[1] > -1 && ext.Y[2] < 1
+        end
     end
 
     @testset "Points, multis, and collections" begin
@@ -111,6 +143,15 @@ end
             r_in = 0.98 * minimum(q -> spherical_distance(c, q), samples)
             for a in axispoints
                 spherical_distance(c, a) < r_in && @test inext(a, ext)
+            end
+            # the reversed ring bounds the complement (S2 convention): it
+            # shares the boundary, covers axis points outside the cap, and
+            # between them the two boxes cover every axis point
+            rext = GO.extent(m, GI.LinearRing(reverse(ring)))
+            @test all(q -> inext(q, rext), samples)
+            for a in axispoints
+                spherical_distance(c, a) > r && @test inext(a, rext)
+                @test inext(a, ext) || inext(a, rext)
             end
         end
     end
