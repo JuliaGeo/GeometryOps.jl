@@ -6,6 +6,7 @@ import GeometryOps.FlexibleRTrees as FRT
 import GeometryOps.FlexibleRTrees: RTree, STR, HPR, Unsorted, query, hilbert_key
 import GeometryOps.SpatialTreeInterface as STI
 import Extents
+using GeometryOps.UnitSpherical: UnitSphericalPoint, SphericalCap
 using Random: Xoshiro
 
 # Random boxes with side lengths ~5% of the unit cube, in N dims.
@@ -83,4 +84,37 @@ end
         path = cells[sortperm(keys)]
         @test all(sum(abs.(path[i + 1] .- path[i])) == 1 for i in 1:(length(path) - 1))
     end
+end
+
+@testset "Manifold-aware construction" begin
+    band = [GI.Polygon([[(lon, 60.0), (lon + 30.0, 60.0), (lon + 30.0, 80.0), (lon, 80.0), (lon, 60.0)]])
+            for lon in 0.0:30.0:330.0]
+    cap = GI.Polygon([[(lon, 80.0) for lon in 0.0:30.0:360.0]])  # around the north pole
+    geoms = vcat(band, [cap])
+
+    tree = RTree(GO.Spherical(), HPR(), geoms)
+    @test Extents.extent(tree) isa Extents.Extent{(:X, :Y, :Z)}
+
+    # only the cap's region reaches the pole; every vertex stops at lat 80
+    pole_box = Extents.Extent(X = (-0.01, 0.01), Y = (-0.01, 0.01), Z = (0.99, 1.0))
+    @test query(tree, pole_box) == [13]
+
+    # a SphericalCap query against the 3D leaf boxes, end to end
+    polecap = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), 0.05)
+    @test STI.query(tree, Base.Fix1(Extents.intersects, polecap)) == [13]
+
+    ni = GO.NaturalIndexing.NaturalIndex(GO.Spherical(), geoms)
+    @test Extents.extent(ni) isa Extents.Extent{(:X, :Y, :Z)}
+    @test STI.query(ni, pole_box) == [13]
+
+    # a ring of UnitSphericalPoints needs no geographic conversion
+    z = 0.9; s = sqrt(1 - z^2)
+    usp_ring = GI.LinearRing([UnitSphericalPoint(s * cos(t), s * sin(t), z)
+                              for t in range(0, 2π; length = 9)[1:8]])
+    @test query(RTree(GO.Spherical(), STR(), [usp_ring]), pole_box) == [1]
+
+    # Planar() matches the manifold-less constructors
+    pt = RTree(GO.Planar(), HPR(), band)
+    t = RTree(HPR(), band)
+    @test pt.levels == t.levels && pt.indices == t.indices
 end

@@ -60,6 +60,16 @@ function NaturalIndex(last_level_extents::Vector{E}; nodecapacity = 32) where E 
     return NaturalIndex{E}(last_level_extents; nodecapacity = nodecapacity)
 end
 
+"""
+    NaturalIndex(m::Manifold, geoms; nodecapacity = 32)
+
+Index each geometry's extent *on the manifold `m`*, via
+`Extents.extent(m, geom)`.  On `Spherical()` the leaf extents are the 3D
+Cartesian boxes of the geometries as regions on the unit sphere.
+"""
+NaturalIndex(m::GO.Manifold, geoms; nodecapacity = 32) =
+    NaturalIndex([Extents.extent(m, g) for g in geoms]; nodecapacity)
+
 function NaturalIndex{E}(geoms; nodecapacity = 32) where E <: Extents.Extent
     # If passed a vector of geometries, and we know the type of the extent,
     # then simply retrieve the extents so they can serve as the "last-level" 
