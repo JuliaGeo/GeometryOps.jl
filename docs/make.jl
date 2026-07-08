@@ -136,6 +136,7 @@ makedocs(;
             "Creating Geometry" => "tutorials/creating_geometry.md",
             "Geospatial Geometry" => "tutorials/geospatial_geometry.md",
             "Spatial Joins" => "tutorials/spatial_joins.md",
+            "Clipping a FeatureCollection" => "tutorials/clipping_featurecollection.md",
         ],
         "Explanations" => [
             "Paradigms" => "explanations/paradigms.md",
