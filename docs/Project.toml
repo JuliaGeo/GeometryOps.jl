@@ -52,6 +52,7 @@ WellKnownGeometry = "0f680547-7be7-4555-8820-bb198eeb646b"
 [sources]
 GeometryOps = {path = ".."}
 GeometryOpsCore = {path = "../GeometryOpsCore"}
+DocumenterVitepress = {url = "https://github.com/LuxDL/DocumenterVitepress.jl", rev = "as/deploy-url-fixes"}
 
 [compat]
 DocumenterVitepress = ">=0.2.1"
