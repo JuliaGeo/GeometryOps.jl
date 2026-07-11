@@ -92,3 +92,113 @@ function point_on_spherical_arc(p::UnitSphericalPoint, a::UnitSphericalPoint, b:
     # (in terms of angle, so larger dot product)
     return (ap ≥ ab - tol) && (bp ≥ ab - tol)
 end
+
+"""
+    spherical_ring_contains(pts, n, q; orient, on_arc, proper_crossing) -> Union{Bool, Nothing}
+
+Whether `q` lies in the closed region on the left of the ring `pts[1:n]`
+(S2 loop convention: counterclockwise winding, interior on the left — a
+clockwise ring therefore contains the complement of the region it visually
+encloses).  The closing edge `pts[n] → pts[1]` is implied; points on the
+boundary count as contained.  Returns `nothing` when every anchor edge is
+degenerate with respect to `q` — callers must treat that conservatively.
+
+Containment is decided by crossing parity, the way `S2Loop::Contains` /
+`InitBound` decide pole containment: which side of an anchor edge `q` falls
+on, flipped once per transversal crossing of the arc from the anchor's
+midpoint to `q` with the other edges.  Anchors degenerate with respect to
+`q` are skipped and the next edge tried.
+
+The geometric predicates are injectable, so callers with stricter
+requirements can substitute their own:
+
+- `orient(a, b, c)`: sign-valued orientation of `c` against the oriented
+  great circle through `a, b`; default [`spherical_orient`](@ref).
+- `on_arc(q, a, b)::Bool`: boundary membership; default
+  [`point_on_spherical_arc`](@ref).  Pass `Returns(false)` when boundary
+  points have already been classified.
+- `proper_crossing(q, m, a, b)::Int`: `1` if the minor arcs `(q, m)` and
+  `(a, b)` cross transversally in both interiors, `0` if not, `-1` for too
+  close to degenerate to call; only consulted once `orient` places both
+  endpoint pairs strictly transversally.  The default decides through
+  `robust_cross_product` with a small tolerance band and assumes unit
+  input.
+
+The injected predicates receive the input points untouched (which may be
+non-unit for scale-invariant predicates); only the constructed reference
+midpoint is normalized.
+"""
+function spherical_ring_contains(pts, n, q;
+        orient = spherical_orient,
+        on_arc = point_on_spherical_arc,
+        proper_crossing = _hemisphere_proper_crossing)
+    for j in 1:n
+        on_arc(q, pts[j], pts[mod1(j + 1, n)]) && return true
+    end
+    nq = norm(q)
+    for j in 1:n
+        a, b = pts[j], pts[mod1(j + 1, n)]
+        a == b && continue
+        side = orient(a, b, q)
+        side == 0 && continue
+        mid = a + b
+        # near-antipodal edge: the midpoint direction is unstable
+        norm(mid) < 1e-9 * (norm(a) + norm(b)) && continue
+        m = UnitSphericalPoint(normalize(mid))
+        # test arc q → m would span a half turn
+        dot(q, m) < (-1 + 1e-9) * nq && continue
+        crossings = 0
+        ok = true
+        for k in 1:n
+            k == j && continue
+            c = _arc_crossing_parity(q, m, pts[k], pts[mod1(k + 1, n)]; orient, proper_crossing)
+            if c == -1
+                ok = false
+                break
+            end
+            crossings += c
+        end
+        ok || continue
+        # walking from `m` toward `q` departs onto `q`'s side of the anchor
+        # edge (the arc meets that great circle again only at `-m`); positive
+        # side is the interior, and each crossing flips it
+        return isodd(crossings) ? side < 0 : side > 0
+    end
+    return nothing
+end
+
+# Crossing parity of the test arc q → m against ring edge a → b: 1 for a
+# transversal crossing, 0 for none, -1 for too close to degenerate to call
+# (with an exact `orient`, only exact incidences return -1).
+function _arc_crossing_parity(q, m, a, b; orient, proper_crossing)
+    # a vertex at `-q` lies on every great circle through `q`; its edges can
+    # reach the test arc only at `q` itself, excluded by the on-boundary check
+    (a == -q || b == -q) && return 0
+    sa = orient(q, m, a)
+    sb = orient(q, m, b)
+    (sa == 0 || sb == 0) && return -1
+    (sa > 0) == (sb > 0) && return 0
+    # `q` on this edge's great circle but off the edge (checked upfront): the
+    # circles meet only at `±q`, out of the test arc's reach — no crossing.
+    # Anchor-independent (lonlat meridian edges hold `±eₓ`/`±e_y` exactly),
+    # so resolve instead of returning -1.
+    sq = orient(a, b, q)
+    sq == 0 && return 0
+    sm = orient(a, b, m)
+    sm == 0 && return -1
+    (sq > 0) == (sm > 0) && return 0
+    return proper_crossing(q, m, a, b)
+end
+
+# Default transversality decision: the circles' intersection direction `x`
+# must point into both arcs' hemispheres (each arc holds exactly one of `±x`
+# once the endpoint sides are strict). Tolerance-banded; assumes unit input.
+function _hemisphere_proper_crossing(q, m, a, b)
+    x = cross(normalize(robust_cross_product(q, m)),
+              normalize(robust_cross_product(a, b)))
+    d1 = dot(x, q + m)
+    d2 = dot(x, a + b)
+    tol = 16 * eps(Float64) * norm(x)
+    (abs(d1) <= tol || abs(d2) <= tol) && return -1
+    return (d1 > 0) == (d2 > 0) ? 1 : 0
+end
