@@ -261,6 +261,12 @@ function _to_kernel_points(m::Manifold, geom)
     return pts
 end
 
+# Manifold hook for edge validation at ingest (the `RelateGeometry`
+# extent-cache pass): a manifold may reject edges it cannot represent. Planar
+# edges are always fine; `Spherical` throws on exactly-antipodal vertex pairs
+# (see kernel_spherical.jl).
+_validate_relate_edges(::Manifold, curve) = nothing
+
 # Degenerate interaction box of a single *kernel* point, matching the
 # dimensionality of `rk_interaction_bounds` (2D for planar tuples, 3D for 3D
 # kernel points such as `UnitSphericalPoint`). Used by the point-locator line

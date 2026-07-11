@@ -32,7 +32,7 @@ end
 # 2D coordinate box. A long near-equatorial arc (lon 0 → 170) bulges to y ≈ 1
 # at lon 90 while its endpoint box has y ∈ [0, 0.17]; a polygon straddling the
 # equator at lon 90 crosses it there. A 2D endpoint box prunes that pair away
-# (wrong DE-9IM); the bulge-aware `arc_extent` keeps it.
+# (wrong DE-9IM); the bulge-aware `spherical_arc_extent` keeps it.
 @testset "spherical tree accelerator agrees with NestedLoop (arc bulge)" begin
     A = GI.Polygon([GI.LinearRing([(0., 0.), (170., 0.), (85., 40.), (0., 0.)])])
     B = GI.Polygon([GI.LinearRing([(88., -2.), (92., -2.), (92., 2.), (88., 2.), (88., -2.)])])
@@ -78,12 +78,12 @@ end
     p0   = GO._to_kernel_point(Spherical(), (0., 0.))       # (1, 0, 0)
     p180 = GO._to_kernel_point(Spherical(), (180., 0.))     # (-1, 0, 0): antipodal
     p90  = GO._to_kernel_point(Spherical(), (90., 0.))      # (0, 1, 0)
-    err = try; GO.arc_extent(p0, p180); nothing; catch e; e; end
+    err = try; GO._validate_relate_edges(Spherical(), GI.LineString([p0, p180])); nothing; catch e; e; end
     @test err isa ArgumentError
     @test occursin("AntipodalEdgeSplit", err.msg)
     #-- a normal edge and a repeated (zero-length) vertex do NOT throw
-    @test (GO.arc_extent(p0, p90); true)
-    @test (GO.arc_extent(p0, p0); true)
+    @test (GO._validate_relate_edges(Spherical(), GI.LineString([p0, p90])); true)
+    @test (GO._validate_relate_edges(Spherical(), GI.LineString([p0, p0])); true)
     #-- the whole relate rejects a polygon carrying an antipodal edge at ingest
     bad = GI.Polygon([GI.LinearRing([(0., 0.), (180., 0.), (90., 80.), (0., 0.)])])
     @test_throws ArgumentError GO.relate(alg, bad, GI.Point(10., 10.))
