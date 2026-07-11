@@ -98,22 +98,20 @@ _kernel_point_type(::Spherical) = UnitSphericalPoint{Float64}
     "unique great-circle arc; densify it first with the `AntipodalEdgeSplit` " *
     "correction (it inserts the lon/lat midpoint)"))
 
-# Ingest validation, run once per curve at `RelateGeometry` construction (the
-# extent-cache pass). A vanishing cross product with the endpoints pointing
-# opposite ways means the vertices are exactly antipodal: infinitely many
-# great circles pass through them, so the edge has no well-defined arc and
-# relate's contract is to throw informatively. (`spherical_arc_extent`
-# deliberately does not throw — it picks a stable plane — so the guard lives
-# here, not in the extent.) A vanishing cross with `a ⋅ b > 0` is a
-# zero-length/repeated vertex, which is fine.
+# Exactly antipodal pair: vanishing cross product, opposed directions. A
+# vanishing cross with `u ⋅ v > 0` is a zero-length/repeated vertex, fine.
+_exactly_antipodal(u, v) = iszero(cross(u, v)) && (u ⋅ v) < 0.0
+
+# Ingest validation, once per curve at `RelateGeometry` construction: an
+# exactly-antipodal edge has no unique great-circle arc, so throw rather
+# than pick one (`spherical_arc_extent` picks a stable plane, never throws).
 function _validate_relate_edges(::Spherical, curve)
     n = GI.npoint(curve)
     n < 2 && return nothing
     prev = _spherical_kernel_point(GI.getpoint(curve, 1))
     for i in 2:n
         cur = _spherical_kernel_point(GI.getpoint(curve, i))
-        c = cross(prev, cur)
-        (c ⋅ c) == 0.0 && (prev ⋅ cur) < 0.0 && _throw_antipodal_edge(prev, cur)
+        _exactly_antipodal(prev, cur) && _throw_antipodal_edge(prev, cur)
         prev = cur
     end
     return nothing
@@ -288,14 +286,11 @@ _ring_kernel_pts(::False, ring) = _ring_usp(ring)
 
 # Location of `p` relative to the area enclosed by `ring` (S2 convention:
 # interior on the left). Boundary first (exact arc membership), then the
-# shared anchor-retry crossing parity — `spherical_ring_contains` with this
-# kernel's predicates injected: `rk_orient` for sides and
-# `_arcs_cross_properly` for transversality, so the interior decision is as
-# exact as the predicates. Unlike a fixed reference point (the previous
-# north-pole walk), the anchor retry has no preferred direction to go
-# degenerate at, and handles super-hemisphere interiors. If every anchor is
-# degenerate with respect to `p` — unreachable for a non-degenerate ring and
-# an off-boundary point — the configuration is refused, not answered wrong.
+# shared `spherical_ring_contains` with this kernel's predicates injected —
+# `rk_orient` for sides, `_arcs_cross_properly` for transversality — so the
+# interior decision is as exact as the predicates. All anchors degenerate
+# (unreachable for a non-degenerate ring and an off-boundary point) is
+# refused, not answered wrong.
 function rk_point_in_ring(m::Spherical, p, ring; exact)
     pts = _ring_kernel_pts(ring)
     @inbounds for i in 1:length(pts)-1
@@ -317,24 +312,23 @@ end
     "respect to the query point $(_tup3(p)) — the ring is degenerate at " *
     "this point"))
 
-# Interaction bounds on the sphere, built from the shared substrate
+# Interaction bounds on the sphere: the shared substrate
 # (`spherical_arc_extent` per edge, `_spherical_region_extent` for area
-# interiors) over kernel-converted points, so the box and the ingested
-# vertices agree bit-for-bit. Relate-specific glue: rings are a polygon's
-# linework / dim-1 curve elements (JTS semantics), not S2 regions — their
-# edges are bounded directly, so a CW hole cannot become a complement region —
-# and every box gets a few ulps of padding so a kernel point that differs
-# from another conversion path by sub-ulp noise still prunes as interacting.
+# interiors) over kernel-converted points, so box and ingested vertices
+# agree bit-for-bit. Rings are dim-1 linework here (JTS semantics), not S2
+# regions — a CW hole must not become a complement region. Boxes get a few
+# ulps of padding so a vertex from another conversion path still prunes as
+# interacting.
 rk_interaction_bounds(m::Spherical, geom) =
     _pad_bounds(_sph_interaction_extent(m, GI.trait(geom), geom))
 
-function _sph_interaction_extent(m::Spherical, ::GI.AbstractPointTrait, geom)
-    p = _spherical_kernel_point(geom)
-    return Extents.Extent(X = (p[1], p[1]), Y = (p[2], p[2]), Z = (p[3], p[3]))
-end
+_sph_interaction_extent(m::Spherical, ::GI.AbstractPointTrait, geom) =
+    GI.extent(_spherical_kernel_point(geom))
 function _sph_interaction_extent(m::Spherical, ::GI.AbstractCurveTrait, geom)
     n = GI.npoint(geom)
     prev = _spherical_kernel_point(GI.getpoint(geom, 1))
+    # seeding with pts[1]'s box covers the degenerate n == 1 curve; it is
+    # absorbed by the first edge box otherwise
     ext = spherical_arc_extent(prev, prev)
     for i in 2:n
         cur = _spherical_kernel_point(GI.getpoint(geom, i))

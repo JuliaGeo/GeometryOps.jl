@@ -52,14 +52,9 @@ end
 (::AntipodalEdgeSplit)(::GI.AbstractCurveTrait, curve) = _split_antipodal_curve(curve)
 
 # Whether the lon/lat points `p`, `q` map to exactly-antipodal unit vectors —
-# the same condition the kernel's edge validation throws on (vanishing cross,
-# negative dot).
-function _is_antipodal_lonlat(p, q)
-    up = _spherical_kernel_point(p)
-    uq = _spherical_kernel_point(q)
-    n = cross(up, uq)
-    return iszero(n[1]) && iszero(n[2]) && iszero(n[3]) && (up ⋅ uq) < 0
-end
+# the condition the kernel's edge validation throws on.
+_is_antipodal_lonlat(p, q) =
+    _exactly_antipodal(_spherical_kernel_point(p), _spherical_kernel_point(q))
 
 # Insert the lon/lat midpoint into every antipodal edge of a ring/line,
 # returning the input unchanged (no copy) when there is nothing to split.
