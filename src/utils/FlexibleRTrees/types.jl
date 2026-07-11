@@ -72,6 +72,17 @@ function RTree(algorithm::A, data; nodecapacity::Int = 16) where A <: BulkLoadAl
     return RTree{A, E}(algorithm, nodecapacity, total, levels, perm)
 end
 
+"""
+    RTree(m::Manifold, algorithm::BulkLoadAlgorithm, data; nodecapacity = 16)
+
+Build the tree over each element's extent *on the manifold `m`*, via
+`Extents.extent(m, x)`.  On `Spherical()` the leaves are the 3D Cartesian
+boxes of the elements as regions on the unit sphere, covering the arc bulge
+and enclosed poles that vertex extents miss.
+"""
+RTree(m::Manifold, algorithm::BulkLoadAlgorithm, data; nodecapacity::Int = 16) =
+    RTree(algorithm, [Extents.extent(m, x) for x in data]; nodecapacity)
+
 Extents.extent(tree::RTree) = tree.extent
 
 function Base.show(io::IO, tree::RTree{A}) where A
