@@ -67,18 +67,6 @@ function kernel_conformance_suite_spherical(m; exact)
             @test e.Z[1] <= GI.z(u) <= e.Z[2]
         end
     end
-    @testset "rk_bounds_covers respects Z" begin
-        big = Extents.Extent(X = (0., 2.), Y = (0., 2.), Z = (0., 2.))
-        inside = Extents.Extent(X = (0.5, 1.), Y = (0.5, 1.), Z = (0.5, 1.))
-        outsideZ = Extents.Extent(X = (0.5, 1.), Y = (0.5, 1.), Z = (0.5, 3.))
-        @test GO.rk_bounds_covers(big, inside)
-        @test !GO.rk_bounds_covers(big, outsideZ)
-        @test !GO.rk_bounds_disjoint(big, inside)
-        # the 2D covering relation is unchanged
-        big2 = Extents.Extent(X = (0., 2.), Y = (0., 2.))
-        @test GO.rk_bounds_covers(big2, Extents.Extent(X = (0.5, 1.), Y = (0.5, 1.)))
-        @test !GO.rk_bounds_covers(big2, Extents.Extent(X = (0.5, 3.), Y = (0.5, 1.)))
-    end
     @testset "rk_classify_intersection: symmetry and incidence consistency" begin
         n_proper = 0; n_touch = 0; n_collinear = 0
         for _ in 1:2000

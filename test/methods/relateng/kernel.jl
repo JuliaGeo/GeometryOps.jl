@@ -6,6 +6,7 @@ import GeometryOps as GO
 import GeometryOps: Planar, True, False
 import GeometryOps.UnitSpherical: UnitSphericalPoint
 import GeoInterface as GI
+import Extents
 
 const PT = Tuple{Float64, Float64}
 m = Planar()
@@ -43,8 +44,8 @@ end
 @testset "bounds" begin
     pa = GI.Polygon([[(0.0,0.0), (1.0,0.0), (1.0,1.0), (0.0,0.0)]])
     ea = GO.rk_interaction_bounds(m, pa)
-    @test !GO.rk_bounds_disjoint(ea, ea)
-    @test GO.rk_bounds_covers(ea, ea)
+    @test Extents.intersects(ea, ea)
+    @test Extents.covers(ea, ea)
 end
 
 @testset "rk_classify_intersection" begin

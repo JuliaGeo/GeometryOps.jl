@@ -769,7 +769,7 @@ end
 # (only reachable when the target is empty but the predicate still requires
 # exterior checks).
 _elem_env_disjoint(m::Manifold, elem, target_ext) =
-    target_ext === nothing || rk_bounds_disjoint(rk_interaction_bounds(m, elem), target_ext)
+    target_ext === nothing || !Extents.intersects(rk_interaction_bounds(m, elem), target_ext)
 
 # Java LineString.isClosed: false for an empty line, otherwise exact 2D
 # coordinate equality of the endpoints.
