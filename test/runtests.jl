@@ -19,6 +19,7 @@ end
 @safetestset "Utils" begin include("utils/utils.jl") end
 @safetestset "LoopStateMachine" begin include("utils/LoopStateMachine.jl") end
 @safetestset "SpatialTreeInterface" begin include("utils/SpatialTreeInterface.jl") end
+@safetestset "FlexibleRTrees" begin include("utils/FlexibleRTrees.jl") end
 @safetestset "UnitSpherical" begin include("utils/unitspherical.jl") end
 @safetestset "RobustCrossProduct" begin include("utils/robustcrossproduct.jl") end
 # Methods
@@ -34,7 +35,9 @@ end
 @safetestset "RelateNG" begin include("methods/relateng/runtests.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end
+@safetestset "Extent" begin include("methods/extent.jl") end
 @safetestset "Minimum Bounding Circle" begin include("methods/minimum_bounding_circle.jl") end
+@safetestset "Polygonize" begin include("methods/polygonize.jl") end
 # Clipping
 @safetestset "Coverage" begin include("methods/clipping/coverage.jl") end
 @safetestset "Cut" begin include("methods/clipping/cut.jl") end

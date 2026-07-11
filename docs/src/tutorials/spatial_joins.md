@@ -4,11 +4,26 @@ Spatial joins are [table joins](https://www.geeksforgeeks.org/sql-join-set-1-inn
 
 Spatial joins can be done between any geometry types (from geometrycollections to points), just as geometrical predicates can be evaluated on any geometries.
 
-In this tutorial, we will show how to perform a spatial join on first a toy dataset and then two Natural Earth datasets, to show how this can be used in the real world.
+In this tutorial, we will demonstrate how to perform spatial joins, first using a toy dataset and then two Natural Earth datasets, to show how this can be applied in the real world
+
+Install the packages used in this tutorial:
+
+````julia
+using Pkg
+Pkg.add(["FlexiJoins", "DataFrames", "CairoMakie", "GeoInterfaceMakie", "GADM", "GeoInterface", "GeometryOps"])
+````
+
+````@example spatialjoins
+using FlexiJoins, 
+using DataFrames
+using CairoMakie, GeoInterfaceMakie
+using GADM # GADM gives us country and sublevel geometry
+import GeoInterface as GI
+import GeometryOps as GO
+````
 
 In order to perform the spatial join, we use **[FlexiJoins.jl](https://github.com/JuliaAPlavin/FlexiJoins.jl)** to perform the join, specifically using its `by_pred` joining method.  This allows the user to specify a predicate in the following manner, for any kind of table join operation:
 ```julia
-using FlexiJoins
 innerjoin((table1, table1),
     by_pred(:table1_column, predicate_function, :table2_column) # & add other conditions here
 )
@@ -43,11 +58,6 @@ The spatial join is performed using the `contains` predicate from GeometryOps, w
 First, we generate our data.  We create two triangle polygons which, together, span the rectangle (0, 0, 1, 1), and a set of points which are randomly distributed within this rectangle.
 
 ```@example spatialjoins
-import GeoInterface as GI, GeometryOps as GO
-using FlexiJoins, DataFrames
-
-using CairoMakie, GeoInterfaceMakie
-
 pl = GI.Polygon([GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 0)])])
 pu = GI.Polygon([GI.LinearRing([(0, 0), (0, 1), (1, 1), (0, 0)])])
 poly_df = DataFrame(geometry = [pl, pu], color = [:red, :blue])
@@ -92,11 +102,6 @@ Here, you can see that the colors were assigned appropriately to the scattered p
 Suppose I have a list of polygons representing administrative regions (or mining sites, or what have you), and I have a list of polygons for each country.  I want to find the country each region is in.
 
 ```julia real
-import GeoInterface as GI, GeometryOps as GO
-using FlexiJoins, DataFrames, GADM # GADM gives us country and sublevel geometry
-
-using CairoMakie, GeoInterfaceMakie
-
 country_df = GADM.get.(["JPN", "USA", "IND", "DEU", "FRA"]) |> DataFrame
 country_df.geometry = GI.GeometryCollection.(GO.tuples.(country_df.geom))
 

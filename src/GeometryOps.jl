@@ -55,6 +55,8 @@ include("utils/utils.jl")
 include("utils/NaturalIndexing.jl")
 using .NaturalIndexing
 
+include("utils/FlexibleRTrees/FlexibleRTrees.jl")
+using .FlexibleRTrees
 
 # Load utility modules in
 using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
@@ -67,6 +69,7 @@ include("methods/centroid.jl")
 include("methods/convex_hull.jl")
 include("methods/distance.jl")
 include("methods/equals.jl")
+include("methods/extent.jl")
 include("methods/perimeter.jl")
 include("methods/clipping/predicates.jl")
 include("methods/clipping/clipping_processor.jl")

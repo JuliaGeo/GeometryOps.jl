@@ -33,7 +33,7 @@ jobs:
             version: '1'
             arch: arm64
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: julia-actions/cache@v3
       - uses: julia-actions/setup-julia@v3
         with:
@@ -58,7 +58,7 @@ jobs:
       statuses: write
       actions: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: julia-actions/cache@v3
       - uses: julia-actions/setup-julia@v3
         with:
@@ -79,7 +79,7 @@ jobs:
       statuses: write
       actions: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: julia-actions/cache@v3
       - uses: julia-actions/setup-julia@v3
         with:

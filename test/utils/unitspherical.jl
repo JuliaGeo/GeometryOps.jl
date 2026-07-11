@@ -3,7 +3,9 @@ using LinearAlgebra
 
 using GeometryOps.UnitSpherical
 
+import GeometryOps as GO
 import GeoInterface as GI
+import Extents
 
 @testset "spherical_distance" begin
     @testset "Basic correctness" begin
@@ -544,4 +546,90 @@ end
     result = spherical_arc_intersection(a7, b7, a8, b8)
     @test result.type == arc_overlap
     @test length(result.points) == 2
+end
+
+@testset "Cap–extent intersection" begin
+    cap = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), π/4)
+    around_center = Extents.Extent(X = (0.9, 1.1), Y = (-0.1, 0.1), Z = (-0.1, 0.1))
+    antipodal = Extents.Extent(X = (-1.1, -0.9), Y = (-0.1, 0.1), Z = (-0.1, 0.1))
+    @test Extents.intersects(cap, around_center)
+    @test Extents.intersects(around_center, cap)
+    @test !Extents.intersects(cap, antipodal)
+    @test !Extents.intersects(antipodal, cap)
+
+    # Degenerate (point) extents straddling the cap boundary
+    just_inside = UnitSphericalPoint(cos(π/4 - 1e-3), sin(π/4 - 1e-3), 0.0)
+    just_outside = UnitSphericalPoint(cos(π/4 + 1e-3), sin(π/4 + 1e-3), 0.0)
+    @test Extents.intersects(cap, GI.extent(just_inside))
+    @test !Extents.intersects(cap, GI.extent(just_outside))
+
+    # A whole-sphere cap reaches the antipodal box; radii past π clamp to full
+    @test Extents.intersects(SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), π), antipodal)
+    @test Extents.intersects(SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), 3π/2), antipodal)
+
+    # Tiny radii keep full precision (the chord radius is computed as
+    # `2sin(radius/2)`, not from `radiuslike = cos(radius)`, which rounds
+    # to 1 below radius ≈ 1.5e-8 and would empty the cap)
+    tinycap = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), 1e-9)
+    @test Extents.intersects(tinycap, GI.extent(UnitSphericalPoint(cos(0.9e-9), sin(0.9e-9), 0.0)))
+    @test !Extents.intersects(tinycap, GI.extent(UnitSphericalPoint(cos(1.1e-9), sin(1.1e-9), 0.0)))
+
+    @testset "Spatial tree pruning against brute force" begin
+        using Random: Xoshiro
+        rng = Xoshiro(1312)
+        points = rand(rng, UnitSphericalPoint{Float64}, 1000)
+        tree = GO.FlexibleRTrees.RTree(GO.FlexibleRTrees.HPR(), points)
+        for radius in (0.05, 0.5, 2.0, π)
+            querycap = SphericalCap(rand(rng, UnitSphericalPoint{Float64}), radius)
+            hits = sort!(GO.SpatialTreeInterface.depth_first_search(
+                Base.Fix1(Extents.intersects, querycap), tree))
+            @test hits == findall(p -> spherical_distance(querycap.point, p) <= querycap.radius, points)
+        end
+    end
+end
+
+@testset "spherical_arc_extent" begin
+    # Quarter arc along the equator: x and y peak at the endpoints, z is flat
+    ext = spherical_arc_extent(UnitSphericalPoint(1.0, 0.0, 0.0), UnitSphericalPoint(0.0, 1.0, 0.0))
+    @test ext isa Extents.Extent{(:X, :Y, :Z)}
+    @test ext.X[1] ≈ 0 atol = 1e-14
+    @test ext.X[2] ≈ 1 atol = 1e-14
+    @test ext.Y[1] ≈ 0 atol = 1e-14
+    @test ext.Y[2] ≈ 1 atol = 1e-14
+    @test ext.Z[1] ≈ 0 atol = 1e-14
+    @test ext.Z[2] ≈ 0 atol = 1e-14
+
+    # Two points at z = 0.9 joined over the pole: the arc reaches z = 1
+    z = 0.9; s = sqrt(1 - z^2)
+    bulging = spherical_arc_extent(UnitSphericalPoint(0.0, -s, z), UnitSphericalPoint(0.0, s, z))
+    @test bulging.Z[2] ≈ 1 atol = 1e-14
+    @test bulging.Z[2] > z
+    @test bulging.Z[1] ≈ z atol = 1e-14
+    @test bulging.Y[1] ≈ -s atol = 1e-14
+    @test bulging.Y[2] ≈ s atol = 1e-14
+
+    # Geographic (lon, lat) input
+    @test spherical_arc_extent((0.0, 0.0), (90.0, 0.0)) ==
+        spherical_arc_extent(UnitSphericalPoint(1.0, 0.0, 0.0), UnitSphericalPoint(0.0, 1.0, 0.0))
+
+    # Degenerate arc: a point
+    p = UnitSphericalPoint(1.0, 0.0, 0.0)
+    degenerate = spherical_arc_extent(p, p)
+    @test degenerate.X[1] <= 1 <= degenerate.X[2]
+    @test degenerate.X[2] - degenerate.X[1] < 1e-14
+
+    @testset "Containment of dense arc samples" begin
+        using Random: Xoshiro
+        rng = Xoshiro(999)
+        inext(q, e) = e.X[1] <= q[1] <= e.X[2] && e.Y[1] <= q[2] <= e.Y[2] && e.Z[1] <= q[3] <= e.Z[2]
+        for _ in 1:100
+            a, b = rand(rng, UnitSphericalPoint{Float64}), rand(rng, UnitSphericalPoint{Float64})
+            e = spherical_arc_extent(a, b)
+            @test all(t -> inext(slerp(a, b, t), e), range(0.0, 1.0, length = 101))
+            # nearly-degenerate arc
+            b2 = UnitSphericalPoint(normalize(a + 1e-12 * rand(rng, UnitSphericalPoint{Float64})))
+            e2 = spherical_arc_extent(a, b2)
+            @test all(t -> inext(slerp(a, b2, t), e2), range(0.0, 1.0, length = 11))
+        end
+    end
 end
