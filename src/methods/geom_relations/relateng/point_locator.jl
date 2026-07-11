@@ -460,7 +460,7 @@ end
 function locate_on_line(loc::RelatePointLocator, p, is_node::Bool, line)
     #-- Java: lineEnv.intersects(p) short-circuit (p is already a kernel point)
     pt_ext = _kernel_point_box(p)
-    if rk_bounds_disjoint(rk_interaction_bounds(loc.m, line), pt_ext)
+    if !Extents.intersects(rk_interaction_bounds(loc.m, line), pt_ext)
         return LOC_EXTERIOR
     end
     #-- Java: PointLocation.isOnLine over the coordinate sequence
