@@ -36,19 +36,19 @@ repeated last point): one of `LOC_INTERIOR`, `LOC_BOUNDARY`, `LOC_EXTERIOR`.
 
     rk_interaction_bounds(m, geom)::Extents.Extent
 
-The bounding region within which `geom` can interact with another geometry.
-On the plane this is the ordinary extent; other manifolds may need to widen
-it (e.g. great-circle edges bulge outside the coordinate box of their
-endpoints).
+The bounding region within which `geom` can interact with another geometry:
+the shared manifold extent (`Extents.extent(m, geom)`) in kernel
+coordinates, plus any relate-specific conservatism (ulp padding, dim-1
+curve semantics for rings — see kernel_spherical.jl). Extent tests on
+these boxes use `Extents.intersects`/`Extents.covers` directly (via the
+`nothing`-tolerant `ext_intersects`/`ext_covers` where empty geometries
+can occur).
 
-    rk_bounds_disjoint(extA, extB)::Bool
-    rk_bounds_covers(extA, extB)::Bool
+    _validate_relate_edges(m, curve)
 
-Conservative interaction-bounds tests used for short-circuiting:
-`rk_bounds_disjoint` must only return `true` when no interaction is possible;
-`rk_bounds_covers` must only return `true` when `extA` covers `extB` in the
-X/Y dimensions. These operate on the extents produced by
-`rk_interaction_bounds` and are manifold-generic.
+Ingest validation hook, run once per curve at `RelateGeometry`
+construction: throw on edges the manifold cannot represent. A no-op on
+`Planar`; `Spherical` rejects exactly-antipodal vertex pairs.
 
     rk_classify_intersection(m, a0, a1, b0, b1; exact)::SegSegClass
 
@@ -152,24 +152,6 @@ struct SegSegClass
 end
 
 # Manifold-generic helpers
-
-# Conservative interaction-bounds tests (contract above): manifold-generic,
-# operating on the extents produced by `rk_interaction_bounds`.
-# `rk_bounds_disjoint` is dimension-generic already (`Extents.intersects`).
-# `rk_bounds_covers` checks X/Y on the plane and additionally Z for the 3D
-# extents the spherical kernel produces; the X/Y path is byte-identical to the
-# original planar definition. `hasproperty(_, :Z)` folds to a compile-time
-# constant for a concretely-typed `Extent`, so both paths stay allocation-free.
-rk_bounds_disjoint(extA, extB) = !Extents.intersects(extA, extB)
-
-function rk_bounds_covers(extA, extB)
-    (extA.X[1] <= extB.X[1] && extB.X[2] <= extA.X[2]) &&
-    (extA.Y[1] <= extB.Y[1] && extB.Y[2] <= extA.Y[2]) &&
-    _bounds_covers_z(extA, extB)
-end
-@inline _bounds_covers_z(extA, extB) =
-    (!hasproperty(extA, :Z) || !hasproperty(extB, :Z)) ||
-    (extA.Z[1] <= extB.Z[1] && extB.Z[2] <= extA.Z[2])
 
 # Symbolic node identity (design D2). One concrete isbits key type for both
 # node kinds so Dict{NodeKey{P}, ...} is type-stable. Equality and hashing

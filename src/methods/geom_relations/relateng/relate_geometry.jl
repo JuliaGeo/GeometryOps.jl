@@ -560,7 +560,7 @@ function _extract_segment_strings_from_atomic!(rg::RelateGeometry, is_a::Bool, g
         if elem_ext === missing
             elem_ext = rk_interaction_bounds(rg.m, geom)
         end
-        rk_bounds_disjoint(ext_filter, elem_ext) && return nothing
+        !Extents.intersects(ext_filter, elem_ext) && return nothing
     end
 
     rg.element_id += Int32(1)
@@ -590,7 +590,7 @@ function _extract_ring_to_segment_string!(rg::RelateGeometry, is_a::Bool, ring, 
         if ring_ext === missing
             ring_ext = rk_interaction_bounds(rg.m, ring)
         end
-        rk_bounds_disjoint(ext_filter, ring_ext) && return nothing
+        !Extents.intersects(ext_filter, ring_ext) && return nothing
     end
 
     #-- orient the points if required
