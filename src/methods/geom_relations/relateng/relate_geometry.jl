@@ -124,9 +124,9 @@ bounds embedded at every level, in one coordinate pass. Wrappers share the
 original linework objects (a `GI.LinearRing(ring; extent)` around a
 same-trait geometry stores `ring`'s coordinate backing, copying nothing),
 so this costs O(#elements) small allocations plus the one extent scan the
-constructor performed anyway. Levels that already carry a stored extent
-are reused as-is, so re-wrapping an already-cached tree (or user inputs
-built with `extent = ...`) does no coordinate work.
+constructor performed anyway. Levels whose stored extent is usable as
+interaction bounds (`_reusable_stored_extent`) are reused as-is, so
+re-wrapping an already-cached tree does no coordinate work.
 ==========================================================================#
 
 _has_stored_extent(geom) =

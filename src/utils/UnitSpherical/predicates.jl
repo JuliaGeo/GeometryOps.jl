@@ -97,36 +97,33 @@ end
     spherical_ring_contains(pts, n, q; orient, on_arc, proper_crossing) -> Union{Bool, Nothing}
 
 Whether `q` lies in the closed region on the left of the ring `pts[1:n]`
-(S2 loop convention: counterclockwise winding, interior on the left — a
-clockwise ring therefore contains the complement of the region it visually
-encloses).  The closing edge `pts[n] → pts[1]` is implied; points on the
-boundary count as contained.  Returns `nothing` when every anchor edge is
-degenerate with respect to `q` — callers must treat that conservatively.
+(S2 loop convention: counterclockwise winding, interior on the left, so a
+clockwise ring contains the complement).  The closing edge `pts[n] → pts[1]`
+is implied; boundary points count as contained.  Returns `nothing` when
+every anchor edge is degenerate with respect to `q` — callers must treat
+that conservatively.
 
 Containment is decided by crossing parity, the way `S2Loop::Contains` /
 `InitBound` decide pole containment: which side of an anchor edge `q` falls
 on, flipped once per transversal crossing of the arc from the anchor's
-midpoint to `q` with the other edges.  Anchors degenerate with respect to
-`q` are skipped and the next edge tried.
+midpoint to `q` with the other edges; degenerate anchors are skipped and
+the next edge tried.
 
-The geometric predicates are injectable, so callers with stricter
-requirements can substitute their own:
+The geometric predicates are injectable, for callers with stricter
+requirements.  They receive the input points untouched (which may be
+non-unit for scale-invariant predicates — the defaults assume unit input);
+only the constructed reference midpoint is normalized.
 
 - `orient(a, b, c)`: sign-valued orientation of `c` against the oriented
   great circle through `a, b`; default [`spherical_orient`](@ref).
 - `on_arc(q, a, b)::Bool`: boundary membership; default
   [`point_on_spherical_arc`](@ref).  Pass `Returns(false)` when boundary
-  points have already been classified.
+  points are already classified.
 - `proper_crossing(q, m, a, b)::Int`: `1` if the minor arcs `(q, m)` and
   `(a, b)` cross transversally in both interiors, `0` if not, `-1` for too
-  close to degenerate to call; only consulted once `orient` places both
-  endpoint pairs strictly transversally.  The default decides through
-  `robust_cross_product` with a small tolerance band and assumes unit
-  input.
-
-The injected predicates receive the input points untouched (which may be
-non-unit for scale-invariant predicates); only the constructed reference
-midpoint is normalized.
+  close to call; consulted once `orient` places both endpoint pairs
+  strictly transversally.  The default uses `robust_cross_product` with a
+  small tolerance band.
 """
 function spherical_ring_contains(pts, n, q;
         orient = spherical_orient,
