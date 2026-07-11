@@ -133,25 +133,36 @@ _has_stored_extent(geom) =
     geom isa GI.Wrappers.WrapperGeometry && hasproperty(geom, :extent) &&
     geom.extent isa Extents.Extent
 
+# A stored extent is reusable as interaction bounds only if it lives in the
+# space the kernel prunes in: any stored extent on `Planar`, but only a 3D
+# `(X, Y, Z)` extent on `Spherical` — user inputs typically carry lon/lat
+# boxes, which must not be compared against unit-sphere boxes. Our own cache
+# pass always stores `(X, Y, Z)`; a user storing one is trusted to mean it.
+_reusable_stored_extent(::Manifold, geom) = _has_stored_extent(geom)
+_reusable_stored_extent(::Spherical, geom) =
+    _has_stored_extent(geom) && geom.extent isa Extents.Extent{(:X, :Y, :Z)}
+
 _relate_cache_extents(m::Manifold, geom) = _relate_cache_extents(m, GI.trait(geom), geom)
 
 #-- point elements: their extent is themselves, nothing to cache
 _relate_cache_extents(::Manifold, ::Union{GI.AbstractPointTrait, GI.AbstractMultiPointTrait}, geom) = geom
 
-#-- linework leaves: lines and rings (the only level where coordinates are read)
+#-- linework leaves: lines and rings (the only level where coordinates are
+#-- read, and hence where the manifold's edge validation runs)
 function _relate_cache_extents(m::Manifold, trait::GI.AbstractCurveTrait, line)
-    (GI.isempty(line) || _has_stored_extent(line)) && return line
+    (GI.isempty(line) || _reusable_stored_extent(m, line)) && return line
+    _validate_relate_edges(m, line)
     return GI.geointerface_geomtype(trait)(line;
         extent = rk_interaction_bounds(m, line), crs = GI.crs(line))
 end
 
 function _relate_cache_extents(m::Manifold, trait::GI.AbstractPolygonTrait, poly)
     GI.isempty(poly) && return poly
-    if _has_stored_extent(poly) && all(r -> GI.isempty(r) || _has_stored_extent(r), GI.getring(poly))
+    if _reusable_stored_extent(m, poly) && all(r -> GI.isempty(r) || _reusable_stored_extent(m, r), GI.getring(poly))
         return poly
     end
     rings = [_relate_cache_extents(m, GI.trait(r), r) for r in GI.getring(poly)]
-    ext = _union_stored_extents(rings)
+    ext = _union_stored_extents(m, rings)
     ext === nothing && return poly
     return GI.geointerface_geomtype(trait)(rings; extent = ext, crs = GI.crs(poly))
 end
@@ -159,7 +170,7 @@ end
 #-- collections (covers Multi* types too): recurse, union the child extents
 function _relate_cache_extents(m::Manifold, trait::GI.AbstractGeometryCollectionTrait, geom)
     children = [_relate_cache_extents(m, GI.trait(g), g) for g in GI.getgeom(geom)]
-    ext = _union_stored_extents(children)
+    ext = _union_stored_extents(m, children)
     ext === nothing && return geom
     return GI.geointerface_geomtype(trait)(children; extent = ext, crs = GI.crs(geom))
 end
@@ -169,16 +180,17 @@ _relate_cache_extents(::Manifold, ::GI.AbstractTrait, geom) = geom
 
 # Union of the children's extents, reading stored ones and computing only
 # for non-empty children that have none (e.g. point members of a GC);
-# `nothing` when no child contributes one.
-function _union_stored_extents(children)
+# `nothing` when no child contributes one. Computed extents go through
+# `rk_interaction_bounds` so they stay in the manifold's coordinate space.
+function _union_stored_extents(m::Manifold, children)
     ext = nothing
     for c in children
-        ce = if _has_stored_extent(c)
+        ce = if _reusable_stored_extent(m, c)
             c.extent
         elseif GI.isempty(c)
             nothing
         else
-            GI.extent(c; fallback = true)
+            rk_interaction_bounds(m, c)
         end
         ce === nothing && continue
         ext = ext === nothing ? ce : Extents.union(ext, ce)

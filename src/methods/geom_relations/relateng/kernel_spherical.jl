@@ -91,12 +91,6 @@ end
 _kernel_point_type(::Spherical) = UnitSphericalPoint{Float64}
 @inline _to_kernel_point(::Spherical, p) = _spherical_kernel_point(p)
 
-# 3D AABB of a minor great-circle arc (spike-proven, 0/102k fuzz escapes). A
-# great-circle arc bulges outside the coordinate box of its endpoints; the
-# extremum of coordinate i on the circle with normal n is at ±w, the normalized
-# projection of axis eᵢ onto the circle's plane. The box is extended by whichever
-# of ±w lies on the minor arc; a few ulps of widening absorb the roundoff in w.
-@inline _on_minor_arc(w, a, b, n) = (cross(a, w) ⋅ n) >= 0.0 && (cross(w, b) ⋅ n) >= 0.0
 @inline _widen(lo, hi) = (prevfloat(lo, 4), nextfloat(hi, 4))
 
 @noinline _throw_antipodal_edge(a, b) = throw(ArgumentError(
@@ -104,41 +98,26 @@ _kernel_point_type(::Spherical) = UnitSphericalPoint{Float64}
     "unique great-circle arc; densify it first with the `AntipodalEdgeSplit` " *
     "correction (it inserts the lon/lat midpoint)"))
 
-function arc_extent(a, b)
-    n = cross(a, b)
-    n2 = n ⋅ n
-    #-- a vanishing normal with the endpoints pointing opposite ways means the
-    #-- vertices are exactly antipodal: infinitely many great circles pass
-    #-- through them, so the edge has no well-defined arc. (A vanishing normal
-    #-- with a·b > 0 is a zero-length/repeated vertex, which is fine.)
-    n2 == 0.0 && (a ⋅ b) < 0.0 && _throw_antipodal_edge(a, b)
-    xlo, xhi = minmax(a[1], b[1]); ylo, yhi = minmax(a[2], b[2]); zlo, zhi = minmax(a[3], b[3])
-    if n2 > 0.0
-        invn2 = inv(n2)
-        @inbounds for i in 1:3
-            ei_n = n[i]
-            wx = (i == 1) - ei_n * n[1] * invn2
-            wy = (i == 2) - ei_n * n[2] * invn2
-            wz = (i == 3) - ei_n * n[3] * invn2
-            wnorm = sqrt(wx^2 + wy^2 + wz^2)
-            wnorm == 0.0 && continue   # axis ⟂ plane: coordinate constant 0, endpoints cover it
-            w = UnitSphericalPoint(wx / wnorm, wy / wnorm, wz / wnorm)
-            for ww in (w, -w)
-                if _on_minor_arc(ww, a, b, n)
-                    ci = ww[i]
-                    if i == 1; xlo = min(xlo, ci); xhi = max(xhi, ci)
-                    elseif i == 2; ylo = min(ylo, ci); yhi = max(yhi, ci)
-                    else; zlo = min(zlo, ci); zhi = max(zhi, ci)
-                    end
-                end
-            end
-        end
+# Ingest validation, run once per curve at `RelateGeometry` construction (the
+# extent-cache pass). A vanishing cross product with the endpoints pointing
+# opposite ways means the vertices are exactly antipodal: infinitely many
+# great circles pass through them, so the edge has no well-defined arc and
+# relate's contract is to throw informatively. (`spherical_arc_extent`
+# deliberately does not throw — it picks a stable plane — so the guard lives
+# here, not in the extent.) A vanishing cross with `a ⋅ b > 0` is a
+# zero-length/repeated vertex, which is fine.
+function _validate_relate_edges(::Spherical, curve)
+    n = GI.npoint(curve)
+    n < 2 && return nothing
+    prev = _spherical_kernel_point(GI.getpoint(curve, 1))
+    for i in 2:n
+        cur = _spherical_kernel_point(GI.getpoint(curve, i))
+        c = cross(prev, cur)
+        (c ⋅ c) == 0.0 && (prev ⋅ cur) < 0.0 && _throw_antipodal_edge(prev, cur)
+        prev = cur
     end
-    return Extents.Extent(X = _widen(xlo, xhi), Y = _widen(ylo, yhi), Z = _widen(zlo, zhi))
+    return nothing
 end
-
-@inline _point_box(u) =
-    Extents.Extent(X = _widen(GI.x(u), GI.x(u)), Y = _widen(GI.y(u), GI.y(u)), Z = _widen(GI.z(u), GI.z(u)))
 
 # ## rk_classify_intersection
 #
@@ -351,57 +330,59 @@ function rk_point_in_ring(m::Spherical, p, ring; exact)
     return (isodd(crossings) ⊻ pole_inside) ? LOC_INTERIOR : LOC_EXTERIOR
 end
 
-# Interaction bounds on the sphere: a 3D `Extent{(:X,:Y,:Z)}` in unit-sphere xyz
-# (the engine works in xyz after ingest), as the union of `arc_extent` over the
-# geometry's edges, plus — for area elements — an axis-point extension so the box
-# covers the interior, not just the boundary slab.
-rk_interaction_bounds(m::Spherical, geom) = _sph_bounds(m, GI.trait(geom), geom)
+# Interaction bounds on the sphere, built from the shared substrate
+# (`spherical_arc_extent` per edge, `_spherical_region_extent` for area
+# interiors) over kernel-converted points, so the box and the ingested
+# vertices agree bit-for-bit. Relate-specific glue: rings are a polygon's
+# linework / dim-1 curve elements (JTS semantics), not S2 regions — their
+# edges are bounded directly, so a CW hole cannot become a complement region —
+# and every box gets a few ulps of padding so a kernel point that differs
+# from another conversion path by sub-ulp noise still prunes as interacting.
+rk_interaction_bounds(m::Spherical, geom) =
+    _pad_bounds(_sph_interaction_extent(m, GI.trait(geom), geom))
 
-# Converted (lon/lat → unit xyz) vertices of a ring/curve.
-_ring_usp(ring) = [_spherical_kernel_point(p) for p in GI.getpoint(ring)]
-
-# Union of arc_extents over consecutive vertices (a single point box if n == 1).
-function _arcs_extent(usp)
-    length(usp) == 1 && return _point_box(usp[1])
-    ext = arc_extent(usp[1], usp[2])
-    for i in 2:length(usp)-1
-        ext = Extents.union(ext, arc_extent(usp[i], usp[i+1]))
+function _sph_interaction_extent(m::Spherical, ::GI.AbstractPointTrait, geom)
+    p = _spherical_kernel_point(geom)
+    return Extents.Extent(X = (p[1], p[1]), Y = (p[2], p[2]), Z = (p[3], p[3]))
+end
+function _sph_interaction_extent(m::Spherical, ::GI.AbstractCurveTrait, geom)
+    n = GI.npoint(geom)
+    prev = _spherical_kernel_point(GI.getpoint(geom, 1))
+    ext = spherical_arc_extent(prev, prev)
+    for i in 2:n
+        cur = _spherical_kernel_point(GI.getpoint(geom, i))
+        ext = Extents.union(ext, spherical_arc_extent(prev, cur))
+        prev = cur
     end
     return ext
 end
-
-function _sph_bounds(::Spherical, ::GI.AbstractPointTrait, geom)
-    return _point_box(_spherical_kernel_point(geom))
-end
-_sph_bounds(::Spherical, ::GI.AbstractCurveTrait, geom) = _arcs_extent(_ring_usp(geom))
-function _sph_bounds(::Spherical, ::GI.AbstractPolygonTrait, geom)
-    exterior = _ring_usp(GI.getexterior(geom))
-    ext = _arcs_extent(exterior)
+function _sph_interaction_extent(m::Spherical, ::GI.AbstractPolygonTrait, geom)
+    # region box of the exterior ring: edge arc extents plus enclosed-axis
+    # widening, on the same converted points the engine ingests
+    ext = _spherical_region_extent(_ring_usp(GI.getexterior(geom)))
+    # a valid polygon's holes lie inside that region — but JTS's element
+    # envelope also covers a stray hole outside the shell, and extraction
+    # relies on that to keep the element alive
+    # (see `_extract_segment_strings_from_atomic!`)
     for hole in GI.gethole(geom)
-        ext = Extents.union(ext, _arcs_extent(_ring_usp(hole)))
+        GI.isempty(hole) && continue
+        ext = Extents.union(ext, _sph_interaction_extent(m, GI.trait(hole), hole))
     end
-    # An area interior reaches beyond its boundary slab (e.g. a ring around a
-    # pole has a thin boundary band but its interior reaches z = 1). Widen each
-    # axis whose ±eᵢ is interior to the exterior ring out to ±1 (conservative —
-    # over-covering can only under-prune, never miss an interaction).
-    return _widen_area_axes(ext, exterior)
+    return ext
 end
-
-function _widen_area_axes(ext, pts)
-    xlo, xhi = ext.X; ylo, yhi = ext.Y; zlo, zhi = ext.Z
-    _ring_contains_dir(pts, UnitSphericalPoint(1.0, 0.0, 0.0)) && (xhi = 1.0)
-    _ring_contains_dir(pts, UnitSphericalPoint(-1.0, 0.0, 0.0)) && (xlo = -1.0)
-    _ring_contains_dir(pts, UnitSphericalPoint(0.0, 1.0, 0.0)) && (yhi = 1.0)
-    _ring_contains_dir(pts, UnitSphericalPoint(0.0, -1.0, 0.0)) && (ylo = -1.0)
-    _ring_contains_dir(pts, UnitSphericalPoint(0.0, 0.0, 1.0)) && (zhi = 1.0)
-    _ring_contains_dir(pts, UnitSphericalPoint(0.0, 0.0, -1.0)) && (zlo = -1.0)
-    return Extents.Extent(X = (xlo, xhi), Y = (ylo, yhi), Z = (zlo, zhi))
-end
-function _sph_bounds(m::Spherical, ::GI.AbstractGeometryTrait, geom)
+function _sph_interaction_extent(m::Spherical, ::GI.AbstractGeometryTrait, geom)
     ext = nothing
     for g in GI.getgeom(geom)
-        e = _sph_bounds(m, GI.trait(g), g)
+        GI.isempty(g) && continue
+        e = _sph_interaction_extent(m, GI.trait(g), g)
         ext = ext === nothing ? e : Extents.union(ext, e)
     end
     return ext
 end
+
+# Converted (kernel-ingest: unit, signed-zero) vertices of a ring/curve.
+_ring_usp(ring) = [_spherical_kernel_point(p) for p in GI.getpoint(ring)]
+
+_pad_bounds(::Nothing) = nothing
+_pad_bounds(ext) = Extents.Extent(
+    X = _widen(ext.X...), Y = _widen(ext.Y...), Z = _widen(ext.Z...))

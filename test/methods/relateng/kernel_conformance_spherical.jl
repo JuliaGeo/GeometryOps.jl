@@ -53,20 +53,8 @@ function kernel_conformance_suite_spherical(m; exact)
         @test !GO.rk_point_on_segment(m, _usp(0, 0, 1), a, b; exact) # pole, off the circle
         @test !GO.rk_point_on_segment(m, _usp(-1, 1, 0), a, b; exact) # on circle, outside the minor-arc span
     end
-    @testset "arc_extent contains the arc (bulge captured)" begin
-        rng2 = Random.MersenneTwister(42)
-        for _ in 1:500
-            p = GO.rk_normalize_usp(_usp(randn(rng2), randn(rng2), randn(rng2)))
-            q = GO.rk_normalize_usp(_usp(randn(rng2), randn(rng2), randn(rng2)))
-            e = GO.arc_extent(p, q)
-            for s in 0:0.05:1
-                u = slerp(p, q, s)
-                @test e.X[1] <= GI.x(u) <= e.X[2]
-                @test e.Y[1] <= GI.y(u) <= e.Y[2]
-                @test e.Z[1] <= GI.z(u) <= e.Z[2]
-            end
-        end
-    end
+    # arc containment (bulge capture) is the shared `spherical_arc_extent`'s
+    # contract, tested exhaustively in test/utils/unitspherical.jl
 
     @testset "rk_interaction_bounds is 3D and contains the converted vertices" begin
         ring = GI.LinearRing([(0.,0.), (10.,0.), (10.,10.), (0.,10.), (0.,0.)])
@@ -274,7 +262,7 @@ function kernel_conformance_suite_spherical(m; exact)
         verts = [_usp(2,0,1), _usp(0,2,1), _usp(-2,0,1), _usp(0,-2,1), _usp(2,0,1)]
         poly = GI.Polygon([GI.LinearRing(verts)])
         e = GO.rk_interaction_bounds(m, poly)
-        @test e.Z[2] == 1.0                # interior reaches the enclosed north pole
+        @test e.Z[2] >= 1.0                # interior reaches the enclosed north pole
         # the boundary ring (curve) bound tops out well below the pole
         eb = GO.rk_interaction_bounds(m, GI.LinearRing(verts))
         @test eb.Z[2] < 0.99
