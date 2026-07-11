@@ -5,22 +5,18 @@
 spherical_arc_extent
 ```
 
-A great-circle arc bulges away from the chord between its endpoints, so the
-endpoints' bounding box does not in general contain the arc: two points at
-`z = 0.9` on either side of the prime meridian are joined by an arc whose
-midpoint has `z = 0.9 / cos(θ/2) > 0.9`.  [`spherical_arc_extent`](@ref)
-computes a box that contains the whole arc.
+A great-circle arc bulges away from the chord between its endpoints (two
+points at `z = 0.9` joined over the pole reach `z = 1`), so the endpoints'
+bounding box does not contain the arc.  [`spherical_arc_extent`](@ref)
+computes a box that does.
 
-With `t̂ₐ` the unit tangent at `a` pointing along the arc, the arc is
-`p(φ) = a cos(φ) + t̂ₐ sin(φ)` for `φ ∈ [0, θ]`, so each Cartesian
-coordinate is a sinusoid `pᵢ(φ) = Rᵢ cos(φ - φᵢ)` with amplitude
-`Rᵢ = hypot(aᵢ, t̂ₐᵢ)`.  Since `θ ≤ π` there is at most one interior maximum
-and one interior minimum per axis: a maximum exists iff `pᵢ` increases at
-`a` and decreases at `b` (`t̂ₐᵢ > 0 > t̂ᵦᵢ`), where it attains `Rᵢ`; minima
-mirror.  The tangents come from [`robust_cross_product`](@ref), which keeps
-nearly-degenerate and nearly-antipodal arcs stable.  Bounds are padded by a
-few ulps to absorb floating point error, as S2's `S2LatLngRectBounder` pads
-by its maximum error.
+Each Cartesian coordinate along the arc is the sinusoid
+`pᵢ(φ) = aᵢ cos φ + t̂ₐᵢ sin φ` (`t̂ₐ` the unit tangent at `a`), of
+amplitude `hypot(aᵢ, t̂ₐᵢ)`; the arc spans at most a half turn, so an
+interior extremum on axis `i` exists iff `pᵢ` rises at `a` and falls at
+`b`.  Tangents come from [`robust_cross_product`](@ref), keeping
+nearly-degenerate and nearly-antipodal arcs stable; bounds are padded by a
+few ulps, as S2's `S2LatLngRectBounder` pads by its maximum error.
 =#
 
 """

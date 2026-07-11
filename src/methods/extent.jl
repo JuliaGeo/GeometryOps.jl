@@ -10,49 +10,35 @@ manifold*.  On `Planar()` it delegates to `GI.extent`.  On `Spherical()` it
 returns 3D Cartesian `Extent{(:X, :Y, :Z)}`s on the unit sphere — the boxes
 that spatial indices over spherical geometry prune with.
 
-On the sphere, an extremum of a coordinate over a *region* is attained
-either on the boundary or at one of the six on-sphere critical points of
-that coordinate: `(±1,0,0)`, `(0,±1,0)`, `(0,0,±1)`.  A polygon that
-strictly encloses one of them (a cell over a pole, say) therefore extends
-past every boundary edge's extent, so a region's box is the union of its
-edges' [`UnitSpherical.spherical_arc_extent`](@ref)s plus an enclosure
-check per axis point.
+An extremum of a coordinate over a *region* on the sphere lies either on
+the boundary or at an on-sphere critical point of that coordinate — across
+the three coordinates, the six axis points `(±1,0,0)`, `(0,±1,0)`,
+`(0,0,±1)`.  A region's box is therefore the union of its edges'
+[`UnitSpherical.spherical_arc_extent`](@ref)s plus an enclosure check per
+axis point, decided by crossing parity as in `S2Loop::InitBound`
+(`s2loop.cc`).
 
-Enclosure follows S2's loop convention (`s2loop.h`): "All loops are defined
-to have a CCW orientation, i.e. the interior of the loop is on the left
-side of the edges.  This implies that a clockwise loop enclosing a small
-area is interpreted to be a CCW loop enclosing a very large area."
-
-The enclosure test is crossing parity, the way `S2Loop::InitBound` decides
-pole containment (`s2loop.cc`).  For an anchor edge whose great circle
-misses the query point `q`, the side of that edge `q` falls on is the side
-the arc from the edge's midpoint to `q` departs into — left is the
-interior — and each transversal boundary crossing along the arc flips it.
-The departure side equals `q`'s side because the arc can meet the anchor's
-great circle again only at the midpoint's antipode, which an arc shorter
-than a half turn never reaches.
-
-Where S2 resolves degenerate configurations with exact predicates and
-symbolic perturbation, this test detects them — a vertex within
-[`UnitSpherical.spherical_orient`](@ref)'s tolerance of a test arc's great
-circle, a crossing too close to an arc endpoint to call — and retries with
-the next edge as anchor.  If every anchor is degenerate the axis is
-extended to `±1`, so the box can come out loose but never under-covers.
+Rings follow S2's loop convention (`s2loop.h`): CCW, interior on the left,
+so a clockwise ring encloses the complement.  Configurations too close to
+degenerate for [`UnitSpherical.spherical_orient`](@ref) to call are retried
+with the next edge as anchor; if every anchor fails, the axis is extended
+to `±1`, so the box can come out loose but never under-covers.
 =#
 
 """
     extent(m::Manifold, geom, [::Type{T} = Float64])::Extents.Extent
 
-The extent of `geom` on the manifold `m` — this method lives on, and
-returns an, `Extents.Extent`.
+The extent of `geom` on the manifold `m`, as an `Extents.Extent`.  The
+method extends `Extents.extent` (GeometryOps does not export `extent`), so
+call it as `GO.extent(m, geom)`.
 
 On `Planar()`, `GI.extent(geom)`.  On `Spherical()`, the 3D Cartesian
 extent of the geometry on the unit sphere, with geographic (longitude,
 latitude) input converted like `UnitSphericalPoint`: curves are covered by
-the union of their edges' great-circle arc extents, and rings and polygons
-are treated as regions — wound CCW with the interior on the left, per S2's
-loop convention — whose extent also covers any enclosed pole or other
-on-sphere axis extreme.
+the union of their edges' great-circle arc extents; rings and polygons are
+regions — wound CCW with the interior on the left, per S2's loop
+convention — whose extent also covers any enclosed axis point (a pole,
+say).
 
 ## Example
 
@@ -144,28 +130,25 @@ end
 # Crossing parity of the test arc q → m against ring edge a → b: 1 for a
 # transversal crossing, 0 for none, -1 for too close to degenerate to call.
 function _arc_crossing_parity(q, m, a, b)
-    # a vertex exactly antipodal to `q` lies on every great circle through
-    # `q`; its edges can reach the test arc only at `q` itself, excluded by
-    # the on-boundary check
+    # a vertex at `-q` lies on every great circle through `q`; its edges can
+    # reach the test arc only at `q` itself, excluded by the on-boundary check
     (a == -q || b == -q) && return 0
     sa = UnitSpherical.spherical_orient(q, m, a)
     sb = UnitSpherical.spherical_orient(q, m, b)
     (sa == 0 || sb == 0) && return -1
     sa == sb && return 0
-    # `q` on this edge's great circle but off the edge (checked upfront):
-    # the circles meet only at `±q`, both out of the test arc's reach — no
-    # crossing.  This degeneracy is anchor-independent (a lonlat grid's
-    # meridian edges hold `±eₓ`/`±e_y` exactly), so it resolves instead of
-    # returning -1.
+    # `q` on this edge's great circle but off the edge (checked upfront): the
+    # circles meet only at `±q`, out of the test arc's reach — no crossing.
+    # Anchor-independent (lonlat meridian edges hold `±eₓ`/`±e_y` exactly),
+    # so resolve instead of returning -1.
     sq = UnitSpherical.spherical_orient(a, b, q)
     sq == 0 && return 0
     sm = UnitSpherical.spherical_orient(a, b, m)
     sm == 0 && return -1
     sq == sm && return 0
     # each arc now crosses the other's great circle exactly once, at one of
-    # the two antipodal circle intersections; the arcs cross iff those are
-    # the same point, i.e. iff the intersection direction `x` points into
-    # both arcs' hemispheres
+    # the two antipodal circle intersections; the arcs cross iff it is the
+    # same one, i.e. iff `x` points into both arcs' hemispheres
     x = cross(normalize(UnitSpherical.robust_cross_product(q, m)),
               normalize(UnitSpherical.robust_cross_product(a, b)))
     d1 = dot(x, q + m)
