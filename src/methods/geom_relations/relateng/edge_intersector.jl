@@ -287,7 +287,7 @@ _segment_envs_disjoint(::Planar, a0, a1, b0, b1) =
 # extent, which is exact in xyz and has no antimeridian pathology — so this
 # prune is valid (and tighter than no pruning).
 _segment_envs_disjoint(::Spherical, a0, a1, b0, b1) =
-    !Extents.intersects(arc_extent(a0, a1), arc_extent(b0, b1))
+    !Extents.intersects(spherical_arc_extent(a0, a1), spherical_arc_extent(b0, b1))
 _segment_envs_disjoint(::Manifold, a0, a1, b0, b1) = false
 
 # The spatial index built over per-segment extents for the tree-accelerated
@@ -427,7 +427,7 @@ end
 # the endpoints, or the bulge-aware 3D great-circle arc extent on the sphere
 # (the endpoint box would miss a long arc's bulge and wrongly prune crossings).
 _segment_extent(::Planar, p, q) = Extents.Extent(X = minmax(p[1], q[1]), Y = minmax(p[2], q[2]))
-_segment_extent(::Spherical, p, q) = arc_extent(p, q)
+_segment_extent(::Spherical, p, q) = spherical_arc_extent(p, q)
 _segment_extent_type(::Planar) = Extents.Extent{(:X, :Y), NTuple{2, NTuple{2, Float64}}}
 _segment_extent_type(::Spherical) = Extents.Extent{(:X, :Y, :Z), NTuple{3, NTuple{2, Float64}}}
 

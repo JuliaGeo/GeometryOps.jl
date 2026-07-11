@@ -5,8 +5,8 @@ export AntipodalEdgeSplit
 #=
 On the sphere an edge between two *antipodal* vertices (a point and its
 antipode) has no unique great-circle arc — infinitely many great circles pass
-through both — so the spherical RelateNG kernel refuses such an edge (see
-[`arc_extent`](@ref) / `relate` with a `Spherical` manifold). This correction
+through both — so `relate` with a `Spherical` manifold refuses such an edge
+at ingest (the kernel's edge validation). This correction
 is the documented remedy: it splits every antipodal edge by inserting the
 lon/lat midpoint of its endpoints, replacing one ambiguous edge with two
 well-defined (roughly quarter-circle) arcs.
@@ -52,7 +52,8 @@ end
 (::AntipodalEdgeSplit)(::GI.AbstractCurveTrait, curve) = _split_antipodal_curve(curve)
 
 # Whether the lon/lat points `p`, `q` map to exactly-antipodal unit vectors —
-# the same condition `arc_extent` throws on (vanishing cross, negative dot).
+# the same condition the kernel's edge validation throws on (vanishing cross,
+# negative dot).
 function _is_antipodal_lonlat(p, q)
     up = _spherical_kernel_point(p)
     uq = _spherical_kernel_point(q)
