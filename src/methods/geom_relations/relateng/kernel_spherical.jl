@@ -262,9 +262,7 @@ function rk_nodes_coincide(::Spherical, k1::NodeKey, k2::NodeKey; exact)
     return _iszero3(_cross3(d1, d2)) && _dot3(d1, d2) > 0
 end
 
-# ## rk_point_in_ring (meridian-crossing parity, S2 convention)
-
-const _NPOLE = UnitSphericalPoint(0.0, 0.0, 1.0)
+# ## rk_point_in_ring (anchor-retry crossing parity, S2 convention)
 
 # Whether the two minor arcs (p0,p1) and (q0,q1) cross properly (interior to
 # both). The great circles meet at ±d, d = (p0×p1)×(q0×q1); a proper crossing is
@@ -279,34 +277,6 @@ function _arcs_cross_properly(bt, p0, p1, q0, q1)
     return _strictly_in_arc3(nd, P0, P1, na) && _strictly_in_arc3(nd, Q0, Q1, nb)
 end
 
-# Whether direction `N` lies in the ring's interior (S2 interior-on-left),
-# decided by the ring's winding around `N`: project each edge onto the plane ⊥ N
-# and sum the signed turn (each < π in magnitude, so there is no atan2 branch
-# ambiguity — unlike a per-triangle solid-angle sum). A single interior-on-left
-# enclosure sweeps +2π. Robust for rings smaller than a hemisphere (the common
-# geographic case); a super-hemisphere interior would under-report a
-# non-encircled interior axis — a documented limitation, see the design doc.
-function _ring_contains_dir(pts, N)
-    θ = 0.0
-    for i in 1:length(pts)-1
-        a = pts[i]; b = pts[i+1]
-        ua = a - (a ⋅ N) * N
-        ub = b - (b ⋅ N) * N
-        θ += atan(N ⋅ cross(ua, ub), ua ⋅ ub)
-    end
-    return θ > π
-end
-@inline _ring_contains_pole(pts) = _ring_contains_dir(pts, _NPOLE)
-
-# Location of `p` relative to the area enclosed by `ring`. Boundary first (exact
-# arc membership), then parity of proper crossings of the minor arc p→NPOLE with
-# the ring edges — "same region as the pole" — resolved to interior/exterior by
-# the pole's own containment.
-#
-# NOTE: the north-pole reference is degenerate when `p` is at/antipodal to the
-# pole, or a ring vertex sits exactly on the p→pole meridian. The engine inputs
-# in this work avoid those; the deterministic-perturbation / other-pole
-# treatment (mirroring planar RayCrossingCounter) is a follow-up.
 # Ring vertices as spherical kernel points. A 3D ring is already in kernel
 # coordinates (e.g. the conformance suite's exact integer USP rings) and is read
 # verbatim — renormalizing would perturb the exact orient the boundary test
@@ -316,19 +286,36 @@ _ring_kernel_pts(ring) = _ring_kernel_pts(booltype(GI.is3d(GI.getpoint(ring, 1))
 _ring_kernel_pts(::True, ring) = _node_points(ring)
 _ring_kernel_pts(::False, ring) = _ring_usp(ring)
 
+# Location of `p` relative to the area enclosed by `ring` (S2 convention:
+# interior on the left). Boundary first (exact arc membership), then the
+# shared anchor-retry crossing parity — `spherical_ring_contains` with this
+# kernel's predicates injected: `rk_orient` for sides and
+# `_arcs_cross_properly` for transversality, so the interior decision is as
+# exact as the predicates. Unlike a fixed reference point (the previous
+# north-pole walk), the anchor retry has no preferred direction to go
+# degenerate at, and handles super-hemisphere interiors. If every anchor is
+# degenerate with respect to `p` — unreachable for a non-degenerate ring and
+# an off-boundary point — the configuration is refused, not answered wrong.
 function rk_point_in_ring(m::Spherical, p, ring; exact)
     pts = _ring_kernel_pts(ring)
     @inbounds for i in 1:length(pts)-1
         rk_point_on_segment(m, p, pts[i], pts[i+1]; exact) && return LOC_BOUNDARY
     end
     bt = booltype(exact)
-    crossings = 0
-    @inbounds for i in 1:length(pts)-1
-        _arcs_cross_properly(bt, p, _NPOLE, pts[i], pts[i+1]) && (crossings += 1)
-    end
-    pole_inside = _ring_contains_pole(pts)
-    return (isodd(crossings) ⊻ pole_inside) ? LOC_INTERIOR : LOC_EXTERIOR
+    n = length(pts)
+    n > 1 && pts[end] == pts[1] && (n -= 1)
+    inside = spherical_ring_contains(pts, n, p;
+        orient = (a, b, c) -> rk_orient(m, a, b, c; exact),
+        on_arc = Returns(false),   # boundary classified exactly above
+        proper_crossing = (q, mid, a, b) -> _arcs_cross_properly(bt, q, mid, a, b) ? 1 : 0)
+    inside === nothing && _throw_degenerate_point_in_ring(p)
+    return inside ? LOC_INTERIOR : LOC_EXTERIOR
 end
+
+@noinline _throw_degenerate_point_in_ring(p) = throw(ArgumentError(
+    "rk_point_in_ring: every anchor edge of the ring is degenerate with " *
+    "respect to the query point $(_tup3(p)) — the ring is degenerate at " *
+    "this point"))
 
 # Interaction bounds on the sphere, built from the shared substrate
 # (`spherical_arc_extent` per edge, `_spherical_region_extent` for area
