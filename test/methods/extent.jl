@@ -78,7 +78,7 @@ end
 
     @testset "Dumbbell: both poles through a thin corridor" begin
         # two polar caps (above ±85°) joined by a corridor over lon ∈ (355°, 5°):
-        # small area, zero net winding about every axis, and both poles and
+        # small area, zero net winding about the polar axis, and both poles and
         # (1, 0, 0) interior
         north = [(lon, 85.0) for lon in range(5.0, 355.0; length = 15)]    # eastward, pole on the left
         south = [(lon, -85.0) for lon in range(355.0, 5.0; length = 15)]   # westward, pole on the left
