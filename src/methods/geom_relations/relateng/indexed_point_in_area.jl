@@ -48,20 +48,15 @@ Port of JTS `SortedPackedIntervalRTree`, with two representation changes
   of level `k` (an unpaired trailing node is carried up unchanged, as in
   `buildLevel`). The last level is the root.
 - JTS always sorts the leaves by interval midpoint (`NodeComparator`)
-  before packing. Here `sort_leaves = false` skips that and keeps insertion
-  (ring) order — the `NaturalIndexing` observation. Query results are
-  order-independent (every visit is extent-checked), but the layouts trade
-  off differently: midpoint order groups same-`y` segments so a point query
-  descends few subtrees, while a long coastline ring in natural order
-  recrosses the query `y` in many separated runs. Measured on Natural Earth
-  10m Canada: the sort is ~4× the rest of the build, and natural-order
-  queries are ~3× slower. So prepared mode sorts (build once, query
-  forever) and the lazily indexed unprepared path doesn't (its query count
-  is at most a few hundred, far below the ~1000-query crossover; see
-  `locate_on_polygonal`).
+  before packing; so does this port. The sort earns its cost in the
+  index's only (prepared, build-once-query-forever) use: midpoint order
+  groups same-`y` segments so a point query descends few subtrees, where
+  insertion (ring) order recrosses the query `y` in many separated runs —
+  measured on Natural Earth 10m Canada, the sort is ~4× the rest of the
+  build and ring-order queries are ~3× slower.
 """
 struct SortedPackedIntervalRTree{I}
-    # leaf items: midpoint-sorted (`sort_leaves = true`) or insertion order
+    # leaf items, midpoint-sorted
     items::Vector{I}
     # level_min[1][i] / level_max[1][i] is the interval of leaf item i;
     # level k > 1 holds the pairwise-combined extents of level k - 1
@@ -70,19 +65,15 @@ struct SortedPackedIntervalRTree{I}
 end
 
 # Port of insert + init/buildRoot/buildTree/buildLevel, packed eagerly.
-# Without `sort_leaves` the leaf arrays are taken over by the tree, not
-# copied.
 function SortedPackedIntervalRTree(mins::Vector{Float64}, maxs::Vector{Float64},
-        items::Vector{I}; sort_leaves::Bool = true) where {I}
-    if sort_leaves
-        #-- sort the leaf nodes (IntervalRTreeNode.NodeComparator: by
-        #-- midpoint; sortperm is stable, matching Collections.sort)
-        n = length(items)
-        perm = sortperm(Float64[(mins[i] + maxs[i]) / 2 for i in 1:n])
-        mins = mins[perm]
-        maxs = maxs[perm]
-        items = items[perm]
-    end
+        items::Vector{I}) where {I}
+    #-- sort the leaf nodes (IntervalRTreeNode.NodeComparator: by
+    #-- midpoint; sortperm is stable, matching Collections.sort)
+    n = length(items)
+    perm = sortperm(Float64[(mins[i] + maxs[i]) / 2 for i in 1:n])
+    mins = mins[perm]
+    maxs = maxs[perm]
+    items = items[perm]
     level_min = [mins]
     level_max = [maxs]
     #-- now group nodes into blocks of two and build tree up recursively
@@ -285,14 +276,14 @@ struct IndexedPointInAreaLocator{M <: Manifold, E}
     is_empty::Bool
 end
 
-function IndexedPointInAreaLocator(m::Manifold, geom; exact, sort_leaves::Bool = true)
+function IndexedPointInAreaLocator(m::Manifold, geom; exact)
     mins = Float64[]
     maxs = Float64[]
     segs = _PIASegment[]
     n = GI.npoint(geom)
     sizehint!(mins, n); sizehint!(maxs, n); sizehint!(segs, n)
     _interval_index_add_geom!(mins, maxs, segs, GI.trait(geom), geom)
-    index = SortedPackedIntervalRTree(mins, maxs, segs; sort_leaves)
+    index = SortedPackedIntervalRTree(mins, maxs, segs)
     #-- IntervalIndexedGeometry.isEmpty: a (recursively) empty polygonal
     #-- geometry contributes no rings, hence no segments
     return IndexedPointInAreaLocator(m, exact, index, isempty(segs))
