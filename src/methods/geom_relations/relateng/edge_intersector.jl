@@ -180,9 +180,9 @@ recorded on `computer`.
 - `NestedLoop`: a plain double loop over
   string pairs and segment pairs, with a per-pair segment-extent
   disjointness skip (on `Planar`).
-- Any tree-backed accelerator (e.g. `DoubleSTRtree`): a spatial index
-  (`_relate_edge_index`, currently a `NaturalIndex`) is built over the
-  per-segment extents of each side and traversed with
+- Any tree-backed accelerator (canonically `DoubleNaturalTree`): a spatial
+  index (`_relate_edge_index`, currently a `NaturalIndex`) is built over
+  the per-segment extents of each side and traversed with
   `SpatialTreeInterface.dual_depth_first_search`
   under the `Extents.intersects` predicate.
 - [`AutoAccelerator`](@ref): picks `NestedLoop` below the clipping size
@@ -233,7 +233,7 @@ function _select_edge_set_accelerator(::Union{Planar, Spherical}, ssa_list, ssb_
             nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
         return NestedLoop()
     else
-        return DoubleSTRtree()
+        return DoubleNaturalTree()
     end
 end
 _select_edge_set_accelerator(::Manifold, ssa_list, ssb_list) = NestedLoop()
@@ -291,7 +291,7 @@ _segment_envs_disjoint(::Manifold, a0, a1, b0, b1) = false
 _relate_edge_index(extents::Vector{<:Extents.Extent}) =
     NaturalIndex(extents; nodecapacity = 16)
 
-# Tree path (any other accelerator, canonically DoubleSTRtree): a spatial
+# Tree path (any other accelerator, canonically DoubleNaturalTree): a spatial
 # index over the per-segment extents of each side, traversed simultaneously.
 function process_edge_intersections!(tc::TopologyComputer,
         ssa_list::AbstractVector{<:RelateSegmentString},
