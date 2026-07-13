@@ -587,17 +587,6 @@ The port of the RelateNG.prepare entry points and the prepared-mode
 branches.
 ==========================================================================#
 
-# The prebuilt A-side segment index reused across evaluations: a spatial
-# index (`_relate_edge_index`, edge_intersector.jl) over the per-segment
-# extents of the cached (unfiltered) A segment strings,
-# plus the owner table mapping each flat tree index back to
-# (string index, segment index). The stand-in for Java's cached
-# `MCIndexSegmentSetMutualIntersector`.
-struct PreparedEdgeIndex{T}
-    tree::T
-    owners::Vector{NTuple{2, Int}}
-end
-
 """
     PreparedRelate{ALG, RG, SS, T}
 
@@ -611,9 +600,10 @@ mode" of JTS `RelateNG.prepare`). Holds:
   forced,
 - `segs_a`: the A segment strings, extracted once *without* an
   interaction-envelope filter so they serve any B geometry,
-- `edge_tree`: the prebuilt `PreparedEdgeIndex` over `segs_a`'s
-  segment extents, or `nothing` below the accelerator size threshold
-  (where the nested loop wins).
+- `edge_tree`: the prebuilt segment index over `segs_a` (`_relate_edge_index`,
+  edge_intersector.jl — the stand-in for Java's cached
+  `MCIndexSegmentSetMutualIntersector`), or `nothing` below the accelerator
+  size threshold (where the nested loop wins).
 
 Construct with [`prepare`](@ref); evaluate with [`relate`](@ref) /
 [`relate_predicate`](@ref).
@@ -624,7 +614,7 @@ Construct with [`prepare`](@ref); evaluate with [`relate`](@ref) /
     `PreparedRelate` per thread.
 """
 struct PreparedRelate{ALG <: RelateNG, RG <: RelateGeometry,
-        SS <: AbstractVector{<:RelateSegmentString}, T <: Union{Nothing, PreparedEdgeIndex}}
+        SS <: AbstractVector{<:RelateSegmentString}, T <: Union{Nothing, RTree}}
     alg::ALG
     geom_a::RG
     segs_a::SS
@@ -714,19 +704,13 @@ relate_predicate(p::PreparedRelate, predicate::TopologyPredicate, b) =
 # decision is made on A's segment count alone); any other explicit
 # accelerator always takes the tree path.
 _build_prepared_edge_index(m::Manifold, ::IntersectionAccelerator, segs_a) =
-    _make_prepared_edge_index(m, segs_a)
+    _relate_edge_index(m, segs_a)
 _build_prepared_edge_index(::Manifold, ::NestedLoop, segs_a) = nothing
 _build_prepared_edge_index(::Manifold, ::AutoAccelerator, segs_a) = nothing
 function _build_prepared_edge_index(m::Union{Planar, Spherical}, ::AutoAccelerator, segs_a)
     _total_segment_count(segs_a) >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS ||
         return nothing
-    return _make_prepared_edge_index(m, segs_a)
-end
-
-function _make_prepared_edge_index(m::Manifold, segs_a)
-    extents, owners = _segment_extent_table(m, segs_a)
-    isempty(extents) && return nothing
-    return PreparedEdgeIndex(_relate_edge_index(extents), owners)
+    return _relate_edge_index(m, segs_a)
 end
 
 # The prepared counterpart of the mutual-pair enumeration: no prebuilt tree
@@ -738,14 +722,13 @@ _process_prepared_edges!(tc::TopologyComputer, segs_a, ::Nothing, edges_b) =
 # over B's (envelope-filtered) segment extents — cf. the unprepared tree path
 # in `process_edge_intersections!`, which builds both trees per call.
 function _process_prepared_edges!(tc::TopologyComputer, segs_a,
-        eidx::PreparedEdgeIndex, edges_b;
+        tree_a::RTree, edges_b;
         m::Manifold = _manifold(tc), exact = _exact(tc))
-    extents_b, owners_b = _segment_extent_table(m, edges_b)
-    isempty(extents_b) && return nothing
-    tree_b = _relate_edge_index(extents_b)
-    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, eidx.tree, tree_b) do ia, ib
-        (sa, ka) = eidx.owners[ia]
-        (sb, kb) = owners_b[ib]
+    tree_b = _relate_edge_index(m, edges_b)
+    tree_b === nothing && return nothing
+    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do ia, ib
+        (sa, ka) = tree_a.data[ia]
+        (sb, kb) = tree_b.data[ib]
         process_intersections!(tc, segs_a[sa], ka, edges_b[sb], kb; m, exact)
         #-- the Java noder's isDone() early-exit hook
         is_result_known(tc) && return Action(:full_return, nothing)

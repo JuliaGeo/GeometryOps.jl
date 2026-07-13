@@ -13,8 +13,8 @@
 # JTS `RelatePointLocator.getLocator`.
 #
 # Indexing choice: this ports the JTS 1D `SortedPackedIntervalRTree` over
-# segment y-intervals rather than reusing the existing 2D `STRtree`
-# machinery (`_make_prepared_edge_index` in relate_ng.jl). The query here is
+# segment y-intervals rather than reusing the existing 2D segment-index
+# machinery (`_relate_edge_index`, edge_intersector.jl). The query here is
 # inherently 1-dimensional: the horizontal ray from the test point must
 # visit *every* segment whose y-interval contains `p.y`, regardless of x
 # (segments wholly left of the point are rejected inside `count_segment!`,
