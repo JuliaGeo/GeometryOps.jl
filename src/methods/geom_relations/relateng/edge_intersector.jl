@@ -181,9 +181,9 @@ recorded on `computer`.
   string pairs and segment pairs, with a per-pair segment-extent
   disjointness skip (on `Planar`).
 - Any tree-backed accelerator (canonically `DoubleNaturalTree`): a spatial
-  index (`_relate_edge_index`, currently a `NaturalIndex`) is built over
-  the per-segment extents of each side and traversed with
-  `SpatialTreeInterface.dual_depth_first_search`
+  index (`_relate_edge_index`, a natural-order `RTree` carrying segment
+  owners as data) is built over the per-segment extents of each side and
+  traversed with `SpatialTreeInterface.dual_depth_first_search`
   under the `Extents.intersects` predicate.
 - [`AutoAccelerator`](@ref): picks `NestedLoop` below the clipping size
   threshold (`GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS`) and on
@@ -223,7 +223,7 @@ end
 # Below the clipping threshold the nested loop wins; above it, the tree
 # path. Valid on both manifolds with a segment-extent kernel: planar boxes
 # on `Planar`, 3D great-circle arc extents (`_segment_extent`) on
-# `Spherical` — `NaturalIndex`, the dual DFS, and `Extents.intersects` are
+# `Spherical` — the `RTree`, the dual DFS, and `Extents.intersects` are
 # dimension-generic. Other manifolds have no extent kernel and always take
 # the nested loop.
 function _select_edge_set_accelerator(::Union{Planar, Spherical}, ssa_list, ssb_list)
@@ -282,14 +282,18 @@ _segment_envs_disjoint(::Spherical, a0, a1, b0, b1) =
 _segment_envs_disjoint(::Manifold, a0, a1, b0, b1) = false
 
 # The spatial index built over per-segment extents for the tree-accelerated
-# paths (here and in the prepared mode of relate_ng.jl). A `NaturalIndex`
-# rather than an `STRtree`: segments arrive in ring/line order, which is
-# already spatially coherent, so the no-sort natural index (pure in-order
-# hierarchical extent reduction) builds much faster while pruning the dual
-# traversal almost as well. Both implement SpatialTreeInterface, so this is
-# the only line to change to swap index structures.
-_relate_edge_index(extents::Vector{<:Extents.Extent}) =
-    NaturalIndex(extents; nodecapacity = 16)
+# paths (here and in the prepared mode of relate_ng.jl), or `nothing` when
+# the list has no segments. An `Unsorted` (natural-order) `RTree`: segments
+# arrive in ring/line order, which is already spatially coherent, so the
+# no-sort layout builds fastest (zero copies) while pruning the dual
+# traversal almost as well. The tree carries each leaf's owner —
+# (string index, segment index) — as its data, so a hit `i` maps back to a
+# segment via `tree.data[i]`.
+function _relate_edge_index(m::Manifold, ss_list)
+    extents, owners = _segment_extent_table(m, ss_list)
+    isempty(extents) && return nothing
+    return RTree(Unsorted(), owners; extents, nodecapacity = 16)
+end
 
 # Tree path (any other accelerator, canonically DoubleNaturalTree): a spatial
 # index over the per-segment extents of each side, traversed simultaneously.
@@ -298,14 +302,12 @@ function process_edge_intersections!(tc::TopologyComputer,
         ssb_list::AbstractVector{<:RelateSegmentString},
         ::IntersectionAccelerator;
         m::Manifold = _manifold(tc), exact = _exact(tc))
-    extents_a, owners_a = _segment_extent_table(m, ssa_list)
-    extents_b, owners_b = _segment_extent_table(m, ssb_list)
-    (isempty(extents_a) || isempty(extents_b)) && return nothing
-    tree_a = _relate_edge_index(extents_a)
-    tree_b = _relate_edge_index(extents_b)
+    tree_a = _relate_edge_index(m, ssa_list)
+    tree_b = _relate_edge_index(m, ssb_list)
+    (tree_a === nothing || tree_b === nothing) && return nothing
     SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do ia, ib
-        (sa, ka) = owners_a[ia]
-        (sb, kb) = owners_b[ib]
+        (sa, ka) = tree_a.data[ia]
+        (sb, kb) = tree_b.data[ib]
         process_intersections!(tc, ssa_list[sa], ka, ssb_list[sb], kb; m, exact)
         #-- the Java noder's isDone() early-exit hook; :full_return
         #-- propagates out of the whole dual traversal via @controlflow
@@ -396,13 +398,12 @@ function process_self_intersections!(tc::TopologyComputer,
         ss_list::AbstractVector{<:RelateSegmentString},
         ::IntersectionAccelerator;
         m::Manifold = _manifold(tc), exact = _exact(tc))
-    extents, owners = _segment_extent_table(m, ss_list)
-    isempty(extents) && return nothing
-    tree = _relate_edge_index(extents)
+    tree = _relate_edge_index(m, ss_list)
+    tree === nothing && return nothing
     SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree, tree) do ia, ib
         ia < ib || return nothing
-        (sa, ka) = owners[ia]
-        (sb, kb) = owners[ib]
+        (sa, ka) = tree.data[ia]
+        (sb, kb) = tree.data[ib]
         process_intersections!(tc, ss_list[sa], ka, ss_list[sb], kb; m, exact)
         #-- the Java noder's isDone() early-exit hook; :full_return
         #-- propagates out of the whole dual traversal via @controlflow

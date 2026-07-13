@@ -54,7 +54,7 @@ end
 
 # Task 17: prepared spherical relate (A indexed once, in 3D) must agree with
 # the unprepared nested-loop relate over several B geometries. The prepared
-# edge index is the dimension-generic `NaturalIndex` over 3D arc extents.
+# edge index is the dimension-generic natural-order `RTree` over 3D arc extents.
 @testset "spherical prepared relate agrees with unprepared" begin
     n = 48
     ringpts = [(10.0 + 8cosd(t), 45.0 + 5sind(t)) for t in range(0, 360; length = n + 1)]
