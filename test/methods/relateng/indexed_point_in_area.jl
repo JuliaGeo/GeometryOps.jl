@@ -95,28 +95,19 @@ mp = GI.MultiPolygon([
 function check_prepared_agreement(geom, pts)
     m = Planar()
     loc_prep = GO.RelatePointLocator(m, geom; exact = True(), is_prepared = true)
-    # long-lived unprepared locator: repeat queries flip each polygonal
-    # element to the lazily built index (deviation from Java; see
-    # `locate_on_polygonal`)
-    loc_lazy = GO.RelatePointLocator(m, geom; exact = True(), is_prepared = false)
-    fresh() = GO.RelatePointLocator(m, geom; exact = True(), is_prepared = false)
+    loc_unprep = GO.RelatePointLocator(m, geom; exact = True(), is_prepared = false)
     n_mismatch = 0
     for pt in pts
-        # fresh unprepared locators so each query is the element's first and
-        # takes the direct ring loop — a true indexed-vs-simple differential
-        GO.locate(loc_prep, pt) == GO.locate(fresh(), pt) || (n_mismatch += 1)
-        GO.locate_with_dim(loc_prep, pt) == GO.locate_with_dim(fresh(), pt) || (n_mismatch += 1)
-        # the lazy locator must agree whichever path it is on
-        GO.locate(loc_lazy, pt) == GO.locate(loc_prep, pt) || (n_mismatch += 1)
-        GO.locate_with_dim(loc_lazy, pt) == GO.locate_with_dim(loc_prep, pt) || (n_mismatch += 1)
+        # unprepared = direct ring loop, prepared = indexed locator — a true
+        # indexed-vs-simple differential on every query
+        GO.locate(loc_prep, pt) == GO.locate(loc_unprep, pt) || (n_mismatch += 1)
+        GO.locate_with_dim(loc_prep, pt) == GO.locate_with_dim(loc_unprep, pt) || (n_mismatch += 1)
     end
     @test n_mismatch == 0
-    # cache sanity: prepared mode built (at most) one locator per polygonal element
+    # cache sanity: prepared mode built (at most) one locator per polygonal
+    # element; unprepared mode never builds one
     @test length(loc_prep.poly_locator) == length(loc_prep.polygons)
-    # the long-lived unprepared locator saw enough repeat queries to switch
-    # to the index on every polygonal element
-    @test all(>(GO._LAZY_INDEX_QUERY_THRESHOLD), loc_lazy.poly_query_count)
-    @test all(!isnothing, loc_lazy.poly_locator)
+    @test all(isnothing, loc_unprep.poly_locator)
 end
 
 function check_prepared_relate(geom, pts)
