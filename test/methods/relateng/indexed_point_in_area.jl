@@ -1,5 +1,5 @@
 # Tests for the prepared-mode indexed point-in-area locator
-# (indexed_point_in_area.jl): the SortedPackedIntervalRTree /
+# (indexed_point_in_area.jl): the 1-D y-interval segment index, the
 # RayCrossingCounter / IndexedPointInAreaLocator ports, and prepared- vs
 # unprepared-mode agreement of RelatePointLocator point location. The
 # unprepared SimplePointInAreaLocator ring loop is the oracle: prepared mode
@@ -12,22 +12,25 @@ using Test
 import GeometryOps as GO
 import GeometryOps: Planar, True
 import GeoInterface as GI
+import Extents
 
-@testset "SortedPackedIntervalRTree" begin
+@testset "1-D y-interval stabbing" begin
+    # the interval-index shape the locator builds: RTree(STR(), items;
+    # extents = y-intervals), queried with a closed [qmin, qmax] extent
+    interval_tree(mins, maxs, items) =
+        GO.FlexibleRTrees.RTree(GO.FlexibleRTrees.STR(), items;
+            extents = [Extents.Extent(Y = (mins[i], maxs[i])) for i in eachindex(mins)])
     collect_query(tree, qmin, qmax) = begin
         out = Int[]
-        GO.query_interval(tree, qmin, qmax) do item
-            push!(out, item)
+        q = Extents.Extent(Y = (qmin, qmax))
+        GO.SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, q), tree) do i
+            push!(out, tree.data[i])
         end
         sort!(out)
     end
 
-    # empty tree query (port of JTS SortedPackedIntervalRTreeTest.testEmptyTreeQuery)
-    empty_tree = GO.SortedPackedIntervalRTree(Float64[], Float64[], Int[])
-    @test collect_query(empty_tree, 0.0, 1.0) == Int[]
-
     # single item
-    one = GO.SortedPackedIntervalRTree([1.0], [2.0], [1])
+    one = interval_tree([1.0], [2.0], [1])
     @test collect_query(one, 1.5, 1.5) == [1]
     @test collect_query(one, 2.5, 3.0) == Int[]
     @test collect_query(one, 2.0, 3.0) == [1]   # closed-interval touch
@@ -36,7 +39,7 @@ import GeoInterface as GI
     mins = [0.0, 1.0, 2.0, 2.0, 5.0, 5.0, -3.0]
     maxs = [1.0, 3.0, 4.0, 2.0, 9.0, 6.0, -1.0]
     items = collect(1:7)
-    tree = GO.SortedPackedIntervalRTree(mins, maxs, items)
+    tree = interval_tree(mins, maxs, items)
     brute(qmin, qmax) = sort!([i for i in 1:7 if !(mins[i] > qmax || maxs[i] < qmin)])
     for (qmin, qmax) in [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (2.5, 2.5),
                          (-4.0, -3.5), (-2.0, 0.5), (3.5, 5.0), (10.0, 11.0),
@@ -164,10 +167,9 @@ end
 
 @testset "empty polygonal element" begin
     # the GI.Polygon wrapper cannot represent POLYGON EMPTY (zero rings), so
-    # exercise the is_empty short-circuit on a directly constructed locator
-    empty_index = GO.SortedPackedIntervalRTree(Float64[], Float64[], GO._PIASegment[])
-    loc = GO.IndexedPointInAreaLocator(Planar(), True(), empty_index, true)
-    @test loc.is_empty
+    # exercise the no-segments short-circuit on a directly constructed locator
+    loc = GO.IndexedPointInAreaLocator(Planar(), True(), nothing)
+    @test loc.index === nothing
     @test GO.locate(loc, (0.0, 0.0)) == GO.LOC_EXTERIOR
 end
 
