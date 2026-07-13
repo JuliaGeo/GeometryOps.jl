@@ -1,140 +1,30 @@
 # # RelateNG indexed point-in-area location
 #
 # Prepared-mode point-in-area locator for RelateNG (Task 22). This file holds
-# the ports of the three JTS classes behind prepared-mode point location, in
-# this order (JTS file boundaries preserved as clearly marked sections):
+# the ports of the two JTS classes behind prepared-mode point location
+# (JTS file boundaries preserved as clearly marked sections):
 #
-# 1. `SortedPackedIntervalRTree`  (JTS index/intervalrtree/SortedPackedIntervalRTree.java)
-# 2. `RayCrossingCounter`         (JTS algorithm/RayCrossingCounter.java)
-# 3. `IndexedPointInAreaLocator`  (JTS algorithm/locate/IndexedPointInAreaLocator.java)
+# 1. `RayCrossingCounter`         (JTS algorithm/RayCrossingCounter.java)
+# 2. `IndexedPointInAreaLocator`  (JTS algorithm/locate/IndexedPointInAreaLocator.java)
 #
 # `RelatePointLocator` (point_locator.jl) swaps this locator in for the
 # SimplePointInAreaLocator ring loop when `is_prepared` is set, mirroring
 # JTS `RelatePointLocator.getLocator`.
 #
-# Indexing choice: this ports the JTS 1D `SortedPackedIntervalRTree` over
-# segment y-intervals rather than reusing the existing 2D segment-index
-# machinery (`_relate_edge_index`, edge_intersector.jl). The query here is
-# inherently 1-dimensional: the horizontal ray from the test point must
-# visit *every* segment whose y-interval contains `p.y`, regardless of x
-# (segments wholly left of the point are rejected inside `count_segment!`,
-# exactly as in JTS), so a 2D index could not prune more candidates without
-# changing the ray-crossing counting contract — and the packed 1D tree is
-# smaller, cheaper to build, and queries without allocating.
-
-#==========================================================================
-## SortedPackedIntervalRTree (port of JTS SortedPackedIntervalRTree.java)
-==========================================================================#
-
-"""
-    SortedPackedIntervalRTree(mins, maxs, items)
-
-A static index on a set of 1-dimensional intervals, using an R-Tree packed
-based on the order of the interval midpoints. It supports range searching,
-where the range is an interval of the real line (which may be a single
-point). A common use is to index 1-dimensional intervals which are the
-projection of 2-D objects onto an axis of the coordinate system.
-
-Port of JTS `SortedPackedIntervalRTree`, with two representation changes
-(behavior, tree shape and query order are identical):
-
-- JTS builds the tree lazily from incremental `insert` calls on the first
-  query; the index is static once queried, so here the constructor takes all
-  the intervals at once and packs eagerly.
-- JTS builds an object tree of branch/leaf nodes (`IntervalRTreeNode` and
-  subclasses); an abstractly-typed node field would box in Julia, so the
-  packed tree is stored as flat per-level extent arrays instead: level 1 is
-  the leaves, and node `j` of level `k + 1` covers nodes `2j - 1` and `2j`
-  of level `k` (an unpaired trailing node is carried up unchanged, as in
-  `buildLevel`). The last level is the root.
-- JTS always sorts the leaves by interval midpoint (`NodeComparator`)
-  before packing; so does this port. The sort earns its cost in the
-  index's only (prepared, build-once-query-forever) use: midpoint order
-  groups same-`y` segments so a point query descends few subtrees, where
-  insertion (ring) order recrosses the query `y` in many separated runs —
-  measured on Natural Earth 10m Canada, the sort is ~4× the rest of the
-  build and ring-order queries are ~3× slower.
-"""
-struct SortedPackedIntervalRTree{I}
-    # leaf items, midpoint-sorted
-    items::Vector{I}
-    # level_min[1][i] / level_max[1][i] is the interval of leaf item i;
-    # level k > 1 holds the pairwise-combined extents of level k - 1
-    level_min::Vector{Vector{Float64}}
-    level_max::Vector{Vector{Float64}}
-end
-
-# Port of insert + init/buildRoot/buildTree/buildLevel, packed eagerly.
-function SortedPackedIntervalRTree(mins::Vector{Float64}, maxs::Vector{Float64},
-        items::Vector{I}) where {I}
-    #-- sort the leaf nodes (IntervalRTreeNode.NodeComparator: by
-    #-- midpoint; sortperm is stable, matching Collections.sort)
-    n = length(items)
-    perm = sortperm(Float64[(mins[i] + maxs[i]) / 2 for i in 1:n])
-    mins = mins[perm]
-    maxs = maxs[perm]
-    items = items[perm]
-    level_min = [mins]
-    level_max = [maxs]
-    #-- now group nodes into blocks of two and build tree up recursively
-    while length(level_min[end]) > 1
-        src_min = level_min[end]
-        src_max = level_max[end]
-        nsrc = length(src_min)
-        ndest = cld(nsrc, 2)
-        dest_min = Vector{Float64}(undef, ndest)
-        dest_max = Vector{Float64}(undef, ndest)
-        for j in 1:ndest
-            i = 2j - 1
-            if i + 1 <= nsrc
-                #-- IntervalRTreeBranchNode.buildExtent
-                dest_min[j] = min(src_min[i], src_min[i + 1])
-                dest_max[j] = max(src_max[i], src_max[i + 1])
-            else
-                #-- unpaired trailing node is carried up unchanged
-                dest_min[j] = src_min[i]
-                dest_max[j] = src_max[i]
-            end
-        end
-        push!(level_min, dest_min)
-        push!(level_max, dest_max)
-    end
-    return SortedPackedIntervalRTree{I}(items, level_min, level_max)
-end
-
-"""
-    query_interval(f, tree::SortedPackedIntervalRTree, qmin, qmax)
-
-Search for intervals in the index which intersect the given closed interval
-`[qmin, qmax]` and apply the function `f` to each matched item. Port of
-`SortedPackedIntervalRTree.query` with the `ItemVisitor` replaced by a
-function (typically a `do`-block closure).
-"""
-function query_interval(f::F, tree::SortedPackedIntervalRTree, qmin::Float64, qmax::Float64) where {F}
-    #-- if there are no leaves the tree is empty (Java: root == null)
-    isempty(tree.items) && return nothing
-    _interval_rtree_query(f, tree, length(tree.level_min), 1, qmin, qmax)
-    return nothing
-end
-
-# Port of IntervalRTreeBranchNode.query / IntervalRTreeLeafNode.query over
-# the packed levels: node `i` of `level`, recursing down to the leaves.
-function _interval_rtree_query(f::F, tree::SortedPackedIntervalRTree, level::Int, i::Int, qmin::Float64, qmax::Float64) where {F}
-    #-- IntervalRTreeNode.intersects
-    (tree.level_min[level][i] > qmax || tree.level_max[level][i] < qmin) && return nothing
-    if level == 1
-        #-- leaf node: visit the item
-        f(tree.items[i])
-    else
-        #-- branch node: query both children
-        child = 2i - 1
-        _interval_rtree_query(f, tree, level - 1, child, qmin, qmax)
-        if child + 1 <= length(tree.level_min[level - 1])
-            _interval_rtree_query(f, tree, level - 1, child + 1, qmin, qmax)
-        end
-    end
-    return nothing
-end
+# JTS backs the locator with its 1D `SortedPackedIntervalRTree` over
+# segment y-intervals; here that role is played by the shared
+# `RTree(STR(), ...)` over 1-D `(Y,)` extents — sort-tile-recursive in one
+# dimension IS the midpoint sort of JTS's `NodeComparator`, so the packed
+# layout is the same idea with a wider fanout. The query is inherently
+# 1-dimensional: the horizontal ray from the test point must visit *every*
+# segment whose y-interval contains `p.y`, regardless of x (segments wholly
+# left of the point are rejected inside `count_segment!`, exactly as in
+# JTS), so a 2D index could not prune more candidates without changing the
+# ray-crossing counting contract. The midpoint sort earns its cost in this
+# index's only (prepared, build-once-query-forever) use: it groups same-`y`
+# segments so a point query descends few subtrees, where insertion (ring)
+# order recrosses the query `y` in many separated runs — measured on
+# Natural Earth 10m Canada, ring-order queries are ~3× slower.
 
 #==========================================================================
 ## RayCrossingCounter (port of JTS RayCrossingCounter.java)
@@ -252,6 +142,11 @@ end
 
 # Leaf item of the segment index: a ring segment as a pair of node points.
 const _PIASegment = Tuple{Tuple{Float64, Float64}, Tuple{Float64, Float64}}
+# The segment index: a midpoint-sorted packed tree over the segments'
+# y-intervals (see the header note on how this maps to JTS's
+# SortedPackedIntervalRTree).
+const _PIAExtent = Extents.Extent{(:Y,), Tuple{NTuple{2, Float64}}}
+const _PIAIndex = RTree{STR, _PIAExtent, Vector{_PIASegment}, Vector{Int}}
 
 """
     IndexedPointInAreaLocator(m::Manifold, geom; exact)
@@ -263,30 +158,28 @@ is computed precisely: points located on the geometry boundary or segments
 return `LOC_BOUNDARY`.
 
 Port of JTS `IndexedPointInAreaLocator` together with its private
-`IntervalIndexedGeometry` (the `is_empty` flag and the y-interval segment
-index). JTS lazy-loads the index on the first `locate`; here the index is
-built in the constructor, since `RelatePointLocator` already creates the
-locator itself lazily on the first use per polygonal element
-(`_get_poly_locator`, the port of `RelatePointLocator.getLocator`).
+`IntervalIndexedGeometry` (the y-interval segment index; its `isEmpty`
+flag is `index === nothing` here, since a recursively empty polygonal
+geometry contributes no rings, hence no segments). JTS lazy-loads the
+index on the first `locate`; here the index is built in the constructor,
+since `RelatePointLocator` already creates the locator itself lazily on
+the first use per polygonal element (`_get_poly_locator`, the port of
+`RelatePointLocator.getLocator`).
 """
 struct IndexedPointInAreaLocator{M <: Manifold, E}
     m::M
     exact::E
-    index::SortedPackedIntervalRTree{_PIASegment}
-    is_empty::Bool
+    index::Union{Nothing, _PIAIndex}
 end
 
 function IndexedPointInAreaLocator(m::Manifold, geom; exact)
-    mins = Float64[]
-    maxs = Float64[]
+    exts = _PIAExtent[]
     segs = _PIASegment[]
     n = GI.npoint(geom)
-    sizehint!(mins, n); sizehint!(maxs, n); sizehint!(segs, n)
-    _interval_index_add_geom!(mins, maxs, segs, GI.trait(geom), geom)
-    index = SortedPackedIntervalRTree(mins, maxs, segs)
-    #-- IntervalIndexedGeometry.isEmpty: a (recursively) empty polygonal
-    #-- geometry contributes no rings, hence no segments
-    return IndexedPointInAreaLocator(m, exact, index, isempty(segs))
+    sizehint!(exts, n); sizehint!(segs, n)
+    _interval_index_add_geom!(exts, segs, GI.trait(geom), geom)
+    index = isempty(segs) ? nothing : RTree(STR(), segs; extents = exts)
+    return IndexedPointInAreaLocator(m, exact, index)
 end
 
 """
@@ -296,11 +189,14 @@ The location (`LOC_*` code) of point `p` in the locator's areal geometry.
 Port of `IndexedPointInAreaLocator.locate`.
 """
 function locate(loc::IndexedPointInAreaLocator, p)
-    loc.is_empty && return LOC_EXTERIOR
+    index = loc.index
+    index === nothing && return LOC_EXTERIOR   #-- IntervalIndexedGeometry.isEmpty
     rcc = RayCrossingCounter(loc.m, p; exact = loc.exact)
     y = rcc.p[2]
+    ray = Extents.Extent(Y = (y, y))
     #-- SegmentVisitor: count every segment whose y-interval touches the ray
-    query_interval(loc.index, y, y) do seg
+    SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, ray), index) do i
+        seg = index.data[i]
         count_segment!(rcc, seg[1], seg[2])
     end
     return rcc_location(rcc)
@@ -310,47 +206,45 @@ end
 # (LinearComponentExtracter) and keeps the closed ones; here only polygonal
 # elements ever reach this locator (RelatePointLocator extracts Polygon /
 # MultiPolygon elements), so the rings are iterated directly.
-function _interval_index_add_geom!(mins, maxs, segs, ::GI.PolygonTrait, poly)
+function _interval_index_add_geom!(exts, segs, ::GI.PolygonTrait, poly)
     GI.isempty(poly) && return nothing
-    _interval_index_add_line!(mins, maxs, segs, GI.getexterior(poly))
+    _interval_index_add_line!(exts, segs, GI.getexterior(poly))
     for hole in GI.gethole(poly)
-        _interval_index_add_line!(mins, maxs, segs, hole)
+        _interval_index_add_line!(exts, segs, hole)
     end
     return nothing
 end
 
-function _interval_index_add_geom!(mins, maxs, segs, ::GI.MultiPolygonTrait, mp)
+function _interval_index_add_geom!(exts, segs, ::GI.MultiPolygonTrait, mp)
     for poly in GI.getgeom(mp)
-        _interval_index_add_geom!(mins, maxs, segs, GI.trait(poly), poly)
+        _interval_index_add_geom!(exts, segs, GI.trait(poly), poly)
     end
     return nothing
 end
 
 # Port of IntervalIndexedGeometry.addLine: index each ring segment on its
-# y-interval, streaming the points directly (no `_node_points` copy — this
-# runs on the unprepared hot path). GI rings may be implicitly closed (no
-# repeated end point); the SimplePointInAreaLocator ring loop
-# (`rk_point_in_ring`) treats rings as closed regardless, so the closing
-# segment is added here too.
-function _interval_index_add_line!(mins, maxs, segs, ring)
+# y-interval, streaming the points directly (no `_node_points` copy).
+# GI rings may be implicitly closed (no repeated end point); the
+# SimplePointInAreaLocator ring loop (`rk_point_in_ring`) treats rings as
+# closed regardless, so the closing segment is added here too.
+function _interval_index_add_line!(exts, segs, ring)
     n = GI.npoint(ring)
     n < 2 && return nothing
     first_pt = _node_point(GI.getpoint(ring, 1))
     prev = first_pt
     for i in 2:n
         pt = _node_point(GI.getpoint(ring, i))
-        _interval_index_add_segment!(mins, maxs, segs, prev, pt)
+        _interval_index_add_segment!(exts, segs, prev, pt)
         prev = pt
     end
     if prev != first_pt
-        _interval_index_add_segment!(mins, maxs, segs, prev, first_pt)
+        _interval_index_add_segment!(exts, segs, prev, first_pt)
     end
     return nothing
 end
 
-function _interval_index_add_segment!(mins, maxs, segs, p0, p1)
-    push!(mins, min(p0[2], p1[2]))
-    push!(maxs, max(p0[2], p1[2]))
+function _interval_index_add_segment!(exts, segs, p0, p1)
+    push!(exts, Extents.Extent(Y = minmax(p0[2], p1[2])))
     push!(segs, (p0, p1))
     return nothing
 end
