@@ -709,21 +709,15 @@ relate_predicate(p::PreparedRelate, predicate::TopologyPredicate, b) =
 # Whether to prebuild the A-side segment tree, mirroring the dispatch of
 # `process_edge_intersections!` + `_select_edge_set_accelerator`: an explicit
 # `NestedLoop` accelerator never uses a tree; `AutoAccelerator` uses one on
-# `Planar` above the clipping size threshold only (B is unknown at prepare
-# time, so the decision is made on A's segment count alone); any other
-# explicit accelerator always takes the tree path.
+# the manifolds with a segment-extent kernel (`Planar`/`Spherical`) above
+# the clipping size threshold only (B is unknown at prepare time, so the
+# decision is made on A's segment count alone); any other explicit
+# accelerator always takes the tree path.
 _build_prepared_edge_index(m::Manifold, ::IntersectionAccelerator, segs_a) =
     _make_prepared_edge_index(m, segs_a)
 _build_prepared_edge_index(::Manifold, ::NestedLoop, segs_a) = nothing
 _build_prepared_edge_index(::Manifold, ::AutoAccelerator, segs_a) = nothing
-function _build_prepared_edge_index(m::Planar, ::AutoAccelerator, segs_a)
-    _total_segment_count(segs_a) >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS ||
-        return nothing
-    return _make_prepared_edge_index(m, segs_a)
-end
-#-- the Spherical tree path is valid too (3D arc extents); above the threshold
-#-- prepared mode indexes A just like Planar
-function _build_prepared_edge_index(m::Spherical, ::AutoAccelerator, segs_a)
+function _build_prepared_edge_index(m::Union{Planar, Spherical}, ::AutoAccelerator, segs_a)
     _total_segment_count(segs_a) >= GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS ||
         return nothing
     return _make_prepared_edge_index(m, segs_a)

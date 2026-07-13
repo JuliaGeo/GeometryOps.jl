@@ -187,8 +187,8 @@ recorded on `computer`.
   under the `Extents.intersects` predicate.
 - [`AutoAccelerator`](@ref): picks `NestedLoop` below the clipping size
   threshold (`GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS`) and on
-  non-`Planar` manifolds (planar extent trees are not valid there), and the
-  tree path otherwise.
+  manifolds without a segment-extent kernel (neither `Planar` nor
+  `Spherical`), and the tree path otherwise.
 
 After each processed pair `is_result_known(computer)` is consulted and the
 enumeration stops early once the predicate value is determined (the port of
@@ -220,22 +220,13 @@ function process_edge_intersections!(tc::TopologyComputer,
         _select_edge_set_accelerator(m, ssa_list, ssb_list); m, exact)
 end
 
-# STRtrees over planar extents are only valid on the Planar manifold, and
-# below the clipping threshold the nested loop wins anyway.
-function _select_edge_set_accelerator(::Planar, ssa_list, ssb_list)
-    na = _total_segment_count(ssa_list)
-    nb = _total_segment_count(ssb_list)
-    if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS &&
-            nb < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
-        return NestedLoop()
-    else
-        return DoubleSTRtree()
-    end
-end
-# The same threshold heuristic on the sphere: the tree path is valid because
-# the segment extents are 3D great-circle arc extents (`_segment_extent`), and
-# `NaturalIndex` / the dual DFS / `Extents.intersects` are dimension-generic.
-function _select_edge_set_accelerator(::Spherical, ssa_list, ssb_list)
+# Below the clipping threshold the nested loop wins; above it, the tree
+# path. Valid on both manifolds with a segment-extent kernel: planar boxes
+# on `Planar`, 3D great-circle arc extents (`_segment_extent`) on
+# `Spherical` — `NaturalIndex`, the dual DFS, and `Extents.intersects` are
+# dimension-generic. Other manifolds have no extent kernel and always take
+# the nested loop.
+function _select_edge_set_accelerator(::Union{Planar, Spherical}, ssa_list, ssb_list)
     na = _total_segment_count(ssa_list)
     nb = _total_segment_count(ssb_list)
     if na < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS &&
