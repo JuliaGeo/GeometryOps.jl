@@ -36,7 +36,7 @@ end
 @testset "spherical tree accelerator agrees with NestedLoop (arc bulge)" begin
     A = GI.Polygon([GI.LinearRing([(0., 0.), (170., 0.), (85., 40.), (0., 0.)])])
     B = GI.Polygon([GI.LinearRing([(88., -2.), (92., -2.), (92., 2.), (88., 2.), (88., -2.)])])
-    tree = RelateNG(; manifold = Spherical(), accelerator = GO.DoubleSTRtree())
+    tree = RelateNG(; manifold = Spherical(), accelerator = GO.DoubleNaturalTree())
     loop = RelateNG(; manifold = Spherical(), accelerator = GO.NestedLoop())
     @test GO.relate(tree, A, B) == GO.relate(loop, A, B)
 end
