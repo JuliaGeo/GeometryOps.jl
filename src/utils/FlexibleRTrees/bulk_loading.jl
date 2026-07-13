@@ -3,12 +3,15 @@
 # ## Leaf ordering
 
 """
-    loadorder(algorithm, extents::Vector{<:Extents.Extent}, nodecapacity)::Vector{Int}
+    loadorder(algorithm, extents::Vector{<:Extents.Extent}, nodecapacity)
 
-The permutation in which `algorithm` packs `extents` into leaves.  Implement
-this for a new `BulkLoadAlgorithm` subtype to plug in another ordering.
+The permutation (an `AbstractVector{Int}`) in which `algorithm` packs
+`extents` into leaves.  Implement this for a new `BulkLoadAlgorithm` subtype
+to plug in another ordering.  Return `Base.OneTo` for the identity — the
+constructor then skips the reorder copy and aliases `extents` as the leaf
+level.
 """
-loadorder(::Unsorted, extents, nodecapacity) = collect(1:length(extents))
+loadorder(::Unsorted, extents, nodecapacity) = Base.OneTo(length(extents))
 loadorder(::HPR, extents, nodecapacity) = sortperm(_hilbert_keys(extents))
 function loadorder(::STR, extents::Vector{E}, nodecapacity) where E
     centers = [_center(e) for e in extents]

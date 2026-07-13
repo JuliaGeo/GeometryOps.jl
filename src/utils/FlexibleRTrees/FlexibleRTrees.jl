@@ -6,10 +6,11 @@ dimensionality, with a pluggable bulk-load algorithm — sort-tile-recursive
 ([`STR`](@ref)), Hilbert-packed ([`HPR`](@ref)), or none
 ([`Unsorted`](@ref)) — behind one tree type.
 
-Storage is flat: `RTree{A, E}` holds a vector of per-level extent vectors
-plus a leaf permutation, and is a concrete type at any size or depth.  A
-bulk-load algorithm chooses only the *leaf order*, via [`loadorder`](@ref);
-packing always unions consecutive runs of `nodecapacity` extents, bottom-up.
+Storage is flat: an `RTree` holds a vector of per-level extent vectors, a
+leaf permutation, and the indexed collection itself (`tree.data`), and is a
+concrete type at any size or depth.  A bulk-load algorithm chooses only the
+*leaf order*, via [`loadorder`](@ref); packing always unions consecutive
+runs of `nodecapacity` extents, bottom-up.
 Upper levels therefore group runs of the leaf order rather than re-tiling
 each level: Hilbert order is spatially local at every scale so `HPR` packs
 tightly, while `STR`'s upper levels are slightly looser than a re-tiled
