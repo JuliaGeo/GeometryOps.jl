@@ -346,7 +346,7 @@ ngon(cx, cy, r, n) = GI.Polygon([[
     ]
     for (ga, gb) in fixtures
         tc_truth, pred_truth = run_all_pairs(ga, gb)
-        for acc in (GO.NestedLoop(), GO.DoubleSTRtree(), GO.AutoAccelerator())
+        for acc in (GO.NestedLoop(), GO.DoubleNaturalTree(), GO.AutoAccelerator())
             tc, pred = run_enum(ga, gb, acc)
             @test node_counts(tc) == node_counts(tc_truth)
             @test imstr(pred) == imstr(pred_truth)
@@ -395,7 +395,7 @@ end
     # stop long before enumerating every extent-overlapping pair
     ga = ngon(0.0, 0.0, 1.0, 64)
     gb = ngon(0.1, 0.0, 1.0, 64)
-    for acc in (GO.NestedLoop(), GO.DoubleSTRtree())
+    for acc in (GO.NestedLoop(), GO.DoubleNaturalTree())
         # baseline: the full-matrix predicate is never known early, so its
         # count is the total number of pairs the enumeration would process
         full = run_counted(ga, gb, acc, GO.RelateMatrixPredicate())
@@ -436,7 +436,7 @@ end
     end
 
     counts_loop, im_loop = run_self(GO.NestedLoop())
-    counts_tree, im_tree = run_self(GO.DoubleSTRtree())
+    counts_tree, im_tree = run_self(GO.DoubleNaturalTree())
     @test counts_loop == counts_tree
     @test im_loop == im_tree
     # sanity: the return segment properly crosses all 40 zigzag segments
@@ -461,7 +461,7 @@ end
         GO.process_self_intersections!(tc, ss_list, acc)
         return pred
     end
-    for acc in (GO.NestedLoop(), GO.DoubleSTRtree())
+    for acc in (GO.NestedLoop(), GO.DoubleNaturalTree())
         # baseline: the full-matrix predicate is never known early, so its
         # count is the total number of pairs the enumeration would process
         full = run_self_counted(GO.RelateMatrixPredicate(), acc)
