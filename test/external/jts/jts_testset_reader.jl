@@ -89,7 +89,9 @@ end
 
 function load_test_run(filepath::String)
     doc = read(filepath, XML.Node) # lazy parsing
-    run = only(children(doc))
+    #-- XML.jl ≥ 0.4 surfaces declaration/comment/whitespace nodes as
+    #-- document children; the <run> root is the single Element among them
+    run = only(c for c in children(doc) if nodetype(c) === XML.Element)
     description = nothing
     precision_model = "FLOATING"
     test_cases = Case[]

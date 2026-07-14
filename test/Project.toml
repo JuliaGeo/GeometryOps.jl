@@ -40,6 +40,7 @@ XML = "72c71f33-b9b6-44de-8c94-c961784809e2"
 ArchGDAL = "0.10.10"
 GeometryBasics = "0.4.7, 0.5"
 Test = "1"
+XML = "0.3.8, 0.4"
 
 [sources]
 GeometryOps = {path = ".."}
