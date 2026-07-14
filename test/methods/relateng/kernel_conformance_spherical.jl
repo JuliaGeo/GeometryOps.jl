@@ -52,6 +52,12 @@ function kernel_conformance_suite_spherical(m; exact)
         @test GO.rk_point_on_segment(m, _usp(1, 1, 0), a, b; exact)  # interior (same great circle, within span)
         @test !GO.rk_point_on_segment(m, _usp(0, 0, 1), a, b; exact) # pole, off the circle
         @test !GO.rk_point_on_segment(m, _usp(-1, 1, 0), a, b; exact) # on circle, outside the minor-arc span
+        # zero-length arc (repeated ring vertex): only its endpoint direction
+        # is on it — the degenerate span test must not accept every point
+        @test GO.rk_point_on_segment(m, a, a, a; exact)
+        @test GO.rk_point_on_segment(m, _usp(2, 0, 0), a, a; exact)  # same direction, different scale
+        @test !GO.rk_point_on_segment(m, b, a, a; exact)
+        @test !GO.rk_point_on_segment(m, _usp(-1, 0, 0), a, a; exact) # antipode of the endpoint
     end
     # arc containment (bulge capture) is the shared `spherical_arc_extent`'s
     # contract, tested exhaustively in test/utils/unitspherical.jl
@@ -225,7 +231,7 @@ function kernel_conformance_suite_spherical(m; exact)
         # antipodal directions are NOT the same point
         @test !GO.rk_nodes_coincide(m, GO.vertex_node(_usp(1,1,0)), GO.vertex_node(_usp(-1,-1,0)); exact)
     end
-    @testset "rk_point_in_ring: parity, boundary, S2 orientation" begin
+    @testset "rk_point_in_ring: parity, boundary, winding independence" begin
         # CCW-from-above diamond at z=1 encircling the north pole; integer
         # vertices (membership decidable: boundary via exact coplanarity, the
         # meridian-parity crossings are scale-invariant signs).
@@ -239,11 +245,12 @@ function kernel_conformance_suite_spherical(m; exact)
         @test GO.rk_point_in_ring(m, _usp(3,1,0), ring; exact) == GO.LOC_EXTERIOR     # equatorial
         @test GO.rk_point_in_ring(m, _usp(3,-1,0), ring; exact) == GO.LOC_EXTERIOR
 
-        # S2 convention: reversing the ring swaps interior/exterior (the pole is
-        # no longer enclosed). Boundary is unchanged.
+        # Winding independence (kernel contract): a ring encloses the same
+        # region — the one smaller than a hemisphere — in either winding, like
+        # the planar ray-crossing parity. Boundary is unchanged too.
         rev = GI.LinearRing(reverse(verts))
-        @test GO.rk_point_in_ring(m, _usp(1,1,10), rev; exact) == GO.LOC_EXTERIOR
-        @test GO.rk_point_in_ring(m, _usp(3,1,0), rev; exact) == GO.LOC_INTERIOR
+        @test GO.rk_point_in_ring(m, _usp(1,1,10), rev; exact) == GO.LOC_INTERIOR
+        @test GO.rk_point_in_ring(m, _usp(3,1,0), rev; exact) == GO.LOC_EXTERIOR
         @test GO.rk_point_in_ring(m, _usp(1,1,1), rev; exact) == GO.LOC_BOUNDARY
     end
     @testset "area interaction bounds reach the enclosed pole" begin

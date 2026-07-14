@@ -63,6 +63,17 @@ end
 @inline function _on_arc_span(bt, p, q0, q1)
     P = _vec3(bt, p); Q0 = _vec3(bt, q0); Q1 = _vec3(bt, q1)
     n = _cross3(Q0, Q1)
+    if _iszero3(n)
+        # parallel endpoints — a zero-length arc (real rings carry repeated
+        # vertices; NE 110m North Korea has an `[A, A, B, A]` sliver ring) or
+        # an ill-defined antipodal pair: the closed arc holds only its
+        # endpoints, but with `n == 0` the span tests below are `0 >= 0` and
+        # would accept every `p` on the great circle (which the orient gate
+        # already reduced to every `p`, since orient against a zero normal is
+        # identically 0). Membership is direction coincidence with an endpoint.
+        return (_iszero3(_cross3(P, Q0)) && _dot3(P, Q0) > 0) ||
+               (_iszero3(_cross3(P, Q1)) && _dot3(P, Q1) > 0)
+    end
     return _dot3(_cross3(Q0, P), n) >= 0 && _dot3(_cross3(P, Q1), n) >= 0
 end
 
@@ -260,7 +271,43 @@ function rk_nodes_coincide(::Spherical, k1::NodeKey, k2::NodeKey; exact)
     return _iszero3(_cross3(d1, d2)) && _dot3(d1, d2) > 0
 end
 
-# ## rk_point_in_ring (anchor-retry crossing parity, S2 convention)
+# ## Ring orientation
+
+#=
+Spherical method of `_ring_is_ccw` (relate_geometry.jl — the port of JTS
+`Orientation.isCCW` used by `_orient_ring`). The planar extreme-vertex cap
+algorithm assumes a coordinate plane: its y-extreme vertex pick and flat-cap
+`del_x` tiebreak are meaningless on xyz points (a ring symmetric about the
+equator has two exactly-equal extreme-y vertices and reads CW in *both*
+windings). On the sphere the ring is CCW iff its signed area (Girard fan sum,
+area.jl) is positive — iff the region on its left is the enclosed one, the
+one smaller than a hemisphere. This is the sole place the engine resolves
+which of the two ring-bounded regions a ring means; `_orient_ring` (edge-side
+topology), `rk_point_in_ring`, and `rk_interaction_bounds` all inherit it, so
+they agree by construction.
+
+`exact` is accepted for signature parity but unused: the sign only selects
+the region convention, and a near-zero sum means the ring splits the sphere
+into equal halves — intrinsically ambiguous, not a float artifact.
+=#
+function _ring_is_ccw(::Spherical, ring::Vector; exact)
+    n = length(ring)
+    n > 1 && ring[end] == ring[1] && (n -= 1)
+    n < 3 && return false
+    # renormalize: the Girard quadrant split assumes unit vectors, and the
+    # conformance suite feeds exact-integer non-unit rings
+    p1 = rk_normalize_usp(ring[1])
+    prev = rk_normalize_usp(ring[2])
+    total = 0.0
+    for i in 3:n
+        cur = rk_normalize_usp(ring[i])
+        total += _spherical_triangle_area(Girard(), p1, prev, cur)
+        prev = cur
+    end
+    return total > 0
+end
+
+# ## rk_point_in_ring (anchor-retry crossing parity, winding-independent)
 
 # Whether the two minor arcs (p0,p1) and (q0,q1) cross properly (interior to
 # both). The great circles meet at ±d, d = (p0×p1)×(q0×q1); a proper crossing is
@@ -284,13 +331,19 @@ _ring_kernel_pts(ring) = _ring_kernel_pts(booltype(GI.is3d(GI.getpoint(ring, 1))
 _ring_kernel_pts(::True, ring) = _node_points(ring)
 _ring_kernel_pts(::False, ring) = _ring_usp(ring)
 
-# Location of `p` relative to the area enclosed by `ring` (S2 convention:
-# interior on the left). Boundary first (exact arc membership), then the
-# shared `spherical_ring_contains` with this kernel's predicates injected —
-# `rk_orient` for sides, `_arcs_cross_properly` for transversality — so the
-# interior decision is as exact as the predicates. All anchors degenerate
-# (unreachable for a non-degenerate ring and an off-boundary point) is
-# refused, not answered wrong.
+# Location of `p` relative to the area enclosed by `ring` — the kernel
+# contract (kernel.jl) is winding-independent, like the planar ray-crossing
+# parity: real-world rings arrive in either winding (Natural Earth ships
+# shapefile-convention CW shells), and `_locate_point_in_polygonal` passes
+# them unoriented. Boundary first (exact arc membership), then the shared
+# `spherical_ring_contains` (which reports the region on the ring's *left*)
+# with this kernel's predicates injected — `rk_orient` for sides,
+# `_arcs_cross_properly` for transversality — so the parity decision is as
+# exact as the predicates; the left region is the interior iff the ring is
+# canonically CCW (`_ring_is_ccw` above, the same bit `_orient_ring` feeds
+# the edge-side topology). All anchors degenerate (unreachable for a
+# non-degenerate ring and an off-boundary point) is refused, not answered
+# wrong.
 function rk_point_in_ring(m::Spherical, p, ring; exact)
     pts = _ring_kernel_pts(ring)
     @inbounds for i in 1:length(pts)-1
@@ -299,12 +352,19 @@ function rk_point_in_ring(m::Spherical, p, ring; exact)
     bt = booltype(exact)
     n = length(pts)
     n > 1 && pts[end] == pts[1] && (n -= 1)
+    # Drop repeated consecutive vertices (real rings carry them — NE 110m
+    # North Korea's sliver is `[A, A, B, A]`; JTS removes them at ingest,
+    # but this path receives the raw ring). A retraced edge lies exactly
+    # under the anchor midpoint and breaks the parity count; after dedup a
+    # ring with fewer than 3 distinct vertices bounds no area.
+    pts, n = _drop_repeated_ring_pts(pts, n)
+    n < 3 && return LOC_EXTERIOR
     inside = spherical_ring_contains(pts, n, p;
         orient = (a, b, c) -> rk_orient(m, a, b, c; exact),
         on_arc = Returns(false),   # boundary classified exactly above
         proper_crossing = (q, mid, a, b) -> _arcs_cross_properly(bt, q, mid, a, b) ? 1 : 0)
     inside === nothing && _throw_degenerate_point_in_ring(p)
-    return inside ? LOC_INTERIOR : LOC_EXTERIOR
+    return inside == _ring_is_ccw(m, pts; exact) ? LOC_INTERIOR : LOC_EXTERIOR
 end
 
 @noinline _throw_degenerate_point_in_ring(p) = throw(ArgumentError(
@@ -339,8 +399,13 @@ function _sph_interaction_extent(m::Spherical, ::GI.AbstractCurveTrait, geom)
 end
 function _sph_interaction_extent(m::Spherical, ::GI.AbstractPolygonTrait, geom)
     # region box of the exterior ring: edge arc extents plus enclosed-axis
-    # widening, on the same converted points the engine ingests
-    ext = _spherical_region_extent(_ring_usp(GI.getexterior(geom)))
+    # widening, on the same converted points the engine ingests.
+    # `_spherical_region_extent` bounds the region on the ring's left, so
+    # orient the shell canonically CCW first — a CW-wound input (shapefile
+    # convention) would otherwise bound the complement, under-covering an
+    # enclosed pole (`exact` is unused by the spherical `_ring_is_ccw`)
+    pts = _orient_ring(m, _ring_usp(GI.getexterior(geom)), false; exact = True())
+    ext = _spherical_region_extent(pts)
     # a valid polygon's holes lie inside that region — but JTS's element
     # envelope also covers a stray hole outside the shell, and extraction
     # relies on that to keep the element alive
@@ -363,6 +428,26 @@ end
 
 # Converted (kernel-ingest: unit, signed-zero) vertices of a ring/curve.
 _ring_usp(ring) = [_spherical_kernel_point(p) for p in GI.getpoint(ring)]
+
+# `pts[1:n]` (implied closure) with repeated consecutive vertices removed,
+# copying only when one exists; wraparound repeats included.
+function _drop_repeated_ring_pts(pts, n)
+    has_dup = false
+    for i in 1:n
+        if pts[i] == pts[mod1(i + 1, n)]
+            has_dup = true
+            break
+        end
+    end
+    has_dup || return pts, n
+    ded = empty(pts)
+    sizehint!(ded, n)
+    for i in 1:n
+        (isempty(ded) || ded[end] != pts[i]) && push!(ded, pts[i])
+    end
+    length(ded) > 1 && ded[end] == ded[1] && pop!(ded)
+    return ded, length(ded)
+end
 
 _pad_bounds(::Nothing) = nothing
 _pad_bounds(ext) = Extents.Extent(
