@@ -72,6 +72,86 @@ end
     end
 end
 
+# Ring winding must not change which region a polygon bounds: real-world data
+# arrives in either winding (Natural Earth ships shapefile-convention CW
+# shells), and the kernel contract for `rk_point_in_ring` is the area enclosed
+# by the ring — the region smaller than a hemisphere — like the planar
+# ray-crossing parity. Under the previous S2 left-of-ring reading, a CW
+# continent meant "the whole sphere minus the continent" and intersected
+# everything.
+@testset "polygon interior is winding-independent" begin
+    sq(x0, y0, s) = [(x0, y0), (x0 + s, y0), (x0 + s, y0 + s), (x0, y0 + s), (x0, y0)]
+    ccw(pts) = GI.Polygon([GI.LinearRing(pts)])
+    cw(pts) = GI.Polygon([GI.LinearRing(reverse(pts))])
+    canada_ish = sq(-100.0, 50.0, 10.0)
+    australia_ish = sq(140.0, -35.0, 15.0)
+    continent = sq(-140.0, 20.0, 60.0)                       # continent-sized
+    far_pt = GI.Point(150.0, -25.0)
+    @testset "disjoint stays disjoint in all four winding combinations" begin
+        for A in (ccw(canada_ish), cw(canada_ish)), B in (ccw(australia_ish), cw(australia_ish))
+            @test !GO.intersects(alg, A, B)
+            @test GO.disjoint(alg, A, B)
+        end
+        for A in (ccw(continent), cw(continent))
+            @test !GO.intersects(alg, A, far_pt)
+            @test !GO.intersects(alg, A, ccw(australia_ish))
+        end
+    end
+    @testset "containment in all four winding combinations" begin
+        inner = sq(-97.0, 53.0, 2.0)
+        for A in (ccw(canada_ish), cw(canada_ish)), B in (ccw(inner), cw(inner))
+            @test GO.contains(alg, A, B)
+            @test GO.within(alg, B, A)
+            @test !GO.touches(alg, A, B)
+        end
+    end
+    @testset "shared-edge neighbors touch in all four winding combinations" begin
+        left = sq(0.0, 40.0, 10.0)
+        right = sq(10.0, 40.0, 10.0)
+        for A in (ccw(left), cw(left)), B in (ccw(right), cw(right))
+            @test GO.touches(alg, A, B)
+            @test GO.intersects(alg, A, B)
+        end
+    end
+    @testset "equator-symmetric ring (planar isCCW tie case)" begin
+        # two vertices tie for the extreme xyz-y coordinate, which broke the
+        # planar extreme-vertex orientation test on the sphere: both windings
+        # read CW
+        eq = sq(-5.0, -5.0, 10.0)
+        inside = GI.Point(0.0, 0.0)
+        for A in (ccw(eq), cw(eq))
+            @test GO.contains(alg, A, inside)
+            @test !GO.intersects(alg, A, far_pt)
+        end
+    end
+end
+
+# A degenerate zero-area sliver ring with a repeated vertex (NE 110m North
+# Korea ships an `[A, A, B, A]` first polygon) must not swallow the sphere:
+# the zero-length arc `A → A` used to read every query point as on-boundary.
+@testset "degenerate sliver polygon in a multipolygon stays local" begin
+    a = (130.78, 42.22)
+    sliver = GI.LinearRing([a, a, (130.78002, 42.22), a])
+    body = GI.LinearRing([(124., 38.), (130., 38.), (130., 43.), (124., 43.), (124., 38.)])
+    mp = GI.MultiPolygon([GI.Polygon([sliver]), GI.Polygon([body])])
+    far = GI.Polygon([GI.LinearRing([(-60., -25.), (-55., -25.), (-55., -20.), (-60., -20.), (-60., -25.)])])
+    @test !GO.intersects(alg, mp, far)
+    @test !GO.intersects(alg, mp, GI.Point(-60.0, -20.0))
+    @test GO.intersects(alg, mp, GI.Point(127.0, 40.0))
+end
+
+# The winding-independent region also drives the kernel interaction bounds: a
+# CW polar cap must still bound the cap (its enclosed pole included), not the
+# complement — which would under-cover the pole and prune away a contained
+# point.
+@testset "CW polar cap still means the cap" begin
+    cap_cw = GI.Polygon([GI.LinearRing([(0., 80.), (240., 80.), (120., 80.), (0., 80.)])])
+    pt = GI.Point(0., 89.)                                   # near north pole
+    @test GO.relate(alg, cap_cw, pt, "T*****FF*")            # contains
+    e = GO.rk_interaction_bounds(Spherical(), cap_cw)
+    @test e.Z[2] >= 1.0                                      # bounds reach the enclosed pole
+end
+
 # Task 18: an exactly-antipodal edge has no unique great-circle arc; the kernel
 # refuses it at ingest with a message pointing at the AntipodalEdgeSplit remedy.
 @testset "spherical antipodal edge throws informatively" begin
