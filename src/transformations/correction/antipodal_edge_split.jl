@@ -35,7 +35,7 @@ great-circle arc. This is the remedy for the antipodal-edge `ArgumentError`
 thrown by `relate` on the `Spherical` manifold.
 
 It can be called on any geometry as usual (`AntipodalEdgeSplit()(geom)`), or
-passed to [`fix`](@ref).
+passed to `GeometryOps.fix`.
 
 See also [`GeometryCorrection`](@ref).
 """
