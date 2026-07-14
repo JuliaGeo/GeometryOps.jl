@@ -35,16 +35,28 @@ design D2) for `evaluate_nodes!`.
 
 Port of JTS `TopologyComputer`.
 """
-struct TopologyComputer{TP <: TopologyPredicate, RA <: RelateGeometry, RB <: RelateGeometry, P}
+struct TopologyComputer{TP <: TopologyPredicate, M <: Manifold, E, P}
     predicate::TP
-    geom_a::RA
-    geom_b::RB
+    #-- the kernel settings the hot per-segment paths read (copied out of
+    #-- geom_a so those reads stay statically typed)
+    m::M
+    exact::E
+    #-- deliberately opaque (abstract) references: the geometries are only
+    #-- consulted per relate call or per node (dimension queries, point
+    #-- location), never in the per-segment hot path — and keeping the input
+    #-- geometry types out of the `TopologyComputer` type keeps the whole
+    #-- edge/node machinery downstream (the edge intersector, its dual-tree
+    #-- traversal closures, every `update_*`/`evaluate_*` method here)
+    #-- compiled once per (manifold, exact, predicate) instead of once per
+    #-- input geometry-type pair
+    geom_a::RelateGeometry
+    geom_b::RelateGeometry
     node_sections::Dict{NodeKey{P}, NodeSections{P}}
 end
 
 function TopologyComputer(predicate::TopologyPredicate,
         geom_a::RelateGeometry, geom_b::RelateGeometry)
-    #-- the kernel manifold/exact settings are read from geom_a below;
+    #-- the kernel manifold/exact settings are read from geom_a;
     #-- both inputs must have been built with the same settings
     (geom_a.m == geom_b.m && geom_a.exact == geom_b.exact) ||
         throw(ArgumentError("RelateGeometry manifold/exact settings of the A and B inputs must agree"))
@@ -52,22 +64,24 @@ function TopologyComputer(predicate::TopologyPredicate,
     #-- every segment string / node point produced at ingest (Tuple{Float64,
     #-- Float64} for Planar, UnitSphericalPoint{Float64} for Spherical)
     P = _kernel_point_type(geom_a.m)
-    tc = TopologyComputer(predicate, geom_a, geom_b, Dict{NodeKey{P}, NodeSections{P}}())
-    init_exterior_dims!(tc)
+    tc = TopologyComputer(predicate, geom_a.m, geom_a.exact, geom_a, geom_b,
+        Dict{NodeKey{P}, NodeSections{P}}())
+    #-- the dimensions are read off the *arguments*, which are concretely
+    #-- typed here (the `tc` fields are opaque; construction runs once per
+    #-- evaluation, so its geometry queries should stay statically typed)
+    init_exterior_dims!(tc, get_dimension_real(geom_a), get_dimension_real(geom_b))
     return tc
 end
 
 # The manifold / exactness flag for kernel calls (asserted equal across both
 # inputs in the constructor).
-_manifold(tc::TopologyComputer) = tc.geom_a.m
-_exact(tc::TopologyComputer) = tc.geom_a.exact
+_manifold(tc::TopologyComputer) = tc.m
+_exact(tc::TopologyComputer) = tc.exact
 
 # Port of TopologyComputer.initExteriorDims (private): determine a priori
-# partial EXTERIOR topology based on the real dimensions.
-function init_exterior_dims!(tc::TopologyComputer)
-    dim_real_a = get_dimension_real(tc.geom_a)
-    dim_real_b = get_dimension_real(tc.geom_b)
-
+# partial EXTERIOR topology based on the real dimensions (computed by the
+# constructor, where the geometries are still concretely typed).
+function init_exterior_dims!(tc::TopologyComputer, dim_real_a::Integer, dim_real_b::Integer)
     if dim_real_a == DIM_P && dim_real_b == DIM_L
         #-- For P/L case, P exterior intersects L interior
         update_dim!(tc, LOC_EXTERIOR, LOC_INTERIOR, DIM_L)
