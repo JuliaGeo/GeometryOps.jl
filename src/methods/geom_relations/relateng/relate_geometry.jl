@@ -499,36 +499,14 @@ given extent (one per line, one per polygon ring). If `ext_filter` is
     must early-return on empty inputs before extraction.
 """
 function extract_segment_strings(rg::RelateGeometry, is_a::Bool, ext_filter)
-    seg_strings = Vector{_segment_string_eltype(rg, rg.geom)}()
+    #-- `RelateSegmentString{P}` is concrete (its geometry references are
+    #-- opaque), so the vector is concretely typed and the per-segment loops
+    #-- downstream (`_segment_extent_table`, the NestedLoop enumerator) stay
+    #-- statically dispatched, for any input geometry type
+    seg_strings = Vector{RelateSegmentString{_kernel_point_type(rg.m)}}()
     _extract_segment_strings!(rg, is_a, ext_filter, rg.geom, seg_strings)
     return seg_strings
 end
-
-# The exact element type the extraction below can produce for `geom`:
-# `RelateSegmentString{P, G, RG}` with `P` the fixed `_node_points` point
-# type, `G` `Nothing` for lines and the parent polygonal's type for rings,
-# and `RG = typeof(rg)`. Concrete for atomic and Multi* inputs; a small
-# `Union` for mixed GeometryCollections. Typing the vector concretely up
-# front keeps the per-segment loops downstream (`_segment_extent_table`,
-# the NestedLoop enumerator) statically dispatched instead of boxing every
-# segment access.
-_segment_string_eltype(rg::RelateGeometry, geom) =
-    _segment_string_eltype(rg, GI.trait(geom), geom)
-_segment_string_eltype(rg::RG, ::GI.AbstractCurveTrait, geom) where {RG <: RelateGeometry} =
-    RelateSegmentString{_kernel_point_type(rg.m), Nothing, RG}
-#-- rings of MultiPolygon elements carry the MultiPolygon as parent
-_segment_string_eltype(rg::RG, ::Union{GI.AbstractPolygonTrait, GI.AbstractMultiPolygonTrait},
-        geom) where {RG <: RelateGeometry} =
-    RelateSegmentString{_kernel_point_type(rg.m), typeof(geom), RG}
-function _segment_string_eltype(rg::RelateGeometry, ::GI.AbstractGeometryCollectionTrait, geom)
-    T = Union{}
-    for g in GI.getgeom(geom)
-        T = Union{T, _segment_string_eltype(rg, g)}
-    end
-    return T
-end
-#-- point elements produce no segment strings
-_segment_string_eltype(::RelateGeometry, ::GI.AbstractTrait, geom) = Union{}
 
 function _extract_segment_strings!(rg::RelateGeometry, is_a::Bool, ext_filter, geom, seg_strings)
     trait = GI.trait(geom)
@@ -677,7 +655,7 @@ end
 ==========================================================================#
 
 """
-    RelateSegmentString{P, G, RG}
+    RelateSegmentString{P}
 
 Models a linear edge of a [`RelateGeometry`](@ref): the coordinate vector of
 one line or one polygon ring, tagged with which input geometry it came from
@@ -687,14 +665,21 @@ and (for rings) the parent polygonal geometry.
 In JTS this extends `BasicSegmentString`; here the coordinates are stored
 directly in `pts`. Segment indices are 1-based: segment `i` runs from
 `pts[i]` to `pts[i + 1]` (the Java equivalents are 0-based).
+
+The geometry references are deliberately opaque (abstract field types, as
+they are in Java): `parent_polygonal` is only ever compared by identity and
+carried into [`NodeSection`](@ref)s, so parameterizing on the input geometry
+type would only re-specialize the whole edge machinery per geometry-type
+pair (a pure compile-time cost). Only `pts` — the per-segment hot path —
+stays concretely typed, on the manifold's kernel point type `P`.
 """
-struct RelateSegmentString{P, G, RG <: RelateGeometry}
+struct RelateSegmentString{P}
     is_a::Bool
     dim::Int8
     id::Int32
     ring_id::Int32
-    input_geom::RG
-    parent_polygonal::G
+    input_geom::RelateGeometry
+    parent_polygonal::Any
     pts::Vector{P}
 end
 
