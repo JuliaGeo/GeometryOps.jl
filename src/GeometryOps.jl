@@ -157,4 +157,6 @@ function __init__()
     Base.Experimental.register_error_hint(_buffer_error_hinter, MethodError)
 end
 
+include("precompile.jl")
+
 end
