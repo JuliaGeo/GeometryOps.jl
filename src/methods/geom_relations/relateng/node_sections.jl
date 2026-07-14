@@ -15,7 +15,7 @@
 ==========================================================================#
 
 """
-    NodeSection{P, G}
+    NodeSection{P}
 
 Represents a computed node along with the incident edges on either side of
 it (if they exist). This captures the information about a node in a geometry
@@ -32,7 +32,10 @@ class stores the node as a `Coordinate`; here `node` is a [`NodeKey`](@ref),
 so proper-crossing nodes never need a constructed coordinate. `v0`/`v1` are
 coordinate tuples of type `P` (or `nothing` for a missing incident edge at a
 line endpoint); `polygonal` is the parent polygonal geometry of an area
-section, or `nothing` if the section is not on a polygon boundary.
+section, or `nothing` if the section is not on a polygon boundary — an
+opaque payload (abstract field type, as in Java): it is only compared by
+identity, so parameterizing on it would re-specialize the node machinery
+per input geometry type for no runtime gain.
 
 The field order matches the Java constructor argument order
 `(isA, dimension, id, ringId, poly, isNodeAtVertex, v0, nodePt, v1)`.
@@ -40,12 +43,12 @@ The field order matches the Java constructor argument order
 signatures reference it; the Java file declares `EdgeAngleComparator` and
 `isAreaArea` first.)
 """
-struct NodeSection{P, G}
+struct NodeSection{P}
     is_a::Bool
     dim::Int8
     id::Int32
     ring_id::Int32
-    polygonal::G
+    polygonal::Any
     is_node_at_vertex::Bool
     v0::Union{P, Nothing}
     node::NodeKey{P}
@@ -223,10 +226,10 @@ Port of JTS `NodeSections`; the Java class is keyed by the node
 """
 mutable struct NodeSections{P}
     const node::NodeKey{P}
-    const sections::Vector{NodeSection}
+    const sections::Vector{NodeSection{P}}
 end
 
-NodeSections(node::NodeKey) = NodeSections(node, NodeSection[])
+NodeSections(node::NodeKey{P}) where {P} = NodeSections(node, NodeSection{P}[])
 
 # Port of NodeSections.getCoordinate. The Java method returns the node
 # Coordinate; here the node is its symbolic NodeKey (design D2).
