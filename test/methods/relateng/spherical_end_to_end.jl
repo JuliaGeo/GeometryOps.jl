@@ -152,6 +152,35 @@ end
     @test e.Z[2] >= 1.0                                      # bounds reach the enclosed pole
 end
 
+# A ring may carry antipodal VERTEX pairs even though antipodal edges are
+# rejected at ingest — the AntipodalEdgeSplit output is exactly such a ring.
+# The Girard orientation fan must not run a chord through a vertex antipodal
+# to its apex (the fan triangle has no defined geodesic and its excess
+# degenerates to zero, flipping the shared orientation bit and with it the
+# polygon interior — CI regression on the fixed ring below).
+@testset "antipodal vertex pair does not flip the interior" begin
+    # AntipodalEdgeSplit's output for the (0,0) → (180,0) edge, verbatim:
+    # the first vertex (0,0) is antipodal to the mid-ring vertex (180,0)
+    split_pts = [(0., 0.), (90., 0.), (180., 0.), (90., 80.), (0., 0.)]
+    inside = GI.Point(10., 10.)      # under the (0,0)→(90,80) arc (lat 44.6° at lon 10)
+    outside = GI.Point(10., -10.)    # southern hemisphere
+    for pts in (split_pts, reverse(split_pts))
+        poly = GI.Polygon([GI.LinearRing(pts)])
+        @test GO.relate(alg, poly, inside, "T*****FF*")      # contains
+        @test GO.contains(alg, poly, inside)
+        @test !GO.intersects(alg, poly, outside)
+    end
+    # a different configuration: the first vertex's antipode mid-ring, with
+    # the ring elsewhere entirely off the first vertex's great circles
+    pts2 = [(20., 30.), (100., 10.), (-160., -30.), (-100., 10.), (20., 30.)]
+    inside2 = GI.Point(0., 40.)
+    for pts in (pts2, reverse(pts2))
+        poly = GI.Polygon([GI.LinearRing(pts)])
+        @test GO.contains(alg, poly, inside2)
+        @test !GO.intersects(alg, poly, GI.Point(0., -80.))
+    end
+end
+
 # Task 18: an exactly-antipodal edge has no unique great-circle arc; the kernel
 # refuses it at ingest with a message pointing at the AntipodalEdgeSplit remedy.
 @testset "spherical antipodal edge throws informatively" begin
