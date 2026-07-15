@@ -296,16 +296,47 @@ function _ring_is_ccw(::Spherical, ring::Vector; exact)
     n < 3 && return false
     # renormalize: the Girard quadrant split assumes unit vectors, and the
     # conformance suite feeds exact-integer non-unit rings
-    p1 = rk_normalize_usp(ring[1])
-    prev = rk_normalize_usp(ring[2])
+    apex = _girard_fan_apex(ring, n)
     total = 0.0
-    for i in 3:n
+    prev = rk_normalize_usp(ring[n])
+    for i in 1:n
         cur = rk_normalize_usp(ring[i])
-        total += _spherical_triangle_area(Girard(), p1, prev, cur)
+        total += _spherical_triangle_area(Girard(), apex, prev, cur)
         prev = cur
     end
     return total > 0
 end
+
+#=
+Fan apex for the Girard sum. The signed-area fan is apex-invariant in exact
+math, but a fan triangle with an (even nearly) antipodal apex–vertex pair
+has no well-defined connecting geodesic — its Girard excess degenerates to
+`atan(≈0, ≈0)` — and corrupts the sum. Ingest only rejects antipodal
+*edges*: a fan chord to a non-adjacent vertex can still be antipodal, and
+post-`AntipodalEdgeSplit` rings carry exactly such vertex pairs (the split
+keeps both endpoints of the offending edge). Pick the first vertex — then
+the first edge midpoint — with no vertex within ~1e-9 of its antipode. A
+ring defeating every candidate pairs its whole vertex set with antipodes;
+fall back to the first vertex, which is no worse than the sum being taken
+at all (such a ring splits the sphere near-evenly, where the sign is
+intrinsically ambiguous).
+=#
+function _girard_fan_apex(ring, n)
+    for i in 1:n
+        apex = rk_normalize_usp(ring[i])
+        _clean_fan_apex(apex, ring, n) && return apex
+    end
+    for i in 1:n
+        mid = rk_normalize_usp(ring[i]) + rk_normalize_usp(ring[mod1(i + 1, n)])
+        norm(mid) < 1e-9 && continue   # near-antipodal edge: unstable midpoint
+        apex = UnitSphericalPoint(normalize(mid))
+        _clean_fan_apex(apex, ring, n) && return apex
+    end
+    return rk_normalize_usp(ring[1])
+end
+
+_clean_fan_apex(apex, ring, n) =
+    all(i -> (rk_normalize_usp(ring[i]) ⋅ apex) > -1 + 1e-9, 1:n)
 
 # ## rk_point_in_ring (anchor-retry crossing parity, winding-independent)
 
