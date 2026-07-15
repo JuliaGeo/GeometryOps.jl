@@ -148,6 +148,13 @@ const _PIASegment = Tuple{Tuple{Float64, Float64}, Tuple{Float64, Float64}}
 const _PIAExtent = Extents.Extent{(:Y,), Tuple{NTuple{2, Float64}}}
 const _PIAIndex = RTree{STR, _PIAExtent, Vector{_PIASegment}, Vector{Int}}
 
+# One polygon's cached kernel rings (spherical): shell plus holes, in the
+# even-odd composition order of `_locate_point_in_polygonal`.
+struct _SphPolyRings
+    shell::SphericalKernelRing
+    holes::Vector{SphericalKernelRing}
+end
+
 """
     IndexedPointInAreaLocator(m::Manifold, geom; exact)
 
@@ -165,21 +172,34 @@ index on the first `locate`; here the index is built in the constructor,
 since `RelatePointLocator` already creates the locator itself lazily on
 the first use per polygonal element (`_get_poly_locator`, the port of
 `RelatePointLocator.getLocator`).
+
+On `Spherical`, the locator instead caches the element's rings in kernel
+space (`polys` — [`SphericalKernelRing`](@ref)s; Layer 1 of the 2026-07-14
+spherical-indexed-locator design) and locates by the exact ring scan over
+them, so queries never reconvert vertices. The `polys` vector is empty on
+`Planar`.
 """
 struct IndexedPointInAreaLocator{M <: Manifold, E}
     m::M
     exact::E
     index::Union{Nothing, _PIAIndex}
+    polys::Vector{_SphPolyRings}
 end
 
-function IndexedPointInAreaLocator(m::Manifold, geom; exact)
+function IndexedPointInAreaLocator(m::Planar, geom; exact)
     exts = _PIAExtent[]
     segs = _PIASegment[]
     n = GI.npoint(geom)
     sizehint!(exts, n); sizehint!(segs, n)
     _interval_index_add_geom!(exts, segs, GI.trait(geom), geom)
     index = isempty(segs) ? nothing : RTree(STR(), segs; extents = exts)
-    return IndexedPointInAreaLocator(m, exact, index)
+    return IndexedPointInAreaLocator(m, exact, index, _SphPolyRings[])
+end
+
+function IndexedPointInAreaLocator(m::Spherical, geom; exact)
+    polys = _SphPolyRings[]
+    _sph_rings_add_geom!(polys, m, GI.trait(geom), geom; exact)
+    return IndexedPointInAreaLocator(m, exact, nothing, polys)
 end
 
 """
@@ -188,7 +208,7 @@ end
 The location (`LOC_*` code) of point `p` in the locator's areal geometry.
 Port of `IndexedPointInAreaLocator.locate`.
 """
-function locate(loc::IndexedPointInAreaLocator, p)
+function locate(loc::IndexedPointInAreaLocator{<:Planar}, p)
     index = loc.index
     index === nothing && return LOC_EXTERIOR   #-- IntervalIndexedGeometry.isEmpty
     rcc = RayCrossingCounter(loc.m, p; exact = loc.exact)
@@ -200,6 +220,51 @@ function locate(loc::IndexedPointInAreaLocator, p)
         count_segment!(rcc, seg[1], seg[2])
     end
     return rcc_location(rcc)
+end
+
+locate(loc::IndexedPointInAreaLocator{<:Spherical}, p) =
+    _sph_scan_locate(loc.m, loc.polys, p; exact = loc.exact)
+
+#==========================================================================
+## Spherical kernel-ring cache (Layer 1 of the spherical indexed locator)
+==========================================================================#
+
+# The exact ring scan of `_locate_point_in_polygonal` (point_locator.jl)
+# over cached kernel rings: same shell-then-holes even-odd composition,
+# with the conversion, dedup, and orientation bit precomputed.
+function _sph_scan_locate(m::Spherical, polys::Vector{_SphPolyRings}, p; exact)
+    for pr in polys
+        l = _sph_locate_in_poly(m, pr, p; exact)
+        l != LOC_EXTERIOR && return l
+    end
+    return LOC_EXTERIOR
+end
+
+function _sph_locate_in_poly(m::Spherical, pr::_SphPolyRings, p; exact)
+    shell_loc = rk_point_in_ring(m, p, pr.shell; exact)
+    shell_loc != LOC_INTERIOR && return shell_loc
+    for hole in pr.holes
+        hole_loc = rk_point_in_ring(m, p, hole; exact)
+        hole_loc == LOC_BOUNDARY && return LOC_BOUNDARY
+        hole_loc == LOC_INTERIOR && return LOC_EXTERIOR
+        #-- if in EXTERIOR of this hole keep checking the other ones
+    end
+    return LOC_INTERIOR
+end
+
+function _sph_rings_add_geom!(polys, m::Spherical, ::GI.PolygonTrait, poly; exact)
+    GI.isempty(poly) && return nothing
+    shell = SphericalKernelRing(m, GI.getexterior(poly); exact)
+    holes = [SphericalKernelRing(m, h; exact) for h in GI.gethole(poly) if !GI.isempty(h)]
+    push!(polys, _SphPolyRings(shell, holes))
+    return nothing
+end
+
+function _sph_rings_add_geom!(polys, m::Spherical, ::GI.MultiPolygonTrait, mp; exact)
+    for poly in GI.getgeom(mp)
+        _sph_rings_add_geom!(polys, m, GI.trait(poly), poly; exact)
+    end
+    return nothing
 end
 
 # Port of IntervalIndexedGeometry.init. JTS extracts all linear components

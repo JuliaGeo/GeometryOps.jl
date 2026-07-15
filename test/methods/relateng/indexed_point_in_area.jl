@@ -168,7 +168,7 @@ end
 @testset "empty polygonal element" begin
     # the GI.Polygon wrapper cannot represent POLYGON EMPTY (zero rings), so
     # exercise the no-segments short-circuit on a directly constructed locator
-    loc = GO.IndexedPointInAreaLocator(Planar(), True(), nothing)
+    loc = GO.IndexedPointInAreaLocator(Planar(), True(), nothing, GO._SphPolyRings[])
     @test loc.index === nothing
     @test GO.locate(loc, (0.0, 0.0)) == GO.LOC_EXTERIOR
 end

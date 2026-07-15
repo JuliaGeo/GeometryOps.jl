@@ -375,27 +375,59 @@ _ring_kernel_pts(::False, ring) = _ring_usp(ring)
 # the edge-side topology). All anchors degenerate (unreachable for a
 # non-degenerate ring and an off-boundary point) is refused, not answered
 # wrong.
-function rk_point_in_ring(m::Spherical, p, ring; exact)
+rk_point_in_ring(m::Spherical, p, ring; exact) =
+    rk_point_in_ring(m, p, SphericalKernelRing(m, ring; exact); exact)
+
+"""
+    SphericalKernelRing(m::Spherical, ring; exact)
+
+The cached kernel-space form of one ring: the converted
+`UnitSphericalPoint` vertex vector (`pts` — the boundary edge walk), its
+deduped open form (`ded`/`n` — the parity walk; aliases `pts` when the
+ring has no repeated vertices), and the ring's Girard orientation bit
+(`_ring_is_ccw`, the same bit edge topology and interaction bounds use).
+
+`rk_point_in_ring` re-derived all of this from lon/lat on every query —
+vertex conversion alone was ~60% of a prepared spherical point query. The
+point-in-area locators (indexed_point_in_area.jl) convert each ring once
+and query on this form (Layer 1 of the 2026-07-14 spherical-indexed-locator
+design).
+
+Repeated consecutive vertices are dropped from the parity walk (real rings
+carry them — NE 110m North Korea's sliver is `[A, A, B, A]`; JTS removes
+them at ingest, but this path receives the raw ring): a retraced edge lies
+exactly under the anchor midpoint and breaks the parity count. After dedup
+a ring with fewer than 3 distinct vertices bounds no area.
+"""
+struct SphericalKernelRing
+    pts::Vector{UnitSphericalPoint{Float64}}
+    ded::Vector{UnitSphericalPoint{Float64}}
+    n::Int
+    is_ccw::Bool
+end
+
+function SphericalKernelRing(m::Spherical, ring; exact)
     pts = _ring_kernel_pts(ring)
+    n = length(pts)
+    n > 1 && pts[end] == pts[1] && (n -= 1)
+    ded, n = _drop_repeated_ring_pts(pts, n)
+    is_ccw = n >= 3 && _ring_is_ccw(m, ded; exact)
+    return SphericalKernelRing(pts, ded, n, is_ccw)
+end
+
+function rk_point_in_ring(m::Spherical, p, kr::SphericalKernelRing; exact)
+    pts = kr.pts
     @inbounds for i in 1:length(pts)-1
         rk_point_on_segment(m, p, pts[i], pts[i+1]; exact) && return LOC_BOUNDARY
     end
+    kr.n < 3 && return LOC_EXTERIOR
     bt = booltype(exact)
-    n = length(pts)
-    n > 1 && pts[end] == pts[1] && (n -= 1)
-    # Drop repeated consecutive vertices (real rings carry them — NE 110m
-    # North Korea's sliver is `[A, A, B, A]`; JTS removes them at ingest,
-    # but this path receives the raw ring). A retraced edge lies exactly
-    # under the anchor midpoint and breaks the parity count; after dedup a
-    # ring with fewer than 3 distinct vertices bounds no area.
-    pts, n = _drop_repeated_ring_pts(pts, n)
-    n < 3 && return LOC_EXTERIOR
-    inside = spherical_ring_contains(pts, n, p;
+    inside = spherical_ring_contains(kr.ded, kr.n, p;
         orient = (a, b, c) -> rk_orient(m, a, b, c; exact),
         on_arc = Returns(false),   # boundary classified exactly above
         proper_crossing = (q, mid, a, b) -> _arcs_cross_properly(bt, q, mid, a, b) ? 1 : 0)
     inside === nothing && _throw_degenerate_point_in_ring(p)
-    return inside == _ring_is_ccw(m, pts; exact) ? LOC_INTERIOR : LOC_EXTERIOR
+    return inside == kr.is_ccw ? LOC_INTERIOR : LOC_EXTERIOR
 end
 
 @noinline _throw_degenerate_point_in_ring(p) = throw(ArgumentError(
