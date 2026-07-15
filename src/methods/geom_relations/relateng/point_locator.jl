@@ -198,7 +198,9 @@ _add_rings!(m, ::GI.AbstractTrait, geom, ring_list; exact) = nothing
 function _add_ring!(m, ring, require_cw::Bool, ring_list; exact)
     #TODO: remove repeated points?
     pts = _to_kernel_points(m, ring)
-    pts = _orient_ring(m, pts, require_cw; exact)
+    #-- callers request CW for shells and CCW for holes, so `!require_cw`
+    #-- is the ring's role
+    pts = _orient_ring(m, pts, require_cw, !require_cw; exact)
     push!(ring_list, pts)
     return nothing
 end
@@ -550,7 +552,7 @@ function _locate_point_in_polygonal(m, p, ::GI.PolygonTrait, poly; exact)
     shell_loc != LOC_INTERIOR && return shell_loc
     #-- now test if the point lies in or on the holes
     for hole in GI.gethole(poly)
-        hole_loc = _locate_point_in_ring(m, p, hole; exact)
+        hole_loc = _locate_point_in_ring(m, p, hole; exact, is_hole = true)
         hole_loc == LOC_BOUNDARY && return LOC_BOUNDARY
         hole_loc == LOC_INTERIOR && return LOC_EXTERIOR
         #-- if in EXTERIOR of this hole keep checking the other ones
@@ -569,9 +571,9 @@ end
 
 # Port of SimplePointInAreaLocator.locatePointInRing, including its ring
 # envelope short-circuit.
-function _locate_point_in_ring(m, p, ring; exact)
+function _locate_point_in_ring(m, p, ring; exact, is_hole::Bool = false)
     _area_env_disjoint(m, p, ring) && return LOC_EXTERIOR
-    return rk_point_in_ring(m, p, ring; exact)
+    return rk_point_in_ring(m, p, ring; exact, is_hole)
 end
 
 #=

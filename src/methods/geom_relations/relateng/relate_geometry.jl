@@ -574,7 +574,7 @@ function _extract_ring_to_segment_string!(rg::RelateGeometry, is_a::Bool, ring, 
     #-- orient the points if required
     require_cw = ring_id == 0
     pts = _to_kernel_points(rg.m, ring)
-    pts = _orient_ring(rg.m, pts, require_cw; exact = rg.exact)
+    pts = _orient_ring(rg.m, pts, require_cw, ring_id != 0; exact = rg.exact)
     ss = _rss_create_ring(pts, is_a, rg.element_id, ring_id, parent_poly, rg)
     push!(seg_strings, ss)
     return nothing
@@ -582,11 +582,25 @@ end
 
 # Port of RelateGeometry.orient (static; moved here from point_locator.jl in
 # Task 13 — `AdjacentEdgeLocator._add_ring!` also uses it): coordinate vector
-# of `pts` with the requested orientation, reversing a copy only if needed.
-function _orient_ring(m, pts::Vector, orient_cw::Bool; exact)
-    is_flipped = orient_cw == _ring_is_ccw(m, pts; exact)
+# of `pts` with the ring's denoted region on the requested side (`orient_cw =
+# true` ⇒ on the right), reversing a copy only if needed. Which side the
+# region lies on in the stored order comes from `_ring_interior_on_left`.
+function _orient_ring(m, pts::Vector, orient_cw::Bool, is_hole::Bool; exact)
+    is_flipped = orient_cw == _ring_interior_on_left(m, pts, is_hole; exact)
     return is_flipped ? reverse(pts) : pts
 end
+
+#=
+The one per-ring bit every consumer shares: whether the region the ring
+DENOTES — the shell region for a shell or bare ring, the cavity for a hole
+— lies on the left of the stored vertex order. On the plane, and on an
+unoriented spherical manifold, the denoted region is the enclosed one and
+the bit is the ring's winding (`_ring_is_ccw`); `Spherical(; oriented =
+true)` overrides this (kernel_spherical.jl) with the declared role — there
+the stored winding is authoritative.
+=#
+_ring_interior_on_left(m, pts::Vector, is_hole::Bool; exact) =
+    _ring_is_ccw(m, pts; exact)
 
 #=
 Port of JTS `Orientation.isCCW(CoordinateSequence)` with the orientation

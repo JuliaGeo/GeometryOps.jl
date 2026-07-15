@@ -423,6 +423,22 @@ function _loop_order_less(o1, o2, loop)
     return false
 end
 
+#=
+`_ring_interior_on_left` (generic method in relate_geometry.jl) with the
+manifold mode applied: on `Spherical(; oriented = true)` the stored winding
+is authoritative, per S2 `InitOriented` (s2polygon.h) — "the input loops
+[are] oriented such that the polygon interior is on the left-hand side of
+every loop", exterior rings counterclockwise and interior rings clockwise.
+A shell's denoted region is therefore the region on its left, and a hole —
+wound oppositely, with the polygon interior on ITS left too — has its
+cavity (the region the hole denotes to the engine) on its right. Nothing is
+computed from the coordinates, so a ring wound against the convention
+simply denotes the complement region — which is how regions larger than a
+hemisphere are expressed.
+=#
+_ring_interior_on_left(m::Spherical, pts::Vector, is_hole::Bool; exact) =
+    m.oriented ? !is_hole : _ring_is_ccw(m, pts; exact)
+
 # ## rk_point_in_ring (anchor-retry crossing parity, winding-independent)
 
 # Whether the two minor arcs (p0,p1) and (q0,q1) cross properly (interior to
@@ -447,30 +463,33 @@ _ring_kernel_pts(ring) = _ring_kernel_pts(booltype(GI.is3d(GI.getpoint(ring, 1))
 _ring_kernel_pts(::True, ring) = _node_points(ring)
 _ring_kernel_pts(::False, ring) = _ring_usp(ring)
 
-# Location of `p` relative to the area enclosed by `ring` — the kernel
-# contract (kernel.jl) is winding-independent, like the planar ray-crossing
-# parity: real-world rings arrive in either winding (Natural Earth ships
-# shapefile-convention CW shells), and `_locate_point_in_polygonal` passes
-# them unoriented. Boundary first (exact arc membership), then the shared
-# `spherical_ring_contains` (which reports the region on the ring's *left*)
-# with this kernel's predicates injected — `rk_orient` for sides,
-# `_arcs_cross_properly` for transversality — so the parity decision is as
-# exact as the predicates; the left region is the interior iff the ring is
-# canonically CCW (`_ring_is_ccw` above, the same bit `_orient_ring` feeds
+# Location of `p` relative to the region denoted by `ring` — per the kernel
+# contract (kernel.jl): winding-independent by default, like the planar
+# ray-crossing parity (real-world rings arrive in either winding — Natural
+# Earth ships shapefile-convention CW shells — and
+# `_locate_point_in_polygonal` passes them unoriented); winding-authoritative
+# with role `is_hole` on an oriented manifold. Boundary first (exact arc
+# membership), then the shared `spherical_ring_contains` (which reports the
+# region on the ring's *left*) with this kernel's predicates injected —
+# `rk_orient` for sides, `_arcs_cross_properly` for transversality — so the
+# parity decision is as exact as the predicates; the left region is the
+# interior iff `_ring_interior_on_left` (the same bit `_orient_ring` feeds
 # the edge-side topology). All anchors degenerate (unreachable for a
 # non-degenerate ring and an off-boundary point) is refused, not answered
 # wrong.
-rk_point_in_ring(m::Spherical, p, ring; exact) =
-    rk_point_in_ring(m, p, SphericalKernelRing(m, ring; exact); exact)
+rk_point_in_ring(m::Spherical, p, ring; exact, is_hole::Bool = false) =
+    rk_point_in_ring(m, p, SphericalKernelRing(m, ring; exact, is_hole); exact)
 
 """
-    SphericalKernelRing(m::Spherical, ring; exact)
+    SphericalKernelRing(m::Spherical, ring; exact, is_hole = false)
 
 The cached kernel-space form of one ring: the converted
 `UnitSphericalPoint` vertex vector (`pts` — the boundary edge walk), its
 deduped open form (`ded`/`n` — the parity walk; aliases `pts` when the
-ring has no repeated vertices), and the ring's orientation bit
-(`_ring_is_ccw`, the same bit edge topology and interaction bounds use).
+ring has no repeated vertices), and the ring's denoted-region bit
+(`_ring_interior_on_left`, from the ring's winding or — on an oriented
+manifold — its declared role; the same bit edge topology and interaction
+bounds use).
 
 `rk_point_in_ring` re-derived all of this from lon/lat on every query —
 vertex conversion alone was ~60% of a prepared spherical point query. The
@@ -488,16 +507,16 @@ struct SphericalKernelRing
     pts::Vector{UnitSphericalPoint{Float64}}
     ded::Vector{UnitSphericalPoint{Float64}}
     n::Int
-    is_ccw::Bool
+    interior_on_left::Bool
 end
 
-function SphericalKernelRing(m::Spherical, ring; exact)
+function SphericalKernelRing(m::Spherical, ring; exact, is_hole::Bool = false)
     pts = _ring_kernel_pts(ring)
     n = length(pts)
     n > 1 && pts[end] == pts[1] && (n -= 1)
     ded, n = _drop_repeated_ring_pts(pts, n)
-    is_ccw = n >= 3 && _ring_is_ccw(m, ded; exact)
-    return SphericalKernelRing(pts, ded, n, is_ccw)
+    interior_on_left = n >= 3 && _ring_interior_on_left(m, ded, is_hole; exact)
+    return SphericalKernelRing(pts, ded, n, interior_on_left)
 end
 
 # Type-stable functors for the predicates injected into
@@ -535,7 +554,7 @@ function rk_point_in_ring(m::Spherical, p, kr::SphericalKernelRing; exact)
         on_arc = Returns(false),   # boundary classified exactly above
         proper_crossing = _RKProperCrossing(booltype(exact)))
     inside === nothing && _throw_degenerate_point_in_ring(p)
-    return inside == kr.is_ccw ? LOC_INTERIOR : LOC_EXTERIOR
+    return inside == kr.interior_on_left ? LOC_INTERIOR : LOC_EXTERIOR
 end
 
 @noinline _throw_degenerate_point_in_ring(p) = throw(ArgumentError(
@@ -572,10 +591,13 @@ function _sph_interaction_extent(m::Spherical, ::GI.AbstractPolygonTrait, geom)
     # region box of the exterior ring: edge arc extents plus enclosed-axis
     # widening, on the same converted points the engine ingests.
     # `_spherical_region_extent` bounds the region on the ring's left, so
-    # orient the shell canonically CCW first — a CW-wound input (shapefile
-    # convention) would otherwise bound the complement, under-covering an
-    # enclosed pole (`exact` is unused by the spherical `_ring_is_ccw`)
-    pts = _orient_ring(m, _ring_usp(GI.getexterior(geom)), false; exact = True())
+    # orient the shell's denoted region onto its left first — unoriented, a
+    # CW-wound input (shapefile convention) would otherwise bound the
+    # complement, under-covering an enclosed pole; oriented, the shell is
+    # interior-on-left by declaration and is used verbatim, so a complement
+    # shell's box covers (nearly) the whole sphere — unprunable but correct
+    # (`exact` is unused by the spherical `_ring_is_ccw`)
+    pts = _orient_ring(m, _ring_usp(GI.getexterior(geom)), false, false; exact = True())
     ext = _spherical_region_extent(pts)
     # a valid polygon's holes lie inside that region — but JTS's element
     # envelope also covers a stray hole outside the shell, and extraction
