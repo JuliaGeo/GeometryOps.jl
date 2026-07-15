@@ -272,3 +272,65 @@ end
         kernel_conformance_suite_spherical(Spherical(); exact = E)
     end
 end
+
+# `_ring_is_ccw(::Spherical)`: the S2 turning-angle (`GetCurvature`)
+# formulation. Exact-independent (turn signs are always exact), so tested
+# outside the exact-parameterized suite.
+@testset "spherical ring orientation: turning-angle curvature" begin
+    m = Spherical()
+    curvature(pts) = GO._spherical_loop_curvature(
+        GO._prune_loop_degeneracies([GO.rk_normalize_usp(p) for p in pts]))
+
+    @testset "antipodal vertex pair (AntipodalEdgeSplit output)" begin
+        # the 80° lune [(0,0), (90,0), (180,0), (90,80)]: its first and third
+        # vertices are antipodal — the fan formulation this replaces NaN'd on
+        # the chord between them; every turn angle here is between adjacent
+        # vertices, so the pair never meets in one term
+        lune = [GO._to_kernel_point(m, p) for p in [(0., 0.), (90., 0.), (180., 0.), (90., 80.)]]
+        @test curvature(lune) ≈ deg2rad(200) atol = 1e-12       # area 2π − curvature ≈ 2.7925268 sr
+        @test GO._ring_is_ccw(m, lune; exact = True())
+        @test !GO._ring_is_ccw(m, reverse(lune); exact = True())
+    end
+
+    @testset "exactly negated under reversal, invariant under rotation" begin
+        rng = Random.Xoshiro(0xc0ffee)
+        for _ in 1:50
+            k = rand(rng, 3:9)
+            ring = [GO.rk_normalize_usp(_usp(randn(rng), randn(rng), randn(rng))) for _ in 1:k]
+            c = curvature(ring)
+            @test curvature(reverse(ring)) == -c                # exact, not ≈
+            for r in 1:(k - 1)
+                @test curvature(vcat(ring[(r + 1):end], ring[1:r])) == c
+            end
+        end
+    end
+
+    @testset "exact hemisphere is normalized in both windings" begin
+        # equator ring: curvature 0, intrinsically winding-ambiguous — the
+        # `>= -maxError` rule (S2 IsNormalized) reads it CCW in both windings
+        eq = [_usp(1, 0, 0), _usp(0, 1, 0), _usp(-1, 0, 0), _usp(0, -1, 0)]
+        @test GO._ring_is_ccw(m, eq; exact = True())
+        @test GO._ring_is_ccw(m, reverse(eq); exact = True())
+    end
+
+    @testset "degeneracy pruning" begin
+        cap = [_usp(2, 0, 1), _usp(0, 2, 1), _usp(-2, 0, 1), _usp(0, -2, 1)]
+        # duplicate run (AA) plus a retraced whisker (ABA) leave the bit alone
+        spiked = [cap[1], cap[1], cap[2], _usp(5, 5, 9), cap[2], cap[3], cap[4]]
+        @test GO._ring_is_ccw(m, spiked; exact = True()) == GO._ring_is_ccw(m, cap; exact = True()) == true
+        @test curvature(spiked) == curvature(cap)
+        # whisker straddling the closure: [B, A, X, Y, A] prunes to [A, X, Y]
+        wrap = [cap[2], cap[1], _usp(3, 1, 2), _usp(1, 3, 2), cap[1]]
+        @test length(GO._prune_loop_degeneracies(wrap)) == 3
+        # a ring degenerate after pruning bounds no area
+        @test !GO._ring_is_ccw(m, [cap[1], cap[2], cap[1], cap[2]]; exact = True())
+        @test !GO._ring_is_ccw(m, [cap[1], cap[2]]; exact = True())
+    end
+
+    @testset "closed and open forms agree" begin
+        cap = [_usp(2, 0, 1), _usp(0, 2, 1), _usp(-2, 0, 1), _usp(0, -2, 1)]
+        closed = vcat(cap, [cap[1]])
+        @test GO._ring_is_ccw(m, closed; exact = True()) == GO._ring_is_ccw(m, cap; exact = True())
+        @test !GO._ring_is_ccw(m, reverse(closed); exact = True())
+    end
+end
