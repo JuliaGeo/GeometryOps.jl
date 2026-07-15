@@ -415,17 +415,33 @@ function SphericalKernelRing(m::Spherical, ring; exact)
     return SphericalKernelRing(pts, ded, n, is_ccw)
 end
 
+# Type-stable functors for the predicates injected into
+# `spherical_ring_contains` (Layer 3 of the spherical-indexed-locator
+# design): the anonymous closures they replace were rebuilt per call and
+# heap-boxed, costing an allocation and dynamic dispatch per predicate call
+# on the point-in-area hot path. The injectable-predicate design of
+# `spherical_ring_contains` is unchanged.
+struct _RKOrient{M <: Spherical, E} <: Function
+    m::M
+    exact::E
+end
+(f::_RKOrient)(a, b, c) = rk_orient(f.m, a, b, c; exact = f.exact)
+
+struct _RKProperCrossing{BT} <: Function
+    bt::BT
+end
+(f::_RKProperCrossing)(q, mid, a, b) = _arcs_cross_properly(f.bt, q, mid, a, b) ? 1 : 0
+
 function rk_point_in_ring(m::Spherical, p, kr::SphericalKernelRing; exact)
     pts = kr.pts
     @inbounds for i in 1:length(pts)-1
         rk_point_on_segment(m, p, pts[i], pts[i+1]; exact) && return LOC_BOUNDARY
     end
     kr.n < 3 && return LOC_EXTERIOR
-    bt = booltype(exact)
     inside = spherical_ring_contains(kr.ded, kr.n, p;
-        orient = (a, b, c) -> rk_orient(m, a, b, c; exact),
+        orient = _RKOrient(m, exact),
         on_arc = Returns(false),   # boundary classified exactly above
-        proper_crossing = (q, mid, a, b) -> _arcs_cross_properly(bt, q, mid, a, b) ? 1 : 0)
+        proper_crossing = _RKProperCrossing(booltype(exact)))
     inside === nothing && _throw_degenerate_point_in_ring(p)
     return inside == kr.is_ccw ? LOC_INTERIOR : LOC_EXTERIOR
 end
