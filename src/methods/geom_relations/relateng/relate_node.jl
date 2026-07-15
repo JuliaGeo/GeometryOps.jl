@@ -543,10 +543,12 @@ Port of RelateNode.addEdge.
 function add_edge!(n::RelateNode, is_a::Bool, dir_pt, dim::Integer, is_forward::Bool)
     #-- check for well-formed edge - skip null or zero-len input
     dir_pt === nothing && return nothing
-    # Java: nodePt.equals2D(dirPt). A proper-crossing node lies strictly in
+    # Java: nodePt.equals2D(dirPt) — but node and direction points are
+    # kernel points, so equality compares all coordinates (spherical kernel
+    # points can differ in z alone). A proper-crossing node lies strictly in
     # the interior of its defining segments, so a (vertex) direction point
     # can never coincide with it; only vertex nodes need the check.
-    (!n.node.is_crossing && _equals2(n.node.pt, dir_pt)) && return nothing
+    (!n.node.is_crossing && n.node.pt == dir_pt) && return nothing
 
     insert_index = 0
     for (i, e) in pairs(n.edges)
