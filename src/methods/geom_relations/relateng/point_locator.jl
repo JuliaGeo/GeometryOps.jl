@@ -235,9 +235,11 @@ bnRule)`; the manifold/`exact` parameters are the only additions (consistent
 with [`AdjacentEdgeLocator`](@ref)). As in JTS, prepared mode swaps the
 per-polygon `SimplePointInAreaLocator` ring loop for a cached
 [`IndexedPointInAreaLocator`](@ref) (indexed_point_in_area.jl), created
-lazily on the first use per polygonal element (Task 22); unprepared mode
-scans the rings directly on every query. Repeated point location against
-one geometry is what [`prepare`](@ref) is for.
+lazily on the first use per polygonal element (Task 22); unprepared planar
+mode scans the rings directly on every query, while the spherical path
+caches a per-element locator in both modes (its kernel-space ring cache is
+what makes queries conversion-free). Repeated point location against one
+geometry is what [`prepare`](@ref) is for.
 """
 mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule, P}
     const m::M
@@ -254,9 +256,9 @@ mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule, P
     const polygons::Vector{Any}
     const line_boundary::LinearBoundary{BR, P}
     const is_empty::Bool
-    # per-polygonal-element indexed locators (prepared mode only), created
-    # lazily by `_get_poly_locator` on the element's first query
-    # (Java: polyLocator, filled by getLocator)
+    # per-polygonal-element locators (prepared mode, and every spherical
+    # mode), created lazily by `_get_poly_locator` on the element's first
+    # query (Java: polyLocator, filled by getLocator)
     const poly_locator::Vector{Union{Nothing, IndexedPointInAreaLocator{M, E}}}
     # lazily built on the first multi-boundary point (Java: adjEdgeLocator)
     adj_edge_locator::Union{Nothing, AdjacentEdgeLocator{M, E, P}}
@@ -279,8 +281,9 @@ function RelatePointLocator(m::Manifold, geom; exact,
     # so it is built unconditionally here.
     line_boundary = LinearBoundary(m, lines, boundary_rule)
     # Java allocates `polyLocator` for both modes (its unprepared arm caches
-    # SimplePointInAreaLocator objects); the direct ring scan here is
-    # stateless, so only prepared mode fills it.
+    # SimplePointInAreaLocator objects); the planar direct ring scan here is
+    # stateless, so on Planar only prepared mode fills it — the spherical
+    # path fills it in both modes (kernel-space ring cache).
     poly_locator = Vector{Union{Nothing, IndexedPointInAreaLocator{typeof(m), typeof(exact)}}}(
         nothing, length(polygons))
     #-- P cannot be inferred from the `nothing` adj_edge_locator, so spell out
@@ -501,10 +504,12 @@ function locate_on_polygonal(loc::RelatePointLocator, p, is_node::Bool, parent_p
     if is_node && parent_polygonal === polygonal
         return LOC_BOUNDARY
     end
-    #-- the RayCrossingCounter horizontal-ray sweep is coordinate-plane
-    #-- logic (as is all of JTS), so a future non-planar kernel falls
-    #-- through to its own rk_point_in_ring even when prepared
-    if loc.is_prepared && loc.m isa Planar
+    #-- prepared planar mode queries the y-interval indexed locator; the
+    #-- spherical path always goes through the cached per-element locator
+    #-- (kernel-space rings, so queries never reconvert vertices), which is
+    #-- the JTS shape too: Java's unprepared arm caches per-element
+    #-- SimplePointInAreaLocators in the same slot
+    if (loc.is_prepared && loc.m isa Planar) || loc.m isa Spherical
         return locate(_get_poly_locator(loc, index), p)
     end
     return _locate_point_in_polygonal(loc.m, p, GI.trait(polygonal), polygonal; exact = loc.exact)
