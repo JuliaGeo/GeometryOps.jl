@@ -61,7 +61,7 @@ the same standard as [`AntipodalEdgeSplit`](@ref)'s midpoint insertion.
     are valid and are not split.
 
 It can be called on any polygonal geometry as usual
-(`CrossingEdgeSplit()(geom)`), or passed to [`fix`](@ref). Because a
+(`CrossingEdgeSplit()(geom)`), or passed to `GeometryOps.fix`. Because a
 split changes the geometry type (`Polygon` → `MultiPolygon`), apply it
 directly to `MultiPolygon` inputs rather than through `fix`'s per-polygon
 traversal.
