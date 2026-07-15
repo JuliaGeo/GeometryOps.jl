@@ -437,6 +437,13 @@ function rk_point_in_ring(m::Spherical, p, kr::SphericalKernelRing; exact)
     @inbounds for i in 1:length(pts)-1
         rk_point_on_segment(m, p, pts[i], pts[i+1]; exact) && return LOC_BOUNDARY
     end
+    #-- rings are closed regardless of a repeated last point (the kernel
+    #-- contract), so an implicitly closed ring's closing edge is boundary
+    #-- too — the same edge set the longitude-interval index walks
+    if length(pts) > 1 && pts[end] != pts[1] &&
+            rk_point_on_segment(m, p, pts[end], pts[1]; exact)
+        return LOC_BOUNDARY
+    end
     kr.n < 3 && return LOC_EXTERIOR
     inside = spherical_ring_contains(kr.ded, kr.n, p;
         orient = _RKOrient(m, exact),

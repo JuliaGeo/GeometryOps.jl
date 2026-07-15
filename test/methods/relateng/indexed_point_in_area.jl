@@ -7,10 +7,14 @@
 # horizontal/vertical edges (exactly representable) and query points
 # deliberately share y-coordinates with ring vertices — the classic
 # RayCrossingCounter edge cases (vertex on ray, horizontal edge on ray).
+# The spherical analogue (longitude-interval index + meridian-arc crossing
+# parity against a pole anchor) is tested the same way at the bottom, with
+# the unindexed exact ring scan as the oracle.
 
 using Test
+using Random
 import GeometryOps as GO
-import GeometryOps: Planar, True
+import GeometryOps: Planar, Spherical, True
 import GeoInterface as GI
 import Extents
 
@@ -168,7 +172,8 @@ end
 @testset "empty polygonal element" begin
     # the GI.Polygon wrapper cannot represent POLYGON EMPTY (zero rings), so
     # exercise the no-segments short-circuit on a directly constructed locator
-    loc = GO.IndexedPointInAreaLocator(Planar(), True(), nothing, GO._SphPolyRings[])
+    loc = GO.IndexedPointInAreaLocator(Planar(), True(), nothing, GO._SphPolyRings[],
+        GO._SPH_SOUTH_POLE, GO.LOC_EXTERIOR)
     @test loc.index === nothing
     @test GO.locate(loc, (0.0, 0.0)) == GO.LOC_EXTERIOR
 end
@@ -182,4 +187,107 @@ end
     @test GO.locate(loc, (5.0, 5.0)) == GO.LOC_BOUNDARY   # on the implicit closing edge
     @test GO.locate(loc, (6.0, 6.0)) == GO.LOC_EXTERIOR
     @test GO.locate(loc, (5.0, 0.0)) == GO.LOC_BOUNDARY
+end
+
+# -- spherical indexed locator -------------------------------------------------
+
+# The unindexed exact ring scan over the cached kernel rings (`indexed =
+# false`, the unprepared arm) is the oracle: the longitude-interval stab plus
+# meridian-arc crossing parity must locate every point identically. Clouds
+# are seeded, and every ring runs in both windings — the enclosed region is
+# winding-independent and the orientation bit lives in the ring cache.
+@testset "spherical indexed locator" begin
+    m = Spherical()
+    kp(ll) = GO._to_kernel_point(m, GI.Point(ll))
+    function check_sph_agreement(geom, lls; indexed_built = true)
+        scan = GO.IndexedPointInAreaLocator(m, geom; exact = True(), indexed = false)
+        idx = GO.IndexedPointInAreaLocator(m, geom; exact = True())
+        @test scan.index === nothing
+        @test (idx.index isa GO._SphPIAIndex) == indexed_built
+        n_mismatch = count(ll -> GO.locate(idx, kp(ll)) != GO.locate(scan, kp(ll)), lls)
+        @test n_mismatch == 0
+    end
+    rng = Xoshiro(11)
+    cloud(n, lonr, latr) = [(lonr[1] + rand(rng) * (lonr[2] - lonr[1]),
+                             latr[1] + rand(rng) * (latr[2] - latr[1])) for _ in 1:n]
+
+    @testset "mid-latitude star, both windings" begin
+        star = [(20.0 + (5 + 2rand(rng)) * cosd(t), 40.0 + (5 + 2rand(rng)) * sind(t))
+                for t in 0:15:345]
+        push!(star, star[1])
+        for pts in (star, reverse(star))
+            check_sph_agreement(GI.Polygon([GI.LinearRing(pts)]),
+                vcat(cloud(400, (10, 30), (30, 50)), pts))
+        end
+    end
+
+    @testset "antimeridian-crossing box, both windings" begin
+        # edges straddle lon ±180°, so their intervals split into two index
+        # entries; queries sit on both sides plus the seam itself
+        am = [(170.0, -10.0), (-170.0, -10.0), (-170.0, 10.0), (170.0, 10.0), (170.0, -10.0)]
+        for pts in (am, reverse(am))
+            qs = vcat(cloud(200, (160, 180), (-20, 20)), cloud(200, (-180, -160), (-20, 20)), pts,
+                      [(180.0, 0.0), (-180.0, 5.0), (175.0, 0.0), (-175.0, 0.0), (165.0, 0.0), (-165.0, 0.0)])
+            check_sph_agreement(GI.Polygon([GI.LinearRing(pts)]), qs)
+        end
+    end
+
+    @testset "polar caps, both poles, both windings" begin
+        # a cap encloses its pole; the pole query exercises the polar-axis
+        # fallback (no meridian reference arc from a pole), and for the south
+        # cap the anchor itself is INTERIOR
+        ncap = [(t, 80.0) for t in 0.0:30.0:330.0]; push!(ncap, ncap[1])
+        scap = [(t, -80.0) for t in 0.0:30.0:330.0]; push!(scap, scap[1])
+        for pts in (ncap, scap), w in (pts, reverse(pts))
+            qs = vcat(cloud(200, (-180, 180), (60, 90)), cloud(100, (-180, 180), (-90, -60)), w,
+                      [(0.0, 90.0), (0.0, -90.0), (45.0, 85.0), (45.0, -85.0)])
+            check_sph_agreement(GI.Polygon([GI.LinearRing(w)]), qs)
+        end
+    end
+
+    @testset "south pole on the boundary: anchor falls back to the north pole" begin
+        spb = [(0.0, -90.0), (20.0, -60.0), (-20.0, -60.0), (0.0, -90.0)]
+        p = GI.Polygon([GI.LinearRing(spb)])
+        idx = GO.IndexedPointInAreaLocator(m, p; exact = True())
+        @test idx.anchor == GO._SPH_NORTH_POLE
+        @test idx.anchor_loc == GO.LOC_EXTERIOR
+        @test GO.locate(idx, kp((0.0, -90.0))) == GO.LOC_BOUNDARY   # the pole itself
+        check_sph_agreement(p, vcat(cloud(300, (-30, 30), (-90, -50)), spb, [(0.0, -90.0)]))
+    end
+
+    @testset "both poles on the boundary: unindexed scan mode" begin
+        bpb = [(0.0, -90.0), (20.0, 0.0), (0.0, 90.0), (40.0, 0.0), (0.0, -90.0)]
+        p = GI.Polygon([GI.LinearRing(bpb)])
+        idx = GO.IndexedPointInAreaLocator(m, p; exact = True())
+        @test idx.index === nothing            # no anchor: every query scans
+        @test idx.anchor_loc == GO.LOC_BOUNDARY
+        check_sph_agreement(p, vcat(cloud(300, (-10, 50), (-80, 80)), bpb);
+            indexed_built = false)
+    end
+
+    @testset "boundary points locate as LOC_BOUNDARY" begin
+        eqp = [(0.0, 0.0), (30.0, 0.0), (15.0, 20.0), (0.0, 0.0)]
+        idx = GO.IndexedPointInAreaLocator(m, GI.Polygon([GI.LinearRing(eqp)]); exact = True())
+        for lon in (5.0, 10.0, 15.0, 29.0)      # on the equator edge
+            @test GO.locate(idx, kp((lon, 0.0))) == GO.LOC_BOUNDARY
+        end
+        @test GO.locate(idx, kp((0.0, 0.0))) == GO.LOC_BOUNDARY     # vertex
+        @test GO.locate(idx, kp((15.0, 5.0))) == GO.LOC_INTERIOR
+        @test GO.locate(idx, kp((15.0, -5.0))) == GO.LOC_EXTERIOR
+    end
+
+    @testset "polygon with a hole" begin
+        hp = GI.Polygon([GI.LinearRing([(0., 0.), (20., 0.), (20., 20.), (0., 20.), (0., 0.)]),
+                         GI.LinearRing([(5., 5.), (15., 5.), (15., 15.), (5., 15.), (5., 5.)])])
+        check_sph_agreement(hp, vcat(cloud(400, (-2, 22), (-2, 22)),
+            [(10.0, 10.0), (10.0, 5.0), (2.0, 2.0)]))
+    end
+
+    @testset "empty spherical element" begin
+        # as in the planar empty case: no rings, no index, everything exterior
+        loc = GO.IndexedPointInAreaLocator(m, True(), nothing, GO._SphPolyRings[],
+            GO._SPH_SOUTH_POLE, GO.LOC_EXTERIOR)
+        @test GO.locate(loc, kp((0.0, 0.0))) == GO.LOC_EXTERIOR
+        @test GO.locate(loc, kp((0.0, 90.0))) == GO.LOC_EXTERIOR
+    end
 end

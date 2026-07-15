@@ -155,6 +155,19 @@ struct _SphPolyRings
     holes::Vector{SphericalKernelRing}
 end
 
+# The spherical segment index (Layer 2 of the 2026-07-14
+# spherical-indexed-locator design): ring edges as kernel-point pairs, on
+# 1-D *longitude* intervals in radians — the spherical isomorph of the
+# planar y-interval trick with `Y → X (lon)` and `ray to -∞ → meridian arc
+# to a pole`. An edge can only meet the reference meridian arc if its
+# longitude span contains the query longitude.
+const _SphPIASegment = Tuple{UnitSphericalPoint{Float64}, UnitSphericalPoint{Float64}}
+const _SphPIAExtent = Extents.Extent{(:X,), Tuple{NTuple{2, Float64}}}
+const _SphPIAIndex = RTree{STR, _SphPIAExtent, Vector{_SphPIASegment}, Vector{Int}}
+
+const _SPH_SOUTH_POLE = UnitSphericalPoint(0.0, 0.0, -1.0)
+const _SPH_NORTH_POLE = UnitSphericalPoint(0.0, 0.0, 1.0)
+
 """
     IndexedPointInAreaLocator(m::Manifold, geom; exact)
 
@@ -173,17 +186,29 @@ since `RelatePointLocator` already creates the locator itself lazily on
 the first use per polygonal element (`_get_poly_locator`, the port of
 `RelatePointLocator.getLocator`).
 
-On `Spherical`, the locator instead caches the element's rings in kernel
-space (`polys` — [`SphericalKernelRing`](@ref)s; Layer 1 of the 2026-07-14
-spherical-indexed-locator design) and locates by the exact ring scan over
-them, so queries never reconvert vertices. The `polys` vector is empty on
-`Planar`.
+On `Spherical`, the locator caches the element's rings in kernel space
+(`polys` — [`SphericalKernelRing`](@ref)s; Layer 1 of the 2026-07-14
+spherical-indexed-locator design), so queries never reconvert vertices, and
+— with `indexed = true`, the default — builds the longitude-interval edge
+index plus the parity anchor (Layer 2): the location of a reference pole,
+computed once by the exact scan, from which each query is a 1-D stab at its
+longitude and a crossing-parity count along its meridian arc to the pole.
+With `indexed = false` (the unprepared arm, where a one-shot query cannot
+amortize the build) it locates by the exact ring scan over the cached
+rings. The `polys` vector is empty on `Planar`, where the corresponding
+roles are played by `index` and the implicit EXTERIOR at the ray's far end.
 """
 struct IndexedPointInAreaLocator{M <: Manifold, E}
     m::M
     exact::E
-    index::Union{Nothing, _PIAIndex}
+    index::Union{Nothing, _PIAIndex, _SphPIAIndex}
     polys::Vector{_SphPolyRings}
+    #-- spherical parity anchor: the reference-arc far end (a pole whose
+    #-- location the exact scan computed at build) and its location.
+    #-- `anchor_loc == LOC_BOUNDARY` means both poles lie on the element
+    #-- boundary: no index is built and every query takes the exact scan.
+    anchor::UnitSphericalPoint{Float64}
+    anchor_loc::Int8
 end
 
 function IndexedPointInAreaLocator(m::Planar, geom; exact)
@@ -193,13 +218,21 @@ function IndexedPointInAreaLocator(m::Planar, geom; exact)
     sizehint!(exts, n); sizehint!(segs, n)
     _interval_index_add_geom!(exts, segs, GI.trait(geom), geom)
     index = isempty(segs) ? nothing : RTree(STR(), segs; extents = exts)
-    return IndexedPointInAreaLocator(m, exact, index, _SphPolyRings[])
+    return IndexedPointInAreaLocator(m, exact, index, _SphPolyRings[], _SPH_SOUTH_POLE, LOC_EXTERIOR)
 end
 
-function IndexedPointInAreaLocator(m::Spherical, geom; exact)
+function IndexedPointInAreaLocator(m::Spherical, geom; exact, indexed::Bool = true)
     polys = _SphPolyRings[]
     _sph_rings_add_geom!(polys, m, GI.trait(geom), geom; exact)
-    return IndexedPointInAreaLocator(m, exact, nothing, polys)
+    anchor, anchor_loc = _SPH_SOUTH_POLE, LOC_EXTERIOR
+    index = nothing
+    if indexed && !isempty(polys)
+        anchor, anchor_loc = _sph_pia_anchor(m, polys; exact)
+        if anchor_loc != LOC_BOUNDARY
+            index = _sph_lon_index(polys)
+        end
+    end
+    return IndexedPointInAreaLocator(m, exact, index, polys, anchor, anchor_loc)
 end
 
 """
@@ -222,8 +255,35 @@ function locate(loc::IndexedPointInAreaLocator{<:Planar}, p)
     return rcc_location(rcc)
 end
 
-locate(loc::IndexedPointInAreaLocator{<:Spherical}, p) =
-    _sph_scan_locate(loc.m, loc.polys, p; exact = loc.exact)
+function locate(loc::IndexedPointInAreaLocator{<:Spherical}, p)
+    index = loc.index
+    #-- signed-zero-normalize an already-kernel point: the index longitudes
+    #-- come from normalized vertices, and atan(-0.0, x<0) is -π, not π
+    q = p isa UnitSphericalPoint{Float64} ? _node_point(p) : _to_kernel_point(loc.m, p)
+    #-- scan mode: unindexed (unprepared), empty, or both poles on boundary
+    index isa _SphPIAIndex ||
+        return _sph_scan_locate(loc.m, loc.polys, q; exact = loc.exact)
+    if q[1] == 0.0 && q[2] == 0.0
+        #-- on the polar axis: the anchor itself answers from the stored
+        #-- bit; its antipode has no reference arc (antipodal pair), so it
+        #-- takes the exact scan
+        q == loc.anchor && return loc.anchor_loc
+        return _sph_scan_locate(loc.m, loc.polys, q; exact = loc.exact)
+    end
+    acc = ArcCrossingCounter(loc.m, loc.exact, q, loc.anchor, 0, false)
+    λ = atan(q[2], q[1])
+    stab = Extents.Extent(X = (λ, λ))
+    #-- count every edge whose longitude interval contains the query's
+    SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, stab), index) do i
+        seg = index.data[i]
+        count_arc_segment!(acc, seg[1], seg[2])
+    end
+    acc.is_point_on_segment && return LOC_BOUNDARY
+    if isodd(acc.crossing_count)
+        return loc.anchor_loc == LOC_INTERIOR ? LOC_EXTERIOR : LOC_INTERIOR
+    end
+    return loc.anchor_loc
+end
 
 #==========================================================================
 ## Spherical kernel-ring cache (Layer 1 of the spherical indexed locator)
@@ -264,6 +324,190 @@ function _sph_rings_add_geom!(polys, m::Spherical, ::GI.MultiPolygonTrait, mp; e
     for poly in GI.getgeom(mp)
         _sph_rings_add_geom!(polys, m, GI.trait(poly), poly; exact)
     end
+    return nothing
+end
+
+#==========================================================================
+## Spherical longitude-interval index (Layer 2)
+==========================================================================#
+
+#=
+Parity anchor: in the plane the far end of the crossing ray is at infinity
+and EXTERIOR by construction; on the sphere the far end is a pole, whose
+location relative to the element is computed once by the exact scan. The
+south pole is preferred; if it lies ON the boundary the reference arc
+could graze the linework everywhere along it, so the north pole takes
+over. Both poles on the boundary leaves `LOC_BOUNDARY`, which the
+constructor maps to unindexed scan mode — pathological, and correctness
+is cheap.
+=#
+function _sph_pia_anchor(m::Spherical, polys; exact)
+    loc_s = _sph_scan_locate(m, polys, _SPH_SOUTH_POLE; exact)
+    loc_s != LOC_BOUNDARY && return (_SPH_SOUTH_POLE, loc_s)
+    loc_n = _sph_scan_locate(m, polys, _SPH_NORTH_POLE; exact)
+    return (_SPH_NORTH_POLE, loc_n)
+end
+
+"""
+    ArcCrossingCounter(m::Spherical, exact, p, anchor, 0, false)
+
+Counts ring edges crossing the reference meridian arc from the query point
+`p` to the `anchor` pole, in an incremental fashion — the spherical
+counterpart of [`RayCrossingCounter`](@ref). As there, the location is only
+correct once **all** edges whose longitude interval contains `p`'s
+longitude have been counted, and a query point found to lie on an edge is
+recorded in `is_point_on_segment` (final location `LOC_BOUNDARY`).
+
+The final location is `anchor`'s location, flipped once per crossing.
+Vertex grazing — an edge endpoint exactly on the reference arc — is
+resolved symbolically, S2-`VertexCrossing` style: the edge counts iff its
+off-arc endpoint lies strictly on the positive side of the meridian great
+circle, so a crossing pair of incident edges counts once, a same-side pair
+counts zero or twice (parity-equal), and edges collinear with the meridian
+count never (their chain's terminal edges decide). With `exact = True()`
+every branch below is decided by exact predicates.
+"""
+mutable struct ArcCrossingCounter{M <: Spherical, E}
+    const m::M
+    const exact::E
+    const p::UnitSphericalPoint{Float64}
+    const anchor::UnitSphericalPoint{Float64}
+    crossing_count::Int
+    is_point_on_segment::Bool
+end
+
+function count_arc_segment!(acc::ArcCrossingCounter, a, b)
+    m, exact = acc.m, acc.exact
+    q, s = acc.p, acc.anchor
+    #-- the query point on the closed edge (vertex or interior, including
+    #-- collinear overlap): boundary
+    if rk_point_on_segment(m, q, a, b; exact)
+        acc.is_point_on_segment = true
+        return nothing
+    end
+    a == b && return nothing   # zero-length edge: only boundary-relevant
+    sa = rk_orient(m, q, s, a; exact)
+    sb = rk_orient(m, q, s, b; exact)
+    if sa == 0 || sb == 0
+        #-- edge collinear with the meridian circle: were q interior to it
+        #-- the boundary test above caught it; the anchor is never on an
+        #-- edge (anchor selection); otherwise its neighbors decide
+        (sa == 0 && sb == 0) && return nothing
+        #-- vertex grazing: an endpoint on the meridian great circle. Two
+        #-- distinct great circles meet only at one antipodal point pair, so
+        #-- the edge can touch the reference arc only at that endpoint —
+        #-- count iff the endpoint is ON the arc and the other endpoint is
+        #-- strictly on the positive side (see the docstring)
+        von, s_off = sa == 0 ? (a, sb) : (b, sa)
+        if s_off > 0 && rk_point_on_segment(m, von, q, s; exact)
+            acc.crossing_count += 1
+        end
+        return nothing
+    end
+    #-- endpoints strictly on the same side: no crossing
+    (sa > 0) == (sb > 0) && return nothing
+    #-- q (or the anchor) on the edge's great circle but not on the edge:
+    #-- the circles meet only at ±q (resp. ±anchor), out of reach of both
+    #-- arcs — cf. `_arc_crossing_parity`
+    sq = rk_orient(m, a, b, q; exact)
+    sq == 0 && return nothing
+    sm = rk_orient(m, a, b, s; exact)
+    sm == 0 && return nothing
+    (sq > 0) == (sm > 0) && return nothing
+    #=
+    Mutual strict straddle: the two great circles meet at ±x, x = n₁×n₂,
+    and each arc contains exactly one of the pair — they cross iff it is
+    the same one. Which one each arc contains is already encoded in the
+    computed signs: traveling the reference arc q → s (tangent n₁×p), the
+    plane-2 crossing is +x iff sq > 0; traveling the edge a → b (tangent
+    n₂×p), the plane-1 crossing is −x iff sa > 0. So the arcs cross iff
+    sa and sq differ — no constructed point, and exactly as exact as
+    `rk_orient` (this replaces a `Rational{BigInt}` in-arc confirmation
+    that dominated indexed query time).
+    =#
+    if (sa > 0) != (sq > 0)
+        acc.crossing_count += 1
+    end
+    return nothing
+end
+
+# The longitude-interval edge index over every ring of the element, built
+# from the same cached kernel points the exact scan walks.
+function _sph_lon_index(polys)
+    exts = _SphPIAExtent[]
+    segs = _SphPIASegment[]
+    for pr in polys
+        _sph_lon_index_add_ring!(exts, segs, pr.shell)
+        for hole in pr.holes
+            _sph_lon_index_add_ring!(exts, segs, hole)
+        end
+    end
+    return isempty(segs) ? nothing : RTree(STR(), segs; extents = exts)
+end
+
+# Index the boundary edge walk (consecutive vertex pairs plus the implicit
+# closing edge) — the same edge set `rk_point_in_ring` tests for boundary
+# and parity.
+function _sph_lon_index_add_ring!(exts, segs, kr::SphericalKernelRing)
+    pts = kr.pts
+    n = length(pts)
+    n < 2 && return nothing
+    for i in 1:(n - 1)
+        _sph_lon_entries!(exts, segs, pts[i], pts[i + 1])
+    end
+    if pts[n] != pts[1]
+        _sph_lon_entries!(exts, segs, pts[n], pts[1])
+    end
+    return nothing
+end
+
+#=
+The longitude interval(s) of one great-circle edge. Longitude is strictly
+monotonic along a great-circle arc — the east component of the tangent at
+`p` is `(n × p) ⋅ (ẑ × p) = n_z`, constant along the whole circle (`n` the
+circle normal) — so an edge spans exactly the wrapped interval between its
+endpoint longitudes; and since `n_z = cos(lat_a) cos(lat_b) sin(λ_b − λ_a)`
+the sweep is always the SHORTER of the two candidate intervals. (The design
+note's worry that longitude "bulges" like latitude does not arise.)
+Intervals are padded a few ulps against `atan` rounding, as the arc extents
+pad. Conservative full-interval fallbacks, where the float longitudes do
+not determine the sweep: an endpoint exactly on the polar axis (undefined
+longitude), or endpoint longitudes within ~1e-9 of half a turn apart
+(pole-hugging edges — the short/long choice would hang on the sign of a
+vanishing cross product). An interval crossing the antimeridian contributes
+two entries; the two never overlap, so no edge is double-counted.
+=#
+function _sph_lon_entries!(exts, segs, a, b)
+    seg = (a, b)
+    halfturn = Float64(π)
+    if (a[1] == 0.0 && a[2] == 0.0) || (b[1] == 0.0 && b[2] == 0.0)
+        return _push_lon_entry!(exts, segs, seg, -halfturn, halfturn)
+    end
+    λa = atan(a[2], a[1])
+    λb = atan(b[2], b[1])
+    Δ = λb - λa
+    Δ > halfturn && (Δ -= 2halfturn)
+    Δ < -halfturn && (Δ += 2halfturn)
+    if abs(Δ) > halfturn - 1e-9
+        return _push_lon_entry!(exts, segs, seg, -halfturn, halfturn)
+    end
+    lo, hi = Δ >= 0 ? (λa, λa + Δ) : (λa + Δ, λa)
+    lo = prevfloat(lo, 32)
+    hi = nextfloat(hi, 32)
+    #-- antimeridian wraparound: split the overflow back into [-π, π]
+    if lo < -halfturn
+        _push_lon_entry!(exts, segs, seg, lo + 2halfturn, halfturn)
+        lo = -halfturn
+    elseif hi > halfturn
+        _push_lon_entry!(exts, segs, seg, -halfturn, hi - 2halfturn)
+        hi = halfturn
+    end
+    return _push_lon_entry!(exts, segs, seg, lo, hi)
+end
+
+function _push_lon_entry!(exts, segs, seg, lo, hi)
+    push!(exts, Extents.Extent(X = (lo, hi)))
+    push!(segs, seg)
     return nothing
 end
 
