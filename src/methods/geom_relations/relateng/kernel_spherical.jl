@@ -279,64 +279,149 @@ Spherical method of `_ring_is_ccw` (relate_geometry.jl — the port of JTS
 algorithm assumes a coordinate plane: its y-extreme vertex pick and flat-cap
 `del_x` tiebreak are meaningless on xyz points (a ring symmetric about the
 equator has two exactly-equal extreme-y vertices and reads CW in *both*
-windings). On the sphere the ring is CCW iff its signed area (Girard fan sum,
-area.jl) is positive — iff the region on its left is the enclosed one, the
-one smaller than a hemisphere. This is the sole place the engine resolves
-which of the two ring-bounded regions a ring means; `_orient_ring` (edge-side
-topology), `rk_point_in_ring`, and `rk_interaction_bounds` all inherit it, so
-they agree by construction.
+windings). On the sphere the ring is CCW iff the region on its left is the
+enclosed one — the one no larger than a hemisphere — decided by the sign of
+the loop's geodesic curvature (Gauss–Bonnet: enclosed area = 2π − curvature),
+the port of S2 `GetCurvature` (s2loop_measures.cc). Each turn angle involves
+only ADJACENT vertex pairs, so an antipodal pair of non-adjacent vertices —
+legal at ingest, and produced by `AntipodalEdgeSplit` — never meets in one
+term (the previous Girard fan ran chords from a single apex through the
+whole ring and degenerated on exactly those pairs).
 
-`exact` is accepted for signature parity but unused: the sign only selects
-the region convention, and a near-zero sum means the ring splits the sphere
-into equal halves — intrinsically ambiguous, not a float artifact.
+This is the sole place the engine resolves which of the two ring-bounded
+regions an unoriented ring means; `_orient_ring` (edge-side topology),
+`rk_point_in_ring`, and `rk_interaction_bounds` all inherit it, so they
+agree by construction.
+
+As in S2 `IsNormalized`, the sign test allows the curvature error bound
+(`GetCurvatureMaxError`: 11.25ε per vertex), so an exact hemisphere —
+curvature 0, intrinsically winding-ambiguous — reads CCW in *both* windings
+rather than falling to the sign of rounding noise. `exact` is accepted for
+signature parity but unused: the turn-angle signs are always exact
+(`_rk_orient(True(), …)`, our port of S2's `Sign`). Vertices are
+renormalized on entry (`robust_cross_product` expects unit vectors; the
+conformance suite feeds exact-integer non-unit rings).
 =#
 function _ring_is_ccw(::Spherical, ring::Vector; exact)
-    n = length(ring)
-    n > 1 && ring[end] == ring[1] && (n -= 1)
-    n < 3 && return false
-    # renormalize: the Girard quadrant split assumes unit vectors, and the
-    # conformance suite feeds exact-integer non-unit rings
-    apex = _girard_fan_apex(ring, n)
-    total = 0.0
-    prev = rk_normalize_usp(ring[n])
-    for i in 1:n
-        cur = rk_normalize_usp(ring[i])
-        total += _spherical_triangle_area(Girard(), apex, prev, cur)
-        prev = cur
-    end
-    return total > 0
+    loop = _prune_loop_degeneracies([rk_normalize_usp(p) for p in ring])
+    n = length(loop)
+    n < 3 && return false   # bounds no area (JTS convention for flat rings)
+    return _spherical_loop_curvature(loop) >= -(11.25 * eps(Float64) * n)
 end
 
 #=
-Fan apex for the Girard sum. The signed-area fan is apex-invariant in exact
-math, but a fan triangle with an (even nearly) antipodal apex–vertex pair
-has no well-defined connecting geodesic — its Girard excess degenerates to
-`atan(≈0, ≈0)` — and corrupts the sum. Ingest only rejects antipodal
-*edges*: a fan chord to a non-adjacent vertex can still be antipodal, and
-post-`AntipodalEdgeSplit` rings carry exactly such vertex pairs (the split
-keeps both endpoints of the offending edge). Pick the first vertex — then
-the first edge midpoint — with no vertex within ~1e-9 of its antipode. A
-ring defeating every candidate pairs its whole vertex set with antipodes;
-fall back to the first vertex, which is no worse than the sum being taken
-at all (such a ring splits the sphere near-evenly, where the sign is
-intrinsically ambiguous).
+Port of S2 `PruneDegeneracies` (s2loop_measures.cc): the loop with all
+degenerate segments removed — repeated vertices (`AA → A`, wraparound
+included) and retraced whiskers (`ABA → A`, including whiskers straddling
+the closure) — so every remaining vertex has two distinct, non-retracing
+neighbors and its turn angle is well defined. Returns fewer than 3 vertices
+for a completely degenerate loop.
 =#
-function _girard_fan_apex(ring, n)
-    for i in 1:n
-        apex = rk_normalize_usp(ring[i])
-        _clean_fan_apex(apex, ring, n) && return apex
+function _prune_loop_degeneracies(pts::Vector)
+    vertices = empty(pts)
+    sizehint!(vertices, length(pts))
+    for v in pts
+        if !isempty(vertices)
+            v == vertices[end] && continue                       # AA → A
+            if length(vertices) >= 2 && v == vertices[end - 1]   # ABA → A
+                pop!(vertices)
+                continue
+            end
+        end
+        push!(vertices, v)
     end
-    for i in 1:n
-        mid = rk_normalize_usp(ring[i]) + rk_normalize_usp(ring[mod1(i + 1, n)])
-        norm(mid) < 1e-9 && continue   # near-antipodal edge: unstable midpoint
-        apex = UnitSphericalPoint(normalize(mid))
-        _clean_fan_apex(apex, ring, n) && return apex
+    length(vertices) > 1 && vertices[1] == vertices[end] && pop!(vertices)
+    m = length(vertices)
+    m < 3 && return vertices
+    # whiskers straddling the closure (the loop begins with `BA…` and ends
+    # with `…A`, or begins with `A…` and ends with `…AB`): strip first/last
+    # pairs while the terminal edges retrace each other — guaranteed to stop
+    # before consuming the loop (S2: some portion is non-degenerate)
+    k = 0
+    while vertices[k + 2] == vertices[m - k] || vertices[k + 1] == vertices[m - k - 1]
+        k += 1
     end
-    return rk_normalize_usp(ring[1])
+    return k == 0 ? vertices : vertices[(k + 1):(m - k)]
 end
 
-_clean_fan_apex(apex, ring, n) =
-    all(i -> (rk_normalize_usp(ring[i]) ⋅ apex) > -1 + 1e-9, 1:n)
+# Port of S2 `TurnAngle` (s2measures.cc): the signed turning angle at `b` on
+# the walk a → b → c, positive for a left (CCW) turn. The magnitude is the
+# angle between the edge normals (`robust_cross_product` keeps it accurate
+# when adjacent vertices are nearly coincident); the sign comes from the
+# exact orient, correct even for turns close to ±180°.
+function _sph_turn_angle(a, b, c)
+    angle = _usp_angle(robust_cross_product(a, b), robust_cross_product(b, c))
+    return _rk_orient(True(), a, b, c) > 0 ? angle : -angle
+end
+
+# S2 `Vector3.Angle`: atan2(|u×v|, u·v), stable near both parallel and
+# antiparallel (acos of the dot is not).
+_usp_angle(u, v) = atan(norm(cross(u, v)), u ⋅ v)
+
+#=
+Port of S2 `GetCurvature` (s2loop_measures.cc) over a pruned loop: the sum
+of the turn angles, taken in canonical order and Kahan-compensated (a naive
+sum's error is quadratic in the vertex count on spiral-like inputs), then
+restored to the stored direction's sign. Positive curvature ⇔ the region on
+the loop's left is smaller than a hemisphere (its area is 2π − curvature).
+=#
+function _spherical_loop_curvature(loop)
+    n = length(loop)
+    i, dir = _canonical_loop_order(loop)
+    at(k) = loop[mod1(k, n)]
+    total = _sph_turn_angle(at(i - dir), at(i), at(i + dir))
+    compensation = 0.0
+    for _ in 1:(n - 1)
+        i += dir
+        angle = _sph_turn_angle(at(i - dir), at(i), at(i + dir)) + compensation
+        old_total = total
+        total += angle
+        compensation = (old_total - total) + angle
+    end
+    return dir * (total + compensation)
+end
+
+#=
+Port of S2 `GetCanonicalLoopOrder` (s2loop_measures.cc): the traversal
+`(start, dir)` minimizing the traversed vertex sequence lexicographically
+over all rotations of both directions. A loop and its reversal share the
+same canonical sequence, so summing turn angles along it — and restoring
+the stored direction's sign afterwards, as `_spherical_loop_curvature`
+does — makes the curvature exactly invariant under rotation and exactly
+negated under reversal, which no fixed storage-order float sum is.
+=#
+function _canonical_loop_order(loop)
+    n = length(loop)
+    min_indices = [1]
+    for i in 2:n
+        if _tup3(loop[i]) <= _tup3(loop[min_indices[1]])
+            _tup3(loop[i]) < _tup3(loop[min_indices[1]]) && empty!(min_indices)
+            push!(min_indices, i)
+        end
+    end
+    best = (min_indices[1], 1)
+    for i in min_indices
+        _loop_order_less((i, 1), best, loop) && (best = (i, 1))
+        _loop_order_less((i, -1), best, loop) && (best = (i, -1))
+    end
+    return best
+end
+
+# Port of S2 `IsOrderLess`: whether traversal `o1` yields a lexicographically
+# smaller vertex sequence than `o2` (both start at the same minimal vertex).
+function _loop_order_less(o1, o2, loop)
+    o1 == o2 && return false
+    n = length(loop)
+    (i1, d1) = o1
+    (i2, d2) = o2
+    for _ in 1:(n - 1)
+        i1 += d1; i2 += d2
+        p1 = _tup3(loop[mod1(i1, n)]); p2 = _tup3(loop[mod1(i2, n)])
+        p1 < p2 && return true
+        p1 > p2 && return false
+    end
+    return false
+end
 
 # ## rk_point_in_ring (anchor-retry crossing parity, winding-independent)
 
@@ -384,7 +469,7 @@ rk_point_in_ring(m::Spherical, p, ring; exact) =
 The cached kernel-space form of one ring: the converted
 `UnitSphericalPoint` vertex vector (`pts` — the boundary edge walk), its
 deduped open form (`ded`/`n` — the parity walk; aliases `pts` when the
-ring has no repeated vertices), and the ring's Girard orientation bit
+ring has no repeated vertices), and the ring's orientation bit
 (`_ring_is_ccw`, the same bit edge topology and interaction bounds use).
 
 `rk_point_in_ring` re-derived all of this from lon/lat on every query —

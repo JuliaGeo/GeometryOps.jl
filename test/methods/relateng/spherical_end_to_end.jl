@@ -180,10 +180,11 @@ end
 
 # A ring may carry antipodal VERTEX pairs even though antipodal edges are
 # rejected at ingest — the AntipodalEdgeSplit output is exactly such a ring.
-# The Girard orientation fan must not run a chord through a vertex antipodal
-# to its apex (the fan triangle has no defined geodesic and its excess
-# degenerates to zero, flipping the shared orientation bit and with it the
-# polygon interior — CI regression on the fixed ring below).
+# The orientation sum must not connect non-adjacent vertices (a chord between
+# an antipodal pair has no defined geodesic; the one-apex Girard fan
+# degenerated on exactly that, flipping the shared orientation bit and with
+# it the polygon interior — CI regression on the fixed ring below. The S2
+# turning-angle curvature uses adjacent vertices only.)
 @testset "antipodal vertex pair does not flip the interior" begin
     # AntipodalEdgeSplit's output for the (0,0) → (180,0) edge, verbatim:
     # the first vertex (0,0) is antipodal to the mid-ring vertex (180,0)
