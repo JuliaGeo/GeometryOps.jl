@@ -439,7 +439,7 @@ hemisphere are expressed.
 _ring_interior_on_left(m::Spherical, pts::Vector, is_hole::Bool; exact) =
     m.oriented ? !is_hole : _ring_is_ccw(m, pts; exact)
 
-# ## rk_point_in_ring (anchor-retry crossing parity, winding-independent)
+# ## rk_point_in_ring (definitional-exterior crossing parity, winding-independent)
 
 # Whether the two minor arcs (p0,p1) and (q0,q1) cross properly (interior to
 # both). The great circles meet at ±d, d = (p0×p1)×(q0×q1); a proper crossing is
@@ -469,14 +469,33 @@ _ring_kernel_pts(::False, ring) = _ring_usp(ring)
 # Earth ships shapefile-convention CW shells — and
 # `_locate_point_in_polygonal` passes them unoriented); winding-authoritative
 # with role `is_hole` on an oriented manifold. Boundary first (exact arc
-# membership), then the shared `spherical_ring_contains` (which reports the
-# region on the ring's *left*) with this kernel's predicates injected —
+# membership), then the parity test, with this kernel's predicates injected —
 # `rk_orient` for sides, `_arcs_cross_properly` for transversality — so the
-# parity decision is as exact as the predicates; the left region is the
-# interior iff `_ring_interior_on_left` (the same bit `_orient_ring` feeds
-# the edge-side topology). All anchors degenerate (unreachable for a
-# non-degenerate ring and an off-boundary point) is refused, not answered
-# wrong.
+# decision is as exact as the predicates.
+#
+# In the default enclosed-region mode the parity is the shared
+# `spherical_ring_encloses`: even-odd crossing parity anchored at the
+# antipode of the ring's vertex mass, a point exterior BY DEFINITION of the
+# semantics. No winding bit is consulted, so a ring that self-intersects on
+# the sphere (a planar-valid figure-eight — see the `prepare` validation)
+# degrades to even-odd answers instead of inverting globally: the previous
+# bootstrap composed the local interior-side wedge of one edge
+# (`spherical_ring_contains`) with the turning-angle winding
+# (`_ring_interior_on_left`), and a figure-eight defeats both at once — the
+# lobes cancel the turning angle while the wedge propagates whichever lobe
+# hosts the anchor edge. When the definitional anchor is itself degenerate
+# (near-hemisphere vertex mass, or `p` at the mass center) the query falls
+# back to that wedge-plus-winding bootstrap — for such rings the
+# enclosed/complement distinction is near-degenerate anyway, and the
+# turning-angle tolerance already treats hemispheres permissively.
+#
+# On `Spherical(; oriented = true)` the stored winding is authoritative
+# (garbage-in-garbage-out is that mode's documented contract), so the wedge
+# bootstrap IS the semantics: `spherical_ring_contains` reports the region
+# on the ring's *left*, the interior iff `_ring_interior_on_left` (the same
+# bit `_orient_ring` feeds the edge-side topology). All anchors degenerate
+# (unreachable for a non-degenerate ring and an off-boundary point) is
+# refused, not answered wrong.
 rk_point_in_ring(m::Spherical, p, ring; exact, is_hole::Bool = false) =
     rk_point_in_ring(m, p, SphericalKernelRing(m, ring; exact, is_hole); exact)
 
@@ -486,10 +505,13 @@ rk_point_in_ring(m::Spherical, p, ring; exact, is_hole::Bool = false) =
 The cached kernel-space form of one ring: the converted
 `UnitSphericalPoint` vertex vector (`pts` — the boundary edge walk), its
 deduped open form (`ded`/`n` — the parity walk; aliases `pts` when the
-ring has no repeated vertices), and the ring's denoted-region bit
+ring has no repeated vertices), the ring's denoted-region bit
 (`_ring_interior_on_left`, from the ring's winding or — on an oriented
 manifold — its declared role; the same bit edge topology and interaction
-bounds use).
+bounds use), and — in enclosed-region mode — the definitional-exterior
+parity anchor (`spherical_exterior_anchor`; `nothing` on an oriented
+manifold, which never consults it, or for a degenerate vertex mass, where
+queries fall back to the wedge bootstrap).
 
 `rk_point_in_ring` re-derived all of this from lon/lat on every query —
 vertex conversion alone was ~60% of a prepared spherical point query. The
@@ -508,6 +530,7 @@ struct SphericalKernelRing
     ded::Vector{UnitSphericalPoint{Float64}}
     n::Int
     interior_on_left::Bool
+    anchor::Union{Nothing, UnitSphericalPoint{Float64}}
 end
 
 function SphericalKernelRing(m::Spherical, ring; exact, is_hole::Bool = false)
@@ -516,7 +539,8 @@ function SphericalKernelRing(m::Spherical, ring; exact, is_hole::Bool = false)
     n > 1 && pts[end] == pts[1] && (n -= 1)
     ded, n = _drop_repeated_ring_pts(pts, n)
     interior_on_left = n >= 3 && _ring_interior_on_left(m, ded, is_hole; exact)
-    return SphericalKernelRing(pts, ded, n, interior_on_left)
+    anchor = (!m.oriented && n >= 3) ? spherical_exterior_anchor(ded, n) : nothing
+    return SphericalKernelRing(pts, ded, n, interior_on_left, anchor)
 end
 
 # Type-stable functors for the predicates injected into
@@ -536,6 +560,14 @@ struct _RKProperCrossing{BT} <: Function
 end
 (f::_RKProperCrossing)(q, mid, a, b) = _arcs_cross_properly(f.bt, q, mid, a, b) ? 1 : 0
 
+# Exact span test for the anchor walk's vertex-grazing resolution
+# (`_anchor_crossing_parity`): whether `p`, already known to lie on the
+# great circle of `(a, b)`, lies on the closed minor arc.
+struct _RKOnTestArc{BT} <: Function
+    bt::BT
+end
+(f::_RKOnTestArc)(p, a, b) = _on_arc_span(f.bt, p, a, b)
+
 function rk_point_in_ring(m::Spherical, p, kr::SphericalKernelRing; exact)
     pts = kr.pts
     @inbounds for i in 1:length(pts)-1
@@ -549,10 +581,19 @@ function rk_point_in_ring(m::Spherical, p, kr::SphericalKernelRing; exact)
         return LOC_BOUNDARY
     end
     kr.n < 3 && return LOC_EXTERIOR
-    inside = spherical_ring_contains(kr.ded, kr.n, p;
-        orient = _RKOrient(m, exact),
-        on_arc = Returns(false),   # boundary classified exactly above
-        proper_crossing = _RKProperCrossing(booltype(exact)))
+    orient = _RKOrient(m, exact)
+    on_arc = Returns(false)   # boundary classified exactly above
+    proper_crossing = _RKProperCrossing(booltype(exact))
+    if !m.oriented
+        #-- enclosed-region mode: even-odd parity from the definitional
+        #-- exterior anchor (see the section comment); `nothing` — degenerate
+        #-- anchor or `p` at the mass center — falls through to the wedge
+        enc = spherical_ring_encloses(kr.ded, kr.n, p; anchor = kr.anchor,
+            orient, on_arc, proper_crossing,
+            on_test_arc = _RKOnTestArc(booltype(exact)))
+        enc === nothing || return enc ? LOC_INTERIOR : LOC_EXTERIOR
+    end
+    inside = spherical_ring_contains(kr.ded, kr.n, p; orient, on_arc, proper_crossing)
     inside === nothing && _throw_degenerate_point_in_ring(p)
     return inside == kr.interior_on_left ? LOC_INTERIOR : LOC_EXTERIOR
 end
