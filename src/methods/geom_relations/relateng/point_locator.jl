@@ -525,16 +525,20 @@ end
 Port of the SimplePointInAreaLocator logic used by `locateOnPolygonal`
 (SimplePointInAreaLocator.locate → locateInGeometry → locatePointInPolygon),
 with point-in-ring routed through the kernel: shell first, then standard
-even-odd composition over the holes. (The Java envelope short-circuit is
-skipped, as in `locate_on_line`.)
+even-odd composition over the holes. The Java envelope short-circuits —
+`locate` checks the geometry envelope, `locatePointInRing` each ring's —
+are kept, like the line envelope check in `locate_on_line`; the elements
+normally come from the RelateGeometry wrapper tree (or an extent-stamped
+input), whose stored extents make them O(1) reads.
 =#
 function _locate_point_in_polygonal(m, p, ::GI.PolygonTrait, poly; exact)
     GI.isempty(poly) && return LOC_EXTERIOR
-    shell_loc = rk_point_in_ring(m, p, GI.getexterior(poly); exact)
+    _area_env_disjoint(m, p, poly) && return LOC_EXTERIOR
+    shell_loc = _locate_point_in_ring(m, p, GI.getexterior(poly); exact)
     shell_loc != LOC_INTERIOR && return shell_loc
     #-- now test if the point lies in or on the holes
     for hole in GI.gethole(poly)
-        hole_loc = rk_point_in_ring(m, p, hole; exact)
+        hole_loc = _locate_point_in_ring(m, p, hole; exact)
         hole_loc == LOC_BOUNDARY && return LOC_BOUNDARY
         hole_loc == LOC_INTERIOR && return LOC_EXTERIOR
         #-- if in EXTERIOR of this hole keep checking the other ones
@@ -543,9 +547,28 @@ function _locate_point_in_polygonal(m, p, ::GI.PolygonTrait, poly; exact)
 end
 
 function _locate_point_in_polygonal(m, p, ::GI.MultiPolygonTrait, mp; exact)
+    _area_env_disjoint(m, p, mp) && return LOC_EXTERIOR
     for poly in GI.getgeom(mp)
         l = _locate_point_in_polygonal(m, p, GI.trait(poly), poly; exact)
         l != LOC_EXTERIOR && return l
     end
     return LOC_EXTERIOR
 end
+
+# Port of SimplePointInAreaLocator.locatePointInRing, including its ring
+# envelope short-circuit.
+function _locate_point_in_ring(m, p, ring; exact)
+    _area_env_disjoint(m, p, ring) && return LOC_EXTERIOR
+    return rk_point_in_ring(m, p, ring; exact)
+end
+
+#=
+An envelope miss is conclusive for point-in-area EXTERIOR only where the
+linework's interaction bounds cover the enclosed region: true on the plane
+(a ring's coordinate box is its region's box), but not on the sphere,
+where a ring's arc-extent box may exclude an enclosed region (e.g. a polar
+cap's pole) — so `Spherical` scans unconditionally.
+=#
+_area_env_disjoint(m::Planar, p, geom) =
+    !Extents.intersects(rk_interaction_bounds(m, geom), _kernel_point_box(p))
+_area_env_disjoint(::Manifold, p, geom) = false
