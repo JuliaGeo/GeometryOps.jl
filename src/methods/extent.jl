@@ -18,11 +18,15 @@ the three coordinates, the six axis points `(±1,0,0)`, `(0,±1,0)`,
 axis point, decided by crossing parity as in `S2Loop::InitBound`
 (`s2loop.cc`).
 
-Rings follow S2's loop convention (`s2loop.h`): CCW, interior on the left,
-so a clockwise ring encloses the complement.  Configurations too close to
-degenerate for [`UnitSpherical.spherical_orient`](@ref) to call are retried
-with the next edge as anchor; if every anchor fails, the axis is extended
-to `±1`, so the box can come out loose but never under-covers.
+Which of the two ring-bounded regions a ring denotes follows the
+manifold's interior mode (see [`Spherical`](@ref)): by default the
+ENCLOSED region, independent of winding; under `oriented = true` the
+region on the left of the stored vertex order (S2's loop convention,
+`s2loop.h`), so there a clockwise ring bounds the complement.
+Configurations too close to degenerate for
+[`UnitSpherical.spherical_orient`](@ref) to call are retried with the next
+edge as anchor; if every anchor fails, the axis is extended to `±1`, so
+the box can come out loose but never under-covers.
 =#
 
 """
@@ -36,9 +40,12 @@ On `Planar()`, `GI.extent(geom)`.  On `Spherical()`, the 3D Cartesian
 extent of the geometry on the unit sphere, with geographic (longitude,
 latitude) input converted like `UnitSphericalPoint`: curves are covered by
 the union of their edges' great-circle arc extents; rings and polygons are
-regions — wound CCW with the interior on the left, per S2's loop
-convention — whose extent also covers any enclosed axis point (a pole,
-say).
+regions, whose extent also covers any enclosed axis point (a pole, say).
+Which region a ring bounds follows the manifold's interior mode (see
+[`Spherical`](@ref)): by default the region it encloses, independent of
+winding; with `Spherical(; oriented = true)` the region on the left of
+the stored vertex order, so a clockwise ring denotes the complement (and
+gets a box covering essentially the whole sphere).
 
 ## Example
 
@@ -61,8 +68,14 @@ _extent(::Spherical, ::GI.PointTrait, geom, ::Type{T}) where T =
     GI.extent(UnitSpherical.UnitSphericalPoint(geom))
 _extent(m::Spherical, ::Union{GI.LineTrait, GI.LineStringTrait}, geom, ::Type{T}) where T =
     mapreduce(GI.extent, Extents.union, lazy_edgelist(m, geom, T))
-_extent(m::Spherical, ::GI.LinearRingTrait, geom, ::Type{T}) where T =
-    _spherical_region_extent(UnitSpherical.to_unit_spherical_points(geom))
+# rings are regions: put the denoted region on the ring's left — a flip of
+# a copy for a CW ring in the default (enclosed-region) mode, a no-op under
+# `oriented = true` — since `_spherical_region_extent` bounds the left region
+function _extent(m::Spherical, ::GI.LinearRingTrait, geom, ::Type{T}) where T
+    pts = _orient_ring(m, UnitSpherical.to_unit_spherical_points(geom), false, false;
+        exact = True())
+    return _spherical_region_extent(pts)
+end
 _extent(m::Spherical, ::GI.PolygonTrait, geom, ::Type{T}) where T =
     _extent(m, GI.LinearRingTrait(), GI.getexterior(geom), T)
 # multi-geometries and collections; holes never extend a polygon's extent,

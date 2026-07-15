@@ -30,12 +30,11 @@ end
         @test -1 < ext.Y[1] && ext.Y[2] < 1
     end
 
-    @testset "CW ring is the complement (S2 convention)" begin
-        ext = GO.extent(m, GI.LinearRing(reverse(polar_ring(z, 8))))
-        @test ext.Z[1] == -1
-        @test ext.Z[2] < 1          # sup z of the complement is on the boundary
-        @test ext.X == (-1.0, 1.0)  # complement contains ±eₓ and ±e_y
-        @test ext.Y == (-1.0, 1.0)
+    @testset "CW ring encloses the same cap (default is winding-independent)" begin
+        rext = GO.extent(m, GI.LinearRing(reverse(polar_ring(z, 8))))
+        @test rext == GO.extent(m, GI.LinearRing(polar_ring(z, 8)))
+        @test rext.Z[2] == 1        # still the polar cap, not the complement
+        @test rext.X[2] < 1 && rext.Y[2] < 1
     end
 
     @testset "Geographic polygon around the pole" begin
@@ -68,12 +67,15 @@ end
         @test all(b -> all(isfinite, b), values(ext))
     end
 
-    @testset "Cap larger than a hemisphere" begin
+    @testset "Ring below the equator encloses the southern cap" begin
+        # the CCW ring at z = cosd(100) has the >hemisphere northern region
+        # on its left; the default mode bounds the ENCLOSED southern cap
+        # (the left region is `oriented = true` behavior, tested below)
         ext = GO.extent(m, GI.LinearRing(polar_ring(cosd(100), 16)))
-        @test ext.Z[2] == 1
-        @test ext.X == (-1.0, 1.0)  # ±eₓ and ±e_y are interior
-        @test ext.Y == (-1.0, 1.0)
-        @test ext.Z[1] < cosd(100)  # arcs bulge below the vertex circle
+        @test ext.Z[1] == -1                       # south pole enclosed
+        @test ext.Z[2] ≈ cosd(100) atol = 1e-12    # rim on top; arcs bulge south
+        @test -1 < ext.X[1] && ext.X[2] < 1
+        @test -1 < ext.Y[1] && ext.Y[2] < 1
     end
 
     @testset "Dumbbell: both poles through a thin corridor" begin
@@ -144,15 +146,59 @@ end
             for a in axispoints
                 spherical_distance(c, a) < r_in && @test inext(a, ext)
             end
-            # the reversed ring bounds the complement (S2 convention): it
-            # shares the boundary, covers axis points outside the cap, and
-            # between them the two boxes cover every axis point
-            rext = GO.extent(m, GI.LinearRing(reverse(ring)))
+            # the reversed ring encloses the same cap by default…
+            @test GO.extent(m, GI.LinearRing(reverse(ring))) == ext
+            # …and bounds the complement under `oriented = true`: it shares
+            # the boundary, covers axis points outside the cap, and between
+            # them the two boxes cover every axis point
+            om = GO.Spherical(oriented = true)
+            @test GO.extent(om, GI.LinearRing(ring)) == ext   # CCW: same region
+            rext = GO.extent(om, GI.LinearRing(reverse(ring)))
             @test all(q -> inext(q, rext), samples)
             for a in axispoints
                 spherical_distance(c, a) > r && @test inext(a, rext)
                 @test inext(a, ext) || inext(a, rext)
             end
         end
+    end
+end
+
+@testset "extent(Spherical(oriented = true), ...)" begin
+    m = GO.Spherical()
+    om = GO.Spherical(oriented = true)
+    z = 0.9
+
+    @testset "CCW polar cap matches the default mode" begin
+        ring = GI.LinearRing(polar_ring(z, 8))
+        @test GO.extent(om, ring) == GO.extent(m, ring)
+        @test GO.extent(om, ring).Z[2] == 1
+    end
+
+    @testset "CW ring is the complement (left-of-ring region)" begin
+        ext = GO.extent(om, GI.LinearRing(reverse(polar_ring(z, 8))))
+        @test ext.Z[1] == -1
+        @test ext.Z[2] < 1          # sup z of the complement is on the boundary
+        @test ext.X == (-1.0, 1.0)  # complement contains ±eₓ and ±e_y
+        @test ext.Y == (-1.0, 1.0)
+    end
+
+    @testset "Cap larger than a hemisphere" begin
+        # the region on the CCW ring's left at z = cosd(100) reaches over
+        # the north pole and past the equator
+        ext = GO.extent(om, GI.LinearRing(polar_ring(cosd(100), 16)))
+        @test ext.Z[2] == 1
+        @test ext.X == (-1.0, 1.0)  # ±eₓ and ±e_y are interior
+        @test ext.Y == (-1.0, 1.0)
+        @test ext.Z[1] < cosd(100)  # arcs bulge below the vertex circle
+    end
+
+    @testset "Geographic CW polygon around the pole is the complement" begin
+        cap_cw = GI.Polygon([[(lon, 60.0) for lon in 360.0:-30.0:0.0]])
+        ext = GO.extent(om, cap_cw)
+        @test ext.Z[1] == -1 && ext.Z[2] < 1
+        # while the default mode reads it as the cap
+        dext = GO.extent(m, cap_cw)
+        @test dext.Z[2] == 1
+        @test dext.Z[1] ≈ sind(60) atol = 1e-12
     end
 end
