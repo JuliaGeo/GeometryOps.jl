@@ -127,6 +127,21 @@ Keyword arguments (all optional): `manifold` (default `Planar()`),
 `True()`), `boundary_rule` (default [`Mod2Boundary`](@ref), the OGC SFS
 rule).
 
+## Unprepared performance
+
+Every unprepared evaluation rebuilds an extent-annotated view of both
+inputs (the stand-in for the envelope cache JTS keeps on each Geometry),
+one coordinate pass per call. Inputs that already carry extents at every
+level skip that pass — stamp them once with
+
+```julia
+geom = GO.tuples(geom; calc_extent = true)
+```
+
+and repeated unprepared calls read the stored extents instead. When one
+geometry is queried many times, [`prepare`](@ref) it instead: the prepared
+form also caches the point locators and edge index.
+
 See [`relate`](@ref) and [`relate_predicate`](@ref) for the entry points.
 """
 struct RelateNG{M <: Manifold, A <: IntersectionAccelerator, E, BR <: BoundaryNodeRule} <: GeometryOpsCore.Algorithm{M}
