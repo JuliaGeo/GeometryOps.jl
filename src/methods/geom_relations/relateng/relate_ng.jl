@@ -637,7 +637,7 @@ struct PreparedRelate{ALG <: RelateNG, RG <: RelateGeometry,
 end
 
 """
-    prepare(alg::RelateNG, a)::PreparedRelate
+    prepare(alg::RelateNG, a; validate = <manifold-dependent>)::PreparedRelate
 
 `prepare` is the generic entry point for prepared-geometry optimizations in
 GeometryOps; `RelateNG` is currently the only algorithm implementing it.
@@ -666,18 +666,195 @@ eagerly:
     (`is_self_noding_required`) bypass the cached edges entirely: as in the
     Java prepared branch, `computeEdgesAll` re-extracts the A edges per
     evaluation, filtered by the A/B interaction envelope.
+
+## Validation
+
+`validate` controls a ring self-crossing check over the prepared geometry:
+a self-join of the segment set (reusing the prepared edge index) that
+detects PROPER crossings — transversal, interior to both edges — between
+non-adjacent edges of the same polygonal element. Shared-endpoint adjacency
+is excluded and vertex touches are NOT flagged: the scope is exactly the
+crossing class that breaks the engine's containment parity, not full OGC
+validity. On the first crossing found an `ArgumentError` is thrown naming
+the ring and the edge pair (\"edge i crosses edge j\"); the documented
+remedy is the [`CrossingEdgeSplit`](@ref) correction.
+
+The default is manifold-dependent, and deliberately so:
+
+- `Spherical` → `validate = true`. A planar-valid ring whose edges cross
+  when reinterpreted as great-circle arcs is *undetectable by standard
+  planar tooling* (planar validity checks pass it), and undetected it can
+  invert containment globally — the figure-eight's lobes cancel the
+  curvature the interior bootstrap reads, so every query lands on the
+  wrong side (Natural Earth 110m Sudan is a real instance). The check is
+  a small fraction of the ~100 ms spherical prepare build.
+- `Planar` → `validate = false`. Planar invalidity of the same class is
+  visible to ordinary planar tools, and the planar engine degrades
+  gracefully under even-odd ray-crossing parity instead of inverting;
+  JTS/GEOS prepared geometries do not validate either. A planar prepare
+  costs ~600 µs, which a validation join would dominate, destroying the
+  build-cost amortization. Pass `validate = true` to opt in.
 """
-function prepare(alg::RelateNG, a)
+function prepare(alg::RelateNG, a;
+        validate::Bool = _prepare_validate_default(GeometryOpsCore.manifold(alg)))
     m = GeometryOpsCore.manifold(alg)
     geom_a = RelateGeometry(m, a; exact = alg.exact, is_prepared = true,
         boundary_rule = alg.boundary_rule)
+    #-- cached A edges: extracted once, unfiltered (Java's null envExtract).
+    #-- Extracted (and validated) before the locator build below, so an
+    #-- invalid ring fails fast instead of after the expensive locator pass.
+    segs_a = extract_segment_strings(geom_a, GEOM_A, nothing)
+    edge_tree = _build_prepared_edge_index(m, alg.accelerator, segs_a)
+    validate && _validate_ring_crossings(m, alg.exact, segs_a, edge_tree)
     #-- force the lazy caches that repeated evaluations reuse
     _get_locator(geom_a)
     get_dimension_real(geom_a) == DIM_P && get_unique_points(geom_a)
-    #-- cached A edges: extracted once, unfiltered (Java's null envExtract)
-    segs_a = extract_segment_strings(geom_a, GEOM_A, nothing)
-    edge_tree = _build_prepared_edge_index(m, alg.accelerator, segs_a)
     return PreparedRelate(alg, geom_a, segs_a, edge_tree)
+end
+
+# The manifold-dependent `validate` default of `prepare` (see its docstring
+# for the rationale): only `Spherical`, where this invalidity class is both
+# invisible to planar tooling and containment-inverting, validates by
+# default.
+_prepare_validate_default(::Spherical) = true
+_prepare_validate_default(::Manifold) = false
+
+#=
+The validation join: enumerate extent-interacting segment pairs within the
+A segment strings — through the prepared edge tree when one was built
+(`dual_depth_first_search` of the tree against itself, exactly like the
+self-noding tree path), otherwise a nested loop with the same per-pair
+extent prune — and throw on the first PROPER crossing between non-adjacent
+edges of the same polygonal element. Only ring edges are checked
+(`dim == DIM_A` on both strings, same element id): lines may legitimately
+self-cross, and rings of different elements (e.g. two polygons of a
+MultiPolygon) may overlap without breaking per-element containment parity.
+Shared-endpoint pairs are skipped by coordinate equality before any
+predicate runs: adjacency and vertex touches are out of scope (see the
+`prepare` docstring), and an exactly-zero orient would otherwise force the
+adaptive exact stage on every adjacent pair.
+=#
+function _validate_ring_crossings(m::Manifold, exact, segs_a, edge_tree)
+    if edge_tree === nothing
+        _validate_ring_crossings_nested(m, exact, segs_a)
+    else
+        SpatialTreeInterface.dual_depth_first_search(Extents.intersects, edge_tree, edge_tree) do ia, ib
+            ia < ib || return nothing
+            (sa, ka) = edge_tree.data[ia]
+            (sb, kb) = edge_tree.data[ib]
+            _check_ring_crossing(m, exact, segs_a[sa], ka, segs_a[sb], kb)
+            return nothing
+        end
+    end
+    return nothing
+end
+
+function _validate_ring_crossings_nested(m::Manifold, exact, segs_a)
+    for si in eachindex(segs_a)
+        ssa = segs_a[si]
+        ssa.dim == DIM_A || continue
+        for sj in si:lastindex(segs_a)
+            ssb = segs_a[sj]
+            (ssb.dim == DIM_A && ssb.id == ssa.id) || continue
+            for ka in 1:(length(ssa.pts) - 1)
+                a0 = ssa.pts[ka]
+                a1 = ssa.pts[ka + 1]
+                kb0 = si == sj ? ka + 1 : 1
+                for kb in kb0:(length(ssb.pts) - 1)
+                    _segment_envs_disjoint(m, a0, a1, ssb.pts[kb], ssb.pts[kb + 1]) && continue
+                    _check_ring_crossing(m, exact, ssa, ka, ssb, kb)
+                end
+            end
+        end
+    end
+    return nothing
+end
+
+# One candidate pair of the validation join: filter (same-element rings,
+# no shared endpoint), confirm (`_edges_cross_properly`), throw.
+function _check_ring_crossing(m::Manifold, exact,
+        ssa::RelateSegmentString, ka::Integer, ssb::RelateSegmentString, kb::Integer)
+    (ssa.dim == DIM_A && ssb.dim == DIM_A && ssa.id == ssb.id) || return nothing
+    a0 = ssa.pts[ka]
+    a1 = ssa.pts[ka + 1]
+    b0 = ssb.pts[kb]
+    b1 = ssb.pts[kb + 1]
+    #-- kernel-point `==` (all coordinates): adjacency and vertex touches
+    #-- are out of scope, and skipping them here keeps the exactly-zero
+    #-- orients of shared endpoints out of the adaptive exact stage
+    (a0 == b0 || a0 == b1 || a1 == b0 || a1 == b1) && return nothing
+    _edges_cross_properly(m, a0, a1, b0, b1; exact) &&
+        _throw_ring_crossing(m, ssa, ka, ssb, kb)
+    return nothing
+end
+
+@noinline function _throw_ring_crossing(m::Manifold, ssa, ka, ssb, kb)
+    ia = _input_edge_index(m, ssa, ka)
+    ib = _input_edge_index(m, ssb, kb)
+    ssa === ssb && ib < ia && ((ia, ib) = (ib, ia))
+    ring_desc(ss) = ss.ring_id == 0 ? "the shell" : "hole $(ss.ring_id)"
+    place = ssa === ssb ?
+        "edge $ia crosses edge $ib in $(ring_desc(ssa)) of polygonal element $(ssa.id)" :
+        "edge $ia of $(ring_desc(ssa)) crosses edge $ib of $(ring_desc(ssb)) in polygonal element $(ssa.id)"
+    throw(ArgumentError(
+        "prepare: geometry is invalid on the `$(nameof(typeof(m)))` manifold: $place " *
+        "(a proper crossing between non-adjacent ring edges). Left undetected, such a " *
+        "crossing can invert containment globally; repair the geometry first with the " *
+        "`CrossingEdgeSplit` correction (it splits each ring at its crossing points " *
+        "into separate loops), or pass `validate = false` to skip this check"))
+end
+
+#=
+Input-order edge index for the error message: segment strings store ring
+vertices in engine orientation (shells and holes reversed as needed, repeated
+points removed), so a stored segment index does not generally match an edge
+of the ring as the user wrote it. Re-derive the input index by locating the
+crossing edge's kernel endpoints among the input ring's consecutive vertex
+pairs, in either direction. Falls back to the stored index if the ring or
+pair cannot be found (it always should be). Error-path only.
+=#
+function _input_edge_index(m::Manifold, ss::RelateSegmentString, k::Integer)
+    ring = _extracted_ring(ss)
+    ring === nothing && return Int(k)
+    e0 = ss.pts[k]
+    e1 = ss.pts[k + 1]
+    n = GI.npoint(ring)
+    prev = _to_kernel_point(m, GI.getpoint(ring, 1))
+    for i in 2:n
+        cur = _to_kernel_point(m, GI.getpoint(ring, i))
+        ((prev == e0 && cur == e1) || (prev == e1 && cur == e0)) && return i - 1
+        prev = cur
+    end
+    return Int(k)
+end
+
+# The input ring a ring segment string was extracted from: the `ring_id`-th
+# ring of the `id`-th non-empty atomic element of the input geometry.
+function _extracted_ring(ss::RelateSegmentString)
+    elem, _ = _nth_atomic_element(ss.input_geom.geom, Int(ss.id))
+    (elem === nothing || !(GI.trait(elem) isa GI.AbstractPolygonTrait)) && return nothing
+    ss.ring_id == 0 && return GI.getexterior(elem)
+    for (i, hole) in enumerate(GI.gethole(elem))
+        i == ss.ring_id && return hole
+    end
+    return nothing
+end
+
+# The `remaining`-th non-empty atomic element of `geom` in extraction order —
+# the walk of `_extract_segment_strings!`, whose `element_id` counter ticks
+# once per non-empty atomic element (collections, including Multi* types,
+# recurse). Returns `(element_or_nothing, remaining_after)`.
+function _nth_atomic_element(geom, remaining::Int)
+    if GI.trait(geom) isa GI.AbstractGeometryCollectionTrait
+        for g in GI.getgeom(geom)
+            elem, remaining = _nth_atomic_element(g, remaining)
+            elem === nothing || return (elem, remaining)
+        end
+        return (nothing, remaining)
+    end
+    GI.isempty(geom) && return (nothing, remaining)
+    remaining -= 1
+    return (remaining == 0 ? geom : nothing, remaining)
 end
 
 """
