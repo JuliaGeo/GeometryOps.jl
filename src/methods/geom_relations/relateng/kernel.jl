@@ -28,11 +28,15 @@ adversarial near-collinear inputs.
 
 Whether point `p` lies on the closed segment `[q0, q1]`, endpoints included.
 
-    rk_point_in_ring(m, p, ring; exact)::Int8
+    rk_point_in_ring(m, p, ring; exact, is_hole = false)::Int8
 
-Location of point `p` relative to the area enclosed by the closed `ring`
+Location of point `p` relative to the region denoted by the closed `ring`
 (a GeoInterface linestring/linearring, assumed closed regardless of a
 repeated last point): one of `LOC_INTERIOR`, `LOC_BOUNDARY`, `LOC_EXTERIOR`.
+The denoted region is the area *enclosed* by the ring, independent of its
+winding — except on `Spherical(; oriented = true)`, where the stored
+winding is authoritative and `is_hole` declares the ring's role (see
+`_ring_interior_on_left`); other manifolds ignore `is_hole`.
 
     rk_interaction_bounds(m, geom)::Extents.Extent
 
