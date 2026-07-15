@@ -715,12 +715,15 @@ end
 
 # Port of CoordinateArrays.removeRepeatedPoints (via hasRepeatedPoints):
 # drops consecutive coordinates that are exactly equal, returning the input
-# vector unchanged (not copied) when there is nothing to remove.
+# vector unchanged (not copied) when there is nothing to remove. Equality is
+# kernel-point `==` — all coordinates — NOT the planar `_equals2`: spherical
+# kernel points at mirror latitudes on one meridian share x and y and differ
+# only in z, and 2D equality deleted such vertices from the ring.
 function _remove_repeated_points(pts::Vector)
-    any(i -> _equals2(pts[i], pts[i + 1]), 1:(length(pts) - 1)) || return pts
+    any(i -> pts[i] == pts[i + 1], 1:(length(pts) - 1)) || return pts
     out = [pts[1]]
     for i in 2:length(pts)
-        _equals2(pts[i], last(out)) || push!(out, pts[i])
+        pts[i] == last(out) || push!(out, pts[i])
     end
     return out
 end
@@ -728,8 +731,9 @@ end
 get_geometry(ss::RelateSegmentString) = ss.input_geom
 get_polygonal(ss::RelateSegmentString) = ss.parent_polygonal
 
-# Port of BasicSegmentString.isClosed.
-is_closed(ss::RelateSegmentString) = _equals2(ss.pts[1], ss.pts[end])
+# Port of BasicSegmentString.isClosed. Kernel-point `==` (all coordinates;
+# Java's equals2D is planar-only — see `_remove_repeated_points`).
+is_closed(ss::RelateSegmentString) = ss.pts[1] == ss.pts[end]
 
 """
     create_node_section(ss::RelateSegmentString, seg_index::Integer, node::NodeKey)
@@ -753,8 +757,10 @@ function create_node_section(ss::RelateSegmentString, seg_index::Integer, node::
         next = ss.pts[seg_index + 1]
     else
         pt = node.pt
+        #-- kernel-point equality (all coordinates), here and in the vertex
+        #-- walks below: node points and segment vertices are kernel points
         is_node_at_vertex =
-            _equals2(pt, ss.pts[seg_index]) || _equals2(pt, ss.pts[seg_index + 1])
+            pt == ss.pts[seg_index] || pt == ss.pts[seg_index + 1]
         prev = prev_vertex(ss, seg_index, pt)
         next = next_vertex(ss, seg_index, pt)
     end
@@ -766,7 +772,7 @@ end
 # on segment `seg_index`, or `nothing` if none exists.
 function prev_vertex(ss::RelateSegmentString, seg_index::Integer, pt)
     seg_start = ss.pts[seg_index]
-    _equals2(seg_start, pt) || return seg_start
+    seg_start == pt || return seg_start
     #-- pt is at segment start, so get previous vertex
     seg_index > 1 && return ss.pts[seg_index - 1]
     is_closed(ss) && return _prev_in_ring(ss, seg_index)
@@ -777,7 +783,7 @@ end
 # on segment `seg_index`, or `nothing` if none exists.
 function next_vertex(ss::RelateSegmentString, seg_index::Integer, pt)
     seg_end = ss.pts[seg_index + 1]
-    _equals2(seg_end, pt) || return seg_end
+    seg_end == pt || return seg_end
     #-- pt is at seg end, so get next vertex
     seg_index < length(ss.pts) - 1 && return ss.pts[seg_index + 2]
     is_closed(ss) && return _next_in_ring(ss, seg_index + 1)
@@ -811,8 +817,8 @@ avoids double-counting intersections which lie exactly at segment endpoints.
 """
 function is_containing_segment(ss::RelateSegmentString, seg_index::Integer, pt)
     #-- intersection is at segment start vertex - process it
-    _equals2(pt, ss.pts[seg_index]) && return true
-    if _equals2(pt, ss.pts[seg_index + 1])
+    pt == ss.pts[seg_index] && return true
+    if pt == ss.pts[seg_index + 1]
         is_final_segment = seg_index == length(ss.pts) - 1
         (is_closed(ss) || !is_final_segment) && return false
         #-- for final segment, process intersections with final endpoint
