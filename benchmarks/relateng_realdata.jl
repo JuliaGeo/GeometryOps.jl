@@ -227,10 +227,10 @@ print_table("rivers x countries (10m, seeded sample of extent-hit pairs, per pai
 
 # ## Workload 5: spherical variants
 #
-# NOTE: as of this file's creation, spherical `intersects` has a known
-# containment bug (disjoint continent-scale pairs report true), so the
-# spherical columns below measure the always-true early-exit path — see the
-# caveat in the representative-output block.
+# Prepared spherical point-in-area goes through the indexed locator
+# (longitude-interval edge index + meridian-arc crossing parity, the
+# 2026-07-14 spherical-indexed-locator design); the unprepared arm scans
+# the rings exactly and reconverts vertices per call.
 
 const SALG = GO.RelateNG(; manifold = GO.Spherical())
 sprep = GO.prepare(SALG, go_big)
@@ -251,9 +251,10 @@ print_table("spherical RelateNG vs planar (same real-data workloads, per op)",
 
 #=
 Representative output (2026-07-14, Apple M4 Pro, macOS — Darwin 25.5.0;
-Julia 1.12.6, GEOS 3.14.1, GeometryOps @ ba903d1ac — after the spherical
-winding-independence fix and the engine type-erasure/precompile work;
-`julia --project=docs benchmarks/relateng_realdata.jl`, ~95 s wall
+Julia 1.12.6, GEOS 3.14.1, GeometryOps @ ed2f9474e — after the single-pass
+extent kernel, the point-in-area envelope short-circuits, and the spherical
+indexed point-in-area locator;
+`julia --project=docs benchmarks/relateng_realdata.jl`, ~90 s wall
 excluding package precompilation):
 
 Point-in-area target: Canada — 68193 vertices, 412 rings; point mix: 4672/10000 hits
@@ -261,60 +262,62 @@ Point-in-area target: Canada — 68193 vertices, 412 rings; point mix: 4672/1000
 point-in-area intersects (largest 10m country, seed-7 point mix, per query)
 workload                       │         unprepared │     extent-stamped │           prepared │            LibGEOS │   LibGEOS prepared
 ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
-Canada, per point              │           861.9 μs │            55.4 μs │             1.0 μs │            26.8 μs │           675.7 ns
+Canada, per point              │            62.6 μs │            21.9 μs │             1.2 μs │            26.6 μs │           653.3 ns
 
-GO.prepare build: 1.4 ms → amortized against unprepared after ~1.6 queries
+GO.prepare build: 587.8 μs → amortized against unprepared after ~9.6 queries
 
 110m: 177 countries (10654 vertices); 3000 sampled ordered pairs, 70 intersecting
 
 pairwise intersects (110m countries, seeded pair sample, per pair)
 workload                       │           RelateNG │             GO old │            LibGEOS
 ─────────────────────────────────────────────────────────────────────────────────────────────
-3000 ordered pairs             │             2.8 μs │             3.3 μs │           116.5 ns
+3000 ordered pairs             │             1.6 μs │             3.3 μs │           115.7 ns
 
 10m neighbor set: 180 extent-hit ordered pairs among top-24 countries, 18 touching
 
 real border-sharing neighbor pairs (10m, 18 pairs, per pair)
 predicate                      │           RelateNG │            LibGEOS
 ────────────────────────────────────────────────────────────────────────
-touches                        │             1.7 ms │           617.9 μs
-full relate                    │             1.6 ms │           620.0 μs
+touches                        │           790.9 μs │           614.6 μs
+full relate                    │           720.0 μs │           619.1 μs
 
 rivers x countries: 1454 rivers (256386 vertices), 5503 extent-hit pairs, 150 sampled
 
 rivers x countries (10m, seeded sample of extent-hit pairs, per pair)
 predicate                      │           RelateNG │            LibGEOS
 ────────────────────────────────────────────────────────────────────────
-intersects                     │           305.4 μs │            35.0 μs
-crosses                        │           995.4 μs │            79.8 μs
+intersects                     │            65.8 μs │            35.6 μs
+crosses                        │           784.4 μs │            79.1 μs
 
 spherical RelateNG vs planar (same real-data workloads, per op)
 workload                       │          Spherical │             Planar
 ────────────────────────────────────────────────────────────────────────
-point-in-area unprepared       │           109.8 ms │           861.9 μs
-point-in-area prepared         │            17.6 ms │             1.0 μs
-prepare build                  │           101.6 ms │             1.4 ms
-pairwise intersects 110m       │           169.8 μs │             2.9 μs
+point-in-area unprepared       │           112.6 ms │            62.6 μs
+point-in-area prepared         │             2.2 μs │             1.2 μs
+prepare build                  │           102.8 ms │           587.8 μs
+pairwise intersects 110m       │           171.4 μs │             1.9 μs
 
 Reading notes:
 
-- Point-in-area: the unprepared 33x gap vs LibGEOS is almost entirely the
-  per-call extent-caching pass over all 68k vertices — pre-stamping extents
-  (`GO.tuples(x; calc_extent = true)`) recovers 16x of it, and `GO.prepare`
-  (indexed point-in-area locator) closes to ~2x of prepared GEOS. Prepare
-  pays for itself after ~2 unprepared-equivalent queries.
-- Pairwise 110m: RelateNG edges out the old GO processors and sits ~25x
-  behind LibGEOS on these mostly-disjoint pairs (LibGEOS resolves most of
-  them from the envelope alone).
+- Point-in-area: the single-pass extent kernel plus the JTS-parity envelope
+  short-circuits put unprepared RelateNG within ~2.4x of plain LibGEOS;
+  pre-stamped extents (`GO.tuples(x; calc_extent = true)`) edge past it, and
+  `GO.prepare` (indexed point-in-area locator) closes to ~2x of prepared
+  GEOS. Prepare pays for itself after ~10 unprepared-equivalent queries.
+- Pairwise 110m: RelateNG is ~2x faster than the old GO processors and sits
+  ~14x behind LibGEOS on these mostly-disjoint pairs (LibGEOS resolves most
+  of them from the envelope alone).
 - Real 10m borders (near-collinear point soups) force constant escalation
-  to exact predicates: ~3x behind GEOS on `touches`/full `relate`.
-- Rivers x countries: `crosses` is ~3x `intersects` — it requires
+  to exact predicates: ~1.2x behind GEOS on `touches`/full `relate`.
+- Rivers x countries: `crosses` is ~12x `intersects` — it requires
   self-noding, which rebuilds and re-traverses edge indexes per evaluation.
-- Spherical: measured after the winding-independence fix (real answers, no
-  always-true early exit). The ~100–17,000x gaps vs planar are dominated by
-  kernel-point conversion — every query reconverts all ring vertices to
-  `UnitSphericalPoint` — and by the absence of a spherical indexed
-  point-in-area locator (prepared point queries re-scan converted rings).
-  Both are addressed by docs/plans/2026-07-14-spherical-indexed-locator.md;
-  re-record this table as those layers land.
+- Spherical: prepared point-in-area now runs the indexed locator
+  (longitude-interval edge index, meridian-arc crossing parity; the
+  2026-07-14 spherical-indexed-locator design) — ~2x planar prepared, five
+  orders of magnitude down from the exact ring re-scan it replaced. The
+  build and the unprepared arm remain ~100 ms on Canada: both are dominated
+  by per-call kernel-point conversion and the exact scan, which a one-shot
+  query cannot amortize (that is what `prepare` is for). Pairwise spherical
+  `intersects` is edge-topology-bound (exact spherical predicates), not
+  point-location-bound, and is unchanged by the locator.
 =#
