@@ -89,6 +89,17 @@ A spherical manifold means that the geometry is on the 3-sphere (but is represen
     sphere.  Operations remain correct on such regions, but extent-based
     pruning degenerates (the region's bounding box is essentially the whole
     sphere), so spatial predicates against them fall back to slower paths.
+
+!!! warning "Validity is manifold-dependent"
+    A ring that is valid in lon/lat can be *invalid on the sphere*: two
+    non-adjacent edges may cross when reinterpreted as great-circle arcs
+    (a planar needle a few meters wide is enough — Natural Earth 110m
+    Sudan is a real instance), and no planar validity tool can detect it.
+    Prepared spherical predicates (`GeometryOps.prepare`) therefore
+    validate against this class by default and throw an "edge i crosses
+    edge j" error; the remedy is the `GeometryOps.CrossingEdgeSplit`
+    correction, which splits each ring at its crossing points into
+    separate loops (even-odd semantics).
 """
 Base.@kwdef struct Spherical{T} <: Manifold
     radius::T = WGS84_EARTH_MEAN_RADIUS # this should be theWGS84 defined mean radius

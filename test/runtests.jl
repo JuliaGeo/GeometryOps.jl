@@ -57,6 +57,7 @@ end
 @safetestset "Closed Rings" begin include("transformations/correction/closed_ring.jl")  end
 @safetestset "Intersecting Polygons" begin include("transformations/correction/intersecting_polygons.jl") end
 @safetestset "Antipodal Edge Split" begin include("transformations/correction/antipodal_edge_split.jl") end
+@safetestset "Crossing Edge Split" begin include("transformations/correction/crossing_edge_split.jl") end
 # Extensions
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end
