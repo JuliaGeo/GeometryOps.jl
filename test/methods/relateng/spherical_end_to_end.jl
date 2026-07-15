@@ -351,3 +351,67 @@ end
         [(-8., -3.), (-2., -3.), (-2., 3.), (-8., 3.), (-8., -3.)])])
     @test GO.contains(alg, left, inner)
 end
+
+# Containment parity is anchored at a DEFINITIONALLY exterior point (the
+# antipode of the ring's vertex mass), so a ring that self-intersects on the
+# sphere — the class `prepare` validation rejects — degrades to even-odd
+# semantics instead of inverting globally: both lobes of a figure-eight read
+# IN, everything else OUT, matching planar even-odd ray crossing (and what
+# S2Builder's undirected repair produces). The previous wedge-plus-winding
+# bootstrap answered with whichever lobe hosted the anchor edge, which on
+# real data (NE 110m Sudan) inverted every containment answer on the globe.
+@testset "self-crossing rings degrade even-odd, not inverted" begin
+    palg = RelateNG()
+    #-- an explicit self-crossing quadrilateral bowtie (crossing near (0,0))
+    #-- and an asymmetric variant (crossing near (-5.8, 0.3), unequal lobes)
+    bowtie = [(-10., -10.), (10., 10.), (10., -10.), (-10., 10.), (-10., -10.)]
+    skew = [(-20., -5.), (20., 10.), (20., -10.), (-20., 6.), (-20., -5.)]
+    cases = (
+        (bowtie, (8., 1.), (-8., -1.), (0., 5.), (0., -5.)),
+        (skew, (15., 0.), (-17., 0.), (0., 8.), (0., -8.)),
+    )
+    far = GI.Point(100., 40.)
+    for (pts, in_a, in_b, out_a, out_b) in cases, w in (pts, reverse(pts))
+        poly = GI.Polygon([GI.LinearRing(w)])
+        #-- even-odd: both lobes IN, between/far OUT, in both windings
+        @test GO.contains(alg, poly, GI.Point(in_a))
+        @test GO.contains(alg, poly, GI.Point(in_b))
+        @test !GO.intersects(alg, poly, GI.Point(out_a))
+        @test !GO.intersects(alg, poly, GI.Point(out_b))
+        @test !GO.intersects(alg, poly, far)
+        #-- and exact agreement with planar even-odd on the same probes
+        probes = (GI.Point(in_a), GI.Point(in_b), GI.Point(out_a), GI.Point(out_b), far)
+        for q in probes
+            @test GO.intersects(alg, poly, q) == GO.intersects(palg, poly, q)
+        end
+        #-- the indexed locator (prepared with validation bypassed — the
+        #-- build-time pole-anchor classification composes with the same
+        #-- parity) must agree with the unprepared exact scan
+        prep = GO.prepare(alg, poly; validate = false)
+        for q in probes
+            @test GO.relate(prep, q) == GO.relate(alg, poly, q)
+        end
+    end
+end
+
+# The definitional anchor degenerates for near-hemisphere/vertex-symmetric
+# rings (vertex mass ~ 0): those queries fall back to the wedge-plus-winding
+# bootstrap — for such rings the enclosed/complement distinction is itself
+# near-degenerate, and the fallback keeps the pre-existing behavior: an
+# exact-equator ring (every edge on ONE great circle) resolves boundary
+# queries exactly and refuses interior location with the documented
+# degenerate-ring error, unchanged.
+@testset "degenerate vertex mass falls back to the wedge bootstrap" begin
+    equator = [(0., 0.), (90., 0.), (180., 0.), (-90., 0.)]
+    usps = [GO.UnitSpherical.UnitSphereFromGeographic()(p) for p in equator]
+    @test GO.UnitSpherical.spherical_exterior_anchor(usps, 4) === nothing
+    hemi = GI.Polygon([GI.LinearRing([equator; [equator[1]]])])
+    @test GO.intersects(alg, hemi, GI.Point(45., 0.))            # boundary, exact
+    @test_throws ArgumentError GO.relate(alg, hemi, GI.Point(10., 45.))
+    #-- a ring 0.5° off the equator has a tiny but usable vertex mass: the
+    #-- parity path still answers, 89.5° from the anchor
+    near_eq = [(Float64(lon), 0.5) for lon in 0:30:360]
+    cap = GI.Polygon([GI.LinearRing(near_eq)])
+    @test GO.contains(alg, cap, GI.Point(0., 45.))
+    @test !GO.intersects(alg, cap, GI.Point(0., -45.))
+end
