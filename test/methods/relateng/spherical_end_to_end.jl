@@ -208,6 +208,109 @@ end
     end
 end
 
+# `Spherical(; oriented = true)`: ring directions are declared correct
+# (exterior rings CCW, interior rings CW), so the polygon interior is the
+# region on the LEFT of each ring's stored order (S2 InitOriented semantics)
+# — no winding is computed, and regions larger than a hemisphere become
+# representable. The default manifold keeps the enclosed-region reading
+# tested above.
+@testset "oriented manifold: winding is authoritative" begin
+    oalg = RelateNG(; manifold = Spherical(oriented = true))
+    sq(x0, y0, s) = [(x0, y0), (x0 + s, y0), (x0 + s, y0 + s), (x0, y0 + s), (x0, y0)]
+    ccw(pts...) = GI.Polygon([GI.LinearRing(p) for p in pts])
+
+    @testset "correctly wound data matches the unoriented mode" begin
+        A = ccw(sq(0., 40., 10.))
+        B = ccw(sq(5., 45., 10.))
+        @test GO.relate(oalg, A, B) == GO.relate(alg, A, B)
+        @test GO.contains(oalg, A, ccw(sq(2., 42., 2.)))
+        @test GO.touches(oalg, A, ccw(sq(10., 40., 10.)))
+        @test !GO.intersects(oalg, A, GI.Point(-90., -45.))
+    end
+
+    @testset "a CW shell denotes its complement" begin
+        Q = sq(0., 40., 10.)
+        C = ccw(reverse(Q))                       # the sphere minus the square
+        far = GI.Point(-90., -45.)
+        inside_sq = GI.Point(5., 45.)
+        @test GO.contains(oalg, C, far)
+        @test !GO.contains(oalg, C, inside_sq)
+        @test !GO.intersects(oalg, C, inside_sq)
+        @test GO.intersects(oalg, C, GI.Point(0., 45.))   # boundary point
+        # the square and its complement share a boundary and have disjoint
+        # interiors: they touch, and neither contains the other
+        @test GO.touches(oalg, ccw(Q), C)
+        @test !GO.contains(oalg, C, ccw(Q))
+        # the same CW ring under the default manifold is still the square
+        @test GO.contains(alg, C, inside_sq)
+        @test !GO.intersects(alg, C, far)
+    end
+
+    @testset "region larger than a hemisphere: sphere minus a polar cap" begin
+        cap_cw = [(0., 80.), (240., 80.), (120., 80.), (0., 80.)]
+        S = ccw(cap_cw)
+        @test GO.contains(oalg, S, GI.Point(0., -89.))    # opposite pole is interior
+        @test !GO.intersects(oalg, S, GI.Point(0., 89.))  # the cap is excluded
+        # containment of a whole mid-latitude polygon in the complement
+        eq_box = ccw(sq(0., -5., 10.))
+        @test GO.contains(oalg, S, eq_box)
+        @test GO.within(oalg, eq_box, S)
+        # a polygon straddling the cap boundary overlaps it
+        straddle = ccw(sq(-5., 75., 10.))
+        @test GO.relate(oalg, S, straddle, "T*T***T**")   # overlaps
+        # default manifold: the same ring is the cap
+        @test GO.contains(alg, S, GI.Point(0., 89.))
+        @test !GO.intersects(alg, S, GI.Point(0., -89.))
+    end
+
+    @testset "hole windings in both modes" begin
+        shell = sq(0., 30., 20.)
+        hole = sq(5., 35., 5.)
+        in_ring = GI.Point(2., 32.)    # inside the shell, outside the hole
+        in_hole = GI.Point(7., 37.)    # inside the hole cavity
+        donut = ccw(shell, reverse(hole))          # CCW shell + CW hole: the convention
+        @test GO.contains(oalg, donut, in_ring)
+        @test !GO.contains(oalg, donut, in_hole)
+        @test !GO.intersects(oalg, donut, in_hole)
+        # a CCW-wound "hole" removes the cavity's complement instead,
+        # leaving only the disk: (shell ∩ disk) = disk
+        weird = ccw(shell, hole)
+        @test GO.contains(oalg, weird, in_hole)
+        @test !GO.intersects(oalg, weird, in_ring)
+        # CW shell with a CW hole elsewhere: (sphere − Q) − R
+        Q, R = shell, sq(100., -20., 10.)
+        comp = ccw(reverse(Q), reverse(R))
+        @test GO.contains(oalg, comp, GI.Point(-90., -45.))
+        @test !GO.intersects(oalg, comp, in_ring)               # inside Q
+        @test !GO.intersects(oalg, comp, GI.Point(105., -15.))  # inside R
+        # the default manifold reads every winding combination as the
+        # enclosed regions (shapefile-convention CW shell + CCW hole too)
+        for s in (shell, reverse(shell)), h in (hole, reverse(hole))
+            shp = ccw(s, h)
+            @test GO.contains(alg, shp, in_ring)
+            @test !GO.contains(alg, shp, in_hole)
+            @test GO.relate(alg, shp, donut, "T*F**FFF*")       # topologically equal
+        end
+    end
+
+    @testset "oriented prepared point location agrees with unprepared" begin
+        polys = (
+            ccw([(0., 80.), (120., 80.), (240., 80.), (0., 80.)]),           # polar cap
+            ccw([(0., 80.), (240., 80.), (120., 80.), (0., 80.)]),           # sphere minus the cap
+            ccw([(170., -10.), (-170., -10.), (-170., 10.), (170., 10.), (170., -10.)]),  # antimeridian box
+            ccw(sq(0., 30., 20.), reverse(sq(5., 35., 5.))),                 # donut
+            ccw(reverse(sq(0., 30., 20.))),                                  # complement of a box
+        )
+        qs = [GI.Point(lon, lat) for lon in -180.0:30.0:180.0 for lat in -90.0:15.0:90.0]
+        push!(qs, GI.Point(180.0, 5.0), GI.Point(7.0, 37.0), GI.Point(2.0, 32.0))
+        for A in polys
+            prep = GO.prepare(oalg, A)
+            n_mismatch = count(q -> GO.relate(prep, q) != GO.relate(oalg, A, q), qs)
+            @test n_mismatch == 0
+        end
+    end
+end
+
 # Task 18: an exactly-antipodal edge has no unique great-circle arc; the kernel
 # refuses it at ingest with a message pointing at the AntipodalEdgeSplit remedy.
 @testset "spherical antipodal edge throws informatively" begin

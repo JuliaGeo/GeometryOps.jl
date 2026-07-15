@@ -15,7 +15,10 @@ function rk_point_on_segment(m::Planar, p, q0, q1; exact)
     return _collinear_between(p, q0, q1)
 end
 
-function rk_point_in_ring(m::Planar, p, ring; exact)
+#-- `is_hole` is consulted only by oriented spherical manifolds (see the
+#-- kernel contract); planar ray-crossing parity is winding- and
+#-- role-independent
+function rk_point_in_ring(m::Planar, p, ring; exact, is_hole::Bool = false)
     o = _point_filled_curve_orientation(m, p, ring; in = point_in, on = point_on, out = point_out, exact)
     o == point_in && return LOC_INTERIOR
     o == point_on && return LOC_BOUNDARY

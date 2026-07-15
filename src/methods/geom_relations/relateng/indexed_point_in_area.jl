@@ -315,7 +315,8 @@ end
 function _sph_rings_add_geom!(polys, m::Spherical, ::GI.PolygonTrait, poly; exact)
     GI.isempty(poly) && return nothing
     shell = SphericalKernelRing(m, GI.getexterior(poly); exact)
-    holes = [SphericalKernelRing(m, h; exact) for h in GI.gethole(poly) if !GI.isempty(h)]
+    holes = [SphericalKernelRing(m, h; exact, is_hole = true)
+             for h in GI.gethole(poly) if !GI.isempty(h)]
     push!(polys, _SphPolyRings(shell, holes))
     return nothing
 end
