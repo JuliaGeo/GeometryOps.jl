@@ -138,10 +138,12 @@ function _add_sections!(ael::AdjacentEdgeLocator, p, ring, sections::NodeSection
         p0 = ring[i]
         pnext = ring[i + 1]
 
-        if _equals2(p, pnext)
+        #-- kernel-point equality (all coordinates; the Java equals2D is
+        #-- planar-only — spherical kernel points can differ in z alone)
+        if p == pnext
             #-- segment final point is assigned to next segment
             continue
-        elseif _equals2(p, p0)
+        elseif p == p0
             iprev = i > 1 ? i - 1 : length(ring) - 1
             pprev = ring[iprev]
             add_node_section!(sections, _create_section(ael, p, pprev, pnext))

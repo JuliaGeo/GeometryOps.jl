@@ -327,3 +327,27 @@ end
     bad = GI.Polygon([GI.LinearRing([(0., 0.), (180., 0.), (90., 80.), (0., 0.)])])
     @test_throws ArgumentError GO.relate(alg, bad, GI.Point(10., 10.))
 end
+
+# Kernel points are 3D, so every coordinate comparison in the segment-string
+# machinery must compare all three components. Two vertices at mirror
+# latitudes on one meridian — e.g. (0, -5) and (0, 5) — share x and y on the
+# unit sphere and differ only in z; the planar 2D coordinate equality
+# (`_equals2`, Java's equals2D) read such a pair as a repeated point and
+# DELETED the second vertex at extraction, corrupting edge topology for any
+# ring with an equator-mirrored meridian edge.
+@testset "equator-mirrored meridian edges survive extraction" begin
+    left = GI.Polygon([GI.LinearRing(
+        [(-10., -5.), (0., -5.), (0., 5.), (-10., 5.), (-10., -5.)])])
+    right = GI.Polygon([GI.LinearRing(
+        [(0., -5.), (10., -5.), (10., 5.), (0., 5.), (0., -5.)])])
+    #-- the extracted shell must keep all its vertices
+    rg = GO.RelateGeometry(Spherical(), left; exact = GO.True())
+    ss = GO.extract_segment_strings(rg, GO.GEOM_A, nothing)
+    @test length(only(ss).pts) == 5
+    #-- shared-meridian neighbors: same DE-9IM as the planar engine
+    @test GO.touches(alg, left, right)
+    @test string(GO.relate(alg, left, right)) == string(GO.relate(left, right))
+    inner = GI.Polygon([GI.LinearRing(
+        [(-8., -3.), (-2., -3.), (-2., 3.), (-8., 3.), (-8., -3.)])])
+    @test GO.contains(alg, left, inner)
+end
