@@ -152,6 +152,32 @@ end
     @test e.Z[2] >= 1.0                                      # bounds reach the enclosed pole
 end
 
+# Prepared point location goes through the indexed spherical locator (the
+# longitude-interval edge index with meridian-arc crossing parity against a
+# pole anchor); unprepared location is the exact ring scan. End to end the
+# two must produce the same DE-9IM for every point, including the awkward
+# geometries: an antimeridian-straddling box (split index intervals), polar
+# caps over either pole (enclosed pole, polar-axis queries), and a shell
+# with the south pole on its boundary (the parity anchor falls back to the
+# north pole). The grid deliberately includes both poles, the ±180° seam,
+# and points on ring boundaries.
+@testset "prepared point location agrees with unprepared" begin
+    rings = (
+        [(170., -10.), (-170., -10.), (-170., 10.), (170., 10.), (170., -10.)],  # antimeridian box
+        [(0., 80.), (120., 80.), (240., 80.), (0., 80.)],                        # north polar cap
+        [(0., -80.), (120., -80.), (240., -80.), (0., -80.)],                    # south polar cap
+        [(0., -90.), (20., -60.), (-20., -60.), (0., -90.)],                     # south pole on boundary
+    )
+    qs = [GI.Point(lon, lat) for lon in -180.0:30.0:180.0 for lat in -90.0:15.0:90.0]
+    push!(qs, GI.Point(180.0, 5.0), GI.Point(175.0, 0.0), GI.Point(0.0, -70.0))
+    for pts in rings, w in (pts, reverse(pts))
+        A = GI.Polygon([GI.LinearRing(w)])
+        prep = GO.prepare(alg, A)
+        n_mismatch = count(q -> GO.relate(prep, q) != GO.relate(alg, A, q), qs)
+        @test n_mismatch == 0
+    end
+end
+
 # A ring may carry antipodal VERTEX pairs even though antipodal edges are
 # rejected at ingest — the AntipodalEdgeSplit output is exactly such a ring.
 # The Girard orientation fan must not run a chord through a vertex antipodal

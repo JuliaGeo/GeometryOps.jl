@@ -504,12 +504,12 @@ function locate_on_polygonal(loc::RelatePointLocator, p, is_node::Bool, parent_p
     if is_node && parent_polygonal === polygonal
         return LOC_BOUNDARY
     end
-    #-- prepared planar mode queries the y-interval indexed locator; the
-    #-- spherical path always goes through the cached per-element locator
-    #-- (kernel-space rings, so queries never reconvert vertices), which is
-    #-- the JTS shape too: Java's unprepared arm caches per-element
-    #-- SimplePointInAreaLocators in the same slot
-    if (loc.is_prepared && loc.m isa Planar) || loc.m isa Spherical
+    #-- prepared mode queries the interval-indexed locator (y-intervals on
+    #-- the plane, lon-intervals on the sphere); the spherical unprepared
+    #-- arm also goes through the cached per-element locator, in scan mode
+    #-- over its kernel-space rings — the JTS shape too: Java's unprepared
+    #-- arm caches per-element SimplePointInAreaLocators in the same slot
+    if loc.is_prepared || loc.m isa Spherical
         return locate(_get_poly_locator(loc, index), p)
     end
     return _locate_point_in_polygonal(loc.m, p, GI.trait(polygonal), polygonal; exact = loc.exact)
@@ -520,11 +520,18 @@ end
 function _get_poly_locator(loc::RelatePointLocator, index::Int)
     locator = loc.poly_locator[index]
     if locator === nothing
-        locator = IndexedPointInAreaLocator(loc.m, loc.polygons[index]; exact = loc.exact)
+        locator = _new_poly_locator(loc.m, loc.polygons[index], loc.is_prepared; exact = loc.exact)
         loc.poly_locator[index] = locator
     end
     return locator
 end
+
+_new_poly_locator(m::Manifold, geom, is_prepared::Bool; exact) =
+    IndexedPointInAreaLocator(m, geom; exact)
+#-- the spherical unprepared arm stays in scan mode: a one-shot query
+#-- cannot amortize the lon-interval index + pole-anchor build
+_new_poly_locator(m::Spherical, geom, is_prepared::Bool; exact) =
+    IndexedPointInAreaLocator(m, geom; exact, indexed = is_prepared)
 
 #=
 Port of the SimplePointInAreaLocator logic used by `locateOnPolygonal`
