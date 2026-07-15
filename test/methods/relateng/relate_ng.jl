@@ -926,3 +926,79 @@ end # @testset "RelateNGTest"
         @test !GO.equals(alg, pa, pb)
     end
 end
+
+# =========================================================================
+# `prepare` ring-crossing validation (GO-side; see the `prepare` docstring:
+# Spherical validates by default, Planar is opt-in)
+# =========================================================================
+
+@testset "prepare ring-crossing validation" begin
+    # a self-crossing quadrilateral bowtie: edges 1 and 3 cross properly
+    # near (0, 0) in both the planar and the great-circle reading
+    bowtie = GI.Polygon([GI.LinearRing(
+        [(-10.0, -10.0), (10.0, 10.0), (10.0, -10.0), (-10.0, 10.0), (-10.0, -10.0)])])
+    valid = GI.Polygon([GI.LinearRing(
+        [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)])])
+    salg = GO.RelateNG(; manifold = GO.Spherical())
+    palg = GO.RelateNG()
+
+    @testset "spherical validates by default, naming the edge pair" begin
+        err = try
+            GO.prepare(salg, bowtie)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("edge 1 crosses edge 3", err.msg)
+        @test occursin("CrossingEdgeSplit", err.msg)
+        #-- opting out accepts the geometry as-is
+        @test GO.prepare(salg, bowtie; validate = false) isa GO.PreparedRelate
+        #-- a valid ring passes validation
+        @test GO.prepare(salg, valid) isa GO.PreparedRelate
+    end
+
+    @testset "planar does not validate by default, and validates on opt-in" begin
+        @test GO.prepare(palg, bowtie) isa GO.PreparedRelate
+        @test_throws ArgumentError GO.prepare(palg, bowtie; validate = true)
+        @test GO.prepare(palg, valid; validate = true) isa GO.PreparedRelate
+    end
+
+    @testset "cross-ring crossings of one element are caught" begin
+        #-- a hole poking through its shell: two proper shell x hole crossings
+        poked = GI.Polygon([
+            GI.LinearRing([(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]),
+            GI.LinearRing([(5.0, 5.0), (15.0, 5.0), (15.0, 7.0), (5.0, 7.0), (5.0, 5.0)]),
+        ])
+        err = try
+            GO.prepare(salg, poked)
+            nothing
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test occursin("hole 1", err.msg)
+        #-- two separate polygons of a MultiPolygon may overlap: union
+        #-- semantics, not a per-element parity break — not flagged
+        overlapping = GI.MultiPolygon([valid,
+            GI.Polygon([GI.LinearRing(
+                [(5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0), (5.0, 5.0)])])])
+        @test GO.prepare(salg, overlapping) isa GO.PreparedRelate
+    end
+
+    @testset "tree-indexed join above the accelerator threshold" begin
+        #-- 48 segments > threshold: the prepared edge tree exists and the
+        #-- validation join runs through it. Swapping two consecutive
+        #-- vertices of a convex ring creates exactly one proper crossing.
+        n = 48
+        circ = [(10.0 + 8cosd(t), 45.0 + 5sind(t)) for t in range(0, 360; length = n + 1)]
+        ring_ok = GI.Polygon([GI.LinearRing(circ)])
+        swapped = copy(circ)
+        swapped[20], swapped[21] = swapped[21], swapped[20]
+        ring_crossed = GI.Polygon([GI.LinearRing(swapped)])
+        @test GO.prepare(salg, ring_ok) isa GO.PreparedRelate
+        @test_throws ArgumentError GO.prepare(salg, ring_crossed)
+        @test GO.prepare(salg, ring_crossed; validate = false) isa GO.PreparedRelate
+        @test_throws ArgumentError GO.prepare(palg, ring_crossed; validate = true)
+    end
+end

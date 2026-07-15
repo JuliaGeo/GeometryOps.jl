@@ -308,3 +308,24 @@ _canonical_segment(p, q) = _lex(p) <= _lex(q) ? (p, q) : (q, p)
     (min(GI.y(q0), GI.y(q1)) <= GI.y(p) <= max(GI.y(q0), GI.y(q1))) &&
     (!GI.is3d(p) || (min(GI.z(q0), GI.z(q1)) <= GI.z(p) <= max(GI.z(q0), GI.z(q1))))
 end
+
+# Whether the segments `(a0, a1)` and `(b0, b1)` cross PROPERLY — transversally,
+# interior to both — as a bare Bool (the yes/no core of `SS_PROPER`, without the
+# incidence bookkeeping of `rk_classify_intersection`). Manifold-generic: a
+# strict mutual-straddle prefilter of four `rk_orient` signs (adaptive-exact, so
+# clearly-separated pairs — the overwhelming majority in a validation or repair
+# sweep — resolve in the float stage; any shared endpoint zeroes a sign and
+# returns `false`, which is what excludes adjacent ring edges) and, for the
+# rare survivors, the manifold's authoritative classification (on `Spherical`
+# mutual straddle alone is NOT sufficient: two arcs can straddle each other's
+# great circles yet meet only at the antipodal candidate). Used by the
+# `prepare` ring-validation join and the `CrossingEdgeSplit` correction.
+function _edges_cross_properly(m::Manifold, a0, a1, b0, b1; exact)
+    ob0 = rk_orient(m, a0, a1, b0; exact)
+    ob1 = rk_orient(m, a0, a1, b1; exact)
+    (ob0 > 0 && ob1 < 0) || (ob0 < 0 && ob1 > 0) || return false
+    oa0 = rk_orient(m, b0, b1, a0; exact)
+    oa1 = rk_orient(m, b0, b1, a1; exact)
+    (oa0 > 0 && oa1 < 0) || (oa0 < 0 && oa1 > 0) || return false
+    return rk_classify_intersection(m, a0, a1, b0, b1; exact).kind == SS_PROPER
+end
