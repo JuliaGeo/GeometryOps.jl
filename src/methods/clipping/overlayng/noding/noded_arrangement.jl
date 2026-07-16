@@ -50,17 +50,24 @@ NodeTable{P}() where {P} =
 
 num_nodes(t::NodeTable) = length(t.keys)
 
-# Intern a key, returning its node id (tier-1 egal merge). New ids grow the
-# lazily-realized coordinate cache with a placeholder.
+# Intern a key, returning its node id (tier-1 egal merge). The output-coordinate
+# cache is an emission concern (`_ensure_coord_cache!`), not grown here.
 function _intern_node!(t::NodeTable{P}, key::NodeKey{P}) where {P}
     id = get(t.ids, key, Int32(0))
     id != 0 && return id
     push!(t.keys, key)
-    push!(t.coords, (0.0, 0.0))
-    push!(t.realized, false)
     id = Int32(length(t.keys))
     t.ids[key] = id
     return id
+end
+
+# Size the (lazily-realized) output-coordinate cache to the final node count.
+# Called once after splitting, so noding itself never touches it.
+function _ensure_coord_cache!(t::NodeTable)
+    n = length(t.keys)
+    t.coords = Vector{Tuple{Float64, Float64}}(undef, n)
+    t.realized = fill(false, n)
+    return nothing
 end
 
 """
@@ -139,5 +146,6 @@ function NodedArrangement(m::Manifold,
     _merge_coincident_nodes!(m, table, seg_nodes; exact)
     # stages 2 + 4
     edges = _split_edges!(m, table, seg_nodes, segstrings; exact)
+    _ensure_coord_cache!(table)
     return NodedArrangement{P}(segstrings, table, seg_nodes, edges)
 end

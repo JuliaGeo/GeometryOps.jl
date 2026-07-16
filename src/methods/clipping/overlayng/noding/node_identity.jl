@@ -39,7 +39,17 @@ function _merge_coincident_nodes!(m::Manifold, table::NodeTable{P}, seg_nodes; e
     end
     parent = collect(Int32(1):Int32(n))
     #-- tier-2 confirmation sweep (manifold-specific proximity geometry)
-    _coincidence_sweep!(m, table, parent; exact)
+    nmerges = _coincidence_sweep!(m, table, parent; exact)
+    if nmerges == 0
+        #-- the overwhelmingly common case (S1: zero coincidences on real data):
+        #-- no ids collapse, so skip the O(n) key-rehash compaction entirely.
+        #-- Only the interior lists need deduping (a node reported by several pairs);
+        #-- the coordinate cache is sized later by `_ensure_coord_cache!`.
+        for (seg, nids) in seg_nodes
+            seg_nodes[seg] = unique(nids)
+        end
+        return nothing
+    end
 
     #-- compact: provisional id -> final id, representative = first-seen member
     remap = Vector{Int32}(undef, n)
@@ -62,9 +72,7 @@ function _merge_coincident_nodes!(m::Manifold, table::NodeTable{P}, seg_nodes; e
         table.ids[k] = remap[oldid]
     end
     table.keys = final_keys
-    nf = length(final_keys)
-    table.coords = fill((0.0, 0.0), nf)
-    table.realized = fill(false, nf)
+    #-- coords/realized are sized once after splitting (`_ensure_coord_cache!`)
 
     #-- rewrite the interior node lists through the remap, deduping ids a merge
     #-- collapsed together (order is re-established in `split.jl`)
@@ -99,6 +107,7 @@ function _coincidence_sweep!(m::Planar, table::NodeTable{P}, parent; exact) wher
         rad[i] = k.is_crossing ? 1e-8 * max(1.0, abs(x), abs(y)) : 0.0
     end
     order = sortperm(xs)
+    nmerges = 0
     @inbounds for a in 1:n
         i = order[a]
         for b in (a + 1):n
@@ -107,11 +116,12 @@ function _coincidence_sweep!(m::Planar, table::NodeTable{P}, parent; exact) wher
             xs[j] - xs[i] > rr && break
             abs(ys[i] - ys[j]) > rr && continue
             _uf_find(parent, Int32(i)) == _uf_find(parent, Int32(j)) && continue
-            rk_nodes_coincide(m, table.keys[i], table.keys[j]; exact) &&
-                _uf_union!(parent, Int32(i), Int32(j))
+            if rk_nodes_coincide(m, table.keys[i], table.keys[j]; exact)
+                _uf_union!(parent, Int32(i), Int32(j)); nmerges += 1
+            end
         end
     end
-    return nothing
+    return nmerges
 end
 
 # Spherical proximity sweep: same shape over the (float, normalized) crossing
@@ -129,6 +139,7 @@ function _coincidence_sweep!(m::Spherical, table::NodeTable{P}, parent; exact) w
     #-- direction error, so no true coincidence is missed
     rr = 1e-11
     order = sortperm(xs)
+    nmerges = 0
     @inbounds for a in 1:n
         i = order[a]
         for b in (a + 1):n
@@ -141,9 +152,10 @@ function _coincidence_sweep!(m::Spherical, table::NodeTable{P}, parent; exact) w
             cz = di[1] * dj[2] - di[2] * dj[1]
             (dotp > 0 && sqrt(cx^2 + cy^2 + cz^2) <= rr) || continue
             _uf_find(parent, Int32(i)) == _uf_find(parent, Int32(j)) && continue
-            rk_nodes_coincide(m, table.keys[i], table.keys[j]; exact) &&
-                _uf_union!(parent, Int32(i), Int32(j))
+            if rk_nodes_coincide(m, table.keys[i], table.keys[j]; exact)
+                _uf_union!(parent, Int32(i), Int32(j)); nmerges += 1
+            end
         end
     end
-    return nothing
+    return nmerges
 end
