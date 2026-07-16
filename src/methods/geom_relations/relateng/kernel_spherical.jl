@@ -419,6 +419,36 @@ function rk_nodes_coincide(::Spherical, k1::NodeKey, k2::NodeKey; exact)
     return _iszero3(_cross3(d1, d2)) && _dot3(d1, d2) > 0
 end
 
+# ## Node ordering along an arc (design §2.5)
+#
+# Two nodes on the minor arc (s0, s1) are ordered by the sign of the
+# discriminant `(da × db) · N`, `N = s0 × s1` the arc's plane normal and `da`,
+# `db` the nodes' on-sphere directions (`_exact_node_dir`): `da` precedes `db`
+# along `s0 → s1` iff the discriminant is positive (both directions lie strictly
+# interior to the minor arc, so they sit in the half where `N` points out of the
+# turning plane). The float filter uses the `False()` (Float64) directions; it
+# is trusted only when `|disc|` clears a conditioning-inflated bound (a
+# near-tangent crossing has a large-error direction and must escalate). The exact
+# fallback recomputes the discriminant over `Rational{BigInt}` directions.
+function rk_compare_along_segment(m::Spherical, s0, s1, na::NodeKey, nb::NodeKey; exact)
+    S0 = _vec3(False(), s0); S1 = _vec3(False(), s1)
+    N = _cross3(S0, S1)
+    da = _exact_node_dir(False(), na); db = _exact_node_dir(False(), nb)
+    disc = _dot3(_cross3(da, db), N)
+    #-- |disc| ≈ |da||db||N| sin(Δ); the directions carry ≲ few·ulp relative
+    #-- error (unit-ish vectors), amplified for crossing nodes by their arc
+    #-- geometry. 64 ulp of the product magnitude is a conservative escalation
+    #-- trigger — coincident/near-coincident pairs fall to the exact path.
+    mag = sqrt(_dot3(da, da) * _dot3(db, db) * _dot3(N, N))
+    tol = 64 * eps(Float64) * mag
+    abs(disc) > tol && return disc > 0 ? -1 : 1
+    #-- exact fallback (lazy): rational directions, exact for Float64 inputs.
+    Se0 = _vec3(True(), s0); Se1 = _vec3(True(), s1); Ne = _cross3(Se0, Se1)
+    ea = _exact_node_dir(True(), na); eb = _exact_node_dir(True(), nb)
+    o = _dot3(_cross3(ea, eb), Ne)
+    return o > 0 ? -1 : (o < 0 ? 1 : 0)
+end
+
 # ## Ring orientation
 
 #=

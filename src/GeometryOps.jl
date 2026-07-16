@@ -123,6 +123,14 @@ include("methods/geom_relations/relateng/topology_computer.jl")
 include("methods/geom_relations/relateng/edge_intersector.jl")
 # The RelateNG engine: drives all of the above through the phased evaluation.
 include("methods/geom_relations/relateng/relate_ng.jl")
+
+# OverlayNG noding substrate (phase 1): geometries → exactly-noded arrangement.
+include("methods/clipping/overlayng/noding/noded_arrangement.jl")
+include("methods/clipping/overlayng/noding/collect.jl")
+include("methods/clipping/overlayng/noding/node_identity.jl")
+include("methods/clipping/overlayng/noding/split.jl")
+include("methods/clipping/overlayng/noding/emit.jl")
+
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")

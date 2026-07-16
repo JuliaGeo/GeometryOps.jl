@@ -725,6 +725,6 @@ end
 # BigFloat's default precision is deterministic, though not strictly
 # correctly rounded).
 function _crossing_locate_point(key::NodeKey)
-    xr, yr = _exact_crossing_point(key.pt, key.a1, key.b0, key.b1)
+    xr, yr = _exact_crossing_point(key)
     return (Float64(BigFloat(xr)), Float64(BigFloat(yr)))
 end

@@ -105,6 +105,19 @@ constructed apex coordinate; foreign directions (incident edges of a D3
 coincidence-merged node, from other segment pairs crossing at the same
 point) are compared exactly around the rational apex (slow path).
 
+    rk_compare_along_segment(m, s0, s1, na, nb; exact)::Int
+
+Order of two nodes `na`, `nb` (`NodeKey`s, both lying on the oriented segment
+`(s0, s1)`) along that segment: negative / zero / positive as `na` precedes /
+coincides with / follows `nb` in the direction `s0 → s1`. Node ordering for
+the noding substrate (OverlayNG phase 1, design §2.5). A certified Float64
+filter decides the pair when the approximate along-segment gap exceeds its
+error bound; only otherwise is the exact key computed — planar via
+`Rational{BigInt}` parameters from `_exact_crossing_point`, spherical via
+triple-product signs against `_sph_crossing_dir` directions. Returning `0`
+means the nodes coincide, which cannot happen for distinct node ids after
+node-identity merging (design §2.4) has run — callers assert this.
+
     rk_crossing_dirs_ccw(m, a0, a1, b0, b1; exact)
 
 CCW cyclic order of the four half-edge directions incident to the proper
