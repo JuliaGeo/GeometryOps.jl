@@ -250,7 +250,7 @@ function rk_compare_edge_dir(m::Planar, node::NodeKey, p, q; exact)
     around the exact rational apex instead (slow path; only reachable on
     the rare self-noding merge path).
     =#
-    apex = _exact_crossing_point(node.pt, node.a1, node.b0, node.b1)
+    apex = _exact_crossing_point(node)
     return _compare_angle_exact(apex, p, q)
 end
 
@@ -324,14 +324,84 @@ function _exact_crossing_point(a0, a1, b0, b1)
     return (ax0 + t * dax, ay0 + t * day)
 end
 
+# NodeKey call shape of the exact-crossing authority (design §2.6): one shape
+# consumed by node-ordering keys, coincidence, and emission fallback. A crossing
+# node keys its defining pair in `(pt, a1)`/`(b0, b1)`.
+_exact_crossing_point(k::NodeKey) = _exact_crossing_point(k.pt, k.a1, k.b0, k.b1)
+
 _exact_node_point(k::NodeKey) = k.is_crossing ?
-    _exact_crossing_point(k.pt, k.a1, k.b0, k.b1) :
+    _exact_crossing_point(k) :
     (Rational{BigInt}(GI.x(k.pt)), Rational{BigInt}(GI.y(k.pt)))
 
 function rk_nodes_coincide(::Planar, k1::NodeKey, k2::NodeKey; exact)
     k1 == k2 && return true
     # Slow path (design D3, follow-up F1): exact rational comparison.
     return _exact_node_point(k1) == _exact_node_point(k2)
+end
+
+# ## Node ordering along a segment (design §2.5)
+
+# Float64 crossing solve without the rational lift: the *filter* seed shared by
+# node ordering (`rk_compare_along_segment`), coincidence proximity
+# (node_identity), and the emission fast path (design §2.4/§2.6). Returns the
+# approximate crossing coordinate together with `condK`, the determinant
+# conditioning `(|dax·dby| + |day·dbx|) / |denom|` — near-parallel pairs (small
+# `|denom|`) get a large `condK`, which every consumer folds into its error
+# bound so the certified filter escalates instead of trusting the approximation.
+@inline function _approx_crossing_point(a0, a1, b0, b1)
+    ax0, ay0 = Float64(GI.x(a0)), Float64(GI.y(a0))
+    ax1, ay1 = Float64(GI.x(a1)), Float64(GI.y(a1))
+    bx0, by0 = Float64(GI.x(b0)), Float64(GI.y(b0))
+    bx1, by1 = Float64(GI.x(b1)), Float64(GI.y(b1))
+    dax, day = ax1 - ax0, ay1 - ay0
+    dbx, dby = bx1 - bx0, by1 - by0
+    denom = dax * dby - day * dbx           # nonzero for a proper crossing
+    t = ((bx0 - ax0) * dby - (by0 - ay0) * dbx) / denom
+    condK = (abs(dax * dby) + abs(day * dbx)) / max(abs(denom), floatmin(Float64))
+    return (ax0 + t * dax, ay0 + t * day, condK)
+end
+
+# Approximate coordinate of a node key (crossing: the float solve; vertex: the
+# exact input coordinate) with a conservative absolute position error radius.
+@inline function _approx_node_point(k::NodeKey)
+    if !k.is_crossing
+        return (Float64(GI.x(k.pt)), Float64(GI.y(k.pt)), 0.0)
+    end
+    x, y, condK = _approx_crossing_point(k.pt, k.a1, k.b0, k.b1)
+    #-- position error ~ (1 + conditioning) ulp of the coordinate magnitude; the
+    #-- 8× cushion covers the handful of rounding ops in the float solve above
+    err = 8 * eps(Float64) * (1.0 + condK) * (abs(x) + abs(y) + 1.0)
+    return (x, y, err)
+end
+
+# Order two nodes along the oriented segment (s0, s1). The along parameter is
+# the projection onto the segment direction `d = s1 - s0`; the float gap is
+# trusted only when it exceeds the summed projected position errors plus the
+# dot-product rounding (the certified filter). Otherwise the exact rational
+# parameters decide (design §2.5). Zero means the nodes coincide.
+function rk_compare_along_segment(m::Planar, s0, s1, na::NodeKey, nb::NodeKey; exact)
+    s0x, s0y = Float64(GI.x(s0)), Float64(GI.y(s0))
+    dx = Float64(GI.x(s1)) - s0x
+    dy = Float64(GI.y(s1)) - s0y
+    scale = abs(dx) + abs(dy)
+    xa, ya, ea = _approx_node_point(na)
+    xb, yb, eb = _approx_node_point(nb)
+    ta = (xa - s0x) * dx + (ya - s0y) * dy
+    tb = (xb - s0x) * dx + (yb - s0y) * dy
+    #-- projected position error (ea, eb) times |d| ≈ scale, plus the ~4 ulp of
+    #-- the two subtract/multiply/add chains that form each parameter
+    tol = (ea + eb) * scale + 8 * eps(Float64) * (abs(ta) + abs(tb) + scale * scale)
+    gap = tb - ta
+    abs(gap) > tol && return gap < 0 ? 1 : -1
+    #-- exact fallback (lazy): rational along-parameters, exact since Float64 are
+    #-- dyadic. Reached only for pairs the filter cannot separate.
+    R = Rational{BigInt}
+    dxr = R(GI.x(s1)) - R(GI.x(s0)); dyr = R(GI.y(s1)) - R(GI.y(s0))
+    s0xr = R(GI.x(s0)); s0yr = R(GI.y(s0))
+    pa = _exact_node_point(na); pb = _exact_node_point(nb)
+    tar = (pa[1] - s0xr) * dxr + (pa[2] - s0yr) * dyr
+    tbr = (pb[1] - s0xr) * dxr + (pb[2] - s0yr) * dyr
+    return tar < tbr ? -1 : (tar > tbr ? 1 : 0)
 end
 
 #=
