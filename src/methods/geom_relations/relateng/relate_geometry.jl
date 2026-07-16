@@ -603,6 +603,21 @@ _ring_interior_on_left(m, pts::Vector, is_hole::Bool; exact) =
     _ring_is_ccw(m, pts; exact)
 
 #=
+The polygon's **material-interior** side of a ring, as opposed to the ring's
+denoted region (`_ring_interior_on_left`). For a shell the denoted region *is*
+the material interior; for a hole the denoted region is the cavity, so the
+material interior is on the opposite side — one flip, defined exactly once so
+relate, overlay, and extents agree by construction (OverlayNG design §2.7).
+Overlay labeling derives JTS `Edge.depth_delta` from this
+(`material_interior_on_left ? -1 : +1`, matching JTS `locationLeft/Right`:
+a positive delta means Left = EXTERIOR, Right = INTERIOR). Manifold-generic:
+it delegates to the manifold-dispatched `_ring_interior_on_left`.
+=#
+_ring_material_interior_on_left(m, pts::Vector, is_hole::Bool; exact) =
+    is_hole ? !_ring_interior_on_left(m, pts, is_hole; exact) :
+               _ring_interior_on_left(m, pts, is_hole; exact)
+
+#=
 Port of JTS `Orientation.isCCW(CoordinateSequence)` with the orientation
 index routed through the kernel (`rk_orient`): whether the closed `ring`
 (repeated end point required) is counterclockwise. Returns `false` for flat
