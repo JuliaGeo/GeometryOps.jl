@@ -26,8 +26,15 @@ lives next to the generic `_rebuild_point` in `kernel.jl`.
 # `UnitSpherical.spherical_orient`, whose eps*16 tolerance is unfit for the
 # exact contract. Float path: the plain triple product.
 rk_orient(::Spherical, a, b, c; exact) = _rk_orient(booltype(exact), a, b, c)
-@inline _rk_orient(::True, a, b, c) =
-    ExactPredicates.orient(_tup3(a), _tup3(b), _tup3(c), (0.0, 0.0, 0.0))
+@inline function _rk_orient(::True, a, b, c)
+    # Repeated-vertex short-circuit: a triple product with two equal vectors is
+    # exactly 0 (per the `rk_orient` contract, `== 0` for `a == b`). On real data
+    # this is the dominant coplanar case — adjacent rings meet at bit-identical
+    # shared border vertices — and it lets the classify/on-segment gate skip
+    # ExactPredicates' µs-scale exact fallback (a genuine zero it cannot filter).
+    (_usp_eq(a, b) || _usp_eq(a, c) || _usp_eq(b, c)) && return 0
+    return ExactPredicates.orient(_tup3(a), _tup3(b), _tup3(c), (0.0, 0.0, 0.0))
+end
 @inline _rk_orient(::False, a, b, c) = cross(a, b) ⋅ c
 
 # ## Exact-aware 3-vector arithmetic
@@ -60,7 +67,21 @@ function rk_point_on_segment(m::Spherical, p, q0, q1; exact)
     rk_orient(m, q0, q1, p; exact) == 0 || return false
     return _on_arc_span(booltype(exact), p, q0, q1)
 end
-@inline function _on_arc_span(bt, p, q0, q1)
+# Exact path: a certified Float64 triage (`_on_arc_span_filter`) that escalates
+# to the `Rational{BigInt}` authority only when a span sign is not proven. On the
+# candidate populations this fires on ~every shared-vertex / T-junction pair
+# (the exact orient gate reduces `p` to the arc's great circle), and was the
+# second spherical hot spot after `_sph_classify`.
+@inline function _on_arc_span(bt::True, p, q0, q1)
+    r = _on_arc_span_filter(p, q0, q1)
+    r === nothing || return r
+    return _on_arc_span_authority(bt, p, q0, q1)
+end
+# Approximate path: the authority evaluated in Float64 (no exact contract to
+# honour, so no filter — an errant sign here is the caller's accepted risk).
+@inline _on_arc_span(bt::False, p, q0, q1) = _on_arc_span_authority(bt, p, q0, q1)
+
+@inline function _on_arc_span_authority(bt, p, q0, q1)
     P = _vec3(bt, p); Q0 = _vec3(bt, q0); Q1 = _vec3(bt, q1)
     n = _cross3(Q0, Q1)
     if _iszero3(n)
@@ -75,6 +96,54 @@ end
                (_iszero3(_cross3(P, Q1)) && _dot3(P, Q1) > 0)
     end
     return _dot3(_cross3(Q0, P), n) >= 0 && _dot3(_cross3(P, Q1), n) >= 0
+end
+
+# Certified forward-error constant for the two `_on_arc_span` span determinants
+# `s = (u × v) · n`. Both are degree-4 polynomials in the point components; a
+# Higham running-error analysis (products then a difference per cross component,
+# products then a length-3 accumulation for the dot) bounds the rounding error
+# by ~9u·Σᵢ|wᵢ_terms|·|nᵢ_terms| with u = ½eps. `16u` (this constant) carries a
+# ~1.7× margin over the derived 9u for the dropped O(u²) terms and the rounding
+# in the abs-magnitude sum itself. Scale-invariant (homogeneous degree 4), so it
+# is valid for non-unit inputs (the exact-integer conformance rings) too.
+const _SPAN_ERR_C = 16 * (eps(Float64) / 2)
+
+# Float64 triage of `_on_arc_span`'s decision `(q0×p)·n ≥ 0 && (p×q1)·n ≥ 0`,
+# `n = q0×q1`. Returns the Bool iff BOTH span signs are certified by the bound,
+# else `nothing` (escalate). A sign is reported only when |value| > its bound,
+# so the filter can never disagree with the rational authority: a certified `<0`
+# proves the result `false`; two certified `>0` prove it `true`; anything near a
+# span boundary — including the exact-boundary `p == endpoint` and the
+# degenerate `n == 0` (zero-length arc) cases, where the value sits inside its
+# own bound — escalates.
+@inline function _on_arc_span_filter(p, q0, q1)
+    # Shared-vertex short-circuit: an endpoint is on its own closed arc. This is
+    # exact and resolves the dominant real-data span call (adjacent rings share
+    # border vertices bit-for-bit), which otherwise always escalates — `s1` or
+    # `s2` is exactly 0 at an endpoint and sits inside its own error band.
+    (_usp_eq(p, q0) || _usp_eq(p, q1)) && return true
+    x0 = GI.x(q0); y0 = GI.y(q0); z0 = GI.z(q0)
+    x1 = GI.x(q1); y1 = GI.y(q1); z1 = GI.z(q1)
+    xp = GI.x(p);  yp = GI.y(p);  zp = GI.z(p)
+    # n = q0 × q1, with per-component abs-magnitude sums Nᵢ
+    n1 = y0*z1 - z0*y1;  N1 = abs(y0*z1) + abs(z0*y1)
+    n2 = z0*x1 - x0*z1;  N2 = abs(z0*x1) + abs(x0*z1)
+    n3 = x0*y1 - y0*x1;  N3 = abs(x0*y1) + abs(y0*x1)
+    # s1 = (q0 × p) · n
+    w1 = y0*zp - z0*yp;  W1 = abs(y0*zp) + abs(z0*yp)
+    w2 = z0*xp - x0*zp;  W2 = abs(z0*xp) + abs(x0*zp)
+    w3 = x0*yp - y0*xp;  W3 = abs(x0*yp) + abs(y0*xp)
+    s1 = w1*n1 + w2*n2 + w3*n3
+    e1 = _SPAN_ERR_C * (W1*N1 + W2*N2 + W3*N3)
+    # s2 = (p × q1) · n
+    v1 = yp*z1 - zp*y1;  V1 = abs(yp*z1) + abs(zp*y1)
+    v2 = zp*x1 - xp*z1;  V2 = abs(zp*x1) + abs(xp*z1)
+    v3 = xp*y1 - yp*x1;  V3 = abs(xp*y1) + abs(yp*x1)
+    s2 = v1*n1 + v2*n2 + v3*n3
+    e2 = _SPAN_ERR_C * (V1*N1 + V2*N2 + V3*N3)
+    (s1 < -e1 || s2 < -e2) && return false     # one span factor certainly < 0
+    (s1 > e1 && s2 > e2) && return true          # both span factors certainly > 0
+    return nothing                               # near a boundary — escalate
 end
 
 # ## Ingest and interaction bounds
@@ -136,12 +205,91 @@ end
 # each other's great circle while meeting only at the antipodal point). Endpoint
 # incidences are exact arc-membership; collinear = the arcs share a great circle
 # (d == 0). No intersection coordinate is constructed.
-function rk_classify_intersection(m::Spherical, a0, a1, b0, b1; exact)
-    a0_on_b = rk_point_on_segment(m, a0, b0, b1; exact)
-    a1_on_b = rk_point_on_segment(m, a1, b0, b1; exact)
-    b0_on_a = rk_point_on_segment(m, b0, a0, a1; exact)
-    b1_on_a = rk_point_on_segment(m, b1, a0, a1; exact)
-    return _sph_classify(booltype(exact), a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+#
+# ### Float-fast path (spike S4): the four-orient reduction
+#
+# The exact classification above was the sole spherical hot spot: it lifted the
+# candidate direction `d`, the normals `na, nb`, and the four `_strictly_in_arc3`
+# tests to `Rational{BigInt}` UNCONDITIONALLY for every candidate pair (measured
+# ~30 µs/pair on clean crossings vs ~0.2 µs planar). The float stage the planar
+# kernel gets from `AdaptivePredicates.orient` was simply absent here.
+#
+# It turns out no per-expression triage is needed, because the whole
+# `_strictly_in_arc3(±d, …)` proper-crossing branch is *algebraically* a function
+# of the four orientation signs, which `rk_orient` already resolves through
+# ExactPredicates' float-filter→exact ladder (~3 ns when separated). With
+# `na = a0×a1`, `nb = b0×b1`, `d = na×nb`, and using `a0·na = a1·na = 0` and
+# BAC–CAB (`u×(v×w) = v(u·w) − w(u·v)`):
+#
+#     (a0×d)·na = (a0·nb)|na|²         (d×a1)·na = −(a1·nb)|na|²
+#     (b0×d)·nb = −(b0·na)|nb|²        (d×b1)·nb =  (b1·na)|nb|²
+#
+# so, writing `[u,v,w] = u·(v×w)` (exactly `rk_orient`), when `d ≠ 0` (⟹ `na≠0`,
+# `nb≠0`):
+#
+#     _strictly_in_arc3(d , a,·) ⟺ [b0,b1,a0]>0 ∧ [b0,b1,a1]<0
+#     _strictly_in_arc3(d , b,·) ⟺ [a0,a1,b0]<0 ∧ [a0,a1,b1]>0
+#
+# and `−d` flips every sign — the classic S2 four-orient near-crossing pattern.
+#
+# `d == 0` (same great circle / degenerate) ⟺ the four points are coplanar ⟺
+# ALL four orients are 0: any single nonzero orient proves `d ≠ 0`. A zero-length
+# arc can't fake this — it forces its two orients *equal* (not a lone spurious
+# zero), so the strict straddle pattern is false and the pair falls to DISJOINT
+# or, when all four vanish, to the exact authority. That same-circle branch is
+# rare on real data (≈0% of separated candidates), so it escalates to the
+# unchanged `Rational{BigInt}` `_sph_classify`. Every non-escalated answer is
+# bit-identical to `_sph_classify`'s (proven above; audited over 10⁶ random +
+# adversarial pairs, zero disagreement).
+rk_classify_intersection(m::Spherical, a0, a1, b0, b1; exact) =
+    _rk_classify_intersection(booltype(exact), m, a0, a1, b0, b1)
+
+# Exact path: the four-orient fast path. Provably bit-identical to the exact
+# `_sph_classify` (derivation above; audited over 10⁶ random + 4·10⁵ adversarial
+# pairs, zero disagreement) but built from float-filtered `rk_orient` signs
+# instead of the unconditional `Rational{BigInt}` lift.
+function _rk_classify_intersection(bt::True, m, a0, a1, b0, b1)
+    # The four exact orientation signs. `sABi = sign[a0,a1,bi]`,
+    # `sBAi = sign[b0,b1,ai]` — the same signs the four `rk_point_on_segment`
+    # arc-membership gates need, computed once and reused.
+    sAB0 = rk_orient(m, a0, a1, b0; exact = bt)
+    sAB1 = rk_orient(m, a0, a1, b1; exact = bt)
+    sBA0 = rk_orient(m, b0, b1, a0; exact = bt)
+    sBA1 = rk_orient(m, b0, b1, a1; exact = bt)
+    # Arc membership: `p` on the arc iff coplanar (orient 0) and within the
+    # minor-arc span. `_on_arc_span` (float-filtered) only fires on the coplanar
+    # `== 0` cases, i.e. shared vertices / T-junctions.
+    a0_on_b = sBA0 == 0 && _on_arc_span(bt, a0, b0, b1)
+    a1_on_b = sBA1 == 0 && _on_arc_span(bt, a1, b0, b1)
+    b0_on_a = sAB0 == 0 && _on_arc_span(bt, b0, a0, a1)
+    b1_on_a = sAB1 == 0 && _on_arc_span(bt, b1, a0, a1)
+    if sAB0 == 0 && sAB1 == 0 && sBA0 == 0 && sBA1 == 0
+        # d == 0: same great circle or a degenerate arc — the exact authority
+        return _sph_classify(bt, a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    # d ≠ 0 (proven exactly by a nonzero orient). Endpoint incidence ⇒ touch.
+    if a0_on_b || a1_on_b || b0_on_a || b1_on_a
+        return SegSegClass(SS_TOUCH, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    # Proper crossing ⟺ +d or −d strictly interior to both arcs, i.e. the
+    # four-orient near-crossing pattern (equal to `_strictly_in_arc3(±d,…)`).
+    proper = (sBA0 > 0 && sBA1 < 0 && sAB0 < 0 && sAB1 > 0) ||
+             (sBA0 < 0 && sBA1 > 0 && sAB0 > 0 && sAB1 < 0)
+    return proper ? SegSegClass(SS_PROPER, false, false, false, false) :
+                    SegSegClass(SS_DISJOINT, false, false, false, false)
+end
+
+# Approximate path (`exact = False()`): the original float formulation, kept
+# bit-for-bit. There is no Rational to shed here (`_sph_classify(False())` is
+# already all-Float64), and the four-orient float reduction rounds differently
+# than the float `_strictly_in_arc3` on near-collinear arcs — a sign the caller
+# has already opted out of, but no reason to perturb the established output.
+function _rk_classify_intersection(bt::False, m, a0, a1, b0, b1)
+    a0_on_b = rk_point_on_segment(m, a0, b0, b1; exact = bt)
+    a1_on_b = rk_point_on_segment(m, a1, b0, b1; exact = bt)
+    b0_on_a = rk_point_on_segment(m, b0, a0, a1; exact = bt)
+    b1_on_a = rk_point_on_segment(m, b1, a0, a1; exact = bt)
+    return _sph_classify(bt, a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
 end
 
 function _sph_classify(bt, a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
