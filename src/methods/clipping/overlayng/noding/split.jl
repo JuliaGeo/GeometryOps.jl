@@ -2,7 +2,7 @@
 #
 # For every parent segment of every string, order its interior nodes along the
 # segment (stage 2, `rk_compare_along_segment`), cap the chain with the segment's
-# endpoint vertex nodes, and emit one [`NodedEdge`](@ref) per non-degenerate link
+# endpoint vertex nodes, and emit one `NodedEdge` per non-degenerate link
 # (stage 4). Interior node lists are already deduped by `node_identity.jl`; the
 # consecutive-dedup here guards the endpoint↔interior joins.
 #

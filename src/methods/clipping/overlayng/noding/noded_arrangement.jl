@@ -4,7 +4,7 @@
 # Nodes two input geometries into a shared, exactly-noded edge arrangement with
 # **symbolic** node identity: node identity, ordering, and coincidence are decided
 # by exact kernel predicates over the input vertices and the symbolic crossing
-# keys ([`NodeKey`](@ref)); Float64 appears only as certified filters and at
+# keys (`NodeKey`); Float64 appears only as certified filters and at
 # emission. There is no snapping, no tolerance in any decision (design §0).
 #
 # The pipeline is four stages over the reused RelateNG substrate:
@@ -34,7 +34,7 @@ mapping every known key to its node id; after tier-2 merging it maps every
 provisional key to its *final* id, so keys interned later (segment endpoints in
 `split.jl`) resolve to the merged id. `keys[id]` is the group representative.
 `coords`/`realized` memoize emitted output coordinates (design §2.6), realized
-lazily by [`node_point`](@ref) and grown as endpoint nodes are interned.
+lazily by `node_point` and grown as endpoint nodes are interned.
 
 Mutable so tier-2 merging can compact `keys` and re-point `ids` in place.
 =#
@@ -79,9 +79,9 @@ manifold's kernel point type — exactly two instantiations,
 so the engine is type-erased over the input geometry types.
 
 Fields:
-- `segstrings`: the ingested inputs as [`RelateSegmentString`](@ref)s (A side
+- `segstrings`: the ingested inputs as `RelateSegmentString`s (A side
   first, then B side); `NodedEdge.string_idx` indexes here.
-- `nodes`: the symbolic node table ([`NodeTable`](@ref)).
+- `nodes`: the symbolic node table (`NodeTable`).
 - `seg_nodes`: per-parent-segment ordered interior node-id lists, keyed by
   `(string_idx, seg_idx)`; absent for unsplit segments.
 - `edges`: every noded sub-segment of every parent segment.
