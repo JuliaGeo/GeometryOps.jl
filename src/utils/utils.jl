@@ -159,6 +159,7 @@ Currently they only work on linear rings.
 
 """
     eachedge(geom, [::Type{T}])
+    eachedge(m::Manifold, geom, [::Type{T}])
 
 Decompose a geometry into a list of edges.
 Currently only works for LineString and LinearRing.
@@ -166,10 +167,18 @@ Currently only works for LineString and LinearRing.
 Returns some iterator, which yields tuples of points.  Each tuple is an edge.
 
 It goes `(p1, p2), (p2, p3), (p3, p4), ...` etc.
+
+On `Planar()` (the default) points are 2D coordinate tuples.  On
+`Spherical()` they are `UnitSphericalPoint`s: geographic (longitude,
+latitude) input is converted, `UnitSphericalPoint`s pass through.
 """
 eachedge(geom) = eachedge(GI.trait(geom), geom, Float64)
 function eachedge(geom, ::Type{T}) where T
     eachedge(GI.trait(geom), geom, T)
+end
+eachedge(::Planar, geom, ::Type{T} = Float64) where T = eachedge(geom, T)
+function eachedge(::Spherical, geom, ::Type{T} = Float64) where T
+    return (map(UnitSpherical.UnitSphericalPoint, ps) for ps in eachedge(geom, T))
 end
 # implementation for LineString and LinearRing
 function eachedge(trait::GI.AbstractCurveTrait, geom, ::Type{T}) where T
@@ -188,11 +197,18 @@ end
 
 """
     to_edgelist(geom, [::Type{T}])
+    to_edgelist(m::Manifold, geom, [::Type{T}])
 
 Convert a geometry into a vector of `GI.Line` objects with attached extents.
+
+On `Spherical()` — or whenever the geometry's points are already
+`UnitSphericalPoint`s — each edge carries the 3D
+[`UnitSpherical.spherical_arc_extent`](@ref) of its great-circle arc.
 """
-to_edgelist(geom, ::Type{T} = Float64) where T = 
+to_edgelist(geom, ::Type{T} = Float64) where T =
     [_lineedge(ps, T) for ps in eachedge(geom, T)]
+to_edgelist(m::Manifold, geom, ::Type{T} = Float64) where T =
+    [_lineedge(ps, T) for ps in eachedge(m, geom, T)]
 
 """
     to_edgelist(ext::E, geom, [::Type{T}])::(::Vector{GI.Line}, ::Vector{Int})
@@ -222,14 +238,22 @@ function _lineedge(ps::Tuple, ::Type{T}) where T
     e = GI.extent(l)
     return GI.Line(l.geom; extent=e)
 end
+function _lineedge(ps::Tuple{<:UnitSpherical.UnitSphericalPoint, <:UnitSpherical.UnitSphericalPoint}, ::Type{T}) where T
+    a, b = UnitSpherical.UnitSphericalPoint{T}.(ps)
+    return GI.Line(StaticArrays.SVector((a, b)); extent = UnitSpherical.spherical_arc_extent(a, b))
+end
 
 """
     lazy_edgelist(geom, [::Type{T}])
+    lazy_edgelist(m::Manifold, geom, [::Type{T}])
 
 Return an iterator over `GI.Line` objects with attached extents.
 """
 function lazy_edgelist(geom, ::Type{T} = Float64) where T
     (_lineedge(ps, T) for ps in eachedge(geom, T))
+end
+function lazy_edgelist(m::Manifold, geom, ::Type{T} = Float64) where T
+    (_lineedge(ps, T) for ps in eachedge(m, geom, T))
 end
 
 """

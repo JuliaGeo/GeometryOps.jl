@@ -69,6 +69,35 @@ end
     @test occursin("RTree{HPR}", sprint(show, gtree))
 end
 
+@testset "payload data and precomputed extents" begin
+    rng = Xoshiro(11)
+    extents = random_extents(rng, 100, 2)
+    # payload elements with no extent of their own, indexed by the `extents` kwarg
+    payloads = [(i, 100 - i) for i in 1:100]
+    tree = @inferred RTree(STR(), payloads; extents)
+    # query hits are indices into the payload vector, whatever the leaf order
+    for q in random_extents(rng, 10, 2)
+        hits = query(tree, q)
+        @test hits == brute_force(q, extents)
+        @test all(tree.data[i] == (i, 100 - i) for i in hits)
+    end
+    @test tree.data === payloads   # vectors are kept, not copied
+
+    # Unsorted is zero-copy: the extents vector IS the leaf level
+    utree = RTree(Unsorted(), payloads; extents)
+    @test utree.levels[end] === extents
+    @test utree.indices isa Base.OneTo
+    @test query(utree, extents[7]) == brute_force(extents[7], extents)
+
+    # without the kwarg, `data` is still kept (here the extents themselves)
+    @test RTree(HPR(), extents).data === extents
+    # non-vector input is collected so `tree.data[i]` works
+    gtree = RTree(Unsorted(), (e for e in extents))
+    @test gtree.data isa Vector && gtree.data[3] == extents[3]
+
+    @test_throws ArgumentError RTree(STR(), payloads; extents = extents[1:99])
+end
+
 @testset "Hilbert curve properties" begin
     # Order-1 2D curve: the classic U through the four quadrants.
     keys1 = [hilbert_key((UInt32(x), UInt32(y)), 1) for (x, y) in ((0, 0), (0, 1), (1, 1), (1, 0))]

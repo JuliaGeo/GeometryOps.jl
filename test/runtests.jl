@@ -32,8 +32,10 @@ end
 @safetestset "Convex Hull" begin include("methods/convex_hull.jl") end
 @safetestset "Voronoi" begin include("methods/voronoi.jl") end
 @safetestset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
+@safetestset "RelateNG" begin include("methods/relateng/runtests.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end
+@safetestset "Extent" begin include("methods/extent.jl") end
 @safetestset "Minimum Bounding Circle" begin include("methods/minimum_bounding_circle.jl") end
 @safetestset "Polygonize" begin include("methods/polygonize.jl") end
 # Clipping
@@ -54,6 +56,8 @@ end
 @safetestset "Geometry Correction" begin include("transformations/correction/geometry_correction.jl") end
 @safetestset "Closed Rings" begin include("transformations/correction/closed_ring.jl")  end
 @safetestset "Intersecting Polygons" begin include("transformations/correction/intersecting_polygons.jl") end
+@safetestset "Antipodal Edge Split" begin include("transformations/correction/antipodal_edge_split.jl") end
+@safetestset "Crossing Edge Split" begin include("transformations/correction/crossing_edge_split.jl") end
 # Extensions
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end

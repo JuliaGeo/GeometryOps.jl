@@ -1,0 +1,836 @@
+# # Spherical RelateKernel
+#
+#=
+Spherical implementation of the RelateKernel contract declared in `kernel.jl`,
+over `UnitSphericalPoint{Float64}`. Every predicate is a sign of
+det(u, v, w) = (u×v)·w, so the exact path mirrors planar: a float filter then an
+exact fallback (`ExactPredicates.orient` for the plain orient, `Rational{BigInt}`
+on the xyz components for composites). No intersection coordinate is ever
+constructed. See the design doc 2026-06-15.
+
+All of `cross`, `⋅`, `normalize` (LinearAlgebra), `ExactPredicates`, and the
+`UnitSpherical` names are already in scope here — this file is `include`d into
+`GeometryOps`, which `using`s them at the top of the module. The
+`_rebuild_point(::UnitSphericalPoint, …)` hook that keeps node points typed
+lives next to the generic `_rebuild_point` in `kernel.jl`.
+=#
+
+# xyz tuple of a 3D point, for the ExactPredicates / Rational{BigInt} paths.
+@inline _tup3(u) = (GI.x(u), GI.y(u), GI.z(u))
+
+# ## rk_orient
+
+# Orientation of `c` relative to the great-circle arc `(a, b)`: the sign of the
+# scalar triple product (a×b)·c. Exact path: `ExactPredicates.orient` over the
+# xyz tuples about the origin (the spike measured 3.5 ns); NOT
+# `UnitSpherical.spherical_orient`, whose eps*16 tolerance is unfit for the
+# exact contract. Float path: the plain triple product.
+rk_orient(::Spherical, a, b, c; exact) = _rk_orient(booltype(exact), a, b, c)
+@inline function _rk_orient(::True, a, b, c)
+    # Repeated-vertex short-circuit: a triple product with two equal vectors is
+    # exactly 0 (per the `rk_orient` contract, `== 0` for `a == b`). On real data
+    # this is the dominant coplanar case — adjacent rings meet at bit-identical
+    # shared border vertices — and it lets the classify/on-segment gate skip
+    # ExactPredicates' µs-scale exact fallback (a genuine zero it cannot filter).
+    (_usp_eq(a, b) || _usp_eq(a, c) || _usp_eq(b, c)) && return 0
+    return ExactPredicates.orient(_tup3(a), _tup3(b), _tup3(c), (0.0, 0.0, 0.0))
+end
+@inline _rk_orient(::False, a, b, c) = cross(a, b) ⋅ c
+
+# ## Exact-aware 3-vector arithmetic
+#
+# Composite predicates (arc membership, proper crossing, node coincidence)
+# reduce to signs of polynomials in the xyz components. With `exact = True()` we
+# evaluate over `Rational{BigInt}` (Float64 are dyadic rationals → exact); with
+# `False()`, Float64. `_vec3(bt, p)` lifts a point to the chosen number type; the
+# rest are plain tuple cross/dot, so one code path serves both — exactly how the
+# planar kernel threads `exact`.
+@inline _vec3(::True, u) = (Rational{BigInt}(GI.x(u)), Rational{BigInt}(GI.y(u)), Rational{BigInt}(GI.z(u)))
+@inline _vec3(::False, u) = (Float64(GI.x(u)), Float64(GI.y(u)), Float64(GI.z(u)))
+@inline _cross3(a, b) = (a[2]*b[3] - a[3]*b[2], a[3]*b[1] - a[1]*b[3], a[1]*b[2] - a[2]*b[1])
+@inline _dot3(a, b) = a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
+@inline _iszero3(a) = iszero(a[1]) && iszero(a[2]) && iszero(a[3])
+@inline _neg3(a) = (-a[1], -a[2], -a[3])
+# `w` strictly interior to the minor arc (a, b) with normal n = a×b.
+@inline _strictly_in_arc3(w, a, b, n) = _dot3(_cross3(a, w), n) > 0 && _dot3(_cross3(w, b), n) > 0
+_usp_eq(p, q) = GI.x(p) == GI.x(q) && GI.y(p) == GI.y(q) && GI.z(p) == GI.z(q)
+
+# ## rk_point_on_segment
+
+# Whether `p` lies on the closed minor arc `[q0, q1]`. Two conditions: `p` is on
+# the arc's great circle (coplanar with `q0`, `q1`, origin — an exact orient ==
+# 0), and within the minor-arc span. The span test is scale-invariant: writing
+# the coplanar `p` as `α q0 + β q1`, `p` is on the closed minor arc iff α, β ≥ 0,
+# and `sign(β) = sign((q0×p)·n)`, `sign(α) = sign((p×q1)·n)` with `n = q0×q1` — a
+# pure determinant sign, correct for unit and non-unit inputs alike.
+function rk_point_on_segment(m::Spherical, p, q0, q1; exact)
+    rk_orient(m, q0, q1, p; exact) == 0 || return false
+    return _on_arc_span(booltype(exact), p, q0, q1)
+end
+# Exact path: a certified Float64 triage (`_on_arc_span_filter`) that escalates
+# to the `Rational{BigInt}` authority only when a span sign is not proven. On the
+# candidate populations this fires on ~every shared-vertex / T-junction pair
+# (the exact orient gate reduces `p` to the arc's great circle), and was the
+# second spherical hot spot after `_sph_classify`.
+@inline function _on_arc_span(bt::True, p, q0, q1)
+    r = _on_arc_span_filter(p, q0, q1)
+    r === nothing || return r
+    return _on_arc_span_authority(bt, p, q0, q1)
+end
+# Approximate path: the authority evaluated in Float64 (no exact contract to
+# honour, so no filter — an errant sign here is the caller's accepted risk).
+@inline _on_arc_span(bt::False, p, q0, q1) = _on_arc_span_authority(bt, p, q0, q1)
+
+@inline function _on_arc_span_authority(bt, p, q0, q1)
+    P = _vec3(bt, p); Q0 = _vec3(bt, q0); Q1 = _vec3(bt, q1)
+    n = _cross3(Q0, Q1)
+    if _iszero3(n)
+        # parallel endpoints — a zero-length arc (real rings carry repeated
+        # vertices; NE 110m North Korea has an `[A, A, B, A]` sliver ring) or
+        # an ill-defined antipodal pair: the closed arc holds only its
+        # endpoints, but with `n == 0` the span tests below are `0 >= 0` and
+        # would accept every `p` on the great circle (which the orient gate
+        # already reduced to every `p`, since orient against a zero normal is
+        # identically 0). Membership is direction coincidence with an endpoint.
+        return (_iszero3(_cross3(P, Q0)) && _dot3(P, Q0) > 0) ||
+               (_iszero3(_cross3(P, Q1)) && _dot3(P, Q1) > 0)
+    end
+    return _dot3(_cross3(Q0, P), n) >= 0 && _dot3(_cross3(P, Q1), n) >= 0
+end
+
+# Certified forward-error constant for the two `_on_arc_span` span determinants
+# `s = (u × v) · n`. Both are degree-4 polynomials in the point components; a
+# Higham running-error analysis (products then a difference per cross component,
+# products then a length-3 accumulation for the dot) bounds the rounding error
+# by ~9u·Σᵢ|wᵢ_terms|·|nᵢ_terms| with u = ½eps. `16u` (this constant) carries a
+# ~1.7× margin over the derived 9u for the dropped O(u²) terms and the rounding
+# in the abs-magnitude sum itself. Scale-invariant (homogeneous degree 4), so it
+# is valid for non-unit inputs (the exact-integer conformance rings) too.
+const _SPAN_ERR_C = 16 * (eps(Float64) / 2)
+
+# Float64 triage of `_on_arc_span`'s decision `(q0×p)·n ≥ 0 && (p×q1)·n ≥ 0`,
+# `n = q0×q1`. Returns the Bool iff BOTH span signs are certified by the bound,
+# else `nothing` (escalate). A sign is reported only when |value| > its bound,
+# so the filter can never disagree with the rational authority: a certified `<0`
+# proves the result `false`; two certified `>0` prove it `true`; anything near a
+# span boundary — including the exact-boundary `p == endpoint` and the
+# degenerate `n == 0` (zero-length arc) cases, where the value sits inside its
+# own bound — escalates.
+@inline function _on_arc_span_filter(p, q0, q1)
+    # Shared-vertex short-circuit: an endpoint is on its own closed arc. This is
+    # exact and resolves the dominant real-data span call (adjacent rings share
+    # border vertices bit-for-bit), which otherwise always escalates — `s1` or
+    # `s2` is exactly 0 at an endpoint and sits inside its own error band.
+    (_usp_eq(p, q0) || _usp_eq(p, q1)) && return true
+    x0 = GI.x(q0); y0 = GI.y(q0); z0 = GI.z(q0)
+    x1 = GI.x(q1); y1 = GI.y(q1); z1 = GI.z(q1)
+    xp = GI.x(p);  yp = GI.y(p);  zp = GI.z(p)
+    # n = q0 × q1, with per-component abs-magnitude sums Nᵢ
+    n1 = y0*z1 - z0*y1;  N1 = abs(y0*z1) + abs(z0*y1)
+    n2 = z0*x1 - x0*z1;  N2 = abs(z0*x1) + abs(x0*z1)
+    n3 = x0*y1 - y0*x1;  N3 = abs(x0*y1) + abs(y0*x1)
+    # s1 = (q0 × p) · n
+    w1 = y0*zp - z0*yp;  W1 = abs(y0*zp) + abs(z0*yp)
+    w2 = z0*xp - x0*zp;  W2 = abs(z0*xp) + abs(x0*zp)
+    w3 = x0*yp - y0*xp;  W3 = abs(x0*yp) + abs(y0*xp)
+    s1 = w1*n1 + w2*n2 + w3*n3
+    e1 = _SPAN_ERR_C * (W1*N1 + W2*N2 + W3*N3)
+    # s2 = (p × q1) · n
+    v1 = yp*z1 - zp*y1;  V1 = abs(yp*z1) + abs(zp*y1)
+    v2 = zp*x1 - xp*z1;  V2 = abs(zp*x1) + abs(xp*z1)
+    v3 = xp*y1 - yp*x1;  V3 = abs(xp*y1) + abs(yp*x1)
+    s2 = v1*n1 + v2*n2 + v3*n3
+    e2 = _SPAN_ERR_C * (V1*N1 + V2*N2 + V3*N3)
+    (s1 < -e1 || s2 < -e2) && return false     # one span factor certainly < 0
+    (s1 > e1 && s2 > e2) && return true          # both span factors certainly > 0
+    return nothing                               # near a boundary — escalate
+end
+
+# ## Ingest and interaction bounds
+
+# Renormalize to unit length (Float32-sourced data — e.g. Natural Earth GeoJSON
+# converted to Float64 — is ~1e-8 off unit and trips `robust_cross_product`).
+@inline rk_normalize_usp(u) = UnitSphericalPoint(normalize(u))
+
+# Canonical kernel point of a GeoInterface point: lon/lat (2D) → unit xyz, or an
+# already-3D point treated as xyz; renormalized and signed-zero normalized so
+# the same vertex always produces identical bits (NodeKey equality). The vertex
+# ingest (Phase 3 `_to_kernel_point`) and the extent computation below share
+# this, so a vertex and its extent agree exactly.
+@inline function _spherical_kernel_point(p)
+    u = GI.is3d(p) ?
+        UnitSphericalPoint(Float64(GI.x(p)), Float64(GI.y(p)), Float64(GI.z(p))) :
+        UnitSphereFromGeographic()((Float64(GI.x(p)), Float64(GI.y(p))))
+    return _node_point(rk_normalize_usp(u))
+end
+
+# Phase 3 ingest hooks (the planar methods live in kernel.jl). The spherical
+# kernel point type is the unit-sphere xyz point; conversion is the canonical
+# `_spherical_kernel_point` (lon/lat → unit xyz, or an already-xyz point
+# renormalized), so an ingested vertex agrees bit-for-bit with its extent.
+_kernel_point_type(::Spherical) = UnitSphericalPoint{Float64}
+@inline _to_kernel_point(::Spherical, p) = _spherical_kernel_point(p)
+
+@inline _widen(lo, hi) = (prevfloat(lo, 4), nextfloat(hi, 4))
+
+@noinline _throw_antipodal_edge(a, b) = throw(ArgumentError(
+    "spherical edge between antipodal vertices $(_tup3(a)) and $(_tup3(b)) has no " *
+    "unique great-circle arc; densify it first with the `AntipodalEdgeSplit` " *
+    "correction (it inserts the lon/lat midpoint)"))
+
+# Exactly antipodal pair: vanishing cross product, opposed directions. A
+# vanishing cross with `u ⋅ v > 0` is a zero-length/repeated vertex, fine.
+_exactly_antipodal(u, v) = iszero(cross(u, v)) && (u ⋅ v) < 0.0
+
+# Ingest validation, once per curve at `RelateGeometry` construction: an
+# exactly-antipodal edge has no unique great-circle arc, so throw rather
+# than pick one (`spherical_arc_extent` picks a stable plane, never throws).
+function _validate_relate_edges(::Spherical, curve)
+    n = GI.npoint(curve)
+    n < 2 && return nothing
+    prev = _spherical_kernel_point(GI.getpoint(curve, 1))
+    for i in 2:n
+        cur = _spherical_kernel_point(GI.getpoint(curve, i))
+        _exactly_antipodal(prev, cur) && _throw_antipodal_edge(prev, cur)
+        prev = cur
+    end
+    return nothing
+end
+
+# ## rk_classify_intersection
+#
+# The two great circles meet at ±d, d = (a0×a1)×(b0×b1). `SS_PROPER` iff one of
+# ±d is strictly interior to both minor arcs (the candidate-direct formulation —
+# planar straddle tests are NOT sufficient on the sphere, where arcs can straddle
+# each other's great circle while meeting only at the antipodal point). Endpoint
+# incidences are exact arc-membership; collinear = the arcs share a great circle
+# (d == 0). No intersection coordinate is constructed.
+#
+# ### Float-fast path (spike S4): the four-orient reduction
+#
+# The exact classification above was the sole spherical hot spot: it lifted the
+# candidate direction `d`, the normals `na, nb`, and the four `_strictly_in_arc3`
+# tests to `Rational{BigInt}` UNCONDITIONALLY for every candidate pair (measured
+# ~30 µs/pair on clean crossings vs ~0.2 µs planar). The float stage the planar
+# kernel gets from `AdaptivePredicates.orient` was simply absent here.
+#
+# It turns out no per-expression triage is needed, because the whole
+# `_strictly_in_arc3(±d, …)` proper-crossing branch is *algebraically* a function
+# of the four orientation signs, which `rk_orient` already resolves through
+# ExactPredicates' float-filter→exact ladder (~3 ns when separated). With
+# `na = a0×a1`, `nb = b0×b1`, `d = na×nb`, and using `a0·na = a1·na = 0` and
+# BAC–CAB (`u×(v×w) = v(u·w) − w(u·v)`):
+#
+#     (a0×d)·na = (a0·nb)|na|²         (d×a1)·na = −(a1·nb)|na|²
+#     (b0×d)·nb = −(b0·na)|nb|²        (d×b1)·nb =  (b1·na)|nb|²
+#
+# so, writing `[u,v,w] = u·(v×w)` (exactly `rk_orient`), when `d ≠ 0` (⟹ `na≠0`,
+# `nb≠0`):
+#
+#     _strictly_in_arc3(d , a,·) ⟺ [b0,b1,a0]>0 ∧ [b0,b1,a1]<0
+#     _strictly_in_arc3(d , b,·) ⟺ [a0,a1,b0]<0 ∧ [a0,a1,b1]>0
+#
+# and `−d` flips every sign — the classic S2 four-orient near-crossing pattern.
+#
+# `d == 0` (same great circle / degenerate) ⟺ the four points are coplanar ⟺
+# ALL four orients are 0: any single nonzero orient proves `d ≠ 0`. A zero-length
+# arc can't fake this — it forces its two orients *equal* (not a lone spurious
+# zero), so the strict straddle pattern is false and the pair falls to DISJOINT
+# or, when all four vanish, to the exact authority. That same-circle branch is
+# rare on real data (≈0% of separated candidates), so it escalates to the
+# unchanged `Rational{BigInt}` `_sph_classify`. Every non-escalated answer is
+# bit-identical to `_sph_classify`'s (proven above; audited over 10⁶ random +
+# adversarial pairs, zero disagreement).
+rk_classify_intersection(m::Spherical, a0, a1, b0, b1; exact) =
+    _rk_classify_intersection(booltype(exact), m, a0, a1, b0, b1)
+
+# Exact path: the four-orient fast path. Provably bit-identical to the exact
+# `_sph_classify` (derivation above; audited over 10⁶ random + 4·10⁵ adversarial
+# pairs, zero disagreement) but built from float-filtered `rk_orient` signs
+# instead of the unconditional `Rational{BigInt}` lift.
+function _rk_classify_intersection(bt::True, m, a0, a1, b0, b1)
+    # The four exact orientation signs. `sABi = sign[a0,a1,bi]`,
+    # `sBAi = sign[b0,b1,ai]` — the same signs the four `rk_point_on_segment`
+    # arc-membership gates need, computed once and reused.
+    sAB0 = rk_orient(m, a0, a1, b0; exact = bt)
+    sAB1 = rk_orient(m, a0, a1, b1; exact = bt)
+    sBA0 = rk_orient(m, b0, b1, a0; exact = bt)
+    sBA1 = rk_orient(m, b0, b1, a1; exact = bt)
+    # Arc membership: `p` on the arc iff coplanar (orient 0) and within the
+    # minor-arc span. `_on_arc_span` (float-filtered) only fires on the coplanar
+    # `== 0` cases, i.e. shared vertices / T-junctions.
+    a0_on_b = sBA0 == 0 && _on_arc_span(bt, a0, b0, b1)
+    a1_on_b = sBA1 == 0 && _on_arc_span(bt, a1, b0, b1)
+    b0_on_a = sAB0 == 0 && _on_arc_span(bt, b0, a0, a1)
+    b1_on_a = sAB1 == 0 && _on_arc_span(bt, b1, a0, a1)
+    if sAB0 == 0 && sAB1 == 0 && sBA0 == 0 && sBA1 == 0
+        # d == 0: same great circle or a degenerate arc — the exact authority
+        return _sph_classify(bt, a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    # d ≠ 0 (proven exactly by a nonzero orient). Endpoint incidence ⇒ touch.
+    if a0_on_b || a1_on_b || b0_on_a || b1_on_a
+        return SegSegClass(SS_TOUCH, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    # Proper crossing ⟺ +d or −d strictly interior to both arcs, i.e. the
+    # four-orient near-crossing pattern (equal to `_strictly_in_arc3(±d,…)`).
+    proper = (sBA0 > 0 && sBA1 < 0 && sAB0 < 0 && sAB1 > 0) ||
+             (sBA0 < 0 && sBA1 > 0 && sAB0 > 0 && sAB1 < 0)
+    return proper ? SegSegClass(SS_PROPER, false, false, false, false) :
+                    SegSegClass(SS_DISJOINT, false, false, false, false)
+end
+
+# Approximate path (`exact = False()`): the original float formulation, kept
+# bit-for-bit. There is no Rational to shed here (`_sph_classify(False())` is
+# already all-Float64), and the four-orient float reduction rounds differently
+# than the float `_strictly_in_arc3` on near-collinear arcs — a sign the caller
+# has already opted out of, but no reason to perturb the established output.
+function _rk_classify_intersection(bt::False, m, a0, a1, b0, b1)
+    a0_on_b = rk_point_on_segment(m, a0, b0, b1; exact = bt)
+    a1_on_b = rk_point_on_segment(m, a1, b0, b1; exact = bt)
+    b0_on_a = rk_point_on_segment(m, b0, a0, a1; exact = bt)
+    b1_on_a = rk_point_on_segment(m, b1, a0, a1; exact = bt)
+    return _sph_classify(bt, a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+end
+
+function _sph_classify(bt, a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    A0 = _vec3(bt, a0); A1 = _vec3(bt, a1); B0 = _vec3(bt, b0); B1 = _vec3(bt, b1)
+    na = _cross3(A0, A1); nb = _cross3(B0, B1)
+    d = _cross3(na, nb)
+    n_inc = a0_on_b + a1_on_b + b0_on_a + b1_on_a
+    if _iszero3(d)   # same great circle (or a degenerate, zero-length arc)
+        n_inc == 0 && return SegSegClass(SS_DISJOINT, false, false, false, false)
+        # a degenerate (zero-length) arc on the other is a touch, not an overlap
+        zero_len = _iszero3(na) || _iszero3(nb)
+        shared_only = n_inc == 2 && (a0_on_b || a1_on_b) && (b0_on_a || b1_on_a) &&
+            (_usp_eq(a0, b0) || _usp_eq(a0, b1) || _usp_eq(a1, b0) || _usp_eq(a1, b1))
+        kind = (shared_only || zero_len) ? SS_TOUCH : SS_COLLINEAR
+        return SegSegClass(kind, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    if a0_on_b || a1_on_b || b0_on_a || b1_on_a
+        return SegSegClass(SS_TOUCH, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
+    end
+    nd = _neg3(d)
+    if (_strictly_in_arc3(d, A0, A1, na) && _strictly_in_arc3(d, B0, B1, nb)) ||
+       (_strictly_in_arc3(nd, A0, A1, na) && _strictly_in_arc3(nd, B0, B1, nb))
+        return SegSegClass(SS_PROPER, false, false, false, false)
+    end
+    return SegSegClass(SS_DISJOINT, false, false, false, false)
+end
+
+# ## Angle ordering at nodes (tangent-plane port of PolygonNodeTopology)
+#
+# Directions around an apex `n` live in the tangent plane at `n`. Pick a
+# reference axis `r` (the coordinate axis least aligned with `n`, so `r ≁ ±n`);
+# the tangent frame is `u = r - (r·n̂)n̂`, `v = n × r`, right-handed with `u×v =
+# n̂`. A direction toward `p` has tangent coordinates `(p·u, p·v)`, and we only
+# need their *signs* — both are determinant signs of `n, r, p`, exact for
+# integer inputs and scale-corrected so the apex need not be unit:
+#   sign(p·u) = sign((p·r)(n·n) - (r·n)(p·n)),   sign(p·v) = sign((n×r)·p).
+# Feeding these to the planar quadrant scheme, with the same-quadrant tiebreak
+# `rk_orient(m, n, q, p) = sign((n×q)·p)` (already the tangent-plane CCW sign),
+# reproduces PolygonNodeTopology exactly.
+
+# Coordinate axis least aligned with `n3` (smallest |component|, first-index
+# tiebreak — matches `argmin`), as a unit vector of `n3`'s element type.
+@inline function _ref_axis(n3)
+    ax, ay, az = abs(n3[1]), abs(n3[2]), abs(n3[3])
+    o = one(ax); z = zero(ax)
+    if ax <= ay && ax <= az
+        return (o, z, z)
+    elseif ay <= az
+        return (z, o, z)
+    else
+        return (z, z, o)
+    end
+end
+
+# JTS quadrant of the direction toward `P3` around apex `n3` with reference
+# `r3`: NE=0, NW=1, SW=2, SE=3, axis directions on the `>= 0` side.
+@inline function _sph_quadrant3(n3, r3, P3)
+    nn = _dot3(n3, n3); nr = _dot3(n3, r3); pn = _dot3(P3, n3); pr = _dot3(P3, r3)
+    su = pr * nn - nr * pn               # sign of P·u
+    sv = _dot3(_cross3(n3, r3), P3)      # sign of P·v
+    (su == 0 && sv == 0) &&
+        throw(ArgumentError("cannot compute the quadrant of a zero-length direction"))
+    if su >= 0
+        return sv >= 0 ? 0 : 3
+    else
+        return sv >= 0 ? 1 : 2
+    end
+end
+
+function rk_quadrant(::Spherical, origin, p)
+    n3 = _tup3(origin)
+    return _sph_quadrant3(n3, _ref_axis(n3), _tup3(p))
+end
+
+# compareAngle around an explicit apex direction `n3` (a vec3 tuple): the
+# crossing-apex slow path, where `n3` is the *constructed* crossing direction
+# and so must be compared with explicit determinant signs (not ExactPredicates,
+# which needs Float64 vertices). Mirrors `_compare_angle`: quadrant first, then
+# the orient tiebreak `sign((n×q)·p)`.
+function _sph_compare_around(bt, n3, p, q)
+    P = _vec3(bt, p); Q = _vec3(bt, q)
+    r3 = _ref_axis(n3)
+    qp = _sph_quadrant3(n3, r3, P)
+    qq = _sph_quadrant3(n3, r3, Q)
+    qp > qq && return 1
+    qp < qq && return -1
+    o = _dot3(_cross3(n3, Q), P)
+    return o > 0 ? 1 : (o < 0 ? -1 : 0)
+end
+
+# The crossing direction (the sphere point where the two arcs of a crossing
+# node meet): ±(na×nb), the candidate strictly interior to both minor arcs.
+function _sph_crossing_dir(bt, node::NodeKey)
+    A0 = _vec3(bt, node.pt); A1 = _vec3(bt, node.a1)
+    B0 = _vec3(bt, node.b0); B1 = _vec3(bt, node.b1)
+    na = _cross3(A0, A1); nb = _cross3(B0, B1)
+    d = _cross3(na, nb)
+    (_strictly_in_arc3(d, A0, A1, na) && _strictly_in_arc3(d, B0, B1, nb)) && return d
+    return _neg3(d)
+end
+
+function rk_compare_edge_dir(m::Spherical, node::NodeKey, p, q; exact)
+    node.is_crossing || return _compare_angle(m, node.pt, p, q; exact)
+    # Crossing apex: unlike the plane, the tangent direction apex→x is not
+    # parallel to opp(x)→x, so the planar endpoint substitution does not carry
+    # over. Compare around the (exact, on-arc) crossing direction instead —
+    # the slow path, only on crossing-node edge ordering.
+    bt = booltype(exact)
+    return _sph_compare_around(bt, _sph_crossing_dir(bt, node), p, q)
+end
+
+# ## rk_nodes_coincide (exact slow path)
+#
+# Whether two node keys denote the same sphere point. The point of a vertex node
+# is its coordinate direction; of a crossing node, the on-arc crossing direction
+# `±(na×nb)`. Two directions denote the same sphere point iff they are parallel
+# (cross product zero) and point into the same hemisphere (positive dot) — `-d`
+# is the antipodal point, a different node. Exact via `Rational{BigInt}` (the
+# `True()` branch of `_vec3`), mirroring the planar D3 rational slow path.
+@inline _exact_node_dir(bt, k::NodeKey) =
+    k.is_crossing ? _sph_crossing_dir(bt, k) : _vec3(bt, k.pt)
+
+function rk_nodes_coincide(::Spherical, k1::NodeKey, k2::NodeKey; exact)
+    k1 == k2 && return true
+    bt = booltype(exact)
+    d1 = _exact_node_dir(bt, k1); d2 = _exact_node_dir(bt, k2)
+    return _iszero3(_cross3(d1, d2)) && _dot3(d1, d2) > 0
+end
+
+# ## Ring orientation
+
+#=
+Spherical method of `_ring_is_ccw` (relate_geometry.jl — the port of JTS
+`Orientation.isCCW` used by `_orient_ring`). The planar extreme-vertex cap
+algorithm assumes a coordinate plane: its y-extreme vertex pick and flat-cap
+`del_x` tiebreak are meaningless on xyz points (a ring symmetric about the
+equator has two exactly-equal extreme-y vertices and reads CW in *both*
+windings). On the sphere the ring is CCW iff the region on its left is the
+enclosed one — the one no larger than a hemisphere — decided by the sign of
+the loop's geodesic curvature (Gauss–Bonnet: enclosed area = 2π − curvature),
+the port of S2 `GetCurvature` (s2loop_measures.cc). Each turn angle involves
+only ADJACENT vertex pairs, so an antipodal pair of non-adjacent vertices —
+legal at ingest, and produced by `AntipodalEdgeSplit` — never meets in one
+term (the previous Girard fan ran chords from a single apex through the
+whole ring and degenerated on exactly those pairs).
+
+This is the sole place the engine resolves which of the two ring-bounded
+regions an unoriented ring means; `_orient_ring` (edge-side topology),
+`rk_point_in_ring`, and `rk_interaction_bounds` all inherit it, so they
+agree by construction.
+
+As in S2 `IsNormalized`, the sign test allows the curvature error bound
+(`GetCurvatureMaxError`: 11.25ε per vertex), so an exact hemisphere —
+curvature 0, intrinsically winding-ambiguous — reads CCW in *both* windings
+rather than falling to the sign of rounding noise. `exact` is accepted for
+signature parity but unused: the turn-angle signs are always exact
+(`_rk_orient(True(), …)`, our port of S2's `Sign`). Vertices are
+renormalized on entry (`robust_cross_product` expects unit vectors; the
+conformance suite feeds exact-integer non-unit rings).
+=#
+function _ring_is_ccw(::Spherical, ring::Vector; exact)
+    loop = _prune_loop_degeneracies([rk_normalize_usp(p) for p in ring])
+    n = length(loop)
+    n < 3 && return false   # bounds no area (JTS convention for flat rings)
+    return _spherical_loop_curvature(loop) >= -(11.25 * eps(Float64) * n)
+end
+
+#=
+Port of S2 `PruneDegeneracies` (s2loop_measures.cc): the loop with all
+degenerate segments removed — repeated vertices (`AA → A`, wraparound
+included) and retraced whiskers (`ABA → A`, including whiskers straddling
+the closure) — so every remaining vertex has two distinct, non-retracing
+neighbors and its turn angle is well defined. Returns fewer than 3 vertices
+for a completely degenerate loop.
+=#
+function _prune_loop_degeneracies(pts::Vector)
+    vertices = empty(pts)
+    sizehint!(vertices, length(pts))
+    for v in pts
+        if !isempty(vertices)
+            v == vertices[end] && continue                       # AA → A
+            if length(vertices) >= 2 && v == vertices[end - 1]   # ABA → A
+                pop!(vertices)
+                continue
+            end
+        end
+        push!(vertices, v)
+    end
+    length(vertices) > 1 && vertices[1] == vertices[end] && pop!(vertices)
+    m = length(vertices)
+    m < 3 && return vertices
+    # whiskers straddling the closure (the loop begins with `BA…` and ends
+    # with `…A`, or begins with `A…` and ends with `…AB`): strip first/last
+    # pairs while the terminal edges retrace each other — guaranteed to stop
+    # before consuming the loop (S2: some portion is non-degenerate)
+    k = 0
+    while vertices[k + 2] == vertices[m - k] || vertices[k + 1] == vertices[m - k - 1]
+        k += 1
+    end
+    return k == 0 ? vertices : vertices[(k + 1):(m - k)]
+end
+
+# Port of S2 `TurnAngle` (s2measures.cc): the signed turning angle at `b` on
+# the walk a → b → c, positive for a left (CCW) turn. The magnitude is the
+# angle between the edge normals (`robust_cross_product` keeps it accurate
+# when adjacent vertices are nearly coincident); the sign comes from the
+# exact orient, correct even for turns close to ±180°.
+function _sph_turn_angle(a, b, c)
+    angle = _usp_angle(robust_cross_product(a, b), robust_cross_product(b, c))
+    return _rk_orient(True(), a, b, c) > 0 ? angle : -angle
+end
+
+# S2 `Vector3.Angle`: atan2(|u×v|, u·v), stable near both parallel and
+# antiparallel (acos of the dot is not).
+_usp_angle(u, v) = atan(norm(cross(u, v)), u ⋅ v)
+
+#=
+Port of S2 `GetCurvature` (s2loop_measures.cc) over a pruned loop: the sum
+of the turn angles, taken in canonical order and Kahan-compensated (a naive
+sum's error is quadratic in the vertex count on spiral-like inputs), then
+restored to the stored direction's sign. Positive curvature ⇔ the region on
+the loop's left is smaller than a hemisphere (its area is 2π − curvature).
+=#
+function _spherical_loop_curvature(loop)
+    n = length(loop)
+    i, dir = _canonical_loop_order(loop)
+    at(k) = loop[mod1(k, n)]
+    total = _sph_turn_angle(at(i - dir), at(i), at(i + dir))
+    compensation = 0.0
+    for _ in 1:(n - 1)
+        i += dir
+        angle = _sph_turn_angle(at(i - dir), at(i), at(i + dir)) + compensation
+        old_total = total
+        total += angle
+        compensation = (old_total - total) + angle
+    end
+    return dir * (total + compensation)
+end
+
+#=
+Port of S2 `GetCanonicalLoopOrder` (s2loop_measures.cc): the traversal
+`(start, dir)` minimizing the traversed vertex sequence lexicographically
+over all rotations of both directions. A loop and its reversal share the
+same canonical sequence, so summing turn angles along it — and restoring
+the stored direction's sign afterwards, as `_spherical_loop_curvature`
+does — makes the curvature exactly invariant under rotation and exactly
+negated under reversal, which no fixed storage-order float sum is.
+=#
+function _canonical_loop_order(loop)
+    n = length(loop)
+    min_indices = [1]
+    for i in 2:n
+        if _tup3(loop[i]) <= _tup3(loop[min_indices[1]])
+            _tup3(loop[i]) < _tup3(loop[min_indices[1]]) && empty!(min_indices)
+            push!(min_indices, i)
+        end
+    end
+    best = (min_indices[1], 1)
+    for i in min_indices
+        _loop_order_less((i, 1), best, loop) && (best = (i, 1))
+        _loop_order_less((i, -1), best, loop) && (best = (i, -1))
+    end
+    return best
+end
+
+# Port of S2 `IsOrderLess`: whether traversal `o1` yields a lexicographically
+# smaller vertex sequence than `o2` (both start at the same minimal vertex).
+function _loop_order_less(o1, o2, loop)
+    o1 == o2 && return false
+    n = length(loop)
+    (i1, d1) = o1
+    (i2, d2) = o2
+    for _ in 1:(n - 1)
+        i1 += d1; i2 += d2
+        p1 = _tup3(loop[mod1(i1, n)]); p2 = _tup3(loop[mod1(i2, n)])
+        p1 < p2 && return true
+        p1 > p2 && return false
+    end
+    return false
+end
+
+#=
+`_ring_interior_on_left` (generic method in relate_geometry.jl) with the
+manifold mode applied: on `Spherical(; oriented = true)` the stored winding
+is authoritative, per S2 `InitOriented` (s2polygon.h) — "the input loops
+[are] oriented such that the polygon interior is on the left-hand side of
+every loop", exterior rings counterclockwise and interior rings clockwise.
+A shell's denoted region is therefore the region on its left, and a hole —
+wound oppositely, with the polygon interior on ITS left too — has its
+cavity (the region the hole denotes to the engine) on its right. Nothing is
+computed from the coordinates, so a ring wound against the convention
+simply denotes the complement region — which is how regions larger than a
+hemisphere are expressed.
+=#
+_ring_interior_on_left(m::Spherical, pts::Vector, is_hole::Bool; exact) =
+    m.oriented ? !is_hole : _ring_is_ccw(m, pts; exact)
+
+# ## rk_point_in_ring (definitional-exterior crossing parity, winding-independent)
+
+# Whether the two minor arcs (p0,p1) and (q0,q1) cross properly (interior to
+# both). The great circles meet at ±d, d = (p0×p1)×(q0×q1); a proper crossing is
+# one of ±d strictly interior to both arcs (the spike's `arcs_cross_properly`).
+function _arcs_cross_properly(bt, p0, p1, q0, q1)
+    P0 = _vec3(bt, p0); P1 = _vec3(bt, p1); Q0 = _vec3(bt, q0); Q1 = _vec3(bt, q1)
+    na = _cross3(P0, P1); nb = _cross3(Q0, Q1)
+    d = _cross3(na, nb)
+    _iszero3(d) && return false
+    (_strictly_in_arc3(d, P0, P1, na) && _strictly_in_arc3(d, Q0, Q1, nb)) && return true
+    nd = _neg3(d)
+    return _strictly_in_arc3(nd, P0, P1, na) && _strictly_in_arc3(nd, Q0, Q1, nb)
+end
+
+# Ring vertices as spherical kernel points. A 3D ring is already in kernel
+# coordinates (e.g. the conformance suite's exact integer USP rings) and is read
+# verbatim — renormalizing would perturb the exact orient the boundary test
+# relies on. A 2D (lon/lat) ring — the engine's ingested polygon — is converted
+# to unit xyz.
+_ring_kernel_pts(ring) = _ring_kernel_pts(booltype(GI.is3d(GI.getpoint(ring, 1))), ring)
+_ring_kernel_pts(::True, ring) = _node_points(ring)
+_ring_kernel_pts(::False, ring) = _ring_usp(ring)
+
+# Location of `p` relative to the region denoted by `ring` — per the kernel
+# contract (kernel.jl): winding-independent by default, like the planar
+# ray-crossing parity (real-world rings arrive in either winding — Natural
+# Earth ships shapefile-convention CW shells — and
+# `_locate_point_in_polygonal` passes them unoriented); winding-authoritative
+# with role `is_hole` on an oriented manifold. Boundary first (exact arc
+# membership), then the parity test, with this kernel's predicates injected —
+# `rk_orient` for sides, `_arcs_cross_properly` for transversality — so the
+# decision is as exact as the predicates.
+#
+# In the default enclosed-region mode the parity is the shared
+# `spherical_ring_encloses`: even-odd crossing parity anchored at the
+# antipode of the ring's vertex mass, a point exterior BY DEFINITION of the
+# semantics. No winding bit is consulted, so a ring that self-intersects on
+# the sphere (a planar-valid figure-eight — see the `prepare` validation)
+# degrades to even-odd answers instead of inverting globally: the previous
+# bootstrap composed the local interior-side wedge of one edge
+# (`spherical_ring_contains`) with the turning-angle winding
+# (`_ring_interior_on_left`), and a figure-eight defeats both at once — the
+# lobes cancel the turning angle while the wedge propagates whichever lobe
+# hosts the anchor edge. When the definitional anchor is itself degenerate
+# (near-hemisphere vertex mass, or `p` at the mass center) the query falls
+# back to that wedge-plus-winding bootstrap — for such rings the
+# enclosed/complement distinction is near-degenerate anyway, and the
+# turning-angle tolerance already treats hemispheres permissively.
+#
+# On `Spherical(; oriented = true)` the stored winding is authoritative
+# (garbage-in-garbage-out is that mode's documented contract), so the wedge
+# bootstrap IS the semantics: `spherical_ring_contains` reports the region
+# on the ring's *left*, the interior iff `_ring_interior_on_left` (the same
+# bit `_orient_ring` feeds the edge-side topology). All anchors degenerate
+# (unreachable for a non-degenerate ring and an off-boundary point) is
+# refused, not answered wrong.
+rk_point_in_ring(m::Spherical, p, ring; exact, is_hole::Bool = false) =
+    rk_point_in_ring(m, p, SphericalKernelRing(m, ring; exact, is_hole); exact)
+
+"""
+    SphericalKernelRing(m::Spherical, ring; exact, is_hole = false)
+
+The cached kernel-space form of one ring: the converted
+`UnitSphericalPoint` vertex vector (`pts` — the boundary edge walk), its
+deduped open form (`ded`/`n` — the parity walk; aliases `pts` when the
+ring has no repeated vertices), the ring's denoted-region bit
+(`_ring_interior_on_left`, from the ring's winding or — on an oriented
+manifold — its declared role; the same bit edge topology and interaction
+bounds use), and — in enclosed-region mode — the definitional-exterior
+parity anchor (`spherical_exterior_anchor`; `nothing` on an oriented
+manifold, which never consults it, or for a degenerate vertex mass, where
+queries fall back to the wedge bootstrap).
+
+`rk_point_in_ring` re-derived all of this from lon/lat on every query —
+vertex conversion alone was ~60% of a prepared spherical point query. The
+point-in-area locators (indexed_point_in_area.jl) convert each ring once
+and query on this form (Layer 1 of the 2026-07-14 spherical-indexed-locator
+design).
+
+Repeated consecutive vertices are dropped from the parity walk (real rings
+carry them — NE 110m North Korea's sliver is `[A, A, B, A]`; JTS removes
+them at ingest, but this path receives the raw ring): a retraced edge lies
+exactly under the anchor midpoint and breaks the parity count. After dedup
+a ring with fewer than 3 distinct vertices bounds no area.
+"""
+struct SphericalKernelRing
+    pts::Vector{UnitSphericalPoint{Float64}}
+    ded::Vector{UnitSphericalPoint{Float64}}
+    n::Int
+    interior_on_left::Bool
+    anchor::Union{Nothing, UnitSphericalPoint{Float64}}
+end
+
+function SphericalKernelRing(m::Spherical, ring; exact, is_hole::Bool = false)
+    pts = _ring_kernel_pts(ring)
+    n = length(pts)
+    n > 1 && pts[end] == pts[1] && (n -= 1)
+    ded, n = _drop_repeated_ring_pts(pts, n)
+    interior_on_left = n >= 3 && _ring_interior_on_left(m, ded, is_hole; exact)
+    anchor = (!m.oriented && n >= 3) ? spherical_exterior_anchor(ded, n) : nothing
+    return SphericalKernelRing(pts, ded, n, interior_on_left, anchor)
+end
+
+# Type-stable functors for the predicates injected into
+# `spherical_ring_contains` (Layer 3 of the spherical-indexed-locator
+# design): the anonymous closures they replace were rebuilt per call and
+# heap-boxed, costing an allocation and dynamic dispatch per predicate call
+# on the point-in-area hot path. The injectable-predicate design of
+# `spherical_ring_contains` is unchanged.
+struct _RKOrient{M <: Spherical, E} <: Function
+    m::M
+    exact::E
+end
+(f::_RKOrient)(a, b, c) = rk_orient(f.m, a, b, c; exact = f.exact)
+
+struct _RKProperCrossing{BT} <: Function
+    bt::BT
+end
+(f::_RKProperCrossing)(q, mid, a, b) = _arcs_cross_properly(f.bt, q, mid, a, b) ? 1 : 0
+
+# Exact span test for the anchor walk's vertex-grazing resolution
+# (`_anchor_crossing_parity`): whether `p`, already known to lie on the
+# great circle of `(a, b)`, lies on the closed minor arc.
+struct _RKOnTestArc{BT} <: Function
+    bt::BT
+end
+(f::_RKOnTestArc)(p, a, b) = _on_arc_span(f.bt, p, a, b)
+
+function rk_point_in_ring(m::Spherical, p, kr::SphericalKernelRing; exact)
+    pts = kr.pts
+    @inbounds for i in 1:length(pts)-1
+        rk_point_on_segment(m, p, pts[i], pts[i+1]; exact) && return LOC_BOUNDARY
+    end
+    #-- rings are closed regardless of a repeated last point (the kernel
+    #-- contract), so an implicitly closed ring's closing edge is boundary
+    #-- too — the same edge set the longitude-interval index walks
+    if length(pts) > 1 && pts[end] != pts[1] &&
+            rk_point_on_segment(m, p, pts[end], pts[1]; exact)
+        return LOC_BOUNDARY
+    end
+    kr.n < 3 && return LOC_EXTERIOR
+    orient = _RKOrient(m, exact)
+    on_arc = Returns(false)   # boundary classified exactly above
+    proper_crossing = _RKProperCrossing(booltype(exact))
+    if !m.oriented
+        #-- enclosed-region mode: even-odd parity from the definitional
+        #-- exterior anchor (see the section comment); `nothing` — degenerate
+        #-- anchor or `p` at the mass center — falls through to the wedge
+        enc = spherical_ring_encloses(kr.ded, kr.n, p; anchor = kr.anchor,
+            orient, on_arc, proper_crossing,
+            on_test_arc = _RKOnTestArc(booltype(exact)))
+        enc === nothing || return enc ? LOC_INTERIOR : LOC_EXTERIOR
+    end
+    inside = spherical_ring_contains(kr.ded, kr.n, p; orient, on_arc, proper_crossing)
+    inside === nothing && _throw_degenerate_point_in_ring(p)
+    return inside == kr.interior_on_left ? LOC_INTERIOR : LOC_EXTERIOR
+end
+
+@noinline _throw_degenerate_point_in_ring(p) = throw(ArgumentError(
+    "rk_point_in_ring: every anchor edge of the ring is degenerate with " *
+    "respect to the query point $(_tup3(p)) — the ring is degenerate at " *
+    "this point"))
+
+# Interaction bounds on the sphere: the shared substrate
+# (`spherical_arc_extent` per edge, `_spherical_region_extent` for area
+# interiors) over kernel-converted points, so box and ingested vertices
+# agree bit-for-bit. Rings are dim-1 linework here (JTS semantics), not S2
+# regions — a CW hole must not become a complement region. Boxes get a few
+# ulps of padding so a vertex from another conversion path still prunes as
+# interacting.
+rk_interaction_bounds(m::Spherical, geom) =
+    _pad_bounds(_sph_interaction_extent(m, GI.trait(geom), geom))
+
+_sph_interaction_extent(m::Spherical, ::GI.AbstractPointTrait, geom) =
+    GI.extent(_spherical_kernel_point(geom))
+function _sph_interaction_extent(m::Spherical, ::GI.AbstractCurveTrait, geom)
+    n = GI.npoint(geom)
+    prev = _spherical_kernel_point(GI.getpoint(geom, 1))
+    # seeding with pts[1]'s box covers the degenerate n == 1 curve; it is
+    # absorbed by the first edge box otherwise
+    ext = spherical_arc_extent(prev, prev)
+    for i in 2:n
+        cur = _spherical_kernel_point(GI.getpoint(geom, i))
+        ext = Extents.union(ext, spherical_arc_extent(prev, cur))
+        prev = cur
+    end
+    return ext
+end
+function _sph_interaction_extent(m::Spherical, ::GI.AbstractPolygonTrait, geom)
+    # region box of the exterior ring: edge arc extents plus enclosed-axis
+    # widening, on the same converted points the engine ingests.
+    # `_spherical_region_extent` bounds the region on the ring's left, so
+    # orient the shell's denoted region onto its left first — unoriented, a
+    # CW-wound input (shapefile convention) would otherwise bound the
+    # complement, under-covering an enclosed pole; oriented, the shell is
+    # interior-on-left by declaration and is used verbatim, so a complement
+    # shell's box covers (nearly) the whole sphere — unprunable but correct
+    # (`exact` is unused by the spherical `_ring_is_ccw`)
+    pts = _orient_ring(m, _ring_usp(GI.getexterior(geom)), false, false; exact = True())
+    ext = _spherical_region_extent(pts)
+    # a valid polygon's holes lie inside that region — but JTS's element
+    # envelope also covers a stray hole outside the shell, and extraction
+    # relies on that to keep the element alive
+    # (see `_extract_segment_strings_from_atomic!`)
+    for hole in GI.gethole(geom)
+        GI.isempty(hole) && continue
+        ext = Extents.union(ext, _sph_interaction_extent(m, GI.trait(hole), hole))
+    end
+    return ext
+end
+function _sph_interaction_extent(m::Spherical, ::GI.AbstractGeometryTrait, geom)
+    ext = nothing
+    for g in GI.getgeom(geom)
+        GI.isempty(g) && continue
+        e = _sph_interaction_extent(m, GI.trait(g), g)
+        ext = ext === nothing ? e : Extents.union(ext, e)
+    end
+    return ext
+end
+
+# Converted (kernel-ingest: unit, signed-zero) vertices of a ring/curve.
+_ring_usp(ring) = [_spherical_kernel_point(p) for p in GI.getpoint(ring)]
+
+# `pts[1:n]` (implied closure) with repeated consecutive vertices removed,
+# copying only when one exists; wraparound repeats included.
+function _drop_repeated_ring_pts(pts, n)
+    has_dup = false
+    for i in 1:n
+        if pts[i] == pts[mod1(i + 1, n)]
+            has_dup = true
+            break
+        end
+    end
+    has_dup || return pts, n
+    ded = empty(pts)
+    sizehint!(ded, n)
+    for i in 1:n
+        (isempty(ded) || ded[end] != pts[i]) && push!(ded, pts[i])
+    end
+    length(ded) > 1 && ded[end] == ded[1] && pop!(ded)
+    return ded, length(ded)
+end
+
+_pad_bounds(::Nothing) = nothing
+_pad_bounds(ext) = Extents.Extent(
+    X = _widen(ext.X...), Y = _widen(ext.Y...), Z = _widen(ext.Z...))
