@@ -53,6 +53,19 @@ Base.showerror(io::IO, e::_OverlayTopologyError) = print(io, "OverlayTopologyErr
     end
 end
 
+# The `op` argument was always a predicate over the two per-input locations:
+# the four set-op codes select the four hard-wired predicates above, and any
+# callable `(loc0, loc1) -> Bool` may stand in their place (`LOC_BOUNDARY` is
+# collapsed to `LOC_INTERIOR` before the call, exactly as for the set ops).
+# This method plus the loosened `op` signatures below are the whole surface a
+# custom result semantics needs on the dissolving (result-area) pipeline;
+# non-dissolving consumers use the face enumeration in polygon_builder.jl.
+@inline function _is_result_of_op(pred::F, loc0::Integer, loc1::Integer) where {F}
+    loc0 == LOC_BOUNDARY && (loc0 = LOC_INTERIOR)
+    loc1 == LOC_BOUNDARY && (loc1 = LOC_INTERIOR)
+    return pred(loc0, loc1)::Bool
+end
+
 # ## computeLabelling — the five passes, in order (port of `computeLabelling`)
 
 function _compute_labelling!(g::OverlayGraph, input)
@@ -211,7 +224,7 @@ end
 
 # ## Result-area marking (ports of `markResultAreaEdges` / `unmarkDuplicate…`)
 
-function _mark_result_area_edges!(g::OverlayGraph, op::_OverlayOpCode)
+function _mark_result_area_edges!(g::OverlayGraph, op)
     edges = g.edges
     for i in eachindex(edges)
         _mark_in_result_area!(edges, i, op)
@@ -220,8 +233,9 @@ function _mark_result_area_edges!(g::OverlayGraph, op::_OverlayOpCode)
 end
 
 # Port of `markInResultArea`: mark an edge whose right-side (boundary) or line
-# location makes it part of the result-area boundary under `op`.
-@inline function _mark_in_result_area!(edges, i::Integer, op::_OverlayOpCode)
+# location makes it part of the result-area boundary under `op` (a set-op code
+# or any location predicate — see `_is_result_of_op`).
+@inline function _mark_in_result_area!(edges, i::Integer, op)
     label = oe_label(edges, i)
     if is_boundary_either(label) && _is_result_of_op(op,
             oe_get_location_boundary_or_line(edges, i, 0, POS_RIGHT),
