@@ -137,6 +137,14 @@ include("methods/clipping/overlayng/edge_source.jl")
 include("methods/clipping/overlayng/half_edge.jl")
 include("methods/clipping/overlayng/overlay_graph.jl")
 
+# OverlayNG engine core (phase 2b): labeller, result builders, and the driver.
+include("methods/clipping/overlayng/overlay_labeller.jl")
+include("methods/clipping/overlayng/maximal_edge_ring.jl")
+include("methods/clipping/overlayng/polygon_builder.jl")
+include("methods/clipping/overlayng/line_builder.jl")
+include("methods/clipping/overlayng/intersection_point_builder.jl")
+include("methods/clipping/overlayng/overlay_ng.jl")
+
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")
