@@ -131,6 +131,12 @@ include("methods/clipping/overlayng/noding/node_identity.jl")
 include("methods/clipping/overlayng/noding/split.jl")
 include("methods/clipping/overlayng/noding/emit.jl")
 
+# OverlayNG engine core (phase 2a): the half-edge graph over the arrangement.
+include("methods/clipping/overlayng/overlay_label.jl")
+include("methods/clipping/overlayng/edge_source.jl")
+include("methods/clipping/overlayng/half_edge.jl")
+include("methods/clipping/overlayng/overlay_graph.jl")
+
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")
