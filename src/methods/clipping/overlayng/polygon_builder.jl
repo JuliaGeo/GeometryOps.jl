@@ -148,3 +148,69 @@ function _ring_to_polygon(ctx, shell_handle::Integer)
     end
     return GI.Polygon(rings)
 end
+
+# ## Face enumeration — all minimal rings of the arrangement (Polygonizer-style)
+#
+# The op pipeline above extracts only the rings the op's result predicate
+# selects, after dissolving interior boundaries (`unmarkDuplicateEdges`). Some
+# consumers — antimeridian splitting, polygon-cut-by-line, polygonize — instead
+# need the arrangement's FACES: every minimal ring of the noded linework, each
+# tracing the face on its RIGHT via the half-edge face traversal (successor =
+# onext ∘ sym), with per-input face locations read off the shared labels. A
+# dangling edge (a line dead-end) is traversed twice by its face's ring, out
+# and back — callers that need dangle-free rings filter, callers like the
+# antimeridian pole seam rely on exactly this doubling.
+#
+# Reuses the `_OverlayEdgeRing` pipeline unchanged: the face link fills the
+# same `next_result` field the op pipeline links, so `_compute_ring!` (ring
+# points, kernel points, shell/hole orientation, bbox) and the hole-placement
+# machinery run identically. Like the op pipeline, this consumes the graph's
+# ring-linkage fields — run one extraction per `OverlayGraph`.
+
+# Link every half-edge to its face-ring successor and build one `_OverlayEdgeRing`
+# per face cycle. Requires a labelled graph (`_compute_labelling!`). Returns the
+# builder context; ring handles are `1:length(ctx.edge_rings)`.
+function _build_faces(m::Manifold, g::OverlayGraph{P}; exact) where {P}
+    edges = g.edges
+    for i in eachindex(edges)
+        oe_set_next_result!(edges, i, he_onext(edges, he_sym(edges, i)))
+    end
+    ctx = _PolyBuilderCtx(m, edges, g.arr, exact, _MaxEdgeRing[],
+                          _OverlayEdgeRing{P}[], Int32[], Int32[])
+    for i in eachindex(edges)
+        edges[i].edge_ring == 0 && _new_edge_ring!(ctx, i)
+    end
+    return ctx
+end
+
+# The location of ring `er`'s face — the face on the ring's RIGHT — for input
+# `gi`. Prefers a boundary edge of `gi` (side locations are authoritative);
+# falls back to the first edge's boundary-or-line location.
+function _face_ring_location(ctx, er::Integer, gi::Integer)
+    edges = ctx.edges
+    start = ctx.edge_rings[er].start_edge
+    e = start
+    while true
+        is_boundary(oe_label(edges, e), gi) &&
+            return oe_get_location(edges, e, gi, POS_RIGHT)
+        e = oe_next_result(edges, e)
+        e == start && break
+    end
+    return oe_get_location_boundary_or_line(edges, start, gi, POS_RIGHT)
+end
+
+# Build the polygons of the faces `keep(loc_a, loc_b)` selects (`keep` sees the
+# raw per-input face locations): kept clockwise rings are face shells, kept
+# counter-clockwise rings are cavities of kept faces, assigned to their shells
+# by the same containment machinery the op pipeline uses.
+function _build_face_polygons(m::Manifold, g::OverlayGraph, keep::F; exact) where {F}
+    ctx = _build_faces(m, g; exact)
+    for er in 1:length(ctx.edge_rings)
+        keep(_face_ring_location(ctx, er, 0), _face_ring_location(ctx, er, 1)) || continue
+        ring = ctx.edge_rings[er]
+        ring.is_hole ? push!(ctx.free_hole_list, Int32(er)) :
+                       push!(ctx.shell_list, Int32(er))
+    end
+    _place_free_holes!(ctx)
+    return [_ring_to_polygon(ctx, sh) for sh in ctx.shell_list]
+end
