@@ -55,3 +55,4 @@ GeometryOpsCore = {path = "../GeometryOpsCore"}
 
 [compat]
 DocumenterVitepress = ">=0.2.1"
+TGGeometry = "0.1.2"
