@@ -55,3 +55,4 @@ GeometryOpsCore = {path = "../GeometryOpsCore"}
 
 [compat]
 DocumenterVitepress = ">=0.2.1"
+MakieThemes = "0.1.5"
