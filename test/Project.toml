@@ -39,6 +39,7 @@ XML = "72c71f33-b9b6-44de-8c94-c961784809e2"
 [compat]
 ArchGDAL = "0.10.10"
 GeometryBasics = "0.4.7, 0.5"
+TGGeometry = "0.1.2"
 Test = "1"
 
 [sources]
