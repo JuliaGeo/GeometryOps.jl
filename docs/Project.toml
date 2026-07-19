@@ -54,4 +54,5 @@ GeometryOps = {path = ".."}
 GeometryOpsCore = {path = "../GeometryOpsCore"}
 
 [compat]
+CairoMakie = "0.15.13"
 DocumenterVitepress = ">=0.2.1"
