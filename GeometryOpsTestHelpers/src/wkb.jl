@@ -137,18 +137,25 @@ end
     return Int(geomcode), le, pos
 end
 
+# Reject a run of `count` items of `stride` bytes before anything is allocated for it.
+# Counts arrive as `UInt32`, so `count * stride` stays under 2^36: on the 64-bit `Int` this
+# codec assumes, neither it nor `pos + need` can overflow.
+@inline function _check_run(pos::Int, n::Int, count::Int, stride::Int)
+    need = count * stride
+    pos + need <= n || throw(WKBTruncatedError(need, n - pos))
+    return nothing
+end
+
 # Parse a Polygon body (header already consumed); return `(polygon, pos)`.
 @inline function _read_polygon_body(bytes, pos::Int, n::Int, le::Bool)
     nrings32, pos = _read_u32(bytes, pos, n, le)
     nrings = Int(nrings32)
-    # Each ring is at least its own 4-byte point count; bound the allocation first.
-    Int64(pos) + Int64(nrings) * 4 <= n || throw(WKBTruncatedError(nrings * 4, n - pos))
+    _check_run(pos, n, nrings, 4)      # each ring is at least its own 4-byte point count
     rings = Vector{_WKBLinearRing}(undef, nrings)
     @inbounds for r in 1:nrings
         npts32, pos = _read_u32(bytes, pos, n, le)
         npts = Int(npts32)
-        need = Int64(npts) * 16
-        Int64(pos) + need <= n || throw(WKBTruncatedError(need, n - pos))
+        _check_run(pos, n, npts, 16)   # two `Float64`s per point
         coords = Vector{Tuple{Float64,Float64}}(undef, npts)
         for i in 1:npts
             x, pos = _read_f64(bytes, pos, le)
@@ -164,8 +171,7 @@ end
 @inline function _read_multipolygon_body(bytes, pos::Int, n::Int, le::Bool)
     ngeoms32, pos = _read_u32(bytes, pos, n, le)
     ngeoms = Int(ngeoms32)
-    # Each sub-polygon is at least order(1) + type(4) + nrings(4) = 9 bytes.
-    Int64(pos) + Int64(ngeoms) * 9 <= n || throw(WKBTruncatedError(ngeoms * 9, n - pos))
+    _check_run(pos, n, ngeoms, 9)      # order(1) + type(4) + nrings(4) per sub-polygon
     polys = Vector{_WKBPolygon}(undef, ngeoms)
     @inbounds for g in 1:ngeoms
         geomcode, le2, pos = _read_header(bytes, pos, n)   # per-element byte order + type
