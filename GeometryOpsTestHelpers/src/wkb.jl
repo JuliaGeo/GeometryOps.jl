@@ -4,43 +4,24 @@ export parse_wkb, write_wkb
 #=
 ## What is this?
 
-A dependency-light, single-pass reader and writer for **Well-Known Binary (WKB)**
-restricted to polygonal geometry (`Polygon` and `MultiPolygon`).  It exists to move
-geometry in and out of C libraries (s2geography's C API, LibGEOS) as `geoarrow.wkb`
-(standard ISO WKB) during differential-validation testing, without pulling in a full
-WKB stack.
-
-* [`parse_wkb`](@ref) reads a byte buffer and returns a `GI.Polygon` or `GI.MultiPolygon`
-  whose rings are `Vector{Tuple{Float64,Float64}}` — the same nested-tuple representation
-  `GO.tuples` produces, so results compare `==` coordinate-exact against it.
-* [`write_wkb`](@ref) serializes any GeoInterface `PolygonTrait`/`MultiPolygonTrait`
-  geometry to little-endian ISO WKB.
-
-Parsing is the hot path (results come back from C as WKB), so the reader is a single
-pass over the buffer using pointer loads — no `IOBuffer`, no per-value `read`, no
-intermediate geometry objects.  Every count is validated against the remaining buffer
-length *before* any allocation, so a truncated or hostile buffer throws a clean error
-instead of segfaulting or OOMing on a giant preallocation.
+A single-pass codec for 2D polygonal **Well-Known Binary**.  [`parse_wkb`](@ref) returns
+a `GI.Polygon`/`GI.MultiPolygon` whose rings are `Vector{Tuple{Float64,Float64}}`, equal
+to `GO.tuples` output; [`write_wkb`](@ref) emits little-endian ISO WKB.
 
 ## WKB layout (ISO)
 
-Each geometry is: a **byte-order** byte (`0x00` big-endian/XDR, `0x01` little-endian/NDR),
-a `UInt32` **type code**, then a type-specific payload.  A `MultiPolygon` payload is a
-`UInt32` count followed by full sub-geometries — **each carrying its own byte-order byte
-and type code**, so mixed endianness within one buffer is legal and handled.
-
-Dimensionality is detected two ways and rejected (2D only): ISO codes (`type + 1000` Z,
-`+ 2000` M, `+ 3000` ZM) and EWKB high-bit flags (`0x80000000` Z, `0x40000000` M).  The
-EWKB SRID flag (`0x20000000`) is accepted and its 4-byte SRID skipped.
+A geometry is a **byte-order** byte (`0x00` big-endian, `0x01` little-endian), a `UInt32`
+**type code**, then a payload.  A `MultiPolygon` payload is a `UInt32` count followed by
+whole sub-geometries, each with its own byte-order byte and type code.  Z/M dimensions are
+encoded either in the ISO type code (`type + 1000` Z, `+ 2000` M, `+ 3000` ZM) or in EWKB
+flag bits (`0x80000000` Z, `0x40000000` M), and are rejected here; the EWKB SRID flag
+(`0x20000000`) is accepted and its 4-byte payload skipped.
 =#
 
 import GeoInterface as GI
 
-# Concrete geometry types.  These match exactly what `GO.tuples` returns for 2D
-# polygonal geometry, so `parse_wkb(...) == GO.tuples(geom)` holds structurally.
-# Building them through the inner constructors (rather than the public `GI.Polygon`
-# etc.) skips validation and, crucially, works for empty rings/polygons/multipolygons
-# (the public constructors call `first(geom)` and throw on empty input).
+# Concrete types matching `GO.tuples` output.  Their inner constructors skip validation
+# and accept empty rings, polygons and multipolygons.
 const _WKBLinearRing = GI.LinearRing{false,false,Vector{Tuple{Float64,Float64}},Nothing,Nothing}
 const _WKBPolygon = GI.Polygon{false,false,Vector{_WKBLinearRing},Nothing,Nothing}
 const _WKBMultiPolygon = GI.MultiPolygon{false,false,Vector{_WKBPolygon},Nothing,Nothing}
@@ -69,10 +50,9 @@ end
 @noinline _wkb_mp_child(code) =
     throw(ArgumentError("A MultiPolygon element must be a Polygon (3), but found WKB type $(code) ($(_wkb_type_name(code)))"))
 
-# ## Low-level reads.
-# `p0` points at byte 1; `pos` is a 0-based byte offset; `n` is the buffer length.
-# `ltoh`/`ntoh` make endianness host-independent: little-endian data goes through
-# `ltoh`, big-endian through `ntoh`, each a no-op or `bswap` depending on host.
+# ## Low-level reads
+# `p0` points at byte 1, `pos` is a 0-based offset from it, `n` is the buffer length.
+# `ltoh`/`ntoh` decode little-/big-endian data on either host.
 
 @inline function _read_u8(p0::Ptr{UInt8}, pos::Int, n::Int)
     pos + 1 <= n || _wkb_truncated(1, n - pos)
@@ -177,8 +157,8 @@ function parse_wkb(bytes::AbstractVector{UInt8})
     end
 end
 
-# ## Writing.
-# Little-endian ISO WKB.  `htol` maps host order to little-endian (a no-op or `bswap`).
+# ## Writing
+# Little-endian ISO WKB, emitted into an exactly-sized preallocated buffer.
 
 @inline function _put_u8!(p0::Ptr{UInt8}, pos::Int, v::UInt8)
     unsafe_store!(p0 + pos, v)
