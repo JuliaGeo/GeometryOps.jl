@@ -41,16 +41,9 @@ import GeoInterface as GI
 # Building them through the inner constructors (rather than the public `GI.Polygon`
 # etc.) skips validation and, crucially, works for empty rings/polygons/multipolygons
 # (the public constructors call `first(geom)` and throw on empty input).
-const _WKBRing  = Vector{Tuple{Float64,Float64}}
-const _WKBLinRing = GI.LinearRing{false,false,_WKBRing,Nothing,Nothing}
-const _WKBRings = Vector{_WKBLinRing}
-const _WKBPoly  = GI.Polygon{false,false,_WKBRings,Nothing,Nothing}
-const _WKBPolys = Vector{_WKBPoly}
-const _WKBMPoly = GI.MultiPolygon{false,false,_WKBPolys,Nothing,Nothing}
-
-@inline _wkb_linearring(coords::_WKBRing) = _WKBLinRing(coords, nothing, nothing)
-@inline _wkb_polygon(rings::_WKBRings) = _WKBPoly(rings, nothing, nothing)
-@inline _wkb_multipolygon(polys::_WKBPolys) = _WKBMPoly(polys, nothing, nothing)
+const _WKBLinearRing = GI.LinearRing{false,false,Vector{Tuple{Float64,Float64}},Nothing,Nothing}
+const _WKBPolygon = GI.Polygon{false,false,Vector{_WKBLinearRing},Nothing,Nothing}
+const _WKBMultiPolygon = GI.MultiPolygon{false,false,Vector{_WKBPolygon},Nothing,Nothing}
 
 # WKB integer type codes -> human names, for error messages.
 function _wkb_type_name(code::Integer)
@@ -122,7 +115,7 @@ end
     nrings = Int(nrings32)
     # Each ring is at least its own 4-byte point count; bound the allocation first.
     Int64(pos) + Int64(nrings) * 4 <= n || _wkb_truncated(nrings * 4, n - pos)
-    rings = Vector{_WKBLinRing}(undef, nrings)
+    rings = Vector{_WKBLinearRing}(undef, nrings)
     @inbounds for r in 1:nrings
         npts32, pos = _read_u32(p0, pos, n, le)
         npts = Int(npts32)
@@ -134,9 +127,9 @@ end
             y, pos = _read_f64(p0, pos, le)
             coords[i] = (x, y)
         end
-        rings[r] = _wkb_linearring(coords)
+        rings[r] = _WKBLinearRing(coords, nothing, nothing)
     end
-    return _wkb_polygon(rings), pos
+    return _WKBPolygon(rings, nothing, nothing), pos
 end
 
 # Parse a MultiPolygon body (header already consumed); return `(multipolygon, pos)`.
@@ -145,14 +138,14 @@ end
     ngeoms = Int(ngeoms32)
     # Each sub-polygon is at least order(1) + type(4) + nrings(4) = 9 bytes.
     Int64(pos) + Int64(ngeoms) * 9 <= n || _wkb_truncated(ngeoms * 9, n - pos)
-    polys = Vector{_WKBPoly}(undef, ngeoms)
+    polys = Vector{_WKBPolygon}(undef, ngeoms)
     @inbounds for g in 1:ngeoms
         geomcode, le2, pos = _read_header(p0, pos, n)   # per-element byte order + type
         geomcode == 3 || _wkb_mp_child(geomcode)
         poly, pos = _read_polygon_body(p0, pos, n, le2)
         polys[g] = poly
     end
-    return _wkb_multipolygon(polys), pos
+    return _WKBMultiPolygon(polys, nothing, nothing), pos
 end
 
 """
