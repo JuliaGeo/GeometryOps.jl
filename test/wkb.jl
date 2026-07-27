@@ -5,7 +5,9 @@ import LibGEOS as LG
 import Random
 import NaturalEarth
 using GeometryOpsTestHelpers
-using GeometryOpsTestHelpers: parse_wkb, write_wkb
+using GeometryOpsTestHelpers: parse_wkb, write_wkb, WKBParseError, WKBWriteError
+using GeometryOpsTestHelpers: WKBTruncatedError, WKBByteOrderError, WKBDimensionError,
+                              WKBUnsupportedTypeError, WKBMultiPolygonElementError
 
 # LibGEOS is the reference codec.  High-level API only (raw GEOS C calls abort the process).
 const CTX = LG.get_global_context()
@@ -202,16 +204,16 @@ end
     le = write_wkb(g)
     # ISO PolygonZ (1003)
     iso = copy(le); iso[2:5] = reinterpret(UInt8, [htol(UInt32(1003))])
-    @test_throws ArgumentError parse_wkb(iso)
+    @test_throws WKBDimensionError parse_wkb(iso)
     # ISO PolygonM (2003) and PolygonZM (3003)
     for code in (2003, 3003)
         b = copy(le); b[2:5] = reinterpret(UInt8, [htol(UInt32(code))])
-        @test_throws ArgumentError parse_wkb(b)
+        @test_throws WKBDimensionError parse_wkb(b)
     end
     # EWKB Z / M flag bits
     for flag in (0x80000000, 0x40000000, 0xc0000000)
         b = copy(le); b[2:5] = reinterpret(UInt8, [htol(UInt32(3) | flag)])
-        @test_throws ArgumentError parse_wkb(b)
+        @test_throws WKBDimensionError parse_wkb(b)
     end
 end
 
@@ -221,19 +223,19 @@ end
         b = UInt8[0x01]
         append!(b, reinterpret(UInt8, [htol(UInt32(code))]))
         append!(b, reinterpret(UInt8, [htol(UInt32(0))]))
-        @test_throws ArgumentError parse_wkb(b)
+        @test_throws WKBUnsupportedTypeError parse_wkb(b)
     end
     # empty buffer / truncated header / truncated count / truncated coords
-    @test_throws ArgumentError parse_wkb(UInt8[])
-    @test_throws ArgumentError parse_wkb(UInt8[1, 3])
-    @test_throws ArgumentError parse_wkb(UInt8[1, 3, 0, 0, 0])          # no ring count
-    @test_throws ArgumentError parse_wkb(UInt8[1, 3, 0, 0, 0, 1, 0, 0, 0])  # ring count but no point count
+    @test_throws WKBTruncatedError parse_wkb(UInt8[])
+    @test_throws WKBTruncatedError parse_wkb(UInt8[1, 3])
+    @test_throws WKBTruncatedError parse_wkb(UInt8[1, 3, 0, 0, 0])          # no ring count
+    @test_throws WKBTruncatedError parse_wkb(UInt8[1, 3, 0, 0, 0, 1, 0, 0, 0])  # ring count but no point count
     # absurd counts must not OOM / segfault
-    @test_throws ArgumentError parse_wkb(UInt8[1, 3, 0, 0, 0, 0xff, 0xff, 0xff, 0xff])
-    @test_throws ArgumentError parse_wkb(UInt8[1, 3, 0, 0, 0, 1, 0, 0, 0, 0xff, 0xff, 0xff, 0xff])
-    @test_throws ArgumentError parse_wkb(UInt8[1, 6, 0, 0, 0, 0xff, 0xff, 0xff, 0xff])
+    @test_throws WKBTruncatedError parse_wkb(UInt8[1, 3, 0, 0, 0, 0xff, 0xff, 0xff, 0xff])
+    @test_throws WKBTruncatedError parse_wkb(UInt8[1, 3, 0, 0, 0, 1, 0, 0, 0, 0xff, 0xff, 0xff, 0xff])
+    @test_throws WKBTruncatedError parse_wkb(UInt8[1, 6, 0, 0, 0, 0xff, 0xff, 0xff, 0xff])
     # bad byte-order flag
-    @test_throws ArgumentError parse_wkb(UInt8[2, 3, 0, 0, 0, 0, 0, 0, 0])
+    @test_throws WKBByteOrderError parse_wkb(UInt8[2, 3, 0, 0, 0, 0, 0, 0, 0])
     # multipolygon whose element is not a polygon
     bad_mp = UInt8[0x01]
     append!(bad_mp, reinterpret(UInt8, [htol(UInt32(6))]))
@@ -242,10 +244,38 @@ end
     append!(bad_mp, reinterpret(UInt8, [htol(UInt32(1))]))   # a Point inside the MultiPolygon
     append!(bad_mp, reinterpret(UInt8, [htol(reinterpret(UInt64, 0.0))]))
     append!(bad_mp, reinterpret(UInt8, [htol(reinterpret(UInt64, 0.0))]))
-    @test_throws ArgumentError parse_wkb(bad_mp)
+    @test_throws WKBMultiPolygonElementError parse_wkb(bad_mp)
+    # every parse failure is catchable through the shared supertype
+    @test_throws WKBParseError parse_wkb(UInt8[])
+    @test_throws WKBParseError parse_wkb(UInt8[2, 3, 0, 0, 0, 0, 0, 0, 0])
+    for T in (WKBTruncatedError, WKBByteOrderError, WKBDimensionError,
+              WKBUnsupportedTypeError, WKBMultiPolygonElementError)
+        @test T <: WKBParseError
+    end
+    # showerror is defined for each of them, and mentions the offending value
+    @test occursin("only 1 remain", sprint(showerror, WKBTruncatedError(4, 1)))
+    @test occursin("2", sprint(showerror, WKBByteOrderError(0x02)))
+    @test occursin("1003", sprint(showerror, WKBDimensionError(UInt32(1003))))
+    @test occursin("LineString", sprint(showerror, WKBUnsupportedTypeError(2)))
+    @test occursin("Point", sprint(showerror, WKBMultiPolygonElementError(1)))
+
     # write_wkb rejects non-polygonal geometry
-    @test_throws ArgumentError write_wkb(GI.Point(1.0, 2.0))
-    @test_throws ArgumentError write_wkb(GI.LineString([(0.0, 0.0), (1.0, 1.0)]))
+    @test_throws WKBWriteError write_wkb(GI.Point(1.0, 2.0))
+    @test_throws WKBWriteError write_wkb(GI.LineString([(0.0, 0.0), (1.0, 1.0)]))
+end
+
+@testset "write_wkb rejects Z / M geometry" begin
+    # The reader rejects Z/M loudly, so the writer must not silently drop it.
+    polyz = GI.Polygon([[(0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 2.0), (0.0, 0.0, 1.0)]])
+    @test GI.is3d(polyz)
+    @test_throws WKBWriteError write_wkb(polyz)
+    mpz = GI.MultiPolygon([[[(0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 2.0), (0.0, 0.0, 1.0)]]])
+    @test GI.is3d(mpz)
+    @test_throws WKBWriteError write_wkb(mpz)
+    # XYM (measured but not 3D) is dropped just as silently, so it throws too.
+    polym = GI.Polygon{false,true}([[(0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 2.0), (0.0, 0.0, 1.0)]])
+    @test GI.ismeasured(polym) && !GI.is3d(polym)
+    @test_throws WKBWriteError write_wkb(polym)
 end
 
 @testset "Seeded fuzz vs LibGEOS" begin

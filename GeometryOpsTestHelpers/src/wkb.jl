@@ -1,5 +1,5 @@
 # # Fast WKB codec for polygonal geometry
-export parse_wkb, write_wkb
+export parse_wkb, write_wkb, WKBParseError, WKBWriteError
 
 #=
 ## What is this?
@@ -38,17 +38,68 @@ function _wkb_type_name(code::Integer)
     "unknown"
 end
 
-# Cold error paths, kept out of the hot loop.
-@noinline _wkb_truncated(need, have) =
-    throw(ArgumentError("Truncated WKB buffer: need $(need) more byte(s) but only $(have) remain"))
-@noinline _wkb_bad_order(b) =
-    throw(ArgumentError("Invalid WKB byte-order flag $(Int(b)); expected 0 (big-endian) or 1 (little-endian)"))
-@noinline _wkb_zm(rawtype) =
-    throw(ArgumentError("parse_wkb supports 2D geometries only, but WKB type code $(Int(rawtype)) declares Z and/or M coordinates"))
-@noinline _wkb_unsupported(code) =
-    throw(ArgumentError("parse_wkb only supports Polygon (3) and MultiPolygon (6); found WKB type $(code) ($(_wkb_type_name(code)))"))
-@noinline _wkb_mp_child(code) =
-    throw(ArgumentError("A MultiPolygon element must be a Polygon (3), but found WKB type $(code) ($(_wkb_type_name(code)))"))
+"""
+    abstract type WKBParseError <: Exception
+
+Supertype of every error [`parse_wkb`](@ref) throws on malformed input: `WKBTruncatedError`,
+`WKBByteOrderError`, `WKBDimensionError`, `WKBUnsupportedTypeError`, `WKBMultiPolygonElementError`.
+"""
+abstract type WKBParseError <: Exception end
+
+"""
+    WKBWriteError <: Exception
+
+Error thrown by [`write_wkb`](@ref) for geometry it cannot serialize, i.e. anything that
+is not a 2D `Polygon` or `MultiPolygon`.
+"""
+struct WKBWriteError <: Exception
+    msg::String
+end
+Base.showerror(io::IO, e::WKBWriteError) = print(io, "WKBWriteError: ", e.msg)
+
+# A field runs past the end of the buffer.
+struct WKBTruncatedError <: WKBParseError
+    needed::Int
+    available::Int
+end
+Base.showerror(io::IO, e::WKBTruncatedError) = print(io,
+    "WKBTruncatedError: need $(e.needed) more byte(s) but only $(e.available) remain")
+
+# The byte-order flag is neither 0x00 (big-endian) nor 0x01 (little-endian).
+struct WKBByteOrderError <: WKBParseError
+    flag::UInt8
+end
+Base.showerror(io::IO, e::WKBByteOrderError) = print(io,
+    "WKBByteOrderError: byte-order flag $(Int(e.flag)) is neither 0 (big-endian) nor 1 (little-endian)")
+
+# The type code declares Z and/or M coordinates, in either the ISO or the EWKB encoding.
+struct WKBDimensionError <: WKBParseError
+    rawtype::UInt32
+end
+Base.showerror(io::IO, e::WKBDimensionError) = print(io,
+    "WKBDimensionError: type code $(Int(e.rawtype)) declares Z and/or M coordinates, but only 2D is supported")
+
+# The top-level geometry is neither a Polygon nor a MultiPolygon.
+struct WKBUnsupportedTypeError <: WKBParseError
+    code::Int
+end
+Base.showerror(io::IO, e::WKBUnsupportedTypeError) = print(io,
+    "WKBUnsupportedTypeError: type $(e.code) ($(_wkb_type_name(e.code))) is not Polygon (3) or MultiPolygon (6)")
+
+# A MultiPolygon holds a sub-geometry that is not a Polygon.
+struct WKBMultiPolygonElementError <: WKBParseError
+    code::Int
+end
+Base.showerror(io::IO, e::WKBMultiPolygonElementError) = print(io,
+    "WKBMultiPolygonElementError: a MultiPolygon element must be a Polygon (3), but found type " *
+    "$(e.code) ($(_wkb_type_name(e.code)))")
+
+# Cold throw paths, kept out of the inlined readers.
+@noinline _wkb_truncated(need, have) = throw(WKBTruncatedError(need, have))
+@noinline _wkb_bad_order(b) = throw(WKBByteOrderError(b))
+@noinline _wkb_zm(rawtype) = throw(WKBDimensionError(rawtype))
+@noinline _wkb_unsupported(code) = throw(WKBUnsupportedTypeError(code))
+@noinline _wkb_mp_child(code) = throw(WKBMultiPolygonElementError(code))
 
 # ## Low-level reads
 # `p0` points at byte 1, `pos` is a 0-based offset from it, `n` is the buffer length.
@@ -138,7 +189,7 @@ Only 2D `Polygon` (type 3) and `MultiPolygon` (type 6) are supported, including 
 ones.  Big-endian and little-endian buffers are both handled, as is mixed endianness
 across the sub-geometries of a `MultiPolygon`.  The EWKB SRID flag is accepted and the
 SRID ignored; any Z/M dimension (ISO or EWKB flavor) throws.  Malformed or truncated
-buffers throw an `ArgumentError` rather than crashing.
+buffers throw a [`WKBParseError`](@ref) rather than crashing.
 """
 function parse_wkb(bytes::AbstractVector{UInt8})
     n = length(bytes)
@@ -218,20 +269,21 @@ end
 
 Serialize a 2D GeoInterface `PolygonTrait` or `MultiPolygonTrait` geometry to
 little-endian ISO WKB (type 3 / 6).  Doubles are written bit-for-bit; the output buffer
-is preallocated from an exact size computation.  Throws `ArgumentError` for any other
-geometry.
+is preallocated from an exact size computation.  Any other geometry, and any geometry
+carrying Z or M coordinates, throws a [`WKBWriteError`](@ref).
 """
 function write_wkb(geom)
     t = GI.trait(geom)
+    (t isa GI.PolygonTrait || t isa GI.MultiPolygonTrait) ||
+        throw(WKBWriteError("only Polygon and MultiPolygon geometries can be written, got trait $(t)"))
+    (GI.is3d(geom) || GI.ismeasured(geom)) &&
+        throw(WKBWriteError("only 2D geometries can be written, but this geometry has Z and/or M coordinates"))
     if t isa GI.PolygonTrait
         out = Vector{UInt8}(undef, _polygon_wkb_size(geom))
         GC.@preserve out _write_polygon!(pointer(out), 0, geom)
-        return out
-    elseif t isa GI.MultiPolygonTrait
+    else
         out = Vector{UInt8}(undef, _multipolygon_wkb_size(geom))
         GC.@preserve out _write_multipolygon!(pointer(out), 0, geom)
-        return out
-    else
-        throw(ArgumentError("write_wkb only supports Polygon and MultiPolygon geometries, got trait $(t)"))
     end
+    return out
 end
