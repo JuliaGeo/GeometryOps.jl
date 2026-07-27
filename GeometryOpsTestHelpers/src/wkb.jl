@@ -102,31 +102,35 @@ Base.showerror(io::IO, e::WKBMultiPolygonElementError) = print(io,
 @noinline _wkb_mp_child(code) = throw(WKBMultiPolygonElementError(code))
 
 # ## Low-level reads
-# `p0` points at byte 1, `pos` is a 0-based offset from it, `n` is the buffer length.
-# `ltoh`/`ntoh` decode little-/big-endian data on either host.
+# `pos` is a 0-based offset into `bytes`, `n` is the buffer length.  Values are assembled
+# little-endian-first and `bswap`ped for big-endian input, so decoding is host-independent.
 
-@inline function _read_u8(p0::Ptr{UInt8}, pos::Int, n::Int)
+@inline function _read_u8(bytes, pos::Int, n::Int)
     pos + 1 <= n || _wkb_truncated(1, n - pos)
-    return unsafe_load(p0 + pos), pos + 1
+    return @inbounds(bytes[pos+1]), pos + 1
 end
 
-@inline function _read_u32(p0::Ptr{UInt8}, pos::Int, n::Int, le::Bool)
+@inline function _read_u32(bytes, pos::Int, n::Int, le::Bool)
     pos + 4 <= n || _wkb_truncated(4, n - pos)
-    v = unsafe_load(Ptr{UInt32}(p0 + pos))
-    return (le ? ltoh(v) : ntoh(v)), pos + 4
+    v = @inbounds(UInt32(bytes[pos+1])       | UInt32(bytes[pos+2]) << 8 |
+                  UInt32(bytes[pos+3]) << 16 | UInt32(bytes[pos+4]) << 24)
+    return (le ? v : bswap(v)), pos + 4
 end
 
 # No bounds check here: callers validate the whole run of coordinates up front.
-@inline function _read_f64(p0::Ptr{UInt8}, pos::Int, le::Bool)
-    u = unsafe_load(Ptr{UInt64}(p0 + pos))
-    return reinterpret(Float64, le ? ltoh(u) : ntoh(u)), pos + 8
+@inline function _read_f64(bytes, pos::Int, le::Bool)
+    u = @inbounds(UInt64(bytes[pos+1])       | UInt64(bytes[pos+2]) << 8  |
+                  UInt64(bytes[pos+3]) << 16 | UInt64(bytes[pos+4]) << 24 |
+                  UInt64(bytes[pos+5]) << 32 | UInt64(bytes[pos+6]) << 40 |
+                  UInt64(bytes[pos+7]) << 48 | UInt64(bytes[pos+8]) << 56)
+    return reinterpret(Float64, le ? u : bswap(u)), pos + 8
 end
 
 # Read a geometry header (byte order + type + optional SRID); return `(geomcode, le, pos)`.
-@inline function _read_header(p0::Ptr{UInt8}, pos::Int, n::Int)
-    order, pos = _read_u8(p0, pos, n)
+@inline function _read_header(bytes, pos::Int, n::Int)
+    order, pos = _read_u8(bytes, pos, n)
     le = order == 0x01 ? true : order == 0x00 ? false : _wkb_bad_order(order)
-    rawtype, pos = _read_u32(p0, pos, n, le)
+    rawtype, pos = _read_u32(bytes, pos, n, le)
     has_z    = (rawtype & 0x80000000) != 0
     has_m    = (rawtype & 0x40000000) != 0
     has_srid = (rawtype & 0x20000000) != 0
@@ -135,27 +139,27 @@ end
     geomcode = base % UInt32(1000)
     (has_z || has_m || isodim != 0) && _wkb_zm(rawtype)
     if has_srid
-        _, pos = _read_u32(p0, pos, n, le)   # accept and discard the 4-byte SRID
+        _, pos = _read_u32(bytes, pos, n, le)   # accept and discard the 4-byte SRID
     end
     return Int(geomcode), le, pos
 end
 
 # Parse a Polygon body (header already consumed); return `(polygon, pos)`.
-@inline function _read_polygon_body(p0::Ptr{UInt8}, pos::Int, n::Int, le::Bool)
-    nrings32, pos = _read_u32(p0, pos, n, le)
+@inline function _read_polygon_body(bytes, pos::Int, n::Int, le::Bool)
+    nrings32, pos = _read_u32(bytes, pos, n, le)
     nrings = Int(nrings32)
     # Each ring is at least its own 4-byte point count; bound the allocation first.
     Int64(pos) + Int64(nrings) * 4 <= n || _wkb_truncated(nrings * 4, n - pos)
     rings = Vector{_WKBLinearRing}(undef, nrings)
     @inbounds for r in 1:nrings
-        npts32, pos = _read_u32(p0, pos, n, le)
+        npts32, pos = _read_u32(bytes, pos, n, le)
         npts = Int(npts32)
         need = Int64(npts) * 16
         Int64(pos) + need <= n || _wkb_truncated(need, n - pos)
         coords = Vector{Tuple{Float64,Float64}}(undef, npts)
         for i in 1:npts
-            x, pos = _read_f64(p0, pos, le)
-            y, pos = _read_f64(p0, pos, le)
+            x, pos = _read_f64(bytes, pos, le)
+            y, pos = _read_f64(bytes, pos, le)
             coords[i] = (x, y)
         end
         rings[r] = _WKBLinearRing(coords, nothing, nothing)
@@ -164,16 +168,16 @@ end
 end
 
 # Parse a MultiPolygon body (header already consumed); return `(multipolygon, pos)`.
-@inline function _read_multipolygon_body(p0::Ptr{UInt8}, pos::Int, n::Int, le::Bool)
-    ngeoms32, pos = _read_u32(p0, pos, n, le)
+@inline function _read_multipolygon_body(bytes, pos::Int, n::Int, le::Bool)
+    ngeoms32, pos = _read_u32(bytes, pos, n, le)
     ngeoms = Int(ngeoms32)
     # Each sub-polygon is at least order(1) + type(4) + nrings(4) = 9 bytes.
     Int64(pos) + Int64(ngeoms) * 9 <= n || _wkb_truncated(ngeoms * 9, n - pos)
     polys = Vector{_WKBPolygon}(undef, ngeoms)
     @inbounds for g in 1:ngeoms
-        geomcode, le2, pos = _read_header(p0, pos, n)   # per-element byte order + type
+        geomcode, le2, pos = _read_header(bytes, pos, n)   # per-element byte order + type
         geomcode == 3 || _wkb_mp_child(geomcode)
-        poly, pos = _read_polygon_body(p0, pos, n, le2)
+        poly, pos = _read_polygon_body(bytes, pos, n, le2)
         polys[g] = poly
     end
     return _WKBMultiPolygon(polys, nothing, nothing), pos
@@ -190,37 +194,44 @@ ones.  Big-endian and little-endian buffers are both handled, as is mixed endian
 across the sub-geometries of a `MultiPolygon`.  The EWKB SRID flag is accepted and the
 SRID ignored; any Z/M dimension (ISO or EWKB flavor) throws.  Malformed or truncated
 buffers throw a [`WKBParseError`](@ref) rather than crashing.
+
+`bytes` is only ever indexed, so any one-based `AbstractVector{UInt8}` will do.
 """
 function parse_wkb(bytes::AbstractVector{UInt8})
+    Base.require_one_based_indexing(bytes)
     n = length(bytes)
-    GC.@preserve bytes begin
-        p0 = pointer(bytes)
-        geomcode, le, pos = _read_header(p0, 0, n)
-        if geomcode == 3
-            poly, _ = _read_polygon_body(p0, pos, n, le)
-            return poly
-        elseif geomcode == 6
-            mp, _ = _read_multipolygon_body(p0, pos, n, le)
-            return mp
-        else
-            _wkb_unsupported(geomcode)
-        end
+    geomcode, le, pos = _read_header(bytes, 0, n)
+    if geomcode == 3
+        poly, _ = _read_polygon_body(bytes, pos, n, le)
+        return poly
+    elseif geomcode == 6
+        mp, _ = _read_multipolygon_body(bytes, pos, n, le)
+        return mp
+    else
+        _wkb_unsupported(geomcode)
     end
 end
 
 # ## Writing
-# Little-endian ISO WKB, emitted into an exactly-sized preallocated buffer.
+# Little-endian ISO WKB, emitted into an exactly-sized buffer.  Each value goes out as a
+# `reinterpret`ed byte tuple, the one spelling of the stores that LLVM merges into one.
 
-@inline function _put_u8!(p0::Ptr{UInt8}, pos::Int, v::UInt8)
-    unsafe_store!(p0 + pos, v)
+@inline function _put_u8!(out::Vector{UInt8}, pos::Int, v::UInt8)
+    @inbounds out[pos+1] = v
     return pos + 1
 end
-@inline function _put_u32!(p0::Ptr{UInt8}, pos::Int, v::UInt32)
-    unsafe_store!(Ptr{UInt32}(p0 + pos), htol(v))
+@inline function _put_u32!(out::Vector{UInt8}, pos::Int, v::UInt32)
+    t = reinterpret(NTuple{4,UInt8}, htol(v))
+    @inbounds for k in 1:4
+        out[pos+k] = t[k]
+    end
     return pos + 4
 end
-@inline function _put_f64!(p0::Ptr{UInt8}, pos::Int, v::Float64)
-    unsafe_store!(Ptr{UInt64}(p0 + pos), htol(reinterpret(UInt64, v)))
+@inline function _put_f64!(out::Vector{UInt8}, pos::Int, v::Float64)
+    t = reinterpret(NTuple{8,UInt8}, htol(reinterpret(UInt64, v)))
+    @inbounds for k in 1:8
+        out[pos+k] = t[k]
+    end
     return pos + 8
 end
 
@@ -240,26 +251,26 @@ function _multipolygon_wkb_size(mp)
     return sz
 end
 
-function _write_polygon!(p0::Ptr{UInt8}, pos::Int, poly)
-    pos = _put_u8!(p0, pos, 0x01)                     # little-endian
-    pos = _put_u32!(p0, pos, UInt32(3))               # Polygon
-    pos = _put_u32!(p0, pos, UInt32(GI.ngeom(poly)))
+function _write_polygon!(out::Vector{UInt8}, pos::Int, poly)
+    pos = _put_u8!(out, pos, 0x01)                     # little-endian
+    pos = _put_u32!(out, pos, UInt32(3))               # Polygon
+    pos = _put_u32!(out, pos, UInt32(GI.ngeom(poly)))
     for ring in GI.getgeom(poly)
-        pos = _put_u32!(p0, pos, UInt32(GI.npoint(ring)))
+        pos = _put_u32!(out, pos, UInt32(GI.npoint(ring)))
         for pt in GI.getpoint(ring)
-            pos = _put_f64!(p0, pos, Float64(GI.x(pt)))
-            pos = _put_f64!(p0, pos, Float64(GI.y(pt)))
+            pos = _put_f64!(out, pos, Float64(GI.x(pt)))
+            pos = _put_f64!(out, pos, Float64(GI.y(pt)))
         end
     end
     return pos
 end
 
-function _write_multipolygon!(p0::Ptr{UInt8}, pos::Int, mp)
-    pos = _put_u8!(p0, pos, 0x01)                     # little-endian
-    pos = _put_u32!(p0, pos, UInt32(6))               # MultiPolygon
-    pos = _put_u32!(p0, pos, UInt32(GI.ngeom(mp)))
+function _write_multipolygon!(out::Vector{UInt8}, pos::Int, mp)
+    pos = _put_u8!(out, pos, 0x01)                     # little-endian
+    pos = _put_u32!(out, pos, UInt32(6))               # MultiPolygon
+    pos = _put_u32!(out, pos, UInt32(GI.ngeom(mp)))
     for poly in GI.getgeom(mp)
-        pos = _write_polygon!(p0, pos, poly)
+        pos = _write_polygon!(out, pos, poly)
     end
     return pos
 end
@@ -280,10 +291,10 @@ function write_wkb(geom)
         throw(WKBWriteError("only 2D geometries can be written, but this geometry has Z and/or M coordinates"))
     if t isa GI.PolygonTrait
         out = Vector{UInt8}(undef, _polygon_wkb_size(geom))
-        GC.@preserve out _write_polygon!(pointer(out), 0, geom)
+        _write_polygon!(out, 0, geom)
     else
         out = Vector{UInt8}(undef, _multipolygon_wkb_size(geom))
-        GC.@preserve out _write_multipolygon!(pointer(out), 0, geom)
+        _write_multipolygon!(out, 0, geom)
     end
     return out
 end

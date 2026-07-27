@@ -4,6 +4,7 @@ import GeoInterface as GI
 import LibGEOS as LG
 import Random
 import NaturalEarth
+import OffsetArrays
 using GeometryOpsTestHelpers
 using GeometryOpsTestHelpers: parse_wkb, write_wkb, WKBParseError, WKBWriteError
 using GeometryOpsTestHelpers: WKBTruncatedError, WKBByteOrderError, WKBDimensionError,
@@ -276,6 +277,25 @@ end
     polym = GI.Polygon{false,true}([[(0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (1.0, 1.0, 2.0), (0.0, 0.0, 1.0)]])
     @test GI.ismeasured(polym) && !GI.is3d(polym)
     @test_throws WKBWriteError write_wkb(polym)
+end
+
+# A deliberately non-strided byte vector: `parse_wkb` may only index into its input.
+struct _IndexedBytes <: AbstractVector{UInt8}
+    v::Vector{UInt8}
+end
+Base.size(b::_IndexedBytes) = size(b.v)
+Base.getindex(b::_IndexedBytes, i::Int) = b.v[i]
+
+@testset "Any one-based `AbstractVector{UInt8}` parses" begin
+    for g in (unit_square, two_holes, mp_holes)
+        buf = write_wkb(g)
+        @test parse_wkb(view(buf, :)) == GO.tuples(g)                 # SubArray
+        @test parse_wkb(view(vcat(buf, buf), 1:length(buf))) == GO.tuples(g)
+        @test parse_wkb(codeunits(String(copy(buf)))) == GO.tuples(g) # Base.CodeUnits
+        @test parse_wkb(_IndexedBytes(buf)) == GO.tuples(g)           # not strided at all
+    end
+    # Offset axes are rejected rather than silently misread.
+    @test_throws ArgumentError parse_wkb(OffsetArrays.OffsetVector(write_wkb(unit_square), -1))
 end
 
 @testset "Seeded fuzz vs LibGEOS" begin
