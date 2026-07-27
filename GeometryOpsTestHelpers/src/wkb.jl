@@ -91,27 +91,20 @@ struct WKBMultiPolygonElementError <: WKBParseError
     code::Int
 end
 Base.showerror(io::IO, e::WKBMultiPolygonElementError) = print(io,
-    "WKBMultiPolygonElementError: a MultiPolygon element must be a Polygon (3), but found type " *
+    "WKBMultiPolygonElementError: a MultiPolygon element must be a Polygon (code 3), but found code " *
     "$(e.code) ($(_wkb_type_name(e.code)))")
-
-# Cold throw paths, kept out of the inlined readers.
-@noinline _wkb_truncated(need, have) = throw(WKBTruncatedError(need, have))
-@noinline _wkb_bad_order(b) = throw(WKBByteOrderError(b))
-@noinline _wkb_zm(rawtype) = throw(WKBDimensionError(rawtype))
-@noinline _wkb_unsupported(code) = throw(WKBUnsupportedTypeError(code))
-@noinline _wkb_mp_child(code) = throw(WKBMultiPolygonElementError(code))
 
 # ## Low-level reads
 # `pos` is a 0-based offset into `bytes`, `n` is the buffer length.  Values are assembled
 # little-endian-first and `bswap`ped for big-endian input, so decoding is host-independent.
 
 @inline function _read_u8(bytes, pos::Int, n::Int)
-    pos + 1 <= n || _wkb_truncated(1, n - pos)
+    pos + 1 <= n || throw(WKBTruncatedError(1, n - pos))
     return @inbounds(bytes[pos+1]), pos + 1
 end
 
 @inline function _read_u32(bytes, pos::Int, n::Int, le::Bool)
-    pos + 4 <= n || _wkb_truncated(4, n - pos)
+    pos + 4 <= n || throw(WKBTruncatedError(4, n - pos))
     v = @inbounds(UInt32(bytes[pos+1])       | UInt32(bytes[pos+2]) << 8 |
                   UInt32(bytes[pos+3]) << 16 | UInt32(bytes[pos+4]) << 24)
     return (le ? v : bswap(v)), pos + 4
@@ -129,7 +122,7 @@ end
 # Read a geometry header (byte order + type + optional SRID); return `(geomcode, le, pos)`.
 @inline function _read_header(bytes, pos::Int, n::Int)
     order, pos = _read_u8(bytes, pos, n)
-    le = order == 0x01 ? true : order == 0x00 ? false : _wkb_bad_order(order)
+    le = order == 0x01 ? true : order == 0x00 ? false : throw(WKBByteOrderError(order))
     rawtype, pos = _read_u32(bytes, pos, n, le)
     has_z    = (rawtype & 0x80000000) != 0
     has_m    = (rawtype & 0x40000000) != 0
@@ -137,7 +130,7 @@ end
     base = rawtype & 0x1fffffff          # strip the three EWKB flag bits
     isodim  = base ÷ UInt32(1000)        # ISO Z/M encoding lives in the thousands digit
     geomcode = base % UInt32(1000)
-    (has_z || has_m || isodim != 0) && _wkb_zm(rawtype)
+    (has_z || has_m || isodim != 0) && throw(WKBDimensionError(rawtype))
     if has_srid
         _, pos = _read_u32(bytes, pos, n, le)   # accept and discard the 4-byte SRID
     end
@@ -149,13 +142,13 @@ end
     nrings32, pos = _read_u32(bytes, pos, n, le)
     nrings = Int(nrings32)
     # Each ring is at least its own 4-byte point count; bound the allocation first.
-    Int64(pos) + Int64(nrings) * 4 <= n || _wkb_truncated(nrings * 4, n - pos)
+    Int64(pos) + Int64(nrings) * 4 <= n || throw(WKBTruncatedError(nrings * 4, n - pos))
     rings = Vector{_WKBLinearRing}(undef, nrings)
     @inbounds for r in 1:nrings
         npts32, pos = _read_u32(bytes, pos, n, le)
         npts = Int(npts32)
         need = Int64(npts) * 16
-        Int64(pos) + need <= n || _wkb_truncated(need, n - pos)
+        Int64(pos) + need <= n || throw(WKBTruncatedError(need, n - pos))
         coords = Vector{Tuple{Float64,Float64}}(undef, npts)
         for i in 1:npts
             x, pos = _read_f64(bytes, pos, le)
@@ -172,11 +165,11 @@ end
     ngeoms32, pos = _read_u32(bytes, pos, n, le)
     ngeoms = Int(ngeoms32)
     # Each sub-polygon is at least order(1) + type(4) + nrings(4) = 9 bytes.
-    Int64(pos) + Int64(ngeoms) * 9 <= n || _wkb_truncated(ngeoms * 9, n - pos)
+    Int64(pos) + Int64(ngeoms) * 9 <= n || throw(WKBTruncatedError(ngeoms * 9, n - pos))
     polys = Vector{_WKBPolygon}(undef, ngeoms)
     @inbounds for g in 1:ngeoms
         geomcode, le2, pos = _read_header(bytes, pos, n)   # per-element byte order + type
-        geomcode == 3 || _wkb_mp_child(geomcode)
+        geomcode == 3 || throw(WKBMultiPolygonElementError(geomcode))
         poly, pos = _read_polygon_body(bytes, pos, n, le2)
         polys[g] = poly
     end
@@ -208,7 +201,7 @@ function parse_wkb(bytes::AbstractVector{UInt8})
         mp, _ = _read_multipolygon_body(bytes, pos, n, le)
         return mp
     else
-        _wkb_unsupported(geomcode)
+        throw(WKBUnsupportedTypeError(geomcode))
     end
 end
 
