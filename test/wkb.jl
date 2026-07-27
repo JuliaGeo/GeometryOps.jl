@@ -361,9 +361,12 @@ end
         @info "WKB benchmark (Natural Earth 110m countries)" nfeatures = length(geoms) totalverts
         @info "parse ns/vertex" parse_wkb = tpm / totalverts * 1e9 libgeos_readgeom_tuples = tpl / totalverts * 1e9 speedup = tpl / tpm
         @info "write ns/vertex" write_wkb = twm / totalverts * 1e9 libgeos_wkbwriter = twl / totalverts * 1e9 speedup = twl / twm
-        # Being faster than LibGEOS is the reason this codec exists.  The measured
-        # margin is ~60x on parse and ~20x on write, so this cannot trip on CI noise.
-        @test tpm < tpl
-        @test twm < twl
+        # Being faster than LibGEOS is the reason this codec exists (~55x parse, ~15x
+        # write uninstrumented).  Coverage instruments our Julia but not GEOS' C, which
+        # costs the writer ~38x and inverts the comparison, so only assert without it.
+        if Base.JLOptions().code_coverage == 0
+            @test tpm < tpl
+            @test twm < twl
+        end
     end
 end
