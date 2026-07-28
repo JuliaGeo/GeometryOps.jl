@@ -14,6 +14,7 @@ end
 
 @safetestset "Types" begin include("types.jl") end
 @safetestset "Primitives" begin include("primitives.jl") end
+@safetestset "WKB codec" begin include("wkb.jl") end
 
 # Utils
 @safetestset "Utils" begin include("utils/utils.jl") end

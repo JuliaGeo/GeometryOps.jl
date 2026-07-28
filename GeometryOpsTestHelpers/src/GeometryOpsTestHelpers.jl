@@ -6,6 +6,8 @@ using Test
 
 export @test_implementations, @testset_implementations
 
+include("wkb.jl")
+
 # List of test modules - will be populated when extensions load
 # GeoInterface is always available as it's a regular dependency
 const TEST_MODULES = Module[GeoInterface]
