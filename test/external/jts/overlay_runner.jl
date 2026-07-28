@@ -299,10 +299,10 @@ collection of hard *inputs*; most of its cases carry no expected geometry).
 
 For each case with two area operands the five identities of
 [`overlay_area_delta`](@ref) must hold to `rtol` relative to `area(A)+area(B)`,
-and every result must satisfy `valid_fn`. Cases are skipped, with a recorded
-reason, when an operand is unsupported, when an input is invalid (the engine
-contracts on valid input, design §2.2), or when the case is in `skiplist`
-(keyed `(file, case_index, "identity", "AB")`).
+and every one of the five overlay results must satisfy `result_valid_fn`. Cases
+are skipped, with a recorded reason, when an operand is unsupported, when an
+input fails `valid_fn` (the engine contracts on valid input, design §2.2), or
+when the case is in `skiplist` (keyed `(file, case_index, "identity", "AB")`).
 
 Returns `(; per_file, skipped, failures, worst)` where `worst` is the largest
 observed `(relative delta, file, case_index)`.
