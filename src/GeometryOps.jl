@@ -148,6 +148,8 @@ include("methods/clipping/overlayng/overlay_ng.jl")
 # OverlayNG point inputs and mixed-dimension results (phase 3).
 include("methods/clipping/overlayng/overlay_points.jl")
 include("methods/clipping/overlayng/overlay_mixed_points.jl")
+# OverlayNG public opt-in API (phase 3): the `OverlayNG{M}` algorithm + ops.
+include("methods/clipping/overlayng/api.jl")
 
 include("methods/orientation.jl")
 include("methods/polygonize.jl")

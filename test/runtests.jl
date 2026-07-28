@@ -50,6 +50,7 @@ end
 @safetestset "OverlayNG engine" begin include("methods/clipping/overlayng/overlay_ng.jl") end
 @safetestset "OverlayNG faces" begin include("methods/clipping/overlayng/faces.jl") end
 @safetestset "OverlayNG points" begin include("methods/clipping/overlayng/overlay_points.jl") end
+@safetestset "OverlayNG API" begin include("methods/clipping/overlayng/api.jl") end
 # Transformations
 @safetestset "Embed Extent" begin include("transformations/extent.jl") end
 @safetestset "Reproject" begin include("transformations/reproject.jl") end
