@@ -111,14 +111,13 @@ function identity_sweep(m, A, B, label; rtol = 1e-12)
         #--    graded fallback the differential fuzz uses, because the rebuild
         #--    re-nodes A's edges against emitted (rounded) crossing vertices, so
         #--    an ulp-scale boundary difference from A is expected and benign.
-        #-- when A and B touch at a single point the intersection is a POINT or a
-        #-- mixed collection, which the engine cannot yet take back as an *input*
-        #-- (point/GC inputs are phase 3, landing on a separate branch). The
-        #-- identity then degenerates to area(A∖B) == area(A), which is asserted
-        #-- instead of rebuilding.
+        #--    When A and B meet at a point the intersection is a POINT or a
+        #--    mixed collection, which the engine cannot yet take back as an
+        #--    *input* (point/GC inputs are phase 3, on a separate branch); the
+        #--    identity is then asserted in its area form instead.
         if !reconstructible(I)
-            rel(aDab - aA) <= rtol ||
-                return (false, "point-touch reconstruction residual $(rel(aDab - aA)) at $label")
+            rel(aI + aDab - aA) <= rtol ||
+                return (false, "area reconstruction residual $(rel(aI + aDab - aA)) at $label")
             @goto symdiff_checks
         end
         R = ovl(m, GO.OVERLAY_UNION, I, Dab)
@@ -227,14 +226,27 @@ end
 # regression are equally visible. Each is an instance of a defect documented in
 # `test/external/jts/overlay_skiplist.jl`.
 const NE_KNOWN_DEFECTS = Set{String}([
-    #= NE_LEDGER =#
+    # SPHERICAL, ANTIMERIDIAN-TOUCHING INPUT. Natural Earth 10 m Russia is a
+    # 214-polygon MultiPolygon, 5 of whose polygons reach lon ±180. Any spherical
+    # overlay against it raises `OverlayTopologyError: side location conflict`,
+    # while the same pair is clean on the plane and clean on the sphere once
+    # those 5 polygons are dropped (verified by filtering to the 209 polygons
+    # with |lon| < 175). Synthetic antimeridian squares do NOT reproduce it, so
+    # it is specific to the seam geometry, not to the seam itself; the remedy is
+    # the `antimeridian_split` transformation on this branch's parent. These two
+    # pairs only appear in the widened sweep (GO_OVERLAYNG_NE10=1 with a large
+    # GO_OVERLAYNG_NE_PAIRS), not in the CI default.
+    "Spherical NE10 Azerbaijan x Russia",
+    "Spherical NE10 Belarus x Russia",
 ])
 
 function run_sweep(m, label, cases; rtol = 1e-12)
     nfail = 0
+    mname = string(typeof(m).name.name)
     for (name, A, B) in cases
-        ok, detail = identity_sweep(m, A, B, "$label $name"; rtol)
-        if "$label $name" in NE_KNOWN_DEFECTS
+        key = "$mname $label $name"          # manifold-specific: a pair can be clean
+        ok, detail = identity_sweep(m, A, B, key; rtol)   # on one manifold and not the other
+        if key in NE_KNOWN_DEFECTS
             @test_broken ok
             ok || (nfail += 1)
         else
