@@ -1,21 +1,23 @@
 # # OverlayNG driver — the internal end-to-end overlay engine
 #
-# Phase 2b of the OverlayNG port (design doc §3, §4 preview). Ties the phase-1
-# noding substrate, the phase-2a graph, and the phase-2b labeller/builders into
-# the internal driver `_overlay_ng`. Ports the engine core of `OverlayNG.java`
-# (`computeEdgeOverlay` phase order, `extractResult` dimensional priority) and
-# `OverlayUtil.java` (`resultDimension`, result assembly), plus the input model
-# of `InputGeometry.java`. Skipped per the design: ElevationModel,
-# FastOverlayFilter, strict mode, precision/PM, RingClipper/LineLimiter,
-# OverlayPoints/OverlayMixedPoints (phase 3).
+# Phase 2b of the OverlayNG port (design doc §3, §4). Ties the phase-1 noding
+# substrate, the phase-2a graph, and the phase-2b labeller/builders into the
+# internal driver `_overlay_ng`. Ports the engine core of `OverlayNG.java`
+# (`getResult` dispatch, `computeEdgeOverlay` phase order, `extractResult`
+# dimensional priority) and `OverlayUtil.java` (`resultDimension`,
+# `createEmptyResult`, result assembly), plus the input model of
+# `InputGeometry.java`. Skipped per the design: ElevationModel,
+# FastOverlayFilter, strict mode, precision/PM, RingClipper/LineLimiter.
 #
 # This is NOT public: no exports, no `@ref` docstrings. The public opt-in
-# `OverlayNG{M}` algorithm and the differential-validation harnesses are phase 3;
-# the existing `intersection`/`union`/`difference` are untouched.
+# `OverlayNG{M}` algorithm lives in api.jl; the existing
+# `intersection`/`union`/`difference` defaults are untouched.
 #
-# Accepted inputs: line (`LineString`/`LinearRing`/`MultiLineString`) and area
-# (`Polygon`/`MultiPolygon`) geometries, in any A×B combination. Point inputs
-# and geometry collections are rejected with a clear error (phase 3).
+# Accepted inputs: point (`Point`/`MultiPoint`), line
+# (`LineString`/`LinearRing`/`MultiLineString`) and area
+# (`Polygon`/`MultiPolygon`) geometries, in any A×B combination — point inputs
+# are routed to `_overlay_points` / `_overlay_mixed_points` (phase 3). Geometry
+# collections are rejected with a clear error.
 
 # ## Input model (port of `InputGeometry`)
 
@@ -75,31 +77,46 @@ function _overlay_dimension(geom)
     throw(ArgumentError("_overlay_ng: unsupported input geometry trait $(typeof(t))"))
 end
 
+# Whether an overlay operand is empty. `GI.isempty` falls back to `false` for
+# every geometry type that does not implement it — including GeoInterface's own
+# wrappers, which is exactly what this engine emits — so emptiness is also
+# tested structurally. `PointTrait` has no `npoint`, and a point that does not
+# report itself empty always carries a coordinate.
+function _ov_isempty(geom)
+    GI.isempty(geom) && return true
+    GI.trait(geom) isa GI.PointTrait && return false
+    return GI.npoint(geom) == 0
+end
+
 # ## The driver (port of `getResult` / `computeEdgeOverlay`)
 
 """
     _overlay_ng(m, op::_OverlayOpCode, a, b; exact=True(), tree_a=nothing, tree_b=nothing)
 
 Compute the overlay of `a` and `b` under `op` on manifold `m`, returning a
-GeoInterface geometry. Internal engine entry point for OverlayNG phase 2b —
-line and area inputs are supported (any A×B combination); point inputs raise an
-error (phase 3). `tree_a`/`tree_b` accept caller-prebuilt segment indices
-(threaded to the noding substrate).
+GeoInterface geometry. Internal engine entry point for OverlayNG — point, line
+and area inputs are supported in any A×B combination. `tree_a`/`tree_b` accept
+caller-prebuilt segment indices (threaded to the noding substrate).
 """
 function _overlay_ng(m::Manifold, op::_OverlayOpCode, a, b;
         exact = True(), tree_a = nothing, tree_b = nothing)
     dim_a = _overlay_dimension(a)
     dim_b = _overlay_dimension(b)
-    (dim_a < 1 || dim_b < 1) && throw(ArgumentError(
-        "_overlay_ng supports line and area inputs only (got dimensions " *
-        "$dim_a and $dim_b); point inputs are handled in phase 3"))
 
-    input = _OverlayInput(m, a, b, dim_a, dim_b, exact, GI.isempty(a), GI.isempty(b),
+    input = _OverlayInput(m, a, b, dim_a, dim_b, exact, _ov_isempty(a), _ov_isempty(b),
                           nothing, nothing)
 
     #-- empty-input / disjoint-envelope short circuits (port of isEmptyResult)
     er = _empty_result_short_circuit(m, op, input)
     er === nothing || return er
+
+    #-- point paths (port of the `getResult` dispatch): points cannot node
+    #-- anything, so they never reach the arrangement
+    if dim_a == 0 && dim_b == 0
+        return _overlay_points(m, op, a, b)                  # isAllPoints
+    elseif dim_a == 0 || dim_b == 0
+        return _overlay_mixed_points(m, op, a, b, dim_a, dim_b; exact)  # hasPoints
+    end
 
     arr = NodedArrangement(m, a, b; exact, tree_a, tree_b)
     g = OverlayGraph(m, arr; exact)
@@ -188,18 +205,44 @@ end
 # always the empty geometry. On the sphere (design §3 amendment 6) a boundaryless
 # area result is ambiguous between empty and the whole sphere; disambiguate by
 # locating one input vertex under the op semantics, and reject a full-sphere
-# result as unrepresentable under enclosed-region semantics.
+# result — it has no representation here (see `_FULL_SPHERE_MSG`).
 function _resolve_empty_result(m::Manifold, op::_OverlayOpCode, input::_OverlayInput)
     if m isa Spherical &&
        _result_dimension(op, input.dim_a, input.dim_b) == 2 &&
        _covers_everything(m, op, input)
-        throw(ArgumentError(
-            "OverlayNG: the overlay result covers the whole sphere, which is not " *
-            "representable as an enclosed-region polygon under GeometryOps' spherical " *
-            "overlay semantics (a documented phase-3 refinement point)"))
+        throw(ArgumentError(_FULL_SPHERE_MSG))
     end
     return _empty_result(op, input)
 end
+
+#=
+The full sphere is the one areal region on `Spherical()` that GeometryOps cannot
+denote, and that is a property of the geometry model, not of this engine:
+
+  * a polygon denotes the region bounded by its rings. Under `Spherical(;
+    oriented = false)` (the default, and the ecosystem's — S2, R/s2, Python)
+    that is the *enclosed* region of the ring; under `oriented = true` it is the
+    region to the ring's left. Either way a nonempty boundary is required, and
+    the full sphere has none.
+  * a ring-free polygon is exactly how an *empty* geometry is spelled
+    (`GI.isempty` is true for it), so it cannot also mean the full sphere.
+
+S2 solves this with a sentinel (`S2Loop::kFull()`, a one-vertex loop that every
+predicate special-cases). Adding such a sentinel is a change to the meaning of
+`Spherical(; oriented)` across `area`, the predicates and the locators — far
+outside overlay — so this engine raises instead of guessing. Reaching this error
+requires an overlay whose result has *no* boundary at all and covers everything:
+in practice a union/symdifference of complementary hemispheres, or a union whose
+operands' boundaries cancel exactly. If you hit it, subtract the region you care
+about instead (`difference(OverlayNG(Spherical()), whole, part)` is
+representable whenever `whole` is).
+=#
+const _FULL_SPHERE_MSG =
+    "OverlayNG: the overlay result covers the whole sphere. GeometryOps has no " *
+    "representation for the full sphere — a polygon denotes the region bounded by " *
+    "its rings, and a ring-free polygon already means the empty geometry — so the " *
+    "result cannot be returned. Reformulate the operation (e.g. as a `difference` " *
+    "from the covering region) or work with the complement."
 
 # Whether a boundaryless result covers the entire manifold: since there is no
 # result boundary the result is uniform, so evaluating the op at any single point
@@ -222,10 +265,15 @@ function _empty_result(op::_OverlayOpCode, input::_OverlayInput)
     return _empty_geom(dim)
 end
 
-# Empty geometry of the given dimension (2 → area, 1 → line). Dimension 0 is not
-# reachable here (point inputs are rejected up front). GeoInterface's
-# auto-detecting wrapper constructors inspect `first(geom)`, so an empty geometry
-# must be built through the raw typed (`{Z,M,T,E,C}`) constructor.
+# Port of `OverlayUtil.createEmptyResult`: an empty geometry of the given
+# dimension (2 → area, 1 → line, 0 → point). GeoInterface's auto-detecting
+# wrapper constructors inspect `first(geom)`, so an empty geometry must be built
+# through the raw typed (`{Z,M,T,E,C}`) constructor.
+#
+# Deviation from Java: JTS returns *atomic* empties (`POLYGON EMPTY`,
+# `LINESTRING EMPTY`, `POINT EMPTY`); this engine returns the multi form at each
+# dimension, matching the non-empty results it builds (which are Multi whenever
+# the component count is not exactly one).
 const _EmptyRing = Vector{Tuple{Float64, Float64}}
 const _EmptyPoly = GI.Polygon{false, false, Vector{_EmptyRing}, Nothing, Nothing}
 const _EmptyLine = GI.LineString{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}
@@ -234,8 +282,11 @@ function _empty_geom(dim::Integer)
     if dim == 2
         return GI.MultiPolygon{false, false, Vector{_EmptyPoly}, Nothing, Nothing}(
             _EmptyPoly[], nothing, nothing)
+    elseif dim == 1
+        return GI.MultiLineString{false, false, Vector{_EmptyLine}, Nothing, Nothing}(
+            _EmptyLine[], nothing, nothing)
     end
-    #-- dim == 1 (line); dim 0 unreachable
-    return GI.MultiLineString{false, false, Vector{_EmptyLine}, Nothing, Nothing}(
-        _EmptyLine[], nothing, nothing)
+    #-- dim == 0 (point)
+    return GI.MultiPoint{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}(
+        Tuple{Float64, Float64}[], nothing, nothing)
 end

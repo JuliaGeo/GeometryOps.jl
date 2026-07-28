@@ -145,6 +145,10 @@ include("methods/clipping/overlayng/line_builder.jl")
 include("methods/clipping/overlayng/intersection_point_builder.jl")
 include("methods/clipping/overlayng/overlay_ng.jl")
 
+# OverlayNG point inputs and mixed-dimension results (phase 3).
+include("methods/clipping/overlayng/overlay_points.jl")
+include("methods/clipping/overlayng/overlay_mixed_points.jl")
+
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")

@@ -353,8 +353,13 @@ end
 
 @testset "input validation and empty short-circuits" begin
     A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
-    #-- point inputs are rejected (phase 3)
-    @test_throws ArgumentError GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, GI.Point((1.0, 1.0)), A; exact = EX)
+    #-- point inputs are routed to the phase-3 point builders (they used to be
+    #-- rejected here); see overlay_points.jl for their full coverage
+    @test GI.trait(GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, GI.Point((1.0, 1.0)), A;
+                                  exact = EX)) isa GI.PointTrait
+    #-- geometry collections are still rejected
+    @test_throws ArgumentError GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION,
+        GI.GeometryCollection([GI.Point((1.0, 1.0))]), A; exact = EX)
     #-- disjoint intersection short-circuits to empty (planar envelope)
     Far = GI.Polygon([[(100.0, 100.0), (102.0, 100.0), (102.0, 102.0), (100.0, 102.0), (100.0, 100.0)]])
     r = GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, Far; exact = EX)
