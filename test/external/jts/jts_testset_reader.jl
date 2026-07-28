@@ -21,9 +21,19 @@ Some WKT is parsed via LibGEOS instead, because WellKnownGeometry can't handle i
 - `GEOMETRYCOLLECTION`, because WellKnownGeometry mis-splits subgeometries
   preceded by whitespace (e.g. `GEOMETRYCOLLECTION( LINESTRING (1 2, 1 1))`).
 - `LINEARRING`, which WellKnownGeometry does not know at all.
+
+JTS geometry elements may also hold **WKB hex** instead of WKT (much of the
+`robust/overlay` corpus does, and one case of `misc/TestOverlay.xml`); those are
+detected by shape and read through LibGEOS's WKB reader.
 """
 function jts_wkt_to_geom(wkt::String)
-    sanitized_wkt = join(strip.(split(wkt, "\n")), "")
+    sanitized_wkt = _canonicalize_wkt(wkt)
+    if _is_wkb_hex(sanitized_wkt)
+        g = LG.readgeom(hex2bytes(sanitized_wkt))
+        #-- same rule as the WKT path: EMPTY and collections stay LibGEOS
+        (LG.isEmpty(g) || g isa LG.GeometryCollection) && return g
+        return GO.tuples(g)
+    end
     upper_wkt = uppercase(lstrip(sanitized_wkt))
     if occursin("EMPTY", upper_wkt) ||
             startswith(upper_wkt, "GEOMETRYCOLLECTION") ||
@@ -37,12 +47,42 @@ function jts_wkt_to_geom(wkt::String)
     return GO.tuples(geom)
 end
 
+# Collapse a JTS geometry element's text to single-line, canonically-spaced WKT.
+# Newlines must NOT simply be deleted: the `robust/overlay` corpus wraps lines
+# in the middle of a coordinate pair, so `60.0\n6.51...` would silently become
+# the number `60.06.51...`. Whitespace is therefore collapsed to a single space
+# and then removed where WKT does not need it — which also normalizes away the
+# leading-whitespace-before-a-subgeometry form that WellKnownGeometry mis-splits.
+function _canonicalize_wkt(wkt::AbstractString)
+    s = replace(strip(wkt), r"\s+" => " ")
+    s = replace(s, r"\(\s+" => "(", r"\s+\)" => ")", r"\s*,\s*" => ",")
+    return String(s)
+end
+
+# A geometry element holds WKB hex rather than WKT when it is a long, even-length
+# run of hex digits. WKT always contains a letter outside `[A-Fa-f]` (the type
+# keyword) and punctuation, so the two are unambiguous.
+function _is_wkb_hex(s::AbstractString)
+    length(s) >= 18 || return false
+    iseven(length(s)) || return false
+    return all(isxdigit, s)
+end
+
 # Operations whose expected result is a boolean, not a geometry.
 const BOOLEAN_OPS = Set(["relate", "intersects", "disjoint", "contains", "within",
     "covers", "coveredby", "crosses", "touches", "overlaps", "equalstopo", "equals"])
 
 function parse_expected(operation, raw::String)
     lowercase(operation) in BOOLEAN_OPS && return parse(Bool, lowercase(strip(raw)))
+    s = strip(raw)
+    #-- Ops outside BOOLEAN_OPS may still have scalar results: `unionArea` /
+    #-- `unionLength` (a number) and `overlayAreaTest` / `isValid` (a boolean),
+    #-- all over the `robust/overlay` corpus. WKT and WKB hex never parse as a
+    #-- number or a boolean, so this dispatch is unambiguous. Numbers are tried
+    #-- first because `tryparse(Bool, "0")` succeeds.
+    isempty(s) && return nothing
+    v = tryparse(Float64, s); v === nothing || return v
+    b = tryparse(Bool, lowercase(s)); b === nothing || return b
     return jts_wkt_to_geom(raw)
 end
 
