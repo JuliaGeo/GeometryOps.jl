@@ -84,19 +84,26 @@ end
 
 # Port of `extractPolygons`/`extractLines`: the non-empty atomic components of
 # the non-point input, as engine-native (tuple-coordinate) geometries.
+#
+# Empty components are dropped BEFORE the `tuples` conversion, not after: `tuples`
+# rebuilds each ring/linestring from `first(points)` and so cannot represent an
+# empty component (`MULTILINESTRING ((10 10, 20 20), EMPTY)`, TestNGOverlayEmpty
+# case 9, is exactly that input).
 function _nonpoint_components(geom)
     _ov_isempty(geom) && return _NO_COMPONENTS
-    g = tuples(geom)
-    t = GI.trait(g)
+    t = GI.trait(geom)
     if t isa GI.MultiPolygonTrait || t isa GI.MultiLineStringTrait
-        return [c for c in GI.getgeom(g) if !_ov_isempty(c)]
+        return [tuples(c) for c in GI.getgeom(geom) if !_ov_isempty(c)]
     end
-    return [g]
+    return [tuples(geom)]
 end
 
 # Port of `copyNonPoint`. Java copies because its precision-reduction step may
-# have aliased the input; here `tuples` is the copy.
+# have aliased the input; here `tuples` is the copy. Routed through
+# `_nonpoint_components` so an empty component is dropped rather than converted.
 function _copy_non_point(geom, dim::Integer)
-    _ov_isempty(geom) && return _empty_geom(dim)
-    return tuples(geom)
+    comps = _nonpoint_components(geom)
+    isempty(comps) && return _empty_geom(dim)
+    length(comps) == 1 && return comps[1]
+    return dim == 2 ? GI.MultiPolygon(comps) : GI.MultiLineString(comps)
 end

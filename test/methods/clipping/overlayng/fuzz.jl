@@ -372,6 +372,15 @@ end
 # op either throws from the max-ring build or returns a self-intersecting ring.
 # GEOS handles all four. These are `@test_broken`, so they flip the moment the
 # self-noding gap is closed.
+#
+# Measured: closing it *does* flip all four — dropping the `DIM_L` filter in
+# `_collect_self_crossings!` (noding/collect.jl), so areal strings are self-noded
+# alongside linear ones, takes this suite to 1600/1600 with no regression
+# anywhere else, and leaves the robust corpus ledger unchanged. It is not done
+# because it roughly doubles arrangement build time on real data (0.43 s -> 0.89 s
+# over 28 Natural Earth 10m country pairs) — see the note in collect.jl for the
+# cheaper targeted variant. The linear half of the same gap IS closed, because a
+# valid MultiLineString has no self-noding guarantee at all (TestOverlayLA case 2).
 
 @testset "hole apex on the shell edge (self-touching input) — known defect" begin
     A = GO.tuples(LG.readgeom("POLYGON ((0 0, 7 0, 7 7, 0 7, 0 0), (0 3, 5 2, 5 4, 0 3))"))

@@ -59,14 +59,19 @@ end
 # either a shell + its holes, or a set of (connected) holes whose shell is found
 # later (free holes).
 function _assign_shells_and_holes!(ctx, min_rings)
-    shell = _find_single_shell(ctx, min_rings)
+    #-- rings that collapsed at emission bound no area and are not legal
+    #-- LinearRings; drop them before the shell/hole census, exactly as JTS drops
+    #-- its DIM_COLLAPSE edges before ring building (`_ring_is_collapsed`)
+    rings = filter(er -> !_ring_is_collapsed(ctx.edge_rings[er]), min_rings)
+    isempty(rings) && return nothing
+    shell = _find_single_shell(ctx, rings)
     if shell != 0
-        for er in min_rings
+        for er in rings
             ctx.edge_rings[er].is_hole && _set_shell!(ctx, er, shell)
         end
         push!(ctx.shell_list, shell)
     else
-        append!(ctx.free_hole_list, min_rings)
+        append!(ctx.free_hole_list, rings)
     end
     return nothing
 end
@@ -206,8 +211,9 @@ end
 function _build_face_polygons(m::Manifold, g::OverlayGraph, keep::F; exact) where {F}
     ctx = _build_faces(m, g; exact)
     for er in 1:length(ctx.edge_rings)
-        keep(_face_ring_location(ctx, er, 0), _face_ring_location(ctx, er, 1)) || continue
         ring = ctx.edge_rings[er]
+        _ring_is_collapsed(ring) && continue
+        keep(_face_ring_location(ctx, er, 0), _face_ring_location(ctx, er, 1)) || continue
         ring.is_hole ? push!(ctx.free_hole_list, Int32(er)) :
                        push!(ctx.shell_list, Int32(er))
     end

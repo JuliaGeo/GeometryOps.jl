@@ -70,7 +70,7 @@ const OVERLAY_EXPECTED_COUNTS = [
     ("TestNGOverlayP.xml",       0,  60),
     ("TestOverlayAA.xml",       44,   0),
     ("TestOverlayEmpty.xml",   132, 162),
-    ("TestOverlayLA.xml",       15,   1),
+    ("TestOverlayLA.xml",       16,   0),
     ("TestOverlayLL.xml",       25,   0),
     ("TestOverlayMisc.xml",      0,   5),
     ("TestOverlayPA.xml",        0,   9),
@@ -146,6 +146,22 @@ end
     a3, b3 = jts_overlay_operand(case3.geom_a), jts_overlay_operand(case3.geom_b)
     @test LG.equals(overlay_to_lg(go_overlay(:intersection, a3, b3)),
                     LG.intersection(overlay_to_lg(a3), overlay_to_lg(b3)))
+
+    #-- case 2 (GEOS ticket 488) used to raise `found two shells in EdgeRing
+    #-- list`; with the collapsed emitted ring dropped it is `equals` to GEOS
+    #-- exactly, and the XML is the outlier — GEOS misses it by the same
+    #-- symmetric difference we do, to 16 digits.
+    case2 = run.cases[2]
+    a2, b2 = jts_overlay_operand(case2.geom_a), jts_overlay_operand(case2.geom_b)
+    want2 = overlay_to_lg(first(i for i in case2.items
+        if lowercase(i.operation) == "union").expected_result)
+    ours2 = overlay_to_lg(go_overlay(:union, a2, b2))
+    geos2 = LG.union(overlay_to_lg(a2), overlay_to_lg(b2))
+    @test LG.isValid(ours2)
+    @test LG.equals(ours2, geos2)
+    @test !LG.equals(geos2, want2)
+    @test isapprox(LG.area(LG.symmetricDifference(ours2, want2)),
+                   LG.area(LG.symmetricDifference(geos2, want2)); rtol = 1e-12)
 end
 
 # ---------------------------------------------------------------------------
@@ -193,20 +209,26 @@ lg_valid(g) = try LG.isValid(overlay_to_lg(g)) catch; false end
 end
 
 # ---------------------------------------------------------------------------
-# 4. Reduced reproducer for the collapsed-result-ring defect
+# 4. Reduced reproducer for the sub-ULP sliver defect
 # ---------------------------------------------------------------------------
 #
-# `TestOverlay-jts-798.xml` case 1, an 8-point pair of VALID polygons (A is a
-# very thin sliver triangle whose apex sits just past B's top edge). GEOS emits
-# the collapsed part as a result LINESTRING; we keep it inside the area ring as
-# an out-and-back spike, which makes the union/difference/symdifference results
-# invalid and leaves INTERSECTION — whose result is entirely collapsed — with
-# holes and no shell at all.
+# `TestOverlay-jts-798.xml` case 1, an 8-point pair of VALID polygons. A is a
+# needle triangle whose apex pokes ~0.125 past B's top edge while its other two
+# vertices are 5e-12 of area apart — so A's two edges cross B's top edge at two
+# points 6.9e-15 apart, which round to the SAME Float64. The arrangement keeps
+# them as two nodes (it is exact); at emission they coincide, and the result ring
+# is a zero-width spike.
 #
-# These are `@test_broken`: they must start passing the moment the defect is
-# fixed, at which point the ledger above shrinks too.
+# GEOS answers by snapping: its union is `GEOMETRYCOLLECTION (POLYGON(...B...),
+# LINESTRING (66697.39423076923 185280, 66697.375 185280.125))` — the collapsed
+# part demoted to a line — and its intersection is a MULTILINESTRING with no area
+# at all. That demotion is what JTS's `DIM_COLLAPSE` edge label does, and it is
+# unavailable to an exact arrangement (see `overlay_skiplist.jl`).
+#
+# The `@test_broken`s must start passing the moment the defect is fixed, at which
+# point the ledger above shrinks too.
 
-@testset "collapsed result ring (jts-798 case 1) — known defect" begin
+@testset "sub-ULP sliver (jts-798 case 1) — known defect" begin
     A = GO.tuples(LG.readgeom("POLYGON ((66697.40120137333 185279.95469107336, " *
         "66698.375 185273.625, 66697.375 185280.125, 66697.40120137333 185279.95469107336))"))
     B = GO.tuples(LG.readgeom("POLYGON ((66710 185280, 66710 185260, 66690 185260, " *
@@ -214,13 +236,16 @@ end
     #-- both inputs are valid, so the engine's validity contract is satisfied
     @test LG.isValid(overlay_to_lg(A))
     @test LG.isValid(overlay_to_lg(B))
-    #-- INTERSECTION: the whole result collapses to a line; we throw instead
+    #-- INTERSECTION: the whole result is the needle; we throw instead
     @test_broken (go_overlay(:intersection, A, B); true)
-    #-- the other three produce the right area but an invalid geometry
-    for op in (:union, :difference, :symdifference)
+    #-- DIFFERENCE is empty and now valid: the collapsed ring is dropped at
+    #-- emission (`_ring_is_collapsed`), which is the repaired half of the class
+    @test lg_valid(go_overlay(:difference, A, B))
+    #-- the other two produce the right area but an invalid geometry: the spike
+    #-- is embedded in B's ring, so no ring-level rule can see it
+    for op in (:union, :symdifference)
         r = go_overlay(op, A, B)
         lgr = op === :union ? LG.union(overlay_to_lg(A), overlay_to_lg(B)) :
-              op === :difference ? LG.difference(overlay_to_lg(A), overlay_to_lg(B)) :
               LG.symmetricDifference(overlay_to_lg(A), overlay_to_lg(B))
         @test isapprox(lg_area(r), LG.area(lgr); atol = 1e-9)
         @test_broken lg_valid(r)
