@@ -29,41 +29,81 @@ function _collect_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
             return nothing
         end
     end
-    #-- design §2.2 amendment: LINEAR inputs must additionally be self-noded
+    #-- design §2.2 amendment: each input must additionally be self-noded, in two
+    #-- passes of different scope (see below)
     _collect_self_crossings!(m, table, seg_nodes, ssa, Int32(0); exact)
     _collect_self_crossings!(m, table, seg_nodes, ssb, na; exact)
+    _collect_self_vertex_nodes!(m, table, seg_nodes, ssa, Int32(0), ta; exact)
+    _collect_self_vertex_nodes!(m, table, seg_nodes, ssb, na, tb; exact)
     return nothing
 end
 
 #=
-Self-noding of one side's LINEAR segment strings.
+## Self-noding (design §2.2 amendment)
 
 The arrangement invariant is that no node lies strictly inside a noded edge
-(design §2.1). The A×B pass alone does not establish it for linear inputs: a
-node created by an A×B crossing can land in the interior of a *third* segment
-belonging to the same input as one of the pair, and nothing then splits that
-segment. `TestOverlayLA.xml` case 2 is the canonical instance — one
-MULTILINESTRING component runs along a polygon hole boundary while a second
-component of the same MULTILINESTRING crosses it, so the hole edge is split at
-the two crossings but the collinear line component is not, the two no longer
-share a node pair, and the edge merger never pairs them.
+(design §2.1). The A×B pass alone does not establish it: a node lying in the
+interior of a segment of the *same* input as one of the pair is never created by
+an A×B classification, so nothing splits that segment. `TestOverlayLA.xml` case 2
+is the canonical instance — one MULTILINESTRING component runs along a polygon
+hole boundary while a second component of the same MULTILINESTRING crosses it,
+so the hole edge is split at the two crossings but the collinear line component
+is not, the two no longer share a node pair, and the edge merger never pairs
+them.
 
-Only LINEAR strings are self-noded, and that is a cost decision, not a
-correctness one. A valid linear input has no self-noding guarantee at all — a
-MultiLineString may cross and even retrace itself — while a valid areal input
-has almost one: its rings never cross or overlap, so the only self-incidence it
-can carry is a single-point touch (a hole meeting its shell, or two
-multipolygon components meeting). That touch point is always a vertex of one
-ring, but it may lie in the *interior* of the other ring's segment, and then the
-same gap opens for areas. That case is real and reproduced: it is the fuzz
-suite's pinned `hole apex on the shell edge (self-touching input)` defect class,
-which self-noding areal strings as well turns from 4 broken to 4 passing (the
-one-line change is dropping the `DIM_L` filter below). It is not enabled because
-it roughly doubles arrangement build time on real data (0.43 s -> 0.89 s over 28
-Natural Earth 10m country pairs, 16k-68k points each) — the §2.2 trade — and
-because a targeted version (each input's vertices against its own segments, the
-only incidence a valid area can have) would very likely recover it for much
-less. Polygon-only inputs skip the pass entirely: no index is built.
+Self-noding therefore runs per side, in two passes of *different scope*, because
+what a valid input can do to itself depends on its dimension:
+
+- LINEAR strings get the full all-pairs pass below. A valid MultiLineString
+  carries no self-noding guarantee whatsoever: components may properly cross,
+  overlap collinearly, and retrace each other.
+- Every string's VERTICES are additionally noded against the side's own segments
+  (`_collect_self_vertex_nodes!`). For a valid AREAL input that is the whole of
+  what self-noding can find, so the expensive all-pairs pass is not run for it.
+
+The areal argument. Rings of a valid polygonal geometry never cross and never
+overlap: any two of them meet in at most finitely many points, so a segment pair
+drawn from one input intersects either in nothing or in a single point. A single
+point shared by two segments that do not properly cross is an endpoint of at
+least one of them — i.e. an input vertex. So the only self-incidence a valid area
+can carry is *vertex of one ring inside the interior of another ring's segment*
+(a hole apex on its shell, or two multipolygon components meeting), which is
+exactly what the vertex pass records. Note this is not a claim that areas need no
+self-noding: they do, and the missing node is a real defect — the fuzz suite's
+`hole apex on the shell edge (self-touching input)` class, 4 broken tests before
+this pass existed.
+
+That argument was checked, not assumed. Over 5 445 input pairs — Natural Earth
+110 m and 10 m country neighbours (planar and spherical) and shifted-self copies,
+600 cases from each of the eight fuzz generators, and every case of the JTS
+`overlay` and `overlay_robust` XML corpora — the per-segment interior node sets
+produced by this vertex pass and by the full all-pairs pass run on every string
+are IDENTICAL on 5 444. The one input they differ on, `TestOverlayMisc.xml`
+case 5 (GEOS ticket 737), is not valid: `isValidReason` reports a
+self-intersection and its rings carry four proper self-crossings, which is
+outside the engine's contract. Both scopes throw `OverlayTopologyError` on it,
+before and after this change.
+
+Cost, over 29 Natural Earth 10 m country pairs (16k-53k points per pair, 884k
+total), arrangement build time, best of five:
+
+    0.220 s   no areal self-noding (what this branch did before)
+    0.346 s   the targeted pass here
+    0.474 s   the full all-pairs pass on every string, `dual(t, t)` enumeration
+
+Read the breakdown before attributing that to the scope. Timing the self-noding
+pass alone over the 46 sides of that corpus:
+
+    0.258 s   `dual(t, t)` enumeration + full classification
+    0.137 s   `_self_pair_search` enumeration + full classification
+    0.131 s   `_self_pair_search` enumeration + vertex-only test  (ships)
+
+So nearly all of the saving is the unordered-pair enumeration, which the full
+pass could have had too; narrowing the scope to vertices is worth ~5% on top.
+The scope is still the right one — it is provably sufficient on valid areal
+input, it is what the argument above licenses, and it never fabricates a
+crossing node on an input that should not have one — but it is not where the
+time went.
 =#
 function _collect_self_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
         ss::AbstractVector{RelateSegmentString{P}}, off::Int32; exact) where {P}
@@ -74,15 +114,114 @@ function _collect_self_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
     sum(s -> length(s.pts) - 1, sub; init = 0) < 2 && return nothing
     t = _relate_edge_index(m, sub)
     t === nothing && return nothing
-    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, t, t) do i1, i2
+    _self_pair_search(m, t) do i1, i2
         (s1, k1) = t.data[i1]
         (s2, k2) = t.data[i2]
-        #-- the dual traversal of a tree against itself yields every unordered
-        #-- pair twice plus every self-pair; keep one ordering, drop self-pairs
-        (s1 < s2 || (s1 == s2 && k1 < k2)) || return nothing
         _classify_pair!(m, table, seg_nodes, sub, s1, off + lin[s1], Int32(k1),
                         sub, s2, off + lin[s2], Int32(k2); exact)
         return nothing
+    end
+    return nothing
+end
+
+#=
+The targeted half of self-noding: one side's vertices against that side's own
+segments, recording a vertex as an interior node of every segment whose
+*interior* it lies in, and recording nothing else. Sufficient scope for valid
+areal input — argued and measured above.
+
+Enumeration reuses the side's existing segment index — the one the A×B pass
+already built, or the one the caller supplied — so no second index is
+constructed, and it walks that index against itself with `_self_pair_search`,
+visiting each unordered segment pair once. A vertex in a segment's interior is
+an endpoint of some segment whose extent therefore overlaps that segment's, so
+the pair is enumerated and the incidence is found; testing the four
+vertex/segment combinations at each pair is what makes this a vertex pass rather
+than an intersection pass. `tree.data[i]` is `(string index within `ss`, segment
+index)`, hence the `off` to reach the arrangement-global string index.
+
+The membership test is `rk_point_on_segment`, the exact kernel predicate, minus
+the two endpoints — no tolerance, no distance, in keeping with design §0. A
+vertex equal to a segment endpoint is rejected before the predicate runs: it is
+already a node of that segment and needs no split, and rejecting it early keeps
+every adjacent-segment and shared-ring-vertex pair off the predicate entirely.
+=#
+function _collect_self_vertex_nodes!(m::Manifold, table::NodeTable{P}, seg_nodes,
+        ss::AbstractVector{RelateSegmentString{P}}, off::Int32, tree; exact) where {P}
+    tree === nothing && return nothing
+    #-- an all-linear side is fully covered by the pass above
+    all(s -> s.dim == DIM_L, ss) && return nothing
+    _self_pair_search(m, tree) do i1, i2
+        (s1, k1) = tree.data[i1]
+        (s2, k2) = tree.data[i2]
+        p1 = ss[s1].pts; p2 = ss[s2].pts
+        a0 = p1[k1]; a1 = p1[k1 + 1]
+        b0 = p2[k2]; b1 = p2[k2 + 1]
+        _record_vertex_on_segment!(m, table, seg_nodes, a0, b0, b1, off + Int32(s2), Int32(k2); exact)
+        _record_vertex_on_segment!(m, table, seg_nodes, a1, b0, b1, off + Int32(s2), Int32(k2); exact)
+        _record_vertex_on_segment!(m, table, seg_nodes, b0, a0, a1, off + Int32(s1), Int32(k1); exact)
+        _record_vertex_on_segment!(m, table, seg_nodes, b1, a0, a1, off + Int32(s1), Int32(k1); exact)
+        return nothing
+    end
+    return nothing
+end
+
+# Record `p` as an interior node of the segment `(q0, q1)` of string `gs`, if it
+# lies strictly inside it. Exact, and endpoint-equal `p` is rejected first.
+@inline function _record_vertex_on_segment!(m::Manifold, table::NodeTable, seg_nodes,
+        p, q0, q1, gs::Int32, k::Int32; exact)
+    (p == q0 || p == q1) && return nothing
+    rk_point_on_segment(m, p, q0, q1; exact) || return nothing
+    _record_interior!(seg_nodes, gs, k, _intern_node!(table, vertex_node(p)))
+    return nothing
+end
+
+#=
+Every unordered pair of distinct leaves of one spatial index whose extents
+intersect, each visited once, `f(i1, i2)` with `i1 < i2` in leaf order.
+
+`dual_depth_first_search(tree, tree)` would do the same job, but it visits every
+unordered pair TWICE and every self-pair once, which the caller then has to
+filter at the leaf — after the traversal has already paid for it. Splitting the
+recursion into the within-child and cross-child halves removes that work instead
+of discarding it, and is worth ~2x of the self-noding pass on dense real rings
+(0.258 s -> 0.137 s over the 46 Natural Earth 10 m sides of the corpus quoted
+above), where an input's own segments overlap each other constantly and there is
+no pruning to be had.
+
+`buf` materializes one leaf node's `(index, extent)` pairs so they can be walked
+pairwise; it is threaded through the recursion and reused, so the whole traversal
+allocates once. That makes `f` non-reentrant here — it must not start another
+search — which neither caller does.
+=#
+function _self_pair_search(f::F, m::Manifold, tree) where {F}
+    buf = Tuple{Int, _segment_extent_type(m)}[]
+    _self_pair_search(f, Extents.intersects, tree, buf)
+    return nothing
+end
+function _self_pair_search(f::F, pred::PR, node::N, buf::Vector) where {F, PR, N}
+    if SpatialTreeInterface.isleaf(node)
+        empty!(buf)
+        for ie in SpatialTreeInterface.child_indices_extents(node)
+            push!(buf, ie)
+        end
+        @inbounds for a in 1:length(buf), b in (a + 1):length(buf)
+            pred(buf[a][2], buf[b][2]) && f(buf[a][1], buf[b][1])
+        end
+    else
+        nc = SpatialTreeInterface.nchild(node)
+        for a in 1:nc
+            ca = SpatialTreeInterface.getchild(node, a)
+            #-- pairs inside this child ...
+            _self_pair_search(f, pred, ca, buf)
+            #-- ... then pairs spanning it and a later sibling
+            ea = SpatialTreeInterface.node_extent(ca)
+            for b in (a + 1):nc
+                cb = SpatialTreeInterface.getchild(node, b)
+                pred(ea, SpatialTreeInterface.node_extent(cb)) &&
+                    SpatialTreeInterface.dual_depth_first_search(f, pred, ca, cb)
+            end
+        end
     end
     return nothing
 end
