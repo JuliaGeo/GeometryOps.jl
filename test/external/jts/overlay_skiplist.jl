@@ -71,113 +71,119 @@ const OVERLAY_SKIPLIST = Set{Tuple{String, Int, String, String}}([
 # sweep over all 44 files confirmed it for the whole ledger. So none of these is
 # an invalid-input case; the engine's §2.2 contract is satisfied throughout.
 #
-# ONE root cause dominates the ledger:
+# WHAT THE INPUTS HAVE IN COMMON — sub-ULP slivers in the exact arrangement.
+# These are near-coincident-linework regressions: the two inputs carry the same
+# real-world boundary digitised twice, a few ULP apart, or a segment passing a
+# hair from a vertex. The arrangement is exact, so it *keeps* the resulting
+# hair-thin sliver — a corridor or needle whose width is 0–30 ULP of the
+# coordinates. JTS does not: its noder computes intersection points as Float64
+# while noding, so the two sides of such a sliver land on the same coordinates,
+# `EdgeMerger` merges them, their depth deltas cancel, and `Edge.labelDim` labels
+# the merged edge `DIM_COLLAPSE` — which `markResultAreaEdges` skips and
+# `LineBuilder` emits as a result line. (GEOS's answers show exactly that:
+# `intersection` on `TestOverlay-geos-275` case 1 and `TestOverlay-jts-798`
+# case 1 is a MULTILINESTRING, not a polygon.)
 #
-#   SUB-ULP SLIVERS IN THE EXACT ARRANGEMENT. These are near-coincident-linework
-#   regressions: the two inputs carry the same real-world boundary digitised
-#   twice, a few ULP apart, or a segment passing a hair from a vertex. The
-#   arrangement is exact, so it *keeps* the resulting hair-thin sliver — a
-#   corridor or needle whose width is 0–30 ULP of the coordinates. JTS does not:
-#   its noder computes intersection points as Float64 while noding, so the two
-#   sides of such a sliver land on the same coordinates, `EdgeMerger` merges
-#   them, their depth deltas cancel, and `Edge.labelDim` labels the merged edge
-#   `DIM_COLLAPSE` — which `markResultAreaEdges` skips and `LineBuilder` emits as
-#   a result line. (GEOS's answers show exactly that: `intersection` on
-#   `TestOverlay-geos-275` case 1 and `TestOverlay-jts-798` case 1 is a
-#   MULTILINESTRING, not a polygon.)
+# WHAT THAT COSTS US, NOW — exactly one symptom, and it is a *linework* symptom:
+# the emitted result has the right AREA but fails `isValid`. Every entry below is
+# `invalid result geometry from …`, and every GEOS reason behind those entries is
+# `Self-intersection` or `Ring Self-intersection` at a sliver apex: a corridor
+# 0–30 ULP wide rounds to linework that touches itself, or to two rings that
+# touch each other, which OGC forbids even though the region it bounds is
+# correct. The area identities hold across the whole corpus to 1.4e-11 relative
+# (worst: `TestOverlay-qgis-29400` case 4), and no case raises an error.
 #
-#   Here the sliver survives to emission, where design §2.6 rounds once — and at
-#   that point it is no longer representable: its two sides round onto each other
-#   and the ring becomes degenerate. The visible symptoms are
-#     * `isValid` false with GEOS reason `Self-intersection` / `Ring
-#       Self-intersection` / `Too few points in geometry component`, always at a
-#       sliver apex — the emitted ring is a zero- or negative-width corridor;
-#     * `OverlayTopologyError: unable to assign free hole to a shell` when a
-#       needle ring is classified CCW (a hole) and no shell contains it — the
-#       common case, and the whole failure when the *whole* result is a needle;
-#     * `OverlayTopologyError: found two shells in EdgeRing list` when a needle
-#       minimal ring of a maximal ring is classified as a second shell.
-#   In every ledger case where an area *is* produced it agrees with GEOS to
-#   ~1e-12 relative, so this is a result-*representation* defect, not an
-#   arithmetic one. The two exceptions, where the area is genuinely wrong, are
-#   called out individually below.
+# WHERE THE LEDGER USED TO BE WRONG — this header previously blamed the whole
+# cluster on emission-time sliver *representation*, and listed
+# `OverlayTopologyError: unable to assign free hole to a shell` / `found two
+# shells in EdgeRing list` (51 op-runs, 14 whole cases) plus two genuinely wrong
+# areas among its symptoms. Those were NOT representation: they were a design §0
+# violation in result assembly. `_compute_ring!` took each minimal ring's
+# shell-vs-hole role from `Orientation.isCCW` over the ring's *emitted* Float64
+# coordinates, so a ring thinner than an ULP — whose rounded image is inverted or
+# self-touching — was filed with the opposite role, and the builder then found
+# either two shells in one maximal ring or a hole no shell contains. The role is
+# now decided by the sign of the ring's exact signed area over the arrangement's
+# node coordinates (`_ring_is_ccw_exact`, maximal_edge_ring.jl). All 51 errors
+# are gone, `TestOverlay-misc-1` case 1 and `TestOverlay-misc-4` case 1 now pass
+# outright, and the two "area genuinely wrong" entries — `TestOverlay-pg-2055`
+# case 1 (`difference` 1395.9967 → 1334.0032858823013, GEOS-identical) and
+# `TestOverlay-qgis-37032` case 3 (`union` 1106.2171 → 1104.868307403492 against
+# GEOS's 1104.8683074034275) — are cured exactly.
 #
-#   The exactly-representable half of the class IS fixed: a ring whose emitted
-#   coordinates carry repeated points (JTS `CoordinateList.add(pt, false)`, which
-#   the port was missing) or that reduces to fewer than three distinct emitted
-#   vertices is now dropped from the area result — `_ring_is_collapsed` in
-#   maximal_edge_ring.jl, the emission-time analogue of JTS's `DIM_COLLAPSE`.
-#   That flipped `TestOverlay-geos-488` case 1, `TestOverlay-jts-808` case 1 and
-#   `TestOverlay-misc-4` case 2. What remains below is the part where the two
-#   sliver sides round to coordinates that are *close but not equal* (1–30 ULP),
-#   where no exact test can distinguish the sliver from a genuine thin polygon.
-#   Closing that gap needs a decision about the design premise (§0) — it is what
-#   JTS's snapping/snap-rounding ladder is for — and is deliberately NOT done
-#   here.
+# The exactly-representable half of the representation class is fixed too: a ring
+# whose emitted coordinates carry repeated points (JTS
+# `CoordinateList.add(pt, false)`, which the port was missing) or that reduces to
+# fewer than three distinct emitted vertices is dropped from the area result —
+# `_ring_is_collapsed` in maximal_edge_ring.jl, the emission-time analogue of
+# JTS's `DIM_COLLAPSE`. That flipped `TestOverlay-geos-488` case 1,
+# `TestOverlay-jts-808` case 1 and `TestOverlay-misc-4` case 2. What remains
+# below is the part where the two sliver sides round to coordinates that are
+# *close but not equal* (1–30 ULP), where no exact test can distinguish the
+# sliver from a genuine thin polygon. Closing that gap needs a decision about the
+# design premise (§0) — it is what JTS's snapping/snap-rounding ladder is for —
+# and is deliberately NOT done here.
 const ROBUST_KNOWN_DEFECTS = Set{Tuple{String, Int}}([
-    ("TestOverlay-geos-1051.xml", 1),                    # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-geos-275.xml", 1),                     # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-geos-1051.xml", 1),                    # invalid result geometry from difference, symdifference
+    ("TestOverlay-geos-275.xml", 1),                     # invalid result geometry from symdifference
     ("TestOverlay-geos-350.xml", 1),                     # invalid result geometry from intersection, difference, symdifference
-    ("TestOverlay-geos-358.xml", 1),                     # invalid result geometry from union, symdifference
+    ("TestOverlay-geos-358.xml", 1),                     # invalid result geometry from symdifference
     ("TestOverlay-geos-368.xml", 1),                     # invalid result geometry from union, difference, symdifference
-    ("TestOverlay-geos-398.xml", 1),                     # OverlayTopologyError: found two shells in EdgeRing list
+    ("TestOverlay-geos-398.xml", 1),                     # invalid result geometry from symdifference
     ("TestOverlay-geos-522.xml", 1),                     # invalid result geometry from union, difference, symdifference
-    ("TestOverlay-geos-615.xml", 1),                     # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-geos-737.xml", 1),                     # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-geos-615.xml", 1),                     # invalid result geometry from union, symdifference
+    ("TestOverlay-geos-737.xml", 1),                     # invalid result geometry from union, intersection, difference, symdifference
     ("TestOverlay-geos-838.xml", 1),                     # invalid result geometry from union, symdifference
-    ("TestOverlay-geos-997-union-fail.xml", 1),          # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-geos-list.xml", 1),                    # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-jts-300.xml", 1),                      # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-jts-798.xml", 1),                      # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-jts-798.xml", 2),                      # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-jts-798.xml", 3),                      # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-misc-1.xml", 1),                       # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-misc-1.xml", 2),                       # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-geos-997-union-fail.xml", 1),          # invalid result geometry from difference, symdifference
+    ("TestOverlay-geos-list.xml", 1),                    # invalid result geometry from difference, symdifference
+    ("TestOverlay-jts-300.xml", 1),                      # invalid result geometry from union, intersection, difference, symdifference
+    ("TestOverlay-jts-798.xml", 1),                      # invalid result geometry from union, difference, symdifference
+    ("TestOverlay-jts-798.xml", 2),                      # invalid result geometry from union, difference, symdifference
+    ("TestOverlay-jts-798.xml", 3),                      # invalid result geometry from union, difference, symdifference
+    ("TestOverlay-misc-1.xml", 2),                       # invalid result geometry from symdifference
     ("TestOverlay-misc-1.xml", 3),                       # invalid result geometry from difference, symdifference
-    ("TestOverlay-misc-1.xml", 4),                       # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-misc-1.xml", 5),                       # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-misc-1.xml", 4),                       # invalid result geometry from symdifference
+    ("TestOverlay-misc-1.xml", 5),                       # invalid result geometry from symdifference
     ("TestOverlay-misc-2.xml", 1),                       # invalid result geometry from union, symdifference
     ("TestOverlay-misc-2.xml", 2),                       # invalid result geometry from union, symdifference
-    ("TestOverlay-misc-2.xml", 3),                       # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-misc-2.xml", 3),                       # invalid result geometry from intersection, symdifference
     ("TestOverlay-misc-2.xml", 4),                       # invalid result geometry from intersection, symdifference
-    ("TestOverlay-misc-2.xml", 5),                       # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-misc-2.xml", 5),                       # invalid result geometry from intersection, symdifference
     ("TestOverlay-misc-2.xml", 6),                       # invalid result geometry from union, symdifference
     ("TestOverlay-misc-2.xml", 7),                       # invalid result geometry from union, symdifference
     ("TestOverlay-misc-3.xml", 1),                       # invalid result geometry from difference, symdifference
     ("TestOverlay-misc-3.xml", 2),                       # invalid result geometry from union, symdifference
     ("TestOverlay-misc-3.xml", 3),                       # invalid result geometry from intersection, difference, symdifference
-    ("TestOverlay-misc-3.xml", 4),                       # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-misc-4.xml", 1),                       # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-misc-4.xml", 5),                       # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-osmwater.xml", 1),                     # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-misc-3.xml", 4),                       # invalid result geometry from symdifference
+    ("TestOverlay-misc-4.xml", 5),                       # invalid result geometry from difference, symdifference
+    ("TestOverlay-osmwater.xml", 1),                     # invalid result geometry from intersection, difference, symdifference
     ("TestOverlay-osmwater.xml", 2),                     # invalid result geometry from difference, symdifference
-    # AREA WRONG (not just representation): identity residual 61.993 on a total of
-    # 1396.0, i.e. 4.44e-2 relative — the worst in the corpus. A is a rectangle
-    # whose "hole" is a needle: its two legs differ by ~4e-6 in one coordinate,
-    # and B is a triangle whose apex sits 1.5e-8 from the needle's tip. The
-    # B-shaped ring of `difference` comes out oriented as a shell rather than a
-    # hole of A's rectangle, so B's 31.0 of area is added instead of subtracted
-    # (1395.997 against GEOS's 1334.003). The needle survives the exact
-    # arrangement and is what flips the emitted ring's winding, so this is the
-    # same class as the rest of the ledger, seen through the shell/hole role
-    # rather than through `isValid`.
-    ("TestOverlay-pg-2055.xml", 1),
-    ("TestOverlay-pg-2176.xml", 1),                      # OverlayTopologyError: unable to assign free hole to a shell
+    # Was the corpus's worst residual (61.993 on a total of 1396.0, 4.44e-2
+    # relative) and is now exact: `difference` is 1334.0032858823013, GEOS's
+    # answer to the last bit. A is a rectangle whose "hole" is a needle — its two
+    # legs differ by ~4e-6 in one coordinate — and B is a triangle whose apex sits
+    # 1.5e-8 from the needle's tip. The B-shaped ring used to come out oriented as
+    # a shell rather than a hole of A's rectangle, adding B's 31.0 of area instead
+    # of subtracting it; the exact role decision fixes that. What is left is the
+    # needle's emitted linework: `Ring Self-intersection` at the needle tip.
+    ("TestOverlay-pg-2055.xml", 1),                      # invalid result geometry from intersection, difference, symdifference
+    ("TestOverlay-pg-2176.xml", 1),                      # invalid result geometry from union, intersection, difference, symdifference
     ("TestOverlay-pg-4182-2.xml", 1),                    # invalid result geometry from union, intersection, difference, symdifference
-    ("TestOverlay-pg-4538.xml", 1),                      # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-pg-list.xml", 3),                      # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-pg-list.xml", 5),                      # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-qgis-29400.xml", 1),                   # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-pg-4538.xml", 1),                      # invalid result geometry from difference, symdifference
+    ("TestOverlay-pg-list.xml", 3),                      # invalid result geometry from union, intersection, difference, symdifference
+    ("TestOverlay-pg-list.xml", 5),                      # invalid result geometry from union, intersection, difference, symdifference
+    ("TestOverlay-qgis-29400.xml", 1),                   # invalid result geometry from symdifference
     ("TestOverlay-qgis-29400.xml", 2),                   # invalid result geometry from difference, symdifference
     ("TestOverlay-qgis-29400.xml", 3),                   # invalid result geometry from difference, symdifference
-    ("TestOverlay-qgis-29400.xml", 4),                   # invalid result geometry from symdifference
-    ("TestOverlay-qgis-29400.xml", 6),                   # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-qgis-29400.xml", 4),                   # invalid result geometry from symdifference — and the corpus's worst area identity residual, 1.3e-11 relative
+    ("TestOverlay-qgis-29400.xml", 6),                   # invalid result geometry from symdifference
     ("TestOverlay-qgis-37032.xml", 2),                   # invalid result geometry from union, symdifference
-    # AREA WRONG (not just representation): identity residual 1.3488 on a total of
-    # 1104.87, i.e. 1.22e-3 relative — same needle-driven winding flip as
-    # pg-2055 case 1.
-    ("TestOverlay-qgis-37032.xml", 3),
+    # Same story as pg-2055 case 1: the identity residual was 1.3488 on a total of
+    # 1104.87 (1.22e-3 relative) from the same needle-driven role flip, and
+    # `union` is now 1104.868307403492 against GEOS's 1104.8683074034275. The
+    # remaining failure is `Self-intersection` in the emitted linework.
+    ("TestOverlay-qgis-37032.xml", 3),                   # invalid result geometry from union, symdifference
     ("TestOverlay-qgis-37032.xml", 4),                   # invalid result geometry from intersection, difference, symdifference
-    ("TestOverlay-qgis-37032.xml", 5),                   # OverlayTopologyError: unable to assign free hole to a shell
-    ("TestOverlay-rsf-794.xml", 1),                      # OverlayTopologyError: unable to assign free hole to a shell
+    ("TestOverlay-qgis-37032.xml", 5),                   # invalid result geometry from difference, symdifference
+    ("TestOverlay-rsf-794.xml", 1),                      # invalid result geometry from symdifference
 ])
