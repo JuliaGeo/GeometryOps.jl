@@ -26,19 +26,21 @@
 #
 # ## Known open defects
 #
-# Two classes are recorded as `@test_broken` and counted, and are only accepted
+# One class is still recorded as `@test_broken` and counted, and is only accepted
 # as broken when the produced area still matches GEOS inside the rounding band —
 # a wrong *area* is always a hard failure, and any other exception is too.
 #
 # 1. COLLAPSED RESULT RINGS. The engine emits a zero-width out-and-back spike
 #    inside an area ring instead of splitting it out as a result line. See
 #    `test/external/jts/overlay_skiplist.jl` for the write-up and `xml_suite.jl`
-#    for the 8-point reduced reproducer.
-# 2. SELF-TOUCHING INPUT. A polygon whose hole reaches its own shell is
-#    OGC-valid, but the noder deliberately does not self-node one input (design
-#    §2.2), so the shell edge is never split at the hole's touch vertex and the
-#    max-ring build fails. Reproducer in the "hole apex on the shell edge"
-#    testset below.
+#    for the 8-point reduced reproducer. No generator here currently reaches it —
+#    the machinery is kept because the defect is open, not because it fires.
+#
+# The second class this suite used to carry, SELF-TOUCHING INPUT (a valid
+# polygon whose hole reaches its own shell, whose touch vertex the noder never
+# split the shell edge at), is closed: `collect.jl` now nodes each input's
+# vertices against its own segments. That took the census from 493 known-defect
+# ops to zero. The reduced reproducer stays below as a regression pin.
 #
 # ## Case count
 #
@@ -50,9 +52,9 @@
 #     GO_OVERLAYNG_FUZZ_N=20000 GO_OVERLAYNG_FUZZ_REPORTS=0 \
 #         julia --project=test -e 'include("test/methods/clipping/overlayng/fuzz.jl")'
 #
-# which is 80 000 ops in ~26 s wall. That sweep produced: 79 295 exactly
+# which is 80 000 ops in ~15 s wall. That sweep produced: 79 788 exactly
 # `equals` and valid, 212 benign (largest symmetric-difference area
-# 4.674e-14, 7.8 % of its band, on a clustered near-collinear union), 493
+# 4.674e-14, 7.8 % of its band, on a clustered near-collinear union), ZERO
 # known-defect cases, and ZERO divergences.
 
 using Test
@@ -363,34 +365,36 @@ const CASES_PER_GENERATOR = max(1, cld(FUZZ_N, length(GENERATORS)))
 end
 
 # ---------------------------------------------------------------------------
-# Reduced reproducer for the self-touching-input defect the fuzz found
+# Regression pin for the self-touching-input defect the fuzz found
 # ---------------------------------------------------------------------------
 #
 # A is OGC-valid (`LG.isValid` is true): its hole's apex sits exactly on the
-# interior of the shell's left edge, at (0, 3). The noder does not self-node one
-# input (design §2.2), so the shell edge x = 0 is never split there, and every
-# op either throws from the max-ring build or returns a self-intersecting ring.
-# GEOS handles all four. These are `@test_broken`, so they flip the moment the
-# self-noding gap is closed.
+# interior of the shell's left edge, at (0, 3). This used to fail all four ops —
+# the noder self-noded only LINEAR inputs, so the shell edge x = 0 was never
+# split at the hole's apex and every op either threw from the max-ring build or
+# returned a self-intersecting ring.
 #
-# Measured: closing it *does* flip all four — dropping the `DIM_L` filter in
-# `_collect_self_crossings!` (noding/collect.jl), so areal strings are self-noded
-# alongside linear ones, takes this suite to 1600/1600 with no regression
-# anywhere else, and leaves the robust corpus ledger unchanged. It is not done
-# because it roughly doubles arrangement build time on real data (0.43 s -> 0.89 s
-# over 28 Natural Earth 10m country pairs) — see the note in collect.jl for the
-# cheaper targeted variant. The linear half of the same gap IS closed, because a
-# valid MultiLineString has no self-noding guarantee at all (TestOverlayLA case 2).
+# It is fixed by the targeted areal half of self-noding (`collect.jl`,
+# `_collect_self_vertex_nodes!`): each input's vertices are noded against that
+# input's own segments, which for a valid area is the only self-incidence
+# possible. Costed against the alternative of running the full all-pairs pass on
+# areal strings too, which fixes the same cases: arrangement build over 29
+# Natural Earth 10 m country pairs is 0.220 s with no areal self-noding, 0.474 s
+# with the full pass, 0.346 s with the targeted pass — see `collect.jl` for the
+# breakdown, and for the corpus-wide check that the two scopes produce the same
+# nodes. The full pass is still what LINEAR strings get, because a valid
+# MultiLineString may properly cross itself (TestOverlayLA case 2) and a vertex
+# pass would not see that.
 
-@testset "hole apex on the shell edge (self-touching input) — known defect" begin
+@testset "hole apex on the shell edge (self-touching input)" begin
     A = GO.tuples(LG.readgeom("POLYGON ((0 0, 7 0, 7 7, 0 7, 0 0), (0 3, 5 2, 5 4, 0 3))"))
     B = GO.tuples(LG.readgeom("POLYGON ((0 1, 3 1, 3 9, 0 9, 0 1))"))
     @test LG.isValid(to_lg(A))       # the input satisfies the engine's contract
     @test LG.isValid(to_lg(B))
     for op in OPS
-        #-- either an OverlayTopologyError or an invalid result; both are the defect
-        @test_broken (r = GO._overlay_ng(GO.Planar(), OPCODE[op], A, B; exact = EX);
-                      LG.isValid(result_to_lg(r)))
+        r = GO._overlay_ng(GO.Planar(), OPCODE[op], A, B; exact = EX)
+        @test LG.isValid(result_to_lg(r))
+        @test LG.equals(result_to_lg(r), geos_op(op, to_lg(A), to_lg(B)))
     end
 end
 
