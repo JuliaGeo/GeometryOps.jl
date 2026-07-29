@@ -186,6 +186,37 @@ end
 
 # ## Minimal ring construction (port of the `OverlayEdgeRing` constructor)
 
+#=
+Port of JTS `CoordinateList.add(coord, allowRepeated = false)`, the accumulator
+`OverlayEdge.addCoordinates` fills a ring's coordinates through: a point equal
+to the current last one is not appended.
+
+This is not cosmetic here. The arrangement's nodes are symbolic and exact, so two
+*distinct* nodes can realize to the same Float64 coordinate at emission (design
+§2.6 rounds once, there); the ring then carries a repeated point, which is not a
+legal `LinearRing` vertex sequence. JTS never sees the situation because its
+noder rounds while noding, so the two nodes are already one.
+=#
+@inline function _ring_add!(pts::Vector{Tuple{Float64, Float64}}, p::Tuple{Float64, Float64})
+    (isempty(pts) || pts[end] != p) && push!(pts, p)
+    return nothing
+end
+
+#=
+Whether a minimal ring collapsed at emission: after repeated-point removal it has
+fewer than three distinct vertices, so it bounds no area and is not a legal
+`LinearRing` (JTS's `GeometryFactory.createLinearRing` rejects it outright).
+
+Such a ring is the emitted image of an arrangement ring whose two sides are
+distinct exactly but round to the same output coordinates — the exact analogue of
+JTS's `DIM_COLLAPSE` edge label, arrived at one stage later because this engine
+rounds at emission rather than while noding. It is excluded from the area result
+for the same reason JTS excludes a collapse: it contributes zero area, and
+keeping it produces an invalid result geometry. No tolerance is involved — the
+test is exact equality of the emitted coordinates.
+=#
+@inline _ring_is_collapsed(r::_OverlayEdgeRing) = length(r.ring_pts) < 4
+
 function _new_edge_ring!(ctx, start::Integer)
     P = _ctx_point_type(ctx)
     id = Int32(length(ctx.edge_rings) + 1)
@@ -202,12 +233,12 @@ end
 function _compute_ring!(ctx, ring::_OverlayEdgeRing)
     edges = ctx.edges
     pts = Tuple{Float64, Float64}[]
-    push!(pts, node_point(ctx.arr, he_origin(edges, ring.start_edge)))
+    _ring_add!(pts, node_point(ctx.arr, he_origin(edges, ring.start_edge)))
     edge = ring.start_edge
     while true
         edges[edge].edge_ring == ring.id &&
             throw(_OverlayTopologyError("Edge visited twice during ring-building"))
-        push!(pts, node_point(ctx.arr, he_dest(edges, edge)))
+        _ring_add!(pts, node_point(ctx.arr, he_dest(edges, edge)))
         edges[edge].edge_ring = ring.id
         ne = oe_next_result(edges, edge)
         ne == 0 && throw(_OverlayTopologyError("Found null edge in ring"))

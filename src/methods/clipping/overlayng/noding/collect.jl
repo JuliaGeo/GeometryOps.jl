@@ -20,25 +20,82 @@ function _collect_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
         exact = True(), tree_a = nothing, tree_b = nothing) where {P}
     ta = tree_a === nothing ? _relate_edge_index(m, ssa) : tree_a
     tb = tree_b === nothing ? _relate_edge_index(m, ssb) : tree_b
-    (ta === nothing || tb === nothing) && return nothing
-    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, ta, tb) do ia, ib
-        (sa, ka) = ta.data[ia]
-        (sb, kb) = tb.data[ib]
-        _classify_pair!(m, table, seg_nodes, ssa, ssb, na, sa, ka, sb, kb; exact)
+    if !(ta === nothing || tb === nothing)
+        SpatialTreeInterface.dual_depth_first_search(Extents.intersects, ta, tb) do ia, ib
+            (sa, ka) = ta.data[ia]
+            (sb, kb) = tb.data[ib]
+            _classify_pair!(m, table, seg_nodes, ssa, sa, Int32(sa), Int32(ka),
+                            ssb, sb, na + Int32(sb), Int32(kb); exact)
+            return nothing
+        end
+    end
+    #-- design §2.2 amendment: LINEAR inputs must additionally be self-noded
+    _collect_self_crossings!(m, table, seg_nodes, ssa, Int32(0); exact)
+    _collect_self_crossings!(m, table, seg_nodes, ssb, na; exact)
+    return nothing
+end
+
+#=
+Self-noding of one side's LINEAR segment strings.
+
+The arrangement invariant is that no node lies strictly inside a noded edge
+(design §2.1). The A×B pass alone does not establish it for linear inputs: a
+node created by an A×B crossing can land in the interior of a *third* segment
+belonging to the same input as one of the pair, and nothing then splits that
+segment. `TestOverlayLA.xml` case 2 is the canonical instance — one
+MULTILINESTRING component runs along a polygon hole boundary while a second
+component of the same MULTILINESTRING crosses it, so the hole edge is split at
+the two crossings but the collinear line component is not, the two no longer
+share a node pair, and the edge merger never pairs them.
+
+Only LINEAR strings are self-noded, and that is a cost decision, not a
+correctness one. A valid linear input has no self-noding guarantee at all — a
+MultiLineString may cross and even retrace itself — while a valid areal input
+has almost one: its rings never cross or overlap, so the only self-incidence it
+can carry is a single-point touch (a hole meeting its shell, or two
+multipolygon components meeting). That touch point is always a vertex of one
+ring, but it may lie in the *interior* of the other ring's segment, and then the
+same gap opens for areas. That case is real and reproduced: it is the fuzz
+suite's pinned `hole apex on the shell edge (self-touching input)` defect class,
+which self-noding areal strings as well turns from 4 broken to 4 passing (the
+one-line change is dropping the `DIM_L` filter below). It is not enabled because
+it roughly doubles arrangement build time on real data (0.43 s -> 0.89 s over 28
+Natural Earth 10m country pairs, 16k-68k points each) — the §2.2 trade — and
+because a targeted version (each input's vertices against its own segments, the
+only incidence a valid area can have) would very likely recover it for much
+less. Polygon-only inputs skip the pass entirely: no index is built.
+=#
+function _collect_self_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
+        ss::AbstractVector{RelateSegmentString{P}}, off::Int32; exact) where {P}
+    lin = Int32[Int32(i) for i in eachindex(ss) if ss[i].dim == DIM_L]
+    isempty(lin) && return nothing
+    sub = [ss[i] for i in lin]
+    #-- fewer than two segments in total: no pair to classify
+    sum(s -> length(s.pts) - 1, sub; init = 0) < 2 && return nothing
+    t = _relate_edge_index(m, sub)
+    t === nothing && return nothing
+    SpatialTreeInterface.dual_depth_first_search(Extents.intersects, t, t) do i1, i2
+        (s1, k1) = t.data[i1]
+        (s2, k2) = t.data[i2]
+        #-- the dual traversal of a tree against itself yields every unordered
+        #-- pair twice plus every self-pair; keep one ordering, drop self-pairs
+        (s1 < s2 || (s1 == s2 && k1 < k2)) || return nothing
+        _classify_pair!(m, table, seg_nodes, sub, s1, off + lin[s1], Int32(k1),
+                        sub, s2, off + lin[s2], Int32(k2); exact)
         return nothing
     end
     return nothing
 end
 
 # Function barrier: statically-typed classification of one candidate pair
-# (the do-block above is a dynamic closure over the tree traversal).
+# (the do-blocks above are dynamic closures over the tree traversal). `gsa`/`gsb`
+# are the *global* string indices (into the arrangement's `segstrings`) of the
+# two segments' parents; `sa`/`sb` index the lists actually passed in.
 function _classify_pair!(m::Manifold, table::NodeTable{P}, seg_nodes,
-        ssa, ssb, na::Int32, sa::Int, ka::Int, sb::Int, kb::Int; exact) where {P}
-    a0 = ssa[sa].pts[ka]; a1 = ssa[sa].pts[ka + 1]
-    b0 = ssb[sb].pts[kb]; b1 = ssb[sb].pts[kb + 1]
-    gsa = Int32(sa)                # A string global index
-    gsb = na + Int32(sb)           # B string global index
-    ksa = Int32(ka); ksb = Int32(kb)
+        ssa, sa::Int, gsa::Int32, ksa::Int32,
+        ssb, sb::Int, gsb::Int32, ksb::Int32; exact) where {P}
+    a0 = ssa[sa].pts[ksa]; a1 = ssa[sa].pts[ksa + 1]
+    b0 = ssb[sb].pts[ksb]; b1 = ssb[sb].pts[ksb + 1]
 
     cls = rk_classify_intersection(m, a0, a1, b0, b1; exact)
     kind = cls.kind
