@@ -225,8 +225,9 @@ end
 # at all. That demotion is what JTS's `DIM_COLLAPSE` edge label does, and it is
 # unavailable to an exact arrangement (see `overlay_skiplist.jl`).
 #
-# The `@test_broken`s must start passing the moment the defect is fixed, at which
-# point the ledger above shrinks too.
+# What is left broken is `isValid` on the two results that embed the spike in B's
+# ring. Those `@test_broken`s must start passing the moment the defect is fixed,
+# at which point the ledger above shrinks too.
 
 @testset "sub-ULP sliver (jts-798 case 1) — known defect" begin
     A = GO.tuples(LG.readgeom("POLYGON ((66697.40120137333 185279.95469107336, " *
@@ -236,8 +237,16 @@ end
     #-- both inputs are valid, so the engine's validity contract is satisfied
     @test LG.isValid(overlay_to_lg(A))
     @test LG.isValid(overlay_to_lg(B))
-    #-- INTERSECTION: the whole result is the needle; we throw instead
-    @test_broken (go_overlay(:intersection, A, B); true)
+    #-- INTERSECTION: the whole result is the needle. This used to raise
+    #-- `unable to assign free hole to a shell`: the needle's *rounded* image
+    #-- reads CCW, so the ring was filed as a hole and no shell contained it.
+    #-- With the shell/hole role taken from the ring's exact signed area
+    #-- (`_ring_is_ccw_exact`) it is the shell it actually is, and the result is
+    #-- a valid sliver polygon of the needle's true (sub-picounit) area, where
+    #-- GEOS — having snapped — returns a zero-area MULTILINESTRING.
+    r_int = go_overlay(:intersection, A, B)
+    @test lg_valid(r_int)
+    @test 0 < lg_area(r_int) < 1e-11
     #-- DIFFERENCE is empty and now valid: the collapsed ring is dropped at
     #-- emission (`_ring_is_collapsed`), which is the repaired half of the class
     @test lg_valid(go_overlay(:difference, A, B))

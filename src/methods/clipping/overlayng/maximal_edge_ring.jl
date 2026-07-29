@@ -5,8 +5,10 @@
 #   - `MaximalEdgeRing.java`  → maximal-ring linking + the minimal-ring split
 #     at self-touching nodes (`_MaxEdgeRing` + `_link_result_area_max_ring_at_node!`).
 #   - `OverlayEdgeRing.java`  → one minimal result ring: its coordinates, its
-#     shell/hole role (via `_ring_is_ccw`), and hole containment (design §3
-#     amendment 5 — never planar even-odd on emitted coordinates).
+#     shell/hole role (decided by exact kernel predicates over the arrangement's
+#     nodes — `_ring_is_ccw_exact`), and hole containment (design §3
+#     amendment 5 — never planar even-odd on emitted coordinates; see the KNOWN
+#     GAP note there, containment is still decided on emitted coordinates).
 #
 # Ring linkage lives in the phase-2a `OverlayEdge` handles: `next_result_max`
 # links maximal rings, `next_result` links minimal rings, and `max_edge_ring` /
@@ -27,16 +29,20 @@ mutable struct _MaxEdgeRing
 end
 
 # One minimal result ring (port of JTS `OverlayEdgeRing`): the emitted output
-# coordinates (`ring_pts`, closed), the manifold kernel points backing the
-# orientation and PIP predicates (`kernel_pts`; identical to `ring_pts` on the
-# plane), its shell/hole role, a bounding box for extent pruning, its assigned
-# shell / contained holes (handles, `0` = null), and a lazily-built indexed
-# point-in-area locator over its own ring.
+# coordinates (`ring_pts`, closed), the arrangement node ids the ring visits
+# (`node_ids`, open — the ring's EXACT identity, from which the shell/hole role
+# is decided), its shell/hole role, a bounding box for extent pruning, its
+# assigned shell / contained holes (handles, `0` = null), and a lazily-built
+# indexed point-in-area locator over its own ring.
+#
+# `node_ids` and `ring_pts` are not in bijection: two distinct nodes can realize
+# to the same output coordinate, which `_ring_add!` drops from `ring_pts` (see
+# below). That is exactly why the role is taken from `node_ids`.
 mutable struct _OverlayEdgeRing{P}
     id::Int32
     start_edge::Int32
     ring_pts::Vector{Tuple{Float64, Float64}}
-    kernel_pts::Vector{P}
+    node_ids::Vector{Int32}
     is_hole::Bool
     bbox::NTuple{4, Float64}   # (xmin, xmax, ymin, ymax) of ring_pts
     shell::Int32
@@ -58,7 +64,17 @@ mutable struct _PolyBuilderCtx{M <: Manifold, P, E}
     edge_rings::Vector{_OverlayEdgeRing{P}}
     shell_list::Vector{Int32}      # handles into edge_rings
     free_hole_list::Vector{Int32}
+    #-- per-node memo of the exact kernel position used by the orientation
+    #-- predicate (spherical only; see `_node_kernel_point`). Allocated on
+    #-- first use so the planar path pays nothing.
+    kernel_cache::Vector{P}
+    kernel_ok::Vector{Bool}
 end
+
+_PolyBuilderCtx(m::M, edges::Vector{OverlayEdge{P}}, arr::NodedArrangement{P}, exact::E,
+        max_rings, edge_rings, shell_list, free_hole_list) where {M <: Manifold, P, E} =
+    _PolyBuilderCtx{M, P, E}(m, edges, arr, exact, max_rings, edge_rings, shell_list,
+                             free_hole_list, P[], Bool[])
 
 @inline _ctx_point_type(::_PolyBuilderCtx{M, P}) where {M, P} = P
 
@@ -220,7 +236,7 @@ test is exact equality of the emitted coordinates.
 function _new_edge_ring!(ctx, start::Integer)
     P = _ctx_point_type(ctx)
     id = Int32(length(ctx.edge_rings) + 1)
-    ring = _OverlayEdgeRing{P}(id, Int32(start), Tuple{Float64, Float64}[], P[],
+    ring = _OverlayEdgeRing{P}(id, Int32(start), Tuple{Float64, Float64}[], Int32[],
                                false, (0.0, 0.0, 0.0, 0.0), Int32(0), Int32[], nothing)
     push!(ctx.edge_rings, ring)
     _compute_ring!(ctx, ring)
@@ -228,38 +244,160 @@ function _new_edge_ring!(ctx, start::Integer)
 end
 
 # Port of `computeRingPts` + `computeRing`: walk the minimal ring via
-# `next_result`, collecting node points; then derive the shell/hole role and the
-# bounding box.
+# `next_result`, collecting the arrangement node ids it visits and their emitted
+# points; then derive the shell/hole role and the bounding box.
 function _compute_ring!(ctx, ring::_OverlayEdgeRing)
     edges = ctx.edges
     pts = Tuple{Float64, Float64}[]
-    _ring_add!(pts, node_point(ctx.arr, he_origin(edges, ring.start_edge)))
+    ids = Int32[]
+    origin = he_origin(edges, ring.start_edge)
+    push!(ids, Int32(origin))
+    _ring_add!(pts, node_point(ctx.arr, origin))
     edge = ring.start_edge
     while true
         edges[edge].edge_ring == ring.id &&
             throw(_OverlayTopologyError("Edge visited twice during ring-building"))
-        _ring_add!(pts, node_point(ctx.arr, he_dest(edges, edge)))
+        dest = he_dest(edges, edge)
         edges[edge].edge_ring = ring.id
         ne = oe_next_result(edges, edge)
         ne == 0 && throw(_OverlayTopologyError("Found null edge in ring"))
         edge = ne
-        edge == ring.start_edge && break
+        #-- `ids` stays OPEN: the final dest is the start origin, already pushed
+        edge == ring.start_edge && (_ring_add!(pts, node_point(ctx.arr, dest)); break)
+        push!(ids, Int32(dest))
+        _ring_add!(pts, node_point(ctx.arr, dest))
     end
     #-- the last dest is the start origin, so pts is already closed; be defensive
     pts[end] == pts[1] || push!(pts, pts[1])
 
     ring.ring_pts = pts
-    ring.kernel_pts = _ring_kernel_pts(ctx.m, pts)
-    ring.is_hole = _ring_is_ccw(ctx.m, ring.kernel_pts; exact = ctx.exact)
+    ring.node_ids = ids
+    ring.is_hole = _ring_is_ccw_exact(ctx, ids)
     ring.bbox = _ring_bbox(pts)
     return nothing
 end
 
-# Emitted output coordinates ARE the planar kernel points; the sphere converts
-# each realized (lon, lat) back to a unit vector for the kernel predicates.
-_ring_kernel_pts(::Planar, pts::Vector{Tuple{Float64, Float64}}) = pts
-_ring_kernel_pts(m::Spherical, pts::Vector{Tuple{Float64, Float64}}) =
-    [_to_kernel_point(m, p) for p in pts]
+#=
+## Shell-vs-hole from exact kernel predicates (design §0)
+
+Result assembly is a decision, so it is decided on the arrangement, not on its
+emitted image. `_ring_is_ccw_exact` answers "is this minimal ring wound CCW?"
+from the ring's NODE IDS — the symbolic, exact identities — never from
+`ring_pts`, which is `node_point` output: rounded once at emission (design
+§2.6). The distinction is not academic. A ring whose exact width is a fraction
+of an ULP rounds to a self-touching or inverted image, and `Orientation.isCCW`
+over that image reports the opposite role; the ring is then filed as a second
+shell or as a free hole no shell contains, which is where the
+`OverlayTopologyError`s came from.
+
+Both manifolds take the sign of the ring's exact signed area — the planar
+shoelace, the spherical geodesic curvature. Neither reads an output coordinate.
+=#
+
+#=
+Planar: the sign of the doubled signed area over the exact node coordinates,
+as a certified Float64 filter with an exact `Rational{BigInt}` fallback — the
+same filter/escalate shape every other predicate in the port uses.
+
+The filter runs on `node_point`, which is the CORRECTLY ROUNDED exact node
+(design §2.6: certified double-double, else the rounded rational), so each
+coordinate carries at most ½ ulp of error. The bound below covers both that
+perturbation (`cmax * len`, a coordinate displacement acting on the ring's
+`L1` extent) and the accumulated summation error (`n * mag`). Clearing it
+certifies the sign of the EXACT area, not merely of the emitted one; failing
+it escalates.
+
+The signed area is used rather than JTS's extreme-vertex "cap" test because
+its sign is the ring's net winding whether or not the ring is simple — the cap
+test presumes simplicity, which holds for arrangement minimal rings but is one
+more premise to carry. Translating to the first vertex costs nothing and keeps
+the filter well-conditioned on the corpus's ~1e6-magnitude coordinates.
+=#
+function _ring_is_ccw_exact(ctx::_PolyBuilderCtx{<:Planar}, ids::Vector{Int32})
+    length(ids) < 3 && return false
+    (area, certain) = _ring_area2_filter(ctx.arr, ids)
+    certain && return area > 0
+    return _ring_area2_exact(ctx.arr, ids) > 0
+end
+
+# Float64 doubled signed area of the emitted ring, with the certificate above.
+function _ring_area2_filter(arr, ids::Vector{Int32})
+    n = length(ids)
+    ox, oy = node_point(arr, ids[1])
+    acc = 0.0; mag = 0.0; len = 0.0; cmax = max(abs(ox), abs(oy))
+    ax = 0.0; ay = 0.0                       # translated previous vertex
+    @inbounds for i in 2:n
+        (px, py) = node_point(arr, ids[i])
+        cmax = max(cmax, abs(px), abs(py))
+        bx = px - ox; by = py - oy
+        t1 = ax * by; t2 = ay * bx
+        acc += t1 - t2
+        mag += abs(t1) + abs(t2)
+        len += abs(bx) + abs(by)
+        ax = bx; ay = by
+    end
+    #-- the closing term (last → first) has both translated factors zero
+    u = 0.5 * eps(Float64)
+    bound = 8 * u * (n * mag + cmax * len)
+    return (acc, abs(acc) > bound)
+end
+
+# Exact doubled signed area: the plain shoelace over the arrangement's exact
+# node coordinates (`_exact_node_point` — the input vertex for a vertex node,
+# `_exact_crossing_point` for a crossing). Rational arithmetic on Float64-derived
+# values is exact, so the returned sign is the ring's true winding.
+function _ring_area2_exact(arr, ids::Vector{Int32})
+    n = length(ids)
+    acc = zero(Rational{BigInt})
+    (ax, ay) = _exact_node_point(arr.nodes.keys[ids[1]])
+    (x1, y1) = (ax, ay)
+    @inbounds for i in 2:n
+        (bx, by) = _exact_node_point(arr.nodes.keys[ids[i]])
+        acc += ax * by - ay * bx
+        ax = bx; ay = by
+    end
+    return acc + (ax * y1 - ay * x1)
+end
+
+#=
+Spherical: the loop's geodesic curvature (`_ring_is_ccw(::Spherical, …)`, our
+port of S2 `GetCurvature`) over the exact node directions. The turning-angle
+formulation is apex-free — each term sees only three adjacent vertices, and its
+sign comes from the exact `Sign` predicate — so it is the formulation this
+codebase has already settled on for spherical orientation, and the planar
+extreme-vertex cap is deliberately NOT ported to it.
+
+What changes here is only its input: each vertex is the node's own direction —
+the ingested unit vector for a vertex node, the exact crossing direction
+`±(na × nb)` for a crossing node — instead of the emitted `(lon, lat)` converted
+back through trigonometry. Distinct nodes therefore stay distinct, which
+`_prune_loop_degeneracies` would otherwise collapse.
+=#
+_ring_is_ccw_exact(ctx::_PolyBuilderCtx{<:Spherical}, ids::Vector{Int32}) =
+    _ring_is_ccw(ctx.m, [_node_kernel_point(ctx, id) for id in ids]; exact = ctx.exact)
+
+# The exact sphere position of node `id` as a unit kernel point, memoized per
+# builder (a node is shared by every ring through it, and the exact crossing
+# direction is `Rational{BigInt}` work).
+function _node_kernel_point(ctx::_PolyBuilderCtx{<:Spherical, P}, id::Integer) where {P}
+    if isempty(ctx.kernel_ok)
+        n = num_nodes(ctx.arr)
+        ctx.kernel_cache = Vector{P}(undef, n)
+        ctx.kernel_ok = fill(false, n)
+    end
+    i = Int(id)
+    @inbounds ctx.kernel_ok[i] && return ctx.kernel_cache[i]
+    k = ctx.arr.nodes.keys[i]
+    p = if k.is_crossing
+        d = _sph_crossing_dir(booltype(ctx.exact), k)
+        rk_normalize_usp(UnitSphericalPoint(Float64(d[1]), Float64(d[2]), Float64(d[3])))
+    else
+        k.pt
+    end
+    @inbounds ctx.kernel_cache[i] = p
+    @inbounds ctx.kernel_ok[i] = true
+    return p
+end
 
 function _ring_bbox(pts::Vector{Tuple{Float64, Float64}})
     xmin = xmax = pts[1][1]
@@ -272,6 +410,20 @@ function _ring_bbox(pts::Vector{Tuple{Float64, Float64}})
 end
 
 # ## Hole containment (ports of `OverlayEdgeRing.locate` / `contains` / …)
+#
+# KNOWN GAP, tracked separately from the shell/hole role above: this half of
+# result assembly still decides on `ring_pts`, i.e. on emitted coordinates. The
+# ray crossing itself is robust (`rk_orient`, never naive even-odd), but its
+# inputs are rounded, and so are the bbox/RTree prefilters that reject candidate
+# shells. Making it exact needs a point-in-ring predicate over the arrangement's
+# node coordinates on both manifolds (`Rational{BigInt}` crossing counts on the
+# plane; a rational-direction crossing-parity scan on the sphere), plus outward
+# padding of the two float prefilters so they cannot reject a genuinely contained
+# hole, plus a way to index rational coordinates (or to demote the existing
+# Float64 y-interval index to a candidate-edge filter). Measured over the robust
+# corpus, all 405 free-hole placements are decided by a strictly-INTERIOR hole
+# vertex — none falls through the all-BOUNDARY path — so nothing currently turns
+# on it.
 
 # Lazily builds an indexed point-in-area locator over this ring and locates `p`
 # (design §3 amendment 5: robust ray crossing via `rk_orient`, over the ring's
