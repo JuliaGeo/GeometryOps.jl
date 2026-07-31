@@ -176,6 +176,7 @@ mutable struct OverlayEdge{P}
     in_result_area :: Bool
     in_result_line :: Bool
     visited        :: Bool
+    removed        :: Bool   # face-walk hygiene: deleted dangle / cut edge (JTS `marked`)
 
     next_result     :: Int32 # next half-edge in the result ring (0 = null)
     next_result_max :: Int32 # next half-edge in the result maximal ring (0 = null)
@@ -185,7 +186,7 @@ end
 
 _overlay_edge(origin::Int32, dir_pt::P, is_forward::Bool, label::OverlayLabel) where {P} =
     OverlayEdge{P}(origin, Int32(0), Int32(0), dir_pt, is_forward, label,
-                   false, false, false, Int32(0), Int32(0), Int32(0), Int32(0))
+                   false, false, false, false, Int32(0), Int32(0), Int32(0), Int32(0))
 
 # ## OverlayEdge accessors (ports of the JTS `OverlayEdge` surface, index-based)
 
@@ -236,6 +237,34 @@ end
     @inbounds edges[i].visited = true
     @inbounds edges[he_sym(edges, i)].visited = true
     return nothing
+end
+
+# Removal flag — the port of JTS `PolygonizeDirectedEdge`'s `marked` bit (JTS
+# reuses `GraphComponent.isMarked` to mean "deleted from the graph"). Set only by
+# the opt-in face-walk hygiene pass in polygon_builder.jl; always false otherwise,
+# so every default path behaves exactly as before it existed. Removal is symmetric
+# — an edge is present or absent as a whole — so both halves are always set
+# together, which is also what keeps `_face_successor`'s skip loop terminating.
+@inline oe_is_removed(edges, i::Integer) = @inbounds edges[i].removed
+@inline function oe_remove_both!(edges, i::Integer)
+    @inbounds edges[i].removed = true
+    @inbounds edges[he_sym(edges, i)].removed = true
+    return nothing
+end
+
+# The number of NON-removed half-edges originating at this edge's origin (port of
+# JTS `PolygonizeGraph.getDegreeNonDeleted`). The origin star (`o_next`) is never
+# rewired by removal — removed members simply stop counting — so this is valid
+# even when `i` itself has been removed.
+function oe_live_degree(edges, i::Integer)
+    d = 0
+    e = Int32(i)
+    while true
+        oe_is_removed(edges, e) || (d += 1)
+        e = he_onext(edges, e)
+        e == i && break
+    end
+    return d
 end
 
 # Result-ring linkage getters/setters (`0` = null).
