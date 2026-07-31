@@ -342,6 +342,147 @@ Sudan-experiment C++ harness pattern); NE/GADM sweeps with area conservation
 (`area(A∪B)+area(A∩B) ≈ area(A)+area(B)` — the signed-area fix `69e416484` makes this a
 machine-precision gate). PrecompileTools workload extension; `benchmarks/` additions.
 
+## 5. Face enumeration — the non-dissolving extraction, and face-walk hygiene
+
+The op pipeline of §3 extracts only the rings the op's result predicate selects, after
+dissolving interior boundaries (`unmarkDuplicateEdges`). A second family of consumers —
+antimeridian splitting, polygon-cut-by-line, and eventually polygonize — needs the opposite:
+**every** boundary cycle of the noded arrangement, nothing dissolved, nothing selected. That
+is `_build_faces` / `_select_faces!` / `_build_face_polygons` in `polygon_builder.jl`, with
+the removal passes described below. Nothing here is exported.
+
+### 5.1 Mechanism, and why it is six lines
+
+A face walk over a half-edge graph is `successor = onext ∘ sym`: from a directed half-edge,
+take its symmetric partner and then the next edge CCW around that partner's origin. Iterating
+it traces the boundary cycle with the **face on the RIGHT** of every half-edge. Because our
+half-edges already store `o_next` (§3 adaptation note in `half_edge.jl`), this needs no new
+linking machinery at all — `_build_faces` writes the face successor into the *same*
+`next_result` field the op pipeline links, so `_compute_ring!` (ring points, node ids,
+exact shell/hole orientation, bbox) and the free-hole placement machinery run bit-identically
+on both paths. There is one ring builder, one ring type, one containment engine.
+
+Orientation follows from the face-on-the-right convention: a **bounded** cycle comes out
+clockwise (`is_hole == false`), the **outer** (unbounded) cycle of each connected component
+comes out counter-clockwise (`is_hole == true`). `_face_ring_location(ctx, er, gi)` reads a
+cycle's per-input location straight off the shared edge labels — it prefers a boundary edge
+of `gi`, whose side locations are authoritative, and falls back to the first edge's
+boundary-or-line location — rather than locating a point. No point-in-polygon test is
+involved in labelling a face.
+
+The face path is **areal-only**: it never marks `in_result_area` / `in_result_line`, so
+`_build_lines` and `_build_points` are unreachable from it.
+
+### 5.2 Cycles are not faces
+
+`_build_faces` produces one `_OverlayEdgeRing` per boundary **cycle**, not per face. A face
+with cavities contributes several (its outer cycle plus one cycle per cavity), and each
+connected component contributes its own outer cycle. For a planar graph with `E` edges, `V`
+vertices and `C` components the counts are
+
+    cycles = E − V + 2C          faces = E − V + C + 1
+
+so the two differ by `C − 1` plus one per cavity. The regrouping into faces is **re-derived
+geometrically**, by `_place_free_holes!`: CCW cycles become free holes and are assigned to the
+innermost containing CW shell. That is the same routine the op pipeline uses, and it carries
+the same KNOWN GAP recorded at `maximal_edge_ring.jl` — containment is still decided on
+*emitted* (rounded) coordinates and float bbox/RTree prefilters, unlike the shell/hole role
+itself, which is exact. Nothing in the face layer may assume a cycle↔face bijection.
+
+### 5.3 One extraction per graph
+
+Ring extraction **consumes** the graph. Both pipelines write the half-edges' `next_result`,
+`next_result_max`, `edge_ring` and `max_edge_ring` fields, which start null and are never
+reset, so a second extraction reads the first one's linkage. Measured on two offset squares,
+the failure mode is silence, not error: faces alone gives 4 cycles and intersection alone
+gives 1 polygon, but op-then-faces gives 3 cycles and faces-then-op gives 0 polygons.
+
+Both entry points therefore call `_assert_graph_extractable`, which scans for any non-null
+ring-linkage field and throws an `_OverlayTopologyError` naming the constraint. That is what
+it actually detects — "some extraction has written linkage" — not which one; it is exact for
+both orders because every extraction writes `next_result` for at least the edges it rings.
+The remedy is always the same: build a fresh `OverlayGraph` (and re-run `_compute_labelling!`)
+per extraction.
+
+### 5.4 Face-walk hygiene: dangles and cut edges (opt-in, default OFF)
+
+A face walk traverses a degree-1 **dangle** out and back, so the spike lands inside the
+emitted ring. `_build_faces(…; remove_dangles, remove_cut_edges)` is the opt-in fix, a
+**graph-level** pass over the existing half-edge structure that marks edges removed *before*
+the walk runs, mirroring JTS `PolygonizeGraph.deleteDangles` / `deleteCutEdges`. It is
+deliberately not a post-filter over emitted point lists: a point list cannot distinguish a
+dangle spike from a legitimate revisit of a node, and cannot express a cut edge at all.
+
+Two distinct JTS cases, both handled:
+
+- **Dangles** — edges incident on a degree-1 node. Removal is iterative (explicit node stack,
+  as in JTS): deleting a dangle can expose a new degree-1 node behind it, so whole dangle
+  *trees* peel off. Purely structural — live degree only, no ring labels needed.
+- **Cut edges / bridges** — edges traversed twice *within one cycle, in opposite directions*.
+  JTS detects these by equal `edgeRing` label on both directed halves after
+  `findLabeledEdgeRings`; we label the live face cycles with `_face_successor` into a scratch
+  vector and compare the two halves' ids. A dangle is the degree-1 special case of a bridge,
+  so this pass subsumes dangle removal, chains included — every edge of a bridge chain lies on
+  one cycle, so a single pass catches them all (which is why JTS does not iterate either).
+
+Both criteria are **structural/exact**: an edge either is or is not incident on a degree-1
+node; a cycle either does or does not traverse it twice. No distance, tolerance or precision
+model is involved (§0 stands).
+
+Implementation shape, chosen to add as little as possible:
+
+- one new `Bool` field, `OverlayEdge.removed` — the port of JTS's `marked` bit on
+  `PolygonizeDirectedEdge` — plus `oe_is_removed` / `oe_remove_both!` / `oe_live_degree`
+  beside the existing flag accessors. Removal is symmetric (both halves at once), which is
+  also what makes the skip loop below terminate.
+- one new primitive, `_face_successor(edges, i) = onext(sym(i))` **skipping removed edges**.
+  This is JTS's `computeNextCWEdges` passing over `marked` edges, expressed on the intact
+  `o_next` star instead of by rewiring it. It is the single point the whole face layer turns
+  on: `_build_faces` writes it into `next_result`, and `_remove_cut_edges!` walks it to label
+  cycles. With nothing removed it is exactly the original `onext ∘ sym`.
+
+Removal is **non-destructive**: the `o_next` stars are never rewired and no linkage field is
+touched, so a hygiene-filtered graph is still an *unconsumed* graph and the standalone
+`_remove_dangles!` / `_remove_cut_edges!` (which return the removed edges as one
+representative half-edge index each — JTS's returned dangle/cut `LineString`s) compose with a
+later `_build_faces`. It is not reversible, though, and the op pipeline has no notion of a
+removed edge, so `_build_polygons` **rejects** a filtered graph rather than quietly ignoring
+the removal.
+
+**Both flags default to `false` and the default must stay that way.** `antimeridian_split`
+structurally *depends* on dangle doubling: the meridian cutting arc's pole endpoint is
+degree-1, so the kept face ring visits the pole twice in opposite directions, therefore on
+opposite seam branches — that doubling **is** the emitted pole pair. Removing dangles there
+would delete the feature.
+
+### 5.5 One selection path
+
+`_select_faces!(ctx, keep)` is the single path every face consumer runs through: it drops
+collapsed rings (`_ring_is_collapsed` — fewer than three distinct emitted vertices after
+`_ring_add!`'s repeated-point suppression, exactly as `_assign_shells_and_holes!` drops them
+from the op result; exact, no tolerance), files kept CW cycles as shells and kept CCW cycles
+as free holes, and runs `_place_free_holes!`. `_build_face_polygons` and
+`antimeridian_split` both call it, so the collapse filter, the shell/hole split and hole
+placement are stated once rather than copied. `antimeridian_split`'s `_emit_ring` likewise
+accumulates through the shared `_ring_add!`, so branch-fixed emission cannot leave a repeated
+vertex behind either.
+
+### 5.6 What polygonize would still need
+
+The hygiene facility above is the hard part of a `polygonize`, but a public entry point is out
+of scope and two gaps remain, both verified on a square-with-hole given as pure linework:
+
+1. **Selection must be topological, not predicate-based.** With dim-1 inputs the labels carry
+   no usable signal — every face reports `loc_A == loc_B == LOC_EXTERIOR` — so `keep` cannot
+   express "the bounded faces". Polygonize must select on `is_hole` (CW = a face shell) and
+   feed `_place_free_holes!` the cavity cycles, i.e. it needs a selection entry point that
+   sees the winding, not just the locations.
+2. **The outer cycle has no container.** Selecting every cycle makes each component's CCW
+   outer cycle a free hole, and `_place_free_holes!` throws `unable to assign free hole to a
+   shell`. Polygonize needs it *dropped*, not fatal — an opt-in "drop unplaceable free holes"
+   mode on `_place_free_holes!`, kept opt-in because for the op pipeline an unplaceable free
+   hole is a genuine topology error.
+
 ## Appendix — spike verdicts (2026-07-15/16, condensed)
 
 Spike code lives in the session scratchpad
