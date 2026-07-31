@@ -193,23 +193,27 @@ function _split_polygon!(pieces, poly, λn; pole_spacing)
     g = OverlayGraph(_AM_MANIFOLD, arr; exact = _AM_EXACT)
     input = _OverlayInput(_AM_MANIFOLD, poly, arc, 2, 1, _AM_EXACT, false, false, nothing, nothing)
     _compute_labelling!(g, input)
+    #-- the raw face walk, dangle doubling INCLUDED: the pole pair this
+    #-- transformation emits IS the doubling at the meridian arc's degree-1 pole
+    #-- endpoint (the ring visits the pole twice, in opposite directions, hence on
+    #-- opposite seam branches), so the hygiene pass must stay off here.
     ctx = _build_faces(_AM_MANIFOLD, g; exact = _AM_EXACT)
 
-    # keep the faces whose A-side (polygon) location is interior; CW rings are
-    # shells, CCW rings are cavities assigned to their shells by the shared
-    # containment machinery.
-    for er in 1:length(ctx.edge_rings)
-        _face_ring_location(ctx, er, 0) == LOC_INTERIOR || continue
-        ring = ctx.edge_rings[er]
-        ring.is_hole ? push!(ctx.free_hole_list, Int32(er)) :
-                       push!(ctx.shell_list, Int32(er))
-    end
-    _place_free_holes!(ctx)
+    # keep the faces whose A-side (polygon) location is interior, through the
+    # shared face-selection path: it drops rings that collapsed at emission, sorts
+    # CW shells from CCW cavities, and places the cavities into their shells.
+    _select_faces!(ctx, (loc_a, _) -> loc_a == LOC_INTERIOR)
 
     for sh in ctx.shell_list
-        rings = [_emit_ring(ctx, g, Int(sh), λn; pole_spacing)]
+        shell = _emit_ring(ctx, g, Int(sh), λn; pole_spacing)
+        #-- a shell whose branch-fixed emission collapses bounds no area and is not
+        #-- a legal LinearRing (the `_ring_is_collapsed` threshold, on the emitted
+        #-- points); the piece — cavities included — is not representable
+        length(shell) < 4 && continue
+        rings = [shell]
         for h in ctx.edge_rings[sh].holes
-            push!(rings, _emit_ring(ctx, g, Int(h), λn; pole_spacing))
+            hole = _emit_ring(ctx, g, Int(h), λn; pole_spacing)
+            length(hole) >= 4 && push!(rings, hole)
         end
         push!(pieces, rings)
     end
@@ -271,6 +275,12 @@ end
 # `(λn − 360, λn]`; seam vertices take the branch of an incident cutting-arc
 # edge (with a neighbour-side fallback for isolated touches); a pole vertex where
 # the seam turns around emits as the two-branch pole pair, optionally resampled.
+#
+# Every point goes in through `_ring_add!`, the shared accumulator the ring
+# builder uses (port of JTS `CoordinateList.add(coord, allowRepeated = false)`):
+# two distinct arrangement nodes can realize to the same emitted coordinate, and
+# branch fixing can map two distinct seam nodes onto the same lip, either of
+# which would leave a repeated vertex — not a legal `LinearRing` sequence.
 function _emit_ring(ctx, g, er::Integer, λn::Float64; pole_spacing = 5.0)
     edges = g.edges
     ring = ctx.edge_rings[er]
@@ -298,32 +308,32 @@ function _emit_ring(ctx, g, er::Integer, λn::Float64; pole_spacing = 5.0)
                 # pole vertex with no seam context (the ring touches the pole
                 # without enclosing it): use the nearest non-pole neighbour's
                 # branch so the emitted ring has no gratuitous longitude jump.
-                push!(pts, (_neighbor_lon(raw, j, λn), polelat))
+                _ring_add!(pts, (_neighbor_lon(raw, j, λn), polelat))
             elseif b1 == b2
-                push!(pts, (b1, polelat))
+                _ring_add!(pts, (b1, polelat))
             else
-                push!(pts, (b1, polelat))                 # entry corner
+                _ring_add!(pts, (b1, polelat))            # entry corner
                 if pole_spacing !== nothing
                     # densified pole row: strictly monotone longitude from b1 to
                     # b2 through the branch interior (|b2 − b1| == 360), step ≤
                     # pole_spacing, both corners bit-exact.
                     ns = max(2, ceil(Int, 360.0 / Float64(pole_spacing)))
                     for k in 1:(ns - 1)
-                        push!(pts, (b1 + (b2 - b1) * k / ns, polelat))
+                        _ring_add!(pts, (b1 + (b2 - b1) * k / ns, polelat))
                     end
                 end
-                push!(pts, (b2, polelat))                 # exit corner
+                _ring_add!(pts, (b2, polelat))            # exit corner
             end
         elseif _on_seam(lon, λn)
             b = _seam_branch(g, e_in, λn)
             b === nothing && (b = _seam_branch(g, e_out, λn))
             b === nothing && (b = _neighbor_lip(raw, j, λn))   # isolated touch
-            push!(pts, (b, lat))
+            _ring_add!(pts, (b, lat))
         else
-            push!(pts, (_wrap_lon(lon, λn), lat))
+            _ring_add!(pts, (_wrap_lon(lon, λn), lat))
         end
     end
-    push!(pts, pts[1])
+    _ring_add!(pts, pts[1])
     return pts
 end
 

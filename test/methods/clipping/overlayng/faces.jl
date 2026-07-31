@@ -1,9 +1,11 @@
-# # Face enumeration (Layer A of the antimeridian split)
+# # Face enumeration (design doc §5; Layer A of the antimeridian split)
 #
-# Tests for `_build_faces` / `_face_ring_location` / `_build_face_polygons` in
-# `polygon_builder.jl`: the non-dissolving companion to the op pipeline that
-# enumerates every minimal ring (face) of the noded arrangement, and the
-# predicate-dispatch overload of `_is_result_of_op` in `overlay_labeller.jl`.
+# Tests for `_build_faces` / `_face_ring_location` / `_select_faces!` /
+# `_build_face_polygons` in `polygon_builder.jl`: the non-dissolving companion to
+# the op pipeline that enumerates every boundary cycle of the noded arrangement,
+# its one-extraction-per-graph guard, its opt-in dangle / cut-edge hygiene pass,
+# and the predicate-dispatch overload of `_is_result_of_op` in
+# `overlay_labeller.jl`.
 
 using Test
 import GeometryOps as GO
@@ -145,16 +147,216 @@ end
 end
 
 # ---------------------------------------------------------------------------
-@testset "one-extraction-per-graph contract" begin
-    # Face extraction WRITES the ring-linkage fields (`next_result`/`edge_ring`)
-    # of the shared graph. A second `_build_faces` on the same graph therefore
-    # finds every edge already ring-tagged and enumerates nothing — the graph is
-    # consumed. Callers must build one graph per extraction.
+@testset "one-extraction-per-graph contract is enforced, in both orders" begin
+    # Ring extraction WRITES the ring-linkage fields (`next_result` /
+    # `next_result_max` / `edge_ring` / `max_edge_ring`) of the shared graph and
+    # never resets them, so only ONE extraction per graph is valid. Left
+    # unchecked this produces silent wrong answers, not errors (measured:
+    # op-then-faces gave 3 of 4 rings, faces-then-op gave 0 of 1 polygons), so
+    # both entry points detect an already-consumed graph and throw.
+    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+
+    op_extract!(g) = GO._build_polygons(PL, g, GO.graph_result_area_edges(g); exact = EX)
+    function marked_graph()
+        g = labelled_graph(PL, A, B, 2, 2)
+        GO._mark_result_area_edges!(g, GO.OVERLAY_INTERSECTION)
+        GO._unmark_duplicate_edges_from_result_area!(g)
+        return g
+    end
+
+    # a fresh graph extracts fine, either way
+    @test length(GO._build_faces(PL, labelled_graph(PL, A, B, 2, 2); exact = EX).edge_rings) == 4
+    @test length(op_extract!(marked_graph())) == 1
+
+    # faces THEN faces
+    g = labelled_graph(PL, A, B, 2, 2)
+    GO._build_faces(PL, g; exact = EX)
+    @test_throws GO._OverlayTopologyError GO._build_faces(PL, g; exact = EX)
+
+    # faces THEN op (would have silently produced 0 polygons)
+    g = marked_graph()
+    GO._build_faces(PL, g; exact = EX)
+    @test_throws GO._OverlayTopologyError op_extract!(g)
+
+    # op THEN faces (would have silently produced 3 of the 4 rings)
+    g = marked_graph()
+    op_extract!(g)
+    @test_throws GO._OverlayTopologyError GO._build_faces(PL, g; exact = EX)
+
+    # the hygiene pass is not an extraction: it writes no linkage, so it leaves
+    # the graph extractable (and the message names the real problem when it is not)
+    g = labelled_graph(PL, A, B, 2, 2)
+    @test !GO._graph_is_ring_consumed(g)
+    GO._remove_dangles!(g)
+    @test !GO._graph_is_ring_consumed(g)
+    @test length(GO._build_faces(PL, g; exact = EX).edge_rings) == 4
+    @test_throws GO._OverlayTopologyError GO._remove_dangles!(g)   # now consumed
+
+    err = try; GO._build_faces(PL, g; exact = EX); catch e; e; end
+    @test occursin("already been consumed", sprint(showerror, err))
+end
+
+# ---------------------------------------------------------------------------
+# ## Face-walk hygiene — dangle and cut-edge removal (opt-in, default off)
+
+# linework with every hygiene case at once: two squares, an interior divider
+# splitting the first, a dangling spur off the divider, a bridge (cut edge)
+# joining the two squares, and an isolated segment.
+const HYG_LINEWORK = GI.MultiLineString([
+    [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)],    # square 1
+    [(5.0, 0.0), (5.0, 10.0)],                                           # divider
+    [(5.0, 5.0), (8.0, 5.0)],                                            # dangling spur
+    [(20.0, 0.0), (30.0, 0.0), (30.0, 10.0), (20.0, 10.0), (20.0, 0.0)], # square 2
+    [(10.0, 5.0), (20.0, 5.0)],                                          # bridge / cut edge
+])
+const HYG_FAR = GI.LineString([(100.0, 100.0), (101.0, 101.0)])          # isolated segment
+
+hyg_faces(; kw...) = GO._build_faces(PL, labelled_graph(PL, HYG_LINEWORK, HYG_FAR, 1, 1);
+                                     exact = EX, kw...)
+
+# the bounded (CW) rings' areas, rounded for comparison
+bounded_areas(ctx) = sort([round(abs(signed_ring_area(r.ring_pts)); digits = 9)
+                           for r in ctx.edge_rings if !r.is_hole && length(r.ring_pts) >= 4])
+
+@testset "hygiene defaults to off — the raw cycle structure is unchanged" begin
+    ctx = hyg_faces()
+    @test length(ctx.edge_rings) == 5
+    # the spur is traversed out and back inside its face's cycle...
+    spur = only(r for r in ctx.edge_rings if (8.0, 5.0) in r.ring_pts)
+    @test count(==((5.0, 5.0)), spur.ring_pts) == 2
+    # ...and the bridge is doubled in the outer cycle, which therefore spans both
+    # squares (a single 15-point cycle of total |area| 200)
+    outer = only(r for r in ctx.edge_rings if r.is_hole)
+    @test length(outer.ring_pts) == 15
+    @test isapprox(abs(signed_ring_area(outer.ring_pts)), 200.0; rtol = 1e-12)
+    @test count(==((10.0, 5.0)), outer.ring_pts) == 2
+    # the isolated segment's cycle is a degenerate 3-point out-and-back
+    @test any(r -> length(r.ring_pts) == 3, ctx.edge_rings)
+end
+
+@testset "remove_dangles peels degree-1 chains, leaving cut edges alone" begin
+    ctx = hyg_faces(; remove_dangles = true)
+    # spur + isolated segment gone; the divided square, its other half, square 2,
+    # and the (still bridged) outer cycle remain
+    @test length(ctx.edge_rings) == 4
+    @test !any(r -> (8.0, 5.0) in r.ring_pts, ctx.edge_rings)
+    @test !any(r -> (100.0, 100.0) in r.ring_pts, ctx.edge_rings)
+    @test bounded_areas(ctx) == [50.0, 50.0, 100.0]
+    # the bridge survives: the outer cycle still spans both squares and doubles it
+    outer = only(r for r in ctx.edge_rings if r.is_hole)
+    @test count(==((10.0, 5.0)), outer.ring_pts) == 2
+end
+
+@testset "remove_cut_edges removes bridges (and subsumes dangles)" begin
+    for kw in ((remove_cut_edges = true,), (remove_dangles = true, remove_cut_edges = true))
+        ctx = hyg_faces(; kw...)
+        # the bridge is gone, so the two squares are separate components: each
+        # contributes its own CCW outer cycle
+        @test length(ctx.edge_rings) == 5
+        @test count(r -> r.is_hole, ctx.edge_rings) == 2
+        @test bounded_areas(ctx) == [50.0, 50.0, 100.0]
+        # no ring visits any node twice any more — the rings are hygienic
+        for r in ctx.edge_rings
+            @test length(unique(r.ring_pts)) == length(r.ring_pts) - 1
+        end
+        @test !any(r -> (8.0, 5.0) in r.ring_pts, ctx.edge_rings)
+    end
+end
+
+@testset "dangle removal is iterative (whole trees peel off)" begin
+    tree = GI.MultiLineString([
+        [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)],
+        [(5.0, 0.0), (5.0, 3.0), (7.0, 4.0)],   # 2-edge chain into the interior
+        [(5.0, 3.0), (3.0, 4.0)],               # a branch off the chain
+    ])
+    g0 = labelled_graph(PL, tree, HYG_FAR, 1, 1)
+    ctx0 = GO._build_faces(PL, g0; exact = EX)
+    @test length(ctx0.edge_rings) == 3                       # incl. the isolated segment
+    @test any(r -> (7.0, 4.0) in r.ring_pts, ctx0.edge_rings)
+
+    g = labelled_graph(PL, tree, HYG_FAR, 1, 1)
+    removed = GO._remove_dangles!(g)
+    @test length(removed) == 4      # 2 chain edges + branch + the isolated segment
+    ctx = GO._build_faces(PL, g; exact = EX)
+    @test length(ctx.edge_rings) == 2
+    @test bounded_areas(ctx) == [100.0]
+    sq = only(r for r in ctx.edge_rings if !r.is_hole)
+    @test sq.ring_pts == [(5.0, 0.0), (0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0), (5.0, 0.0)]
+end
+
+@testset "hygiene removes the dangle a face ring would otherwise double" begin
+    # the `dangling line edge doubles in its face ring` geometry above, with the
+    # dangle removed at the graph level instead of by post-filtering points
+    poly = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    line = GI.LineString([(5.0, -5.0), (5.0, 5.0)])
+    for kw in ((remove_dangles = true,), (remove_cut_edges = true,))
+        g = labelled_graph(PL, poly, line, 2, 1)
+        ctx = GO._build_faces(PL, g; exact = EX, kw...)
+        @test length(ctx.edge_rings) == 2
+        kept = only(er for er in 1:length(ctx.edge_rings)
+                    if GO._face_ring_location(ctx, er, 0) == GO.LOC_INTERIOR)
+        r = ctx.edge_rings[kept]
+        @test !r.is_hole
+        @test isapprox(abs(signed_ring_area(r.ring_pts)), 100.0; rtol = 1e-12)
+        @test !((5.0, 5.0) in r.ring_pts)            # dangle tip gone
+        @test length(r.ring_pts) == 6                # 5-pt square + the (5,0) node
+        # `_build_face_polygons` forwards the same opt-in
+        gp = labelled_graph(PL, poly, line, 2, 1)
+        polys = GO._build_face_polygons(PL, gp, (a, b) -> a == GO.LOC_INTERIOR; exact = EX, kw...)
+        @test length(polys) == 1
+        @test GI.nring(polys[1]) == 1
+        @test isapprox(GO.area(polys[1]), 100.0; rtol = 1e-12)
+        @test LG.isValid(GI.convert(LG, polys[1]))
+    end
+end
+
+@testset "hygiene is a face facility — the op pipeline rejects a filtered graph" begin
     A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
     B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
     g = labelled_graph(PL, A, B, 2, 2)
-    ctx1 = GO._build_faces(PL, g; exact = EX)
-    @test length(ctx1.edge_rings) == 4
-    ctx2 = GO._build_faces(PL, g; exact = EX)           # same graph, already consumed
-    @test length(ctx2.edge_rings) == 0
+    GO._mark_result_area_edges!(g, GO.OVERLAY_INTERSECTION)
+    GO._unmark_duplicate_edges_from_result_area!(g)
+    @test isempty(GO._remove_cut_edges!(g))        # two overlapping squares: no bridges
+    GO.oe_remove_both!(g.edges, 1)                 # so force a removal
+    err = try
+        GO._build_polygons(PL, g, GO.graph_result_area_edges(g); exact = EX)
+    catch e; e; end
+    @test err isa GO._OverlayTopologyError
+    @test occursin("does not honour removal", sprint(showerror, err))
+end
+
+@testset "hygiene on the sphere" begin
+    SPH = GO.Spherical()
+    poly = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    line = GI.LineString([(5.0, -5.0), (5.0, 5.0)])
+    g = labelled_graph(SPH, poly, line, 2, 1)
+    ctx = GO._build_faces(SPH, g; exact = EX, remove_dangles = true)
+    @test length(ctx.edge_rings) == 2
+    kept = only(er for er in 1:length(ctx.edge_rings)
+                if GO._face_ring_location(ctx, er, 0) == GO.LOC_INTERIOR)
+    @test !((5.0, 5.0) in ctx.edge_rings[kept].ring_pts)
+    @test length(ctx.edge_rings[kept].ring_pts) == 6
+    @test isapprox(GO.area(SPH, GI.Polygon([ctx.edge_rings[kept].ring_pts])),
+                   GO.area(SPH, poly); rtol = 1e-12)
+end
+
+# ---------------------------------------------------------------------------
+@testset "collapsed face cycles are dropped by the shared selection path" begin
+    # A face cycle with fewer than three distinct emitted vertices bounds no area
+    # and is not a legal LinearRing. `_select_faces!` — the one path every face
+    # consumer runs through — drops it, exactly as `_assign_shells_and_holes!`
+    # drops a collapsed ring from the op result.
+    A = GI.LineString([(0.0, 0.0), (1.0, 1.0)])
+    B = GI.LineString([(5.0, 5.0), (6.0, 6.0)])
+    ctx = GO._build_faces(PL, labelled_graph(PL, A, B, 1, 1); exact = EX)
+    @test length(ctx.edge_rings) == 2
+    @test all(GO._ring_is_collapsed, ctx.edge_rings)     # both are 3-point out-and-backs
+    @test all(r -> !r.is_hole, ctx.edge_rings)           # …and would file as shells
+
+    # `keep` accepts everything, yet nothing is emitted
+    GO._select_faces!(ctx, (a, b) -> true)
+    @test isempty(ctx.shell_list) && isempty(ctx.free_hole_list)
+    @test isempty(GO._build_face_polygons(PL, labelled_graph(PL, A, B, 1, 1),
+                                          (a, b) -> true; exact = EX))
 end

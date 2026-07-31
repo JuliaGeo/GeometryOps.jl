@@ -36,13 +36,26 @@ npole_verts(piece) = sum(r -> count(q -> abs(Float64(GI.y(q))) >= 89.999999, GI.
                          GI.getring(piece); init = 0)
 
 # global gates on an emitted MultiPolygon: high-level LibGEOS validity, no
-# |Δlon| > 180 anywhere, all longitudes in the closed branch [λn-360, λn], and
-# (optionally) spherical area conservation vs a reference.
-function assert_gates(mp; λn = 180.0, check_jump = true, area_ref = nothing, rtol = 1e-12)
+# |Δlon| > 180 anywhere, all longitudes in the closed branch [λn-360, λn], at
+# least 4 points per ring, no repeated consecutive vertex, and (optionally)
+# spherical area conservation vs a reference.
+#
+# `check_repeats` covers the rings the split actually *emits*: they all go
+# through the shared `_ring_add!` accumulator, so two arrangement nodes that
+# realize to one coordinate — or two seam nodes that land on one lip — cannot
+# leave an illegal `LinearRing` sequence behind. It is turned off only for inputs
+# that already carry repeated vertices in a part which does not interact with the
+# seam: such a part is copied verbatim by the fast path, by design (see the
+# `output ≡ input` gate below), so its duplicates are the caller's, not ours.
+function assert_gates(mp; λn = 180.0, check_jump = true, check_repeats = true,
+        area_ref = nothing, rtol = 1e-12)
     @test GI.trait(mp) isa GI.MultiPolygonTrait
     for p in GI.getgeom(mp)
         @test LG.isValid(GI.convert(LG, p))
         for r in GI.getring(p)
+            pts = [(Float64(GI.x(q)), Float64(GI.y(q))) for q in GI.getpoint(r)]
+            @test length(pts) >= 4
+            check_repeats && @test all(i -> pts[i] != pts[i + 1], 1:(length(pts) - 1))
             lons = [Float64(GI.x(q)) for q in GI.getpoint(r)]
             @test all(l -> λn - 360.0 - 1e-9 <= l <= λn + 1e-9, lons)
             if check_jump
@@ -283,14 +296,29 @@ end
         @test_skip "Natural Earth data unavailable"
     else
         byname(nm) = ne_geoms[findfirst(==(nm), ne_names)]
-        for (nm, expect_pieces, wants_polerow) in
-                (("Russia", 14, false), ("Fiji", 3, false), ("Antarctica", 8, true))
+        # `check_repeats` is off for Antarctica only: NE's own coordinates repeat a
+        # vertex in five of its small island parts, none of which reaches the seam,
+        # so the fast path copies them through verbatim (as it must).
+        for (nm, expect_pieces, wants_polerow, check_repeats) in
+                (("Russia", 14, false, true), ("Fiji", 3, false, true),
+                 ("Antarctica", 8, true, false))
             g = byname(nm)
             mp = GO.antimeridian_split(g)
             @test GI.ngeom(mp) == expect_pieces
-            assert_gates(mp; area_ref = GO.area(SPH, g), rtol = 1e-13)
+            assert_gates(mp; area_ref = GO.area(SPH, g), rtol = 1e-13, check_repeats)
             haspolerow = any(p -> !isempty(pole_rows(p)), GI.getgeom(mp))
             @test haspolerow == wants_polerow
+        end
+        # …and the seam-crossing part of Antarctica, which the split really does
+        # emit, carries no repeated vertex: the input's one repeat inside a
+        # crossing ring (Russia) is suppressed by `_ring_add!` on the way out.
+        for nm in ("Russia", "Antarctica")
+            for p in GI.getgeom(GO.antimeridian_split(byname(nm))), r in GI.getring(p)
+                pts = [(Float64(GI.x(q)), Float64(GI.y(q))) for q in GI.getpoint(r)]
+                #-- a seam lip vertex only occurs on an emitted (non-verbatim) ring
+                any(q -> abs(abs(q[1]) - 180.0) < 1e-9, pts) || continue
+                @test all(i -> pts[i] != pts[i + 1], 1:(length(pts) - 1))
+            end
         end
 
         # rotated-pole NE sanity: split Russia about a Pacific pole. Output is in
