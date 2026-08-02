@@ -3,7 +3,8 @@ import GeometryOps as GO, GeoInterface as GI
 using GeometryOps.SpatialTreeInterface
 using GeometryOps.SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 using GeometryOps.SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
-using GeometryOps.SpatialTreeInterface: FlatNoTree
+using GeometryOps.SpatialTreeInterface: FlatNoTree, spatialtree
+using GeometryOps.FlexibleRTrees: RTree, STR
 using GeometryOps.NaturalIndexing: NaturalIndex
 using Extents
 using SortTileRecursiveTree: STRtree
@@ -217,6 +218,18 @@ end
     test_dual_query_functionality(STRtree)
     test_geometry_support(STRtree)
     test_find_point_in_all_countries(STRtree)
+end
+
+@testset "spatialtree" begin
+    geometries = [missing, nothing, (0.0, 0.0), nothing, (1.0, 1.0)]
+    tree = spatialtree(geometries)
+
+    @test tree isa RTree{STR}
+    @test query(tree, Extents.Extent(X = (-0.1, 1.1), Y = (-0.1, 1.1))) == [3, 5]
+    valid_point = (1.0, 1.0)
+    filtered_tree = spatialtree([1, valid_point])
+    @test query(filtered_tree, Extents.Extent(X = (0.5, 1.5), Y = (0.5, 1.5))) == [2]
+    @test isnothing(spatialtree([missing, nothing, missing]))
 end
 
 # Test NaturalIndex implementation

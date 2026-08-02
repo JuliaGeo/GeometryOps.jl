@@ -1,7 +1,7 @@
 # # SpatialTreeInterface
 
 using ..SpatialTreeInterface
-import ..SpatialTreeInterface: isspatialtree, isleaf, nchild, getchild,
+import ..SpatialTreeInterface: spatialtree, isspatialtree, isleaf, nchild, getchild,
     child_indices_extents, depth_first_search
 
 """
@@ -84,4 +84,18 @@ function query(tree::RTree, geom)
     ext = GI.extent(geom)
     isnothing(ext) && throw(ArgumentError("no extent found on $(typeof(geom))"))
     return query(tree, ext)
+end
+
+function spatialtree(geometries)
+    valid = nonmissingtype(eltype(geometries))[]
+    positions = Int[]
+    for (i, geom) in enumerate(geometries)
+        if geom === nothing || ismissing(geom) || isnothing(GI.extent(geom))
+            continue
+        end
+        push!(valid, geom)
+        push!(positions, i)
+    end
+    isempty(valid) && return nothing
+    return RTree(STR(), valid; indices=positions)
 end

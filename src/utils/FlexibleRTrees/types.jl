@@ -41,7 +41,7 @@ struct Unsorted <: BulkLoadAlgorithm end
 # ## The tree
 
 """
-    RTree(algorithm::BulkLoadAlgorithm, data; nodecapacity = 16, extents = nothing)
+    RTree(algorithm::BulkLoadAlgorithm, data; nodecapacity = 16, extents = nothing, indices = nothing)
 
 A packed R-tree over the extents of `data` (anything `GI.extent` accepts —
 geometries, or `Extents.Extent`s themselves), of any dimensionality, bulk
@@ -53,9 +53,15 @@ that carry no extent of their own, or extents computed in another coordinate
 space.  The tree takes ownership of the vector (`Unsorted` aliases it as the
 leaf level rather than copying).
 
+Pass a vector as `indices` (one per element of `data`, in order) to have
+queries report those indices instead of positions in `data` — for indexing a
+filtered subset of a larger collection, say one whose `missing` entries were
+dropped, while still addressing the collection it came from.
+
 The tree is flat and fully concrete: `levels[1]` is the coarsest level and
 `levels[end]` holds the leaf extents in packed order, with `indices` mapping
-each leaf slot back to its position in `data`.  Queries through
+each leaf slot back to its position in `data` (or, when `indices` was given,
+to the caller's index for that element).  Queries through
 SpatialTreeInterface therefore return indices into `data`, which the tree
 keeps as `tree.data` so hits map straight back to elements wherever the
 tree travels.
@@ -70,7 +76,8 @@ struct RTree{A <: BulkLoadAlgorithm, E <: Extents.Extent, D <: AbstractVector, I
 end
 
 function RTree(algorithm::A, data; nodecapacity::Int = 16,
-        extents::Union{Nothing, Vector{<:Extents.Extent}} = nothing) where A <: BulkLoadAlgorithm
+        extents::Union{Nothing, Vector{<:Extents.Extent}} = nothing,
+        indices::Union{Nothing, AbstractVector{Int}} = nothing) where A <: BulkLoadAlgorithm
     nodecapacity >= 2 || throw(ArgumentError("`nodecapacity` must be at least 2, got $nodecapacity"))
     items = data isa AbstractVector ? data : collect(data)
     isempty(items) && throw(ArgumentError("cannot build an `RTree` from an empty collection"))
@@ -82,23 +89,31 @@ function RTree(algorithm::A, data; nodecapacity::Int = 16,
             "`extents` must have one entry per element of `data`, got $(length(extents)) for $(length(items))"))
         extents
     end
+    isnothing(indices) || length(indices) == length(items) || throw(ArgumentError(
+        "`indices` must have one entry per element of `data`, got $(length(indices)) for $(length(items))"))
     perm = loadorder(algorithm, exts, nodecapacity)
     leaves = perm isa Base.OneTo ? exts : exts[perm]
     levels = _pack_levels(leaves, nodecapacity)
     total = reduce(Extents.union, levels[1])
-    return RTree(algorithm, nodecapacity, total, levels, perm, items)
+    leafindices = isnothing(indices) ? perm : indices[perm]
+    return RTree(algorithm, nodecapacity, total, levels, leafindices, items)
 end
 
 """
-    RTree(m::Manifold, algorithm::BulkLoadAlgorithm, data; nodecapacity = 16)
+    RTree(m::Manifold, algorithm::BulkLoadAlgorithm, data; nodecapacity = 16, indices = nothing)
 
 Build the tree over each element's extent *on the manifold `m`*, via
 `Extents.extent(m, x)`.  On `Spherical()` the leaves are the 3D Cartesian
 boxes of the elements as regions on the unit sphere, covering the arc bulge
 and enclosed poles that vertex extents miss.
 """
-RTree(m::Manifold, algorithm::BulkLoadAlgorithm, data; nodecapacity::Int = 16) =
-    RTree(algorithm, [Extents.extent(m, x) for x in data]; nodecapacity)
+function RTree(m::Manifold, algorithm::BulkLoadAlgorithm, data; nodecapacity::Int = 16,
+        indices::Union{Nothing, AbstractVector{Int}} = nothing)
+    items = data isa AbstractVector ? data : collect(data)
+    isempty(items) && throw(ArgumentError("cannot build an `RTree` from an empty collection"))
+    return RTree(algorithm, items; nodecapacity, indices,
+        extents = [Extents.extent(m, x) for x in items])
+end
 
 Extents.extent(tree::RTree) = tree.extent
 

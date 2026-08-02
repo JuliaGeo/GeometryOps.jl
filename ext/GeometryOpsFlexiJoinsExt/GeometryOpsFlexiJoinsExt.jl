@@ -13,7 +13,9 @@ using GeometryOps
 using FlexiJoins
 
 import GeometryOps as GO, GeoInterface as GI
-using SortTileRecursiveTree, Tables
+import GeometryOps.SpatialTreeInterface: spatialtree
+using GeometryOps.SpatialTreeInterface: query, isspatialtree
+using Tables
 
 
 # This module defines the FlexiJoins APIs for GeometryOps' boolean comparison functions, taken from DE-9IM.
@@ -35,12 +37,23 @@ FlexiJoins.supports_mode(::FlexiJoins.Mode.Tree, ::FlexiJoins.ByPred{F}, datas) 
 
 # In theory, one could extract the tree from e.g a GeoPackage or some future GeoDataFrame.
 
-FlexiJoins.prepare_for_join(::FlexiJoins.Mode.Tree, X, cond::FlexiJoins.ByPred{<: GO_DE9IM_FUNCS}) = (X, SortTileRecursiveTree.STRtree(map(cond.Rf, X)))
-function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{F}, ix_a, a, (B, tree)::Tuple, multi::typeof(identity)) where F <: GO_DE9IM_FUNCS
+function spatialtree(X, selector)
+    tree_or_geometries = selector(X)
+    tree_or_geometries === nothing && return nothing
+    ismissing(tree_or_geometries) && return nothing
+    isspatialtree(tree_or_geometries) && return tree_or_geometries
+    return spatialtree(tree_or_geometries)
+end
+
+FlexiJoins.prepare_for_join(::FlexiJoins.Mode.Tree, X, cond::FlexiJoins.ByPred{<: GO_DE9IM_FUNCS}) = (X, spatialtree(X, cond.Rf))
+function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{F}, ix_a, a, (B, tree)::Tuple, multi::typeof(identity)) where F<:GO_DE9IM_FUNCS
     # Implementation note:
     # here, `a` is a row, and `b` is the full table.
     # We extract the relevant columns using cond.Lf and cond.Rf.
-    idxs = SortTileRecursiveTree.query(tree, cond.Lf(a))
+    tree === nothing && return Int[]
+    left_geom = cond.Lf(a)
+    (left_geom === nothing || ismissing(left_geom) || isnothing(GI.extent(left_geom))) && return Int[]
+    idxs = query(tree, left_geom)
     intersecting_idxs = filter!(idxs) do idx
         cond.pred(cond.Lf(a), cond.Rf(B[idx]))
     end

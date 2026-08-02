@@ -65,6 +65,20 @@ end
     # covering the whole square, so extent-intersects finds it too.
     @test query(gtree, Extents.Extent(X = (0.9, 1.1), Y = (0.4, 0.6))) == [2, 3]
 
+    filtered_geometries = extents[[2, 4]]
+    @test query(RTree(STR(), filtered_geometries; indices = [2, 4]), filtered_geometries[1]) == [2]
+    @test_throws ArgumentError RTree(STR(), filtered_geometries; indices = [2])
+
+    iter_extents = Iterators.filter(_ -> true, filtered_geometries)
+    @test query(RTree(STR(), iter_extents), filtered_geometries[1]) == [1]
+
+    stateful_extents = [
+        Extents.Extent(X = (0.0, 1.0), Y = (0.0, 1.0)),
+        Extents.Extent(X = (2.0, 3.0), Y = (2.0, 3.0)),
+    ]
+    stateful = Iterators.Stateful(stateful_extents)
+    @test query(RTree(STR(), stateful), stateful_extents[2]) == [2]
+
     @test_throws ArgumentError RTree(STR(), Extents.Extent{(:X, :Y)}[])
     @test_throws ArgumentError RTree(STR(), random_extents(rng, 5, 2); nodecapacity = 1)
     @test occursin("RTree{HPR}", sprint(show, gtree))
