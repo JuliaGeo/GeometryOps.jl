@@ -86,7 +86,7 @@ Now, we can perform the "spatial join" using FlexiJoins.  We are performing an o
 ```@example spatialjoins
 @time joined_df = FlexiJoins.innerjoin(
     (points_df, poly_df), 
-    by_pred(:geometry, GO.within, :geometry)
+    GO.within,
 )
 ```
 
@@ -94,6 +94,8 @@ Now, we can perform the "spatial join" using FlexiJoins.  We are performing an o
 scatter!(a, joined_df.geometry; color = joined_df.color)
 f
 ```
+
+This shorthand uses the first column declared by `GeoInterface.geometrycolumns` for each table. If a table declares multiple geometry columns, it warns you. Use `by_pred` directly when you want a different column or to add more conditions.
 
 Here, you can see that the colors were assigned appropriately to the scattered points!
 

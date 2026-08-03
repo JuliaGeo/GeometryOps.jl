@@ -54,7 +54,26 @@ FlexiJoins.swap_sides(::typeof(GO.within)) = GO.contains
 FlexiJoins.swap_sides(::typeof(GO.coveredby)) = GO.covers
 FlexiJoins.swap_sides(::typeof(GO.covers)) = GO.coveredby
 
+function _geometry_column(table, input_index)
+    geometry_columns = GI.geometrycolumns(table)
+    if isnothing(geometry_columns) || isempty(geometry_columns)
+        throw(ArgumentError("$input_index input does not declare a geometry column"))
+    end
+    geometry_column = first(geometry_columns)
+    length(geometry_columns) > 1 && @warn "$input_index input declares multiple geometry columns $(repr(geometry_columns)); using the first."
+    return geometry_column
+end
+
+function FlexiJoins.flexijoin((a, b)::NTuple{2,Any}, predicate::GO_DE9IM_FUNCS; kwargs...)
+    left_col = _geometry_column(a, "First")
+    right_col = _geometry_column(b, "Second")
+    return FlexiJoins.flexijoin(
+        (a, b),
+        FlexiJoins.by_pred(left_col, predicate, right_col);
+        kwargs...,
+    )
+end
+
 # That's a wrap, folks!
 
 end
-
