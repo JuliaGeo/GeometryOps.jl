@@ -327,6 +327,55 @@ end
     @test isapprox(asd, au - ai; rtol = 1e-12)
 end
 
+#=
+Emission used to pick between the two antipodal candidates `±(na×nb)` for a
+crossing node by evaluating `_strictly_in_arc3` in Float64. Those determinants
+vanish as the crossing approaches an endpoint of either arc, so on inputs whose
+vertices are ulps apart — here, one region decomposed into two components two
+different ways, as an overlay result fed back in — a crossing node was emitted at
+its ANTIPODE. The result kept the right combinatorial structure and the right
+shell/hole roles; one of its vertices was simply half a sphere away, which made
+`intersection` a clean quarter of the sphere and `symdifference` a clean half.
+
+X and Y below denote the same region, so intersection and union are that region
+and both differences are empty. Planar gets this right on the same input and is
+checked alongside, since the sign choice is a spherical-only construction.
+=#
+@testset "spherical crossing emitted at its antipode (near-endpoint crossing)" begin
+    X = GO.tuples(LG.readgeom("MULTIPOLYGON (((0 0, 0 1, 0.5 1.0000380706528735, 0.5 0.5, 0.9999999999999998 0.5000190382262165, 1 0, 0 0)), ((0.9999999999999998 1, 0.5 1.0000380706528735, 0.5 1.5000000000000004, 1.5000000000000002 1.5000000000000004, 1.5000000000000002 0.5000000000000001, 0.9999999999999998 0.5000190382262165, 0.9999999999999998 1)))"))
+    Y = GO.tuples(LG.readgeom("MULTIPOLYGON (((0.5 1.0000380706528735, 0 1, 0 0, 1 0, 1 0.5000190382262163, 0.5 0.5, 0.5 1.0000380706528735)), ((0.5 1.0000380706528735, 0.9999999999999998 1, 1 0.5000190382262163, 1.5000000000000002 0.5, 1.5000000000000002 1.5000000000000002, 0.5 1.5000000000000002, 0.5 1.0000380706528735)))"))
+
+    for m in (Planar(), Spherical())
+        aX, aY = GO.area(m, X), GO.area(m, Y)
+        @test isapprox(aX, aY; rtol = 1e-15)
+        ops = Dict(op => GO.area(m, GO._overlay_ng(m, op, X, Y; exact = EX)) for op in
+                   (GO.OVERLAY_INTERSECTION, GO.OVERLAY_UNION,
+                    GO.OVERLAY_DIFFERENCE, GO.OVERLAY_SYMDIFFERENCE))
+        @test isapprox(ops[GO.OVERLAY_INTERSECTION], aX; rtol = 1e-12)
+        @test isapprox(ops[GO.OVERLAY_UNION], aX; rtol = 1e-12)
+        @test ops[GO.OVERLAY_DIFFERENCE] <= 1e-12 * aX
+        @test ops[GO.OVERLAY_SYMDIFFERENCE] <= 1e-12 * aX
+    end
+
+    #-- and directly on the defect: no emitted vertex may be a hemisphere away
+    #-- from the crossing's own arcs. The emitted longitudes all sit in [0, 2].
+    r = GO._overlay_ng(Spherical(), GO.OVERLAY_INTERSECTION, X, Y; exact = EX)
+    @test all(p -> 0 <= GI.x(p) <= 2 && 0 <= GI.y(p) <= 2, GI.getpoint(r))
+
+    #-- and at the emitter itself, on the offending crossing: X's
+    #-- (1.5, 0.5)->(1, 0.50001904) against Y's (1, 1)->(1, 0.50001904), whose
+    #-- endpoints differ in the last ulp of latitude so the crossing sits ~1e-16
+    #-- rad from both. Float `_strictly_in_arc3` rejected BOTH candidates here
+    #-- and the old code fell through to `-d`. (The exact-arithmetic half of this
+    #-- lives with the predicate, in the spherical kernel conformance suite.)
+    m = Spherical()
+    a0, a1, b0, b1 = (GO._to_kernel_point(m, p) for p in
+                      ((1.5000000000000002, 0.5000000000000001), (0.9999999999999998, 0.5000190382262165),
+                       (0.9999999999999998, 1.0), (1.0, 0.5000190382262163)))
+    lon, lat = GO._emit_node_coord(GO.crossing_node(a0, a1, b0, b1))
+    @test 0.99 <= lon <= 1.01 && 0.4 <= lat <= 0.6
+end
+
 @testset "spherical empty-vs-full disambiguation (§3 amendment 6)" begin
     A = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
     Bdisjoint = GI.Polygon([[(40.0, 0.0), (50.0, 0.0), (50.0, 10.0), (40.0, 10.0), (40.0, 0.0)]])
