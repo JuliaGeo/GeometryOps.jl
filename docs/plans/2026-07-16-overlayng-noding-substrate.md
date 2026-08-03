@@ -220,6 +220,20 @@ rk_compare_along_segment(m, s0, s1, na, nb; exact) -> -1 / 0 / +1
   `_sph_crossing_dir` exact direction → high-precision normalize → lon/lat (the
   `CrossingEdgeSplit` precedent, `src/transformations/correction/crossing_edge_split.jl`).
 
+  **Amendment (spherical antipodal candidate).** The certificate above bounds the direction's
+  *magnitude* error. Which of the two antipodal candidates `±(na×nb)` the crossing means is a
+  separate, discrete question — a decision, so §0 puts it on the exact side of the line on
+  *both* paths, certified or not. `_sph_crossing_dir` originally answered it by evaluating
+  `_strictly_in_arc3` in the caller's number type; those four determinants vanish as the
+  crossing approaches an endpoint of either arc, so a Float64 caller (this emission) returned
+  the ANTIPODE — a vertex half a sphere from where it belongs, which turns an overlay result
+  into a quarter or a half of the sphere while its combinatorics and shell/hole roles stay
+  correct. The sign now comes from the crossing's own exact orients: by BAC–CAB,
+  `d = na×nb = [b0,b1,a0]·a1 − [b0,b1,a1]·a0`, so `d` (rather than `−d`) is the on-arc
+  candidate iff `[b0,b1,a0] > 0`, and a proper crossing's four orients are nonzero in the
+  fixed near-crossing pattern §2.4 already establishes — one `rk_orient` decides it, through
+  ExactPredicates' own filter→exact ladder, with no threshold and no `Rational{BigInt}` lift.
+
 Substrate refactor bundled here (S2 finding g): make `_exact_crossing_point` /
 `_sph_crossing_dir` the single shared exact-crossing authority with one call shape, consumed
 by (a) this fallback, (b) §2.5's exact ordering keys, (c) `rk_nodes_coincide` — today their

@@ -17,7 +17,9 @@
 #   the arcs clear a near-tangency conditioning gate (spike S3 measured the float
 #   direction at ≤1.4e-14° ≈ 1.5 nm; the lon/lat trig itself is uncertified by
 #   design — no decision ever consumes an emitted coordinate). Fallback: the
-#   exact `_sph_crossing_dir`, normalized and converted.
+#   exact `_sph_crossing_dir`, normalized and converted. The gate bounds the
+#   direction's *magnitude* error only; WHICH of the two antipodal candidates is
+#   meant is a decision and `_sph_crossing_dir` settles it exactly on both paths.
 
 # ## Error-free transforms and double-double primitives (spike S3, productionized)
 
