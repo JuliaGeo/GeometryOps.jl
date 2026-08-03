@@ -380,15 +380,52 @@ function _sph_compare_around(bt, n3, p, q)
     return o > 0 ? 1 : (o < 0 ? -1 : 0)
 end
 
-# The crossing direction (the sphere point where the two arcs of a crossing
-# node meet): ±(na×nb), the candidate strictly interior to both minor arcs.
+#=
+The crossing direction (the sphere point where the two arcs of a crossing node
+meet): ±(na×nb), the candidate strictly interior to both minor arcs.
+
+`bt` chooses the arithmetic of the direction — but WHICH of the two antipodal
+candidates is meant is a decision, not a coordinate, so it is decided exactly on
+both paths. Evaluating `_strictly_in_arc3` in the caller's number type was a
+defect: those four determinants vanish as the crossing approaches an endpoint of
+either arc, which is the ordinary case for near-coincident real data, and a
+Float64 `bt` then selected the ANTIPODE — a whole hemisphere away, not an ulp.
+(Audited over 200 000 adversarial proper crossings per class: the float
+selection was wrong on 1.5% of crossings within 1e-15 of an arc endpoint and on
+42% of crossings whose arcs span ~1e-9 rad.)
+
+The exact sign needs no new predicate, only BAC–CAB. Writing `[u,v,w] = u·(v×w)`
+(exactly `rk_orient`), `na = a0×a1`, `nb = b0×b1`:
+
+    d = na×nb = [b0,b1,a0]·a1 − [b0,b1,a1]·a0 = [a0,a1,b1]·b0 − [a0,a1,b0]·b1
+
+so `d` is a POSITIVE combination of `a0, a1` — equivalently of `b0, b1`, i.e. it
+is the candidate on both minor arcs rather than its antipode — iff
+`[b0,b1,a0] > 0`. A proper crossing is exactly the near-crossing sign pattern
+`(+,−,−,+)` or `(−,+,+,−)` over the four orients (the pattern
+`rk_classify_intersection` already establishes, same derivation), so any one of
+the four that is nonzero decides, and `rk_orient` resolves it through
+ExactPredicates' float-filter → exact ladder: no threshold anywhere, and ~3 ns
+instead of a `Rational{BigInt}` lift even on the `bt = True()` path.
+=#
 function _sph_crossing_dir(bt, node::NodeKey)
     A0 = _vec3(bt, node.pt); A1 = _vec3(bt, node.a1)
     B0 = _vec3(bt, node.b0); B1 = _vec3(bt, node.b1)
-    na = _cross3(A0, A1); nb = _cross3(B0, B1)
-    d = _cross3(na, nb)
-    (_strictly_in_arc3(d, A0, A1, na) && _strictly_in_arc3(d, B0, B1, nb)) && return d
-    return _neg3(d)
+    d = _cross3(_cross3(A0, A1), _cross3(B0, B1))
+    return _crossing_dir_is_positive(node) ? d : _neg3(d)
+end
+
+# Whether `+(na×nb)` is the on-arc candidate, from the first nonzero of the
+# crossing's four exact orients (derivation above). All four are nonzero for a
+# proper crossing, which is the only kind of node `crossing_node` keys; the scan
+# past the first is defensive. All four zero means the four points are coplanar
+# with the origin, hence `na ∥ nb` and `d == −d == 0`, and the choice is vacuous.
+function _crossing_dir_is_positive(node::NodeKey)
+    s = _rk_orient(True(), node.b0, node.b1, node.pt); s != 0 && return s > 0
+    s = _rk_orient(True(), node.b0, node.b1, node.a1); s != 0 && return s < 0
+    s = _rk_orient(True(), node.pt, node.a1, node.b0); s != 0 && return s < 0
+    s = _rk_orient(True(), node.pt, node.a1, node.b1); s != 0 && return s > 0
+    return true
 end
 
 function rk_compare_edge_dir(m::Spherical, node::NodeKey, p, q; exact)
@@ -417,6 +454,36 @@ function rk_nodes_coincide(::Spherical, k1::NodeKey, k2::NodeKey; exact)
     bt = booltype(exact)
     d1 = _exact_node_dir(bt, k1); d2 = _exact_node_dir(bt, k2)
     return _iszero3(_cross3(d1, d2)) && _dot3(d1, d2) > 0
+end
+
+# ## Node ordering along an arc (design §2.5)
+#
+# Two nodes on the minor arc (s0, s1) are ordered by the sign of the
+# discriminant `(da × db) · N`, `N = s0 × s1` the arc's plane normal and `da`,
+# `db` the nodes' on-sphere directions (`_exact_node_dir`): `da` precedes `db`
+# along `s0 → s1` iff the discriminant is positive (both directions lie strictly
+# interior to the minor arc, so they sit in the half where `N` points out of the
+# turning plane). The float filter uses the `False()` (Float64) directions; it
+# is trusted only when `|disc|` clears a conditioning-inflated bound (a
+# near-tangent crossing has a large-error direction and must escalate). The exact
+# fallback recomputes the discriminant over `Rational{BigInt}` directions.
+function rk_compare_along_segment(m::Spherical, s0, s1, na::NodeKey, nb::NodeKey; exact)
+    S0 = _vec3(False(), s0); S1 = _vec3(False(), s1)
+    N = _cross3(S0, S1)
+    da = _exact_node_dir(False(), na); db = _exact_node_dir(False(), nb)
+    disc = _dot3(_cross3(da, db), N)
+    #-- |disc| ≈ |da||db||N| sin(Δ); the directions carry ≲ few·ulp relative
+    #-- error (unit-ish vectors), amplified for crossing nodes by their arc
+    #-- geometry. 64 ulp of the product magnitude is a conservative escalation
+    #-- trigger — coincident/near-coincident pairs fall to the exact path.
+    mag = sqrt(_dot3(da, da) * _dot3(db, db) * _dot3(N, N))
+    tol = 64 * eps(Float64) * mag
+    abs(disc) > tol && return disc > 0 ? -1 : 1
+    #-- exact fallback (lazy): rational directions, exact for Float64 inputs.
+    Se0 = _vec3(True(), s0); Se1 = _vec3(True(), s1); Ne = _cross3(Se0, Se1)
+    ea = _exact_node_dir(True(), na); eb = _exact_node_dir(True(), nb)
+    o = _dot3(_cross3(ea, eb), Ne)
+    return o > 0 ? -1 : (o < 0 ? 1 : 0)
 end
 
 # ## Ring orientation
