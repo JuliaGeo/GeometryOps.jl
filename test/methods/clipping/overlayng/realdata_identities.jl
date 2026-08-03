@@ -35,18 +35,11 @@ using Test
 import GeometryOps as GO
 import GeoInterface as GI
 import LibGEOS as LG
-import Extents
 
 const EX = GO.True()
 const NE_PAIRS = something(tryparse(Int, get(ENV, "GO_OVERLAYNG_NE_PAIRS", "")), 60)
 const SPH_PAIRS = something(tryparse(Int, get(ENV, "GO_OVERLAYNG_SPH_PAIRS", "")), 30)
 const NE10_WIDE = get(ENV, "GO_OVERLAYNG_NE10", "") == "1"
-
-# Natural Earth 110 m **Sudan** is a documented bad input: its exterior ring is
-# clockwise, carries a duplicate vertex, and is geodesically self-intersecting.
-# s2geography rejects it too. It is excluded by name rather than left to poison
-# a sweep — the engine contracts on valid input (design §2.2).
-const NE_EXCLUDED = Set(["Sudan"])
 
 ovl(m, op, a, b) = GO._overlay_ng(m, op, a, b; exact = EX)
 const OPS = (GO.OVERLAY_INTERSECTION, GO.OVERLAY_UNION, GO.OVERLAY_DIFFERENCE, GO.OVERLAY_SYMDIFFERENCE)
@@ -156,64 +149,6 @@ function identity_sweep(m, A, B, label; rtol = 1e-12)
     end
 end
 
-# Pairs whose extents intersect, in a deterministic order (sorted by name), up
-# to `limit`. Only pairs that actually share more than a point are kept, so the
-# sweep does not fill up with trivially-disjoint neighbours.
-function neighbour_pairs(names, geoms, limit)
-    order = sortperm(names)
-    exts = [GI.extent(g) for g in geoms]
-    pairs = Tuple{Int, Int}[]
-    for ii in eachindex(order), jj in (ii + 1):length(order)
-        i, j = order[ii], order[jj]
-        (exts[i] === nothing || exts[j] === nothing) && continue
-        Extents.intersects(exts[i], exts[j]) || continue
-        push!(pairs, (i, j))
-        length(pairs) >= 4 * limit && break
-    end
-    kept = Tuple{Int, Int}[]
-    for (i, j) in pairs
-        length(kept) >= limit && break
-        try
-            LG.intersects(GI.convert(LG, geoms[i]), GI.convert(LG, geoms[j])) || continue
-        catch
-            continue
-        end
-        push!(kept, (i, j))
-    end
-    return kept
-end
-
-# Shifted-self pairs: A against a copy translated by a fraction of a degree, so
-# every border segment crosses its own copy — the densest crossing workload
-# available from this data.
-shifted(A, dx, dy) = GO.apply(GI.PointTrait(), A) do p
-    (GI.x(p) + dx, GI.y(p) + dy)
-end
-
-function load_ne(resolution)
-    names = String[]
-    geoms = Any[]
-    fc = NaturalEarth.naturalearth("admin_0_countries", resolution)
-    for f in fc
-        g = GeoJSON.geometry(f)
-        (g === nothing || GI.npoint(g) == 0) && continue
-        nm = try string(f.NAME) catch; "?" end
-        nm in NE_EXCLUDED && continue
-        t = GI.trait(g)
-        (t isa GI.PolygonTrait || t isa GI.MultiPolygonTrait) || continue
-        tg = GO.tuples(g)
-        #-- the engine contracts on valid input; NE has a handful of other
-        #-- self-intersecting rings besides Sudan, dropped here by the same rule
-        try
-            LG.isValid(GI.convert(LG, tg)) || continue
-        catch
-            continue
-        end
-        push!(names, nm); push!(geoms, tg)
-    end
-    return names, geoms
-end
-
 const NE_AVAILABLE = try
     import NaturalEarth, GeoJSON
     true
@@ -221,6 +156,10 @@ catch err
     @info "Natural Earth overlay identity sweeps skipped (data unavailable)" err
     false
 end
+
+# `load_ne`, `neighbour_pairs`, `shifted` and `shifted_cases` are shared with the
+# s2geography differential suite, which sweeps the same corpus.
+include(joinpath(@__DIR__, "..", "..", "..", "data", "natural_earth_pairs.jl"))
 
 # Country pairs that the engine currently gets wrong, pinned so that a fix and a
 # regression are equally visible. Each is an instance of a defect documented in
@@ -271,15 +210,7 @@ if NE_AVAILABLE
 
         #-- shifted-self cases, on countries away from the antimeridian (whose
         #-- overlay is a separate concern handled by `antimeridian_split`)
-        shift_names = ["Brazil", "France", "Egypt", "Australia", "Chile", "Norway",
-                       "Indonesia", "India", "Kazakhstan", "Argentina"]
-        shifts = Any[]
-        for nm in shift_names
-            idx = findfirst(==(nm), ne110_names)
-            idx === nothing && continue
-            A = ne110_geoms[idx]
-            push!(shifts, ("$nm shifted", A, shifted(A, 0.5, 0.25)))
-        end
+        shifts = shifted_cases(ne110_names, ne110_geoms)
         @test length(shifts) >= 6
 
         @testset "planar" begin

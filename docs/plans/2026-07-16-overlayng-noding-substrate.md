@@ -342,6 +342,47 @@ Sudan-experiment C++ harness pattern); NE/GADM sweeps with area conservation
 (`area(A∪B)+area(A∩B) ≈ area(A)+area(B)` — the signed-area fix `69e416484` makes this a
 machine-precision gate). PrecompileTools workload extension; `benchmarks/` additions.
 
+### 4.1 The spherical differential, as built
+
+The s2 half of that validation landed as `test/methods/clipping/overlayng/s2_differential.jl`,
+against **`S2Geography_jll` 0.4** rather than a hand-compiled C++ harness — the JLL ships
+artifacts for all five CI platforms, so the oracle is available in CI, not just locally. The
+binding is `test/external/s2geography/s2geography.jl`: four entry points
+(`s2_overlay`, `s2_area`, `s2_predicate`, `s2_available`) over the two C routes s2geography
+offers. Constructive overlay is reachable only through the Sedona scalar-UDF kernels, which
+speak the Arrow C Data Interface; that interface is declared inline in
+`sedona_udf/sedona_extension.h` as plain structs, so nanoarrow is NOT a dependency and Julia
+builds the `ArrowSchema`/`ArrowArray` directly. Geography arguments must be `geoarrow.wkb`
+with `{"edges":"spherical"}` — a kernel that does not recognise its argument types reports
+"does not apply" rather than an error, so a wrong spelling presents as a missing overload.
+
+Measured over 204 ops (NE 110 m neighbour pairs, shifted-self cases, NE 10 m pairs, and the
+NE 10 m Russia antimeridian pairs), on symmetric-difference area and direct area agreement,
+both computed by s2 on both operands:
+
+    area agreement        median 3.3e-15   worst 1.0e-13
+    L1 symdiff / scale    median 2.2e-16   worst 5.9e-15
+    radius-corrected area median 4.3e-15   worst 2.3e-13
+
+i.e. the two engines agree to machine precision, and the gates (1e-12) are set by the
+ORACLE's floors, not by our emission — S2's builder snaps, so its symmetric difference either
+cannot be assembled at all on ulp-scale slivers (35 of 204 ops) or is reported four orders
+high. s2geography's `st_area` uses 6371010.0 against our 6371008.8; that 3.8e-7 is divided
+out explicitly rather than absorbed into a tolerance. The 120-comparison predicate
+differential against RelateNG's spherical kernel, over the much simpler handle API, agrees
+exactly.
+
+Two differences are structural and diagnosed rather than scored: s2's constructive ops are
+areal-only where OGC/JTS semantics return the dimension-collapsed result (a shared border
+makes `intersection` a LINESTRING for us and `POLYGON EMPTY` for s2 — GEOS agrees with us),
+and the antimeridian seam partitions the same region into different component counts, because
+Natural Earth's ±180 split makes the input invalid *on the sphere* while valid on the plane.
+Both are written up in full in the suite's ledger.
+
+The `side location conflict` that `realdata_identities.jl` pins as `@test_broken` for
+`Azerbaijan x Russia` and `Belarus x Russia` no longer reproduces on this branch: both pairs
+now pass every algebraic identity, so those two pins are stale.
+
 ## 5. Face enumeration — the non-dissolving extraction, and face-walk hygiene
 
 The op pipeline of §3 extracts only the rings the op's result predicate selects, after

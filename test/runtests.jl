@@ -54,6 +54,7 @@ end
 @safetestset "OverlayNG JTS XML suites" begin include("methods/clipping/overlayng/xml_suite.jl") end
 @safetestset "OverlayNG fuzz vs LibGEOS" begin include("methods/clipping/overlayng/fuzz.jl") end
 @safetestset "OverlayNG real-data identities" begin include("methods/clipping/overlayng/realdata_identities.jl") end
+@safetestset "OverlayNG spherical vs s2geography" begin include("methods/clipping/overlayng/s2_differential.jl") end
 # Transformations
 @safetestset "Embed Extent" begin include("transformations/extent.jl") end
 @safetestset "Reproject" begin include("transformations/reproject.jl") end
