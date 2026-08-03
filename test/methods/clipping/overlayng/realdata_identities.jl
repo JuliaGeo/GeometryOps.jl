@@ -161,39 +161,25 @@ end
 # s2geography differential suite, which sweeps the same corpus.
 include(joinpath(@__DIR__, "..", "..", "..", "data", "natural_earth_pairs.jl"))
 
-# Country pairs that the engine currently gets wrong, pinned so that a fix and a
-# regression are equally visible. Each is an instance of a defect documented in
-# `test/external/jts/overlay_skiplist.jl`.
-const NE_KNOWN_DEFECTS = Set{String}([
-    # SPHERICAL, ANTIMERIDIAN-TOUCHING INPUT. Natural Earth 10 m Russia is a
-    # 214-polygon MultiPolygon, 5 of whose polygons reach lon ±180. Any spherical
-    # overlay against it raises `OverlayTopologyError: side location conflict`,
-    # while the same pair is clean on the plane and clean on the sphere once
-    # those 5 polygons are dropped (verified by filtering to the 209 polygons
-    # with |lon| < 175). Synthetic antimeridian squares do NOT reproduce it, so
-    # it is specific to the seam geometry, not to the seam itself; the remedy is
-    # the `antimeridian_split` transformation on this branch's parent. These two
-    # pairs only appear in the widened sweep (GO_OVERLAYNG_NE10=1 with a large
-    # GO_OVERLAYNG_NE_PAIRS), not in the CI default.
-    "Spherical NE10 Azerbaijan x Russia",
-    "Spherical NE10 Belarus x Russia",
-])
-
+# Nothing is pinned: every pair of every sweep must satisfy every identity on
+# both manifolds. `Spherical NE10 Azerbaijan x Russia` and
+# `Spherical NE10 Belarus x Russia` were pinned `@test_broken` here for the
+# antimeridian seam defect (`OverlayTopologyError: side location conflict` from
+# the 5 of Russia's 214 polygons that reach lon ±180). Both clear all four
+# identities now, in both argument orders — conservation 5.3e-15 / 5.6e-15,
+# reconstruction 9.9e-18 / 1.6e-17, all four ops completing. They only ever ran
+# in the widened sweep (GO_OVERLAYNG_NE10=1 with a large GO_OVERLAYNG_NE_PAIRS),
+# never in the CI default, which is why the stale pins were never reported as
+# unexpectedly passing.
 function run_sweep(m, label, cases; rtol = 1e-12)
-    nfail = 0
     mname = string(typeof(m).name.name)
     for (name, A, B) in cases
         key = "$mname $label $name"          # manifold-specific: a pair can be clean
         ok, detail = identity_sweep(m, A, B, key; rtol)   # on one manifold and not the other
-        if key in NE_KNOWN_DEFECTS
-            @test_broken ok
-            ok || (nfail += 1)
-        else
-            ok || println("REALDATA FAILURE: ", detail)
-            @test ok
-        end
+        ok || println("REALDATA FAILURE: ", detail)
+        @test ok
     end
-    return nfail
+    return nothing
 end
 
 if NE_AVAILABLE

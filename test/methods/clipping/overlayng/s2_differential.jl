@@ -406,10 +406,10 @@ const S2_KNOWN_DISAGREEMENTS = Dict{String, String}()
 # the rings already terminate exactly at ±180 and there is nothing to cut.
 #
 # Worth recording alongside: the `OverlayTopologyError: side location conflict`
-# that these two pairs are pinned for in `realdata_identities.jl` NO LONGER
-# REPRODUCES on this branch. `Azerbaijan x Russia` and `Belarus x Russia` now
-# pass every algebraic identity (conservation 5.3e-15 / 5.6e-15, reconstruction
-# 9.9e-18 / 1.6e-17), so those two `@test_broken` pins are stale.
+# these two pairs used to raise NO LONGER REPRODUCES on this branch.
+# `Azerbaijan x Russia` and `Belarus x Russia` pass every algebraic identity
+# (conservation 5.3e-15 / 5.6e-15, reconstruction 9.9e-18 / 1.6e-17), so the
+# `@test_broken` pins they carried in `realdata_identities.jl` are gone.
 const S2_SEAM_COMPONENT_SPLIT = Set{String}(
     "NE10 $nm x Russia/$op"
     for nm in ("Azerbaijan", "Belarus", "Finland", "Norway",
@@ -489,10 +489,10 @@ if NE_OK
     # -----------------------------------------------------------------------
     #
     # Natural Earth 10 m Russia is a 214-polygon MultiPolygon, five of whose
-    # polygons reach lon ±180 — the input behind the two `@test_broken` pins in
-    # `realdata_identities.jl` ("Spherical NE10 Azerbaijan x Russia",
-    # "Spherical NE10 Belarus x Russia"), which recorded an
-    # `OverlayTopologyError: side location conflict`.
+    # polygons reach lon ±180 — the input behind the two `@test_broken` pins
+    # `realdata_identities.jl` used to carry ("Spherical NE10 Azerbaijan x
+    # Russia", "Spherical NE10 Belarus x Russia") for an
+    # `OverlayTopologyError: side location conflict` that no longer reproduces.
     #
     # It is the hardest spherical input this corpus has and the one case a
     # planar oracle is structurally unable to check, so it gets its own sweep
