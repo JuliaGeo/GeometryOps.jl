@@ -334,3 +334,68 @@ end
         @test !GO._ring_is_ccw(m, reverse(closed); exact = True())
     end
 end
+
+#=
+`_sph_crossing_dir`: which of the two antipodal candidates `±(na×nb)` a proper
+crossing means. The choice is a decision, so it is exact on both `bt` paths and
+tested outside the exact-parameterized suite — it used to be taken from
+`_strictly_in_arc3` evaluated in the caller's number type, and those four
+determinants vanish as the crossing approaches an endpoint of either arc. A
+Float64 caller (emission, `_emit_node_coord`) then returned the ANTIPODE: a
+vertex half a sphere from where it belongs, which turned a spherical overlay
+result into a quarter or a half of the sphere.
+=#
+@testset "spherical crossing direction: the antipodal choice is exact" begin
+    m = Spherical()
+    rng = Random.Xoshiro(0x5c40551)
+    f64(d) = (Float64(d[1]), Float64(d[2]), Float64(d[3]))
+    dot3(u, v) = u[1] * v[1] + u[2] * v[2] + u[3] * v[3]
+
+    # The exact direction must be strictly interior to both minor arcs — the
+    # defining property — and the float direction must be the SAME sphere point,
+    # never its antipode (only its magnitude may differ).
+    function check(k)
+        de = GO._sph_crossing_dir(True(), k)
+        df = GO._sph_crossing_dir(False(), k)
+        A0 = GO._vec3(True(), k.pt); A1 = GO._vec3(True(), k.a1)
+        B0 = GO._vec3(True(), k.b0); B1 = GO._vec3(True(), k.b1)
+        on_arcs = GO._strictly_in_arc3(de, A0, A1, GO._cross3(A0, A1)) &&
+                  GO._strictly_in_arc3(de, B0, B1, GO._cross3(B0, B1))
+        return (on_arcs, dot3(f64(de), df) > 0)
+    end
+
+    @testset "crossing an ulp from an arc endpoint" begin
+        # X's (1.5, 0.5)->(1, 0.50001904) against Y's (1, 1)->(1, 0.50001904):
+        # the two arcs' endpoints differ in the last ulp of latitude, so the
+        # crossing sits ~1e-16 rad from both. Float `_strictly_in_arc3` rejects
+        # BOTH candidates here and the old code fell through to `-d`.
+        ll = [(1.5000000000000002, 0.5000000000000001), (0.9999999999999998, 0.5000190382262165),
+              (0.9999999999999998, 1.0), (1.0, 0.5000190382262163)]
+        a0, a1, b0, b1 = (GO._to_kernel_point(m, p) for p in ll)
+        @test GO.rk_classify_intersection(m, a0, a1, b0, b1; exact = True()).kind == GO.SS_PROPER
+        k = GO.crossing_node(a0, a1, b0, b1)
+        @test check(k) == (true, true)
+        #-- the emission-level consequence (this crossing's emitted coordinate,
+        #-- and the whole-geometry result it corrupted) is asserted where the
+        #-- emitter lives, in the OverlayNG suite.
+    end
+
+    @testset "random and ulp-perturbed crossings" begin
+        rpt() = GO.rk_normalize_usp(_usp(randn(rng), randn(rng), randn(rng)))
+        function jitter(p, n)   # move each component n ulps in a random direction
+            f(x) = foldl((v, _) -> rand(rng, Bool) ? nextfloat(v) : prevfloat(v), 1:n; init = x)
+            return GO.rk_normalize_usp(_usp(f(GI.x(p)), f(GI.y(p)), f(GI.z(p))))
+        end
+        nproper = 0
+        for trial in 1:20_000
+            a0, a1, b0 = rpt(), rpt(), rpt()
+            #-- half the trials put b1 within a few ulps of a1: the near-degenerate
+            #-- shared-vertex configuration real data (and re-fed overlay output) has
+            b1 = isodd(trial) ? rpt() : jitter(a1, rand(rng, 1:4))
+            GO.rk_classify_intersection(m, a0, a1, b0, b1; exact = True()).kind == GO.SS_PROPER || continue
+            nproper += 1
+            @test check(GO.crossing_node(a0, a1, b0, b1)) == (true, true)
+        end
+        @test nproper > 2000
+    end
+end
