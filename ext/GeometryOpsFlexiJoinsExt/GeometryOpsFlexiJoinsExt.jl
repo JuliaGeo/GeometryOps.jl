@@ -52,7 +52,7 @@ function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{
     # We extract the relevant columns using cond.Lf and cond.Rf.
     tree === nothing && return Int[]
     left_geom = cond.Lf(a)
-    (left_geom === nothing || ismissing(left_geom) || isnothing(GI.extent(left_geom))) && return Int[]
+    (isnothing(left_geom) || ismissing(left_geom) || GI.isempty(left_geom)) && return Int[]
     idxs = query(tree, left_geom)
     intersecting_idxs = filter!(idxs) do idx
         cond.pred(cond.Lf(a), cond.Rf(B[idx]))

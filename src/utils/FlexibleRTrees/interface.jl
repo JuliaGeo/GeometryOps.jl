@@ -90,7 +90,7 @@ function spatialtree(geometries)
     valid = nonmissingtype(eltype(geometries))[]
     positions = Int[]
     for (i, geom) in enumerate(geometries)
-        if geom === nothing || ismissing(geom) || isnothing(GI.extent(geom))
+        if geom === nothing || ismissing(geom)
             continue
         end
         push!(valid, geom)
