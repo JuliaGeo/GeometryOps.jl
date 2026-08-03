@@ -36,5 +36,5 @@ pu = GI.Polygon([GI.LinearRing([(0, 0), (0, 1), (1, 1), (0, 0)])])
     # This table only has `:location`, so the shorthand must reject it before delegation.
     no_metadata_location = DataFrame(location=points_df.geometry)
     @test GI.geometrycolumns(no_metadata_location) == (:geometry,)
-    @test_throws "FieldError: type NamedTuple has no field `geometry`" FlexiJoins.innerjoin((no_metadata_location, zones_by_shape), GO.within)
+    @test_throws "type NamedTuple has no field `geometry`" FlexiJoins.innerjoin((no_metadata_location, zones_by_shape), GO.within)
 end
