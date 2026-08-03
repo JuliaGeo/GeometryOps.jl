@@ -40,6 +40,14 @@ c = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2.0, 0.0)]])
 GO.intersection(GO.OverlayNG(), a, c)
 ```
 
+If you only ever want one dimension back, say so with `target` and the result
+shape stops depending on the data — this pair shares only a line, so the areal
+answer is the empty vector rather than a `LineString` you did not ask for:
+
+```@example overlayng
+GO.intersection(GO.OverlayNG(), a, c; target = GI.PolygonTrait())
+```
+
 Point inputs work too, which makes intersection an efficient "which of these
 points are inside" query:
 
@@ -74,10 +82,11 @@ under `noding/`, then `overlay_label.jl` → `overlay_graph.jl` →
 
 The four op codes are the internal `_OverlayOpCode` enum; the methods below are
 the only place a user-facing name is bound to one. They follow the house
-`GO.f(alg, a, b)` idiom (cf. `GO.intersects(GO.RelateNG(), a, b)`), and they
-deliberately do *not* accept the `target`/`fix_multipoly`/`T` arguments of the
-Foster–Hormann entry points: OverlayNG has one result for a given pair of
-inputs and an operation, and it is always emitted at `Float64`.
+`GO.f(alg, a, b)` idiom (cf. `GO.intersects(GO.RelateNG(), a, b)`). Of the
+Foster–Hormann entry points' extra arguments they take `target` — with the same
+meaning and the same return shapes, see the docstring — but not
+`fix_multipoly` (there is nothing to fix: the arrangement never emits
+overlapping components) and not `T` (the result is always emitted at `Float64`).
 
 JTS's precision-model machinery (`SnappingNoder`, `SnapRoundingNoder`,
 `OverlayNGRobust`, `PrecisionReducer`) is deliberately *not* ported. It exists
@@ -133,6 +142,43 @@ that share a boundary segment and also overlap is a `GeometryCollection` of the
 overlap polygon and the shared line. This is JTS's original (non-strict)
 overlay semantics.
 
+## `target`: asking for one dimension
+
+Each operation takes a `target` keyword that narrows the result to a single
+dimension, chosen up front rather than by the data. It is the `target` of the
+Foster–Hormann entry points, with the same return shapes — a singular trait
+gives the `Vector` of atomic components, a `Multi` trait gives the one
+multi-geometry:
+
+| `target`                    | returns                |
+|:----------------------------|:-----------------------|
+| `nothing` (default)         | as above — most specific over every dimension |
+| `GI.PolygonTrait()`         | `Vector{<:Polygon}`    |
+| `GI.MultiPolygonTrait()`    | `MultiPolygon`         |
+| `GI.LineStringTrait()`      | `Vector{<:LineString}` |
+| `GI.MultiLineStringTrait()` | `MultiLineString`      |
+| `GI.PointTrait()`           | `Vector{<:Point}`      |
+| `GI.MultiPointTrait()`      | `MultiPoint`           |
+
+```julia
+#-- always a MultiPolygon, whatever `a` and `b` turn out to share
+GO.intersection(GO.OverlayNG(), a, b; target = GI.MultiPolygonTrait())
+```
+
+An empty targeted result is the empty `Vector` or empty multi-geometry of that
+same concrete type, so the return type no longer depends on the inputs — which
+is the point: without `target`, code that only wants areas has to handle a
+`GeometryCollection` that appears only when the inputs happen to touch.
+
+`target` also removes work. A target above the result's OGC dimension is
+answered from the input dimensions alone, with no noding at all (an areal target
+on a line ∩ area is empty for every possible input), and the builds the target
+cannot want are skipped. The saving is one-directional, because the three builds
+form a dependency chain: an areal target skips both the line and point builds, a
+line target skips the point build, and a point target skips neither. Result
+polygons are built even for a line or point target — whether a line lies inside
+the result area is part of deciding it, and there is no cheaper equivalent test.
+
 ## Inputs
 
 `Point`, `MultiPoint`, `LineString`, `LinearRing`, `MultiLineString`, `Polygon`
@@ -183,14 +229,14 @@ GeometryOpsCore.rebuild(alg::OverlayNG, m::Manifold) = OverlayNG(m; exact = alg.
 # driver. `intersection`, `union` and `difference` gain an `OverlayNG` method
 # beside their existing Foster–Hormann ones; `symdifference` is new.
 
-intersection(alg::OverlayNG, geom_a, geom_b) =
-    _overlay_ng(alg.manifold, OVERLAY_INTERSECTION, geom_a, geom_b; exact = alg.exact)
+intersection(alg::OverlayNG, geom_a, geom_b; target = nothing) =
+    _overlay_ng(alg.manifold, OVERLAY_INTERSECTION, geom_a, geom_b; exact = alg.exact, target)
 
-union(alg::OverlayNG, geom_a, geom_b) =
-    _overlay_ng(alg.manifold, OVERLAY_UNION, geom_a, geom_b; exact = alg.exact)
+union(alg::OverlayNG, geom_a, geom_b; target = nothing) =
+    _overlay_ng(alg.manifold, OVERLAY_UNION, geom_a, geom_b; exact = alg.exact, target)
 
-difference(alg::OverlayNG, geom_a, geom_b) =
-    _overlay_ng(alg.manifold, OVERLAY_DIFFERENCE, geom_a, geom_b; exact = alg.exact)
+difference(alg::OverlayNG, geom_a, geom_b; target = nothing) =
+    _overlay_ng(alg.manifold, OVERLAY_DIFFERENCE, geom_a, geom_b; exact = alg.exact, target)
 
 """
     symdifference([alg::OverlayNG], geom_a, geom_b)
@@ -225,8 +271,10 @@ does not run Foster–Hormann: `symdifference(a, b)` is
 See [`OverlayNG`](@ref) for the result shape, the input contract, and the
 spherical full-sphere limitation.
 """
-symdifference(alg::OverlayNG, geom_a, geom_b) =
-    _overlay_ng(alg.manifold, OVERLAY_SYMDIFFERENCE, geom_a, geom_b; exact = alg.exact)
+symdifference(alg::OverlayNG, geom_a, geom_b; target = nothing) =
+    _overlay_ng(alg.manifold, OVERLAY_SYMDIFFERENCE, geom_a, geom_b; exact = alg.exact, target)
 
-symdifference(m::Manifold, geom_a, geom_b) = symdifference(OverlayNG(m), geom_a, geom_b)
-symdifference(geom_a, geom_b) = symdifference(OverlayNG(Planar()), geom_a, geom_b)
+symdifference(m::Manifold, geom_a, geom_b; kwargs...) =
+    symdifference(OverlayNG(m), geom_a, geom_b; kwargs...)
+symdifference(geom_a, geom_b; kwargs...) =
+    symdifference(OverlayNG(Planar()), geom_a, geom_b; kwargs...)

@@ -91,31 +91,36 @@ end
 # ## The driver (port of `getResult` / `computeEdgeOverlay`)
 
 """
-    _overlay_ng(m, op::_OverlayOpCode, a, b; exact=True(), tree_a=nothing, tree_b=nothing)
+    _overlay_ng(m, op::_OverlayOpCode, a, b; exact=True(), tree_a=nothing, tree_b=nothing, target=nothing)
 
 Compute the overlay of `a` and `b` under `op` on manifold `m`, returning a
 GeoInterface geometry. Internal engine entry point for OverlayNG — point, line
 and area inputs are supported in any A×B combination. `tree_a`/`tree_b` accept
-caller-prebuilt segment indices (threaded to the noding substrate).
+caller-prebuilt segment indices (threaded to the noding substrate). `target`
+narrows the result to one dimension — see "Result targeting" below.
 """
 function _overlay_ng(m::Manifold, op::_OverlayOpCode, a, b;
-        exact = True(), tree_a = nothing, tree_b = nothing)
+        exact = True(), tree_a = nothing, tree_b = nothing, target = nothing)
+    tgt = _ov_target(target)
     dim_a = _overlay_dimension(a)
     dim_b = _overlay_dimension(b)
 
     input = _OverlayInput(m, a, b, dim_a, dim_b, exact, _ov_isempty(a), _ov_isempty(b),
                           nothing, nothing)
 
+    #-- a target above the result dimension can match nothing whatever the inputs
+    #-- contain, so it is answered without noding at all
+    _target_above_result(tgt, op, dim_a, dim_b) && return _empty_result(op, input, tgt)
+
     #-- empty-input / disjoint-envelope short circuits (port of isEmptyResult)
-    er = _empty_result_short_circuit(m, op, input)
-    er === nothing || return er
+    _empty_result_short_circuit(m, op, input) && return _empty_result(op, input, tgt)
 
     #-- point paths (port of the `getResult` dispatch): points cannot node
     #-- anything, so they never reach the arrangement
     if dim_a == 0 && dim_b == 0
-        return _overlay_points(m, op, a, b)                  # isAllPoints
+        return _overlay_points(m, op, a, b, tgt)                  # isAllPoints
     elseif dim_a == 0 || dim_b == 0
-        return _overlay_mixed_points(m, op, a, b, dim_a, dim_b; exact)  # hasPoints
+        return _overlay_mixed_points(m, op, a, b, dim_a, dim_b, tgt; exact)  # hasPoints
     end
 
     arr = NodedArrangement(m, a, b; exact, tree_a, tree_b)
@@ -125,26 +130,49 @@ function _overlay_ng(m::Manifold, op::_OverlayOpCode, a, b;
     _mark_result_area_edges!(g, op)
     _unmark_duplicate_edges_from_result_area!(g)
 
-    return _extract_result(m, op, g, input; exact)
+    return _extract_result(m, op, g, input, tgt; exact)
 end
 
 # ## Result extraction (port of `extractResult`)
 
-function _extract_result(m::Manifold, op::_OverlayOpCode, g::OverlayGraph, input; exact)
+#=
+The three builds are a *dependency chain*, not three independent passes, and that
+is what decides which of them a `target` can skip:
+
+  * polygons depend on nothing downstream;
+  * lines depend on `has_result_area` — `isResultLine` subsumes a line that lies
+    inside the result area — which is only known once the polygons are built;
+  * points depend on the in-result marks of *both* earlier builds
+    (`isResultPoint` rejects a node incident on any in-result edge).
+
+So the elision is one-directional: an areal target drops both later builds, a
+line target drops the point build, and a point target drops nothing. Building the
+polygons anyway for a line or point target is not an oversight — `has_result_area`
+is `!isempty(polys)`, and no cheaper test is equivalent (result-area edges can be
+marked and still ring up to no polygon).
+=#
+function _extract_result(m::Manifold, op::_OverlayOpCode, g::OverlayGraph, input,
+        target = nothing; exact)
     result_area_edges = graph_result_area_edges(g)
     polys = _build_polygons(m, g, result_area_edges; exact)
     has_result_area = !isempty(polys)
 
-    #-- non-strict semantics always allow result lines
-    lines = _build_lines(m, g, input, has_result_area, op; exact)
-
     #-- only Intersection produces points from non-point inputs
-    points = op == OVERLAY_INTERSECTION ? _build_points(g) : Tuple{Float64, Float64}[]
+    build_points = op == OVERLAY_INTERSECTION && _target_needs_dim(target, 0)
 
-    if isempty(polys) && isempty(lines) && isempty(points)
-        return _resolve_empty_result(m, op, input)
+    #-- non-strict semantics always allow result lines. The line pass also runs
+    #-- for a point target, whose lines are then discarded: `isResultPoint` reads
+    #-- the in-result-LINE marks this pass writes, and without them every node on
+    #-- a result line reports as an isolated intersection point.
+    lines = (_target_needs_dim(target, 1) || build_points) ?
+        _build_lines(m, g, input, has_result_area, op; exact) : _ResultLine[]
+
+    points = build_points ? _build_points(g) : Tuple{Float64, Float64}[]
+
+    if _target_is_empty(target, polys, lines, points)
+        return _resolve_empty_result(m, op, input, target)
     end
-    return _create_result_geometry(polys, lines, points)
+    return _target_result(target, polys, lines, points)
 end
 
 # Port of `OverlayUtil.createResultGeometry` + `GeometryFactory.buildGeometry`:
@@ -170,21 +198,151 @@ function _create_result_geometry(polys, lines, points)
     return GI.GeometryCollection(comps)
 end
 
+# ## Result targeting (the `target` keyword)
+
+#=
+`target` fixes the dimension of the result *up front*, instead of letting the
+arrangement decide it. Untargeted, an overlay returns the most specific geometry
+that fits, which may be a `GeometryCollection` when components of several
+dimensions survive — two polygons that overlap *and* share a boundary segment
+intersect in a polygon and a line. A caller who only ever wants the areal part
+then has to destructure a collection whose shape depends on the data.
+
+With a target it does not: the return type is a function of the target alone.
+The accepted targets and their returns mirror the Foster–Hormann entry points —
+a singular trait gives the `Vector` of atomic components, a `Multi` trait gives
+the one multi-geometry:
+
+    dim  singular target          -> returns          multi target                 -> returns
+    2    `GI.PolygonTrait()`      -> Vector{<:Polygon}     `GI.MultiPolygonTrait()`    -> MultiPolygon
+    1    `GI.LineStringTrait()`   -> Vector{<:LineString}  `GI.MultiLineStringTrait()` -> MultiLineString
+    0    `GI.PointTrait()`        -> Vector{<:Point}       `GI.MultiPointTrait()`      -> MultiPoint
+
+An empty result is the empty `Vector` or the empty multi-geometry of that same
+concrete type — never a geometry of another dimension, which is what the
+untargeted `_empty_geom` would give. That promise is only worth making because
+every path in the engine agrees on the component types below: `_ring_to_polygon`
+and `tuples` (the mixed-point path) construct the same wrappers.
+
+Targeting also *removes work*, in two places: `_target_above_result` answers
+without noding whenever the target is above the OGC result dimension (an areal
+target on a line × area intersection is empty for every possible input), and
+`_extract_result` skips the builds the target cannot want.
+=#
+
+const _ResultRing  = GI.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}
+const _ResultPoly  = GI.Polygon{false, false, Vector{_ResultRing}, Nothing, Nothing}
+const _ResultLine  = GI.LineString{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}
+const _ResultPoint = GI.Point{false, false, Tuple{Float64, Float64}, Nothing}
+
+const _OverlayTarget = Union{GI.PointTrait, GI.MultiPointTrait,
+                             GI.LineStringTrait, GI.MultiLineStringTrait,
+                             GI.PolygonTrait, GI.MultiPolygonTrait}
+
+# Normalize whatever the caller passed to `nothing` or a bare trait instance.
+# Trait types and `TraitTarget`s are accepted for parity with the Foster–Hormann
+# entry points, which document `target::Type` and wrap in `TraitTarget`.
+_ov_target(::Nothing) = nothing
+_ov_target(t::_OverlayTarget) = t
+_ov_target(::TraitTarget{T}) where {T} = _ov_target(T)
+function _ov_target(::Type{T}) where {T <: GI.AbstractTrait}
+    #-- a `TraitTarget` over a Union of traits has no single result dimension
+    isconcretetype(T) || throw(ArgumentError(_bad_target_msg(T)))
+    return _ov_target(T())
+end
+_ov_target(x) = throw(ArgumentError(_bad_target_msg(x)))
+
+_bad_target_msg(x) =
+    "OverlayNG: unsupported `target` $(x). An overlay result is targeted by " *
+    "dimension, so `target` must be `nothing` (the default — the most specific " *
+    "geometry over every dimension present) or exactly one of `GI.PolygonTrait()`, " *
+    "`GI.MultiPolygonTrait()`, `GI.LineStringTrait()`, `GI.MultiLineStringTrait()`, " *
+    "`GI.PointTrait()` or `GI.MultiPointTrait()`."
+
+_target_dim(::Union{GI.PolygonTrait, GI.MultiPolygonTrait}) = 2
+_target_dim(::Union{GI.LineStringTrait, GI.MultiLineStringTrait}) = 1
+_target_dim(::Union{GI.PointTrait, GI.MultiPointTrait}) = 0
+
+# Whether the target is above the OGC dimension of the result, i.e. provably
+# unsatisfiable from the inputs' dimensions alone.
+_target_above_result(::Nothing, op::_OverlayOpCode, dim_a, dim_b) = false
+_target_above_result(t, op::_OverlayOpCode, dim_a, dim_b) =
+    _target_dim(t) > _result_dimension(op, dim_a, dim_b)
+
+# Whether components of dimension `d` can appear in the targeted result — the
+# builder-elision test.
+_target_needs_dim(::Nothing, d::Integer) = true
+_target_needs_dim(t, d::Integer) = _target_dim(t) == d
+
+_target_admits_area(::Nothing) = true
+_target_admits_area(t) = _target_dim(t) == 2
+
+_target_is_empty(::Nothing, polys, lines, points) =
+    isempty(polys) && isempty(lines) && isempty(points)
+_target_is_empty(::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polys, lines, points) =
+    isempty(polys)
+_target_is_empty(::Union{GI.LineStringTrait, GI.MultiLineStringTrait}, polys, lines, points) =
+    isempty(lines)
+_target_is_empty(::Union{GI.PointTrait, GI.MultiPointTrait}, polys, lines, points) =
+    isempty(points)
+
+# The component lists are already concrete `Vector`s on every path but one: the
+# mixed-point path substitutes `_NO_COMPONENTS` (`Any[]`) for the dimension its
+# non-point input does not have, and that is always empty.
+@inline _typed(::Type{T}, v::Vector{T}) where {T} = v
+@inline _typed(::Type{T}, v) where {T} = T[c for c in v]
+
+# Assemble the targeted result. `nothing` is the untargeted assembler and, like
+# it, requires at least one component; the six trait methods are total.
+_target_result(::Nothing, polys, lines, points) = _create_result_geometry(polys, lines, points)
+
+_target_result(::GI.PolygonTrait, polys, lines, points) = _typed(_ResultPoly, polys)
+_target_result(::GI.LineStringTrait, polys, lines, points) = _typed(_ResultLine, lines)
+_target_result(::GI.PointTrait, polys, lines, points) = _ResultPoint[GI.Point(p) for p in points]
+
+#-- the wrapper constructors read `first(geom)` to detect their element type, so
+#-- an empty multi-geometry has to come from `_empty_geom`'s raw typed constructor
+_target_result(::GI.MultiPolygonTrait, polys, lines, points) =
+    (v = _typed(_ResultPoly, polys); isempty(v) ? _empty_geom(2) : GI.MultiPolygon(v))
+_target_result(::GI.MultiLineStringTrait, polys, lines, points) =
+    (v = _typed(_ResultLine, lines); isempty(v) ? _empty_geom(1) : GI.MultiLineString(v))
+_target_result(::GI.MultiPointTrait, polys, lines, points) =
+    isempty(points) ? _empty_geom(0) : GI.MultiPoint(points)
+
+_empty_target_result(t) =
+    _target_result(t, _ResultPoly[], _ResultLine[], Tuple{Float64, Float64}[])
+
+# Empty component lists, for the dimensions a path does not produce at all.
+# Shared and never mutated — `_target_result` wraps but does not take ownership.
+const _NO_COMPONENTS = Any[]
+const _NO_POINTS = Tuple{Float64, Float64}[]
+
+_empty_dim_result(target, dim::Integer) =
+    target === nothing ? _empty_geom(dim) : _empty_target_result(target)
+
+# The shared result tail of the three overlay paths: assemble the targeted
+# result, falling back to the empty geometry of the OGC result dimension. Only
+# `_extract_result` needs more than this — it interposes the full-sphere check.
+function _dimensional_result(target, dim::Integer, polys, lines, points)
+    _target_is_empty(target, polys, lines, points) && return _empty_dim_result(target, dim)
+    return _target_result(target, polys, lines, points)
+end
+
 # ## Empty / full-sphere handling
 
-# Port of `OverlayUtil.isEmptyResult` (the input-driven short circuit). Returns
-# an empty result geometry, or `nothing` if the pipeline must run.
+# Port of `OverlayUtil.isEmptyResult` (the input-driven short circuit). Whether
+# the inputs alone force an empty result, so the pipeline need not run.
 function _empty_result_short_circuit(m::Manifold, op::_OverlayOpCode, input::_OverlayInput)
     if op == OVERLAY_INTERSECTION
-        (input.empty_a || input.empty_b) && return _empty_result(op, input)
+        (input.empty_a || input.empty_b) && return true
         #-- disjoint-envelope reject (planar only; the spherical box is unreliable)
-        m isa Planar && _env_disjoint(input.a, input.b) && return _empty_result(op, input)
+        m isa Planar && _env_disjoint(input.a, input.b) && return true
     elseif op == OVERLAY_DIFFERENCE
-        input.empty_a && return _empty_result(op, input)
+        input.empty_a && return true
     else # UNION / SYMDIFFERENCE
-        input.empty_a && input.empty_b && return _empty_result(op, input)
+        input.empty_a && input.empty_b && return true
     end
-    return nothing
+    return false
 end
 
 @inline function _env_disjoint(a, b)
@@ -206,13 +364,18 @@ end
 # area result is ambiguous between empty and the whole sphere; disambiguate by
 # locating one input vertex under the op semantics, and reject a full-sphere
 # result — it has no representation here (see `_FULL_SPHERE_MSG`).
-function _resolve_empty_result(m::Manifold, op::_OverlayOpCode, input::_OverlayInput)
-    if m isa Spherical &&
+#
+# The rejection is areal, so it is skipped for a target that excludes areas: the
+# lines or points of such an overlay are perfectly representable, and the caller
+# who asked only for those has no stake in the region being unnameable.
+function _resolve_empty_result(m::Manifold, op::_OverlayOpCode, input::_OverlayInput,
+        target = nothing)
+    if m isa Spherical && _target_admits_area(target) &&
        _result_dimension(op, input.dim_a, input.dim_b) == 2 &&
        _covers_everything(m, op, input)
         throw(ArgumentError(_FULL_SPHERE_MSG))
     end
-    return _empty_result(op, input)
+    return _empty_result(op, input, target)
 end
 
 #=
@@ -260,10 +423,8 @@ function _first_area_vertex(input::_OverlayInput)
     return (Float64(GI.x(p)), Float64(GI.y(p)))
 end
 
-function _empty_result(op::_OverlayOpCode, input::_OverlayInput)
-    dim = _result_dimension(op, input.dim_a, input.dim_b)
-    return _empty_geom(dim)
-end
+_empty_result(op::_OverlayOpCode, input::_OverlayInput, target = nothing) =
+    _empty_dim_result(target, _result_dimension(op, input.dim_a, input.dim_b))
 
 # Port of `OverlayUtil.createEmptyResult`: an empty geometry of the given
 # dimension (2 → area, 1 → line, 0 → point). GeoInterface's auto-detecting
@@ -274,17 +435,16 @@ end
 # `LINESTRING EMPTY`, `POINT EMPTY`); this engine returns the multi form at each
 # dimension, matching the non-empty results it builds (which are Multi whenever
 # the component count is not exactly one).
-const _EmptyRing = Vector{Tuple{Float64, Float64}}
-const _EmptyPoly = GI.Polygon{false, false, Vector{_EmptyRing}, Nothing, Nothing}
-const _EmptyLine = GI.LineString{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}
-
+#
+# The element types are `_Result*`, so an empty multi-geometry has the same
+# concrete type as the non-empty one of that dimension.
 function _empty_geom(dim::Integer)
     if dim == 2
-        return GI.MultiPolygon{false, false, Vector{_EmptyPoly}, Nothing, Nothing}(
-            _EmptyPoly[], nothing, nothing)
+        return GI.MultiPolygon{false, false, Vector{_ResultPoly}, Nothing, Nothing}(
+            _ResultPoly[], nothing, nothing)
     elseif dim == 1
-        return GI.MultiLineString{false, false, Vector{_EmptyLine}, Nothing, Nothing}(
-            _EmptyLine[], nothing, nothing)
+        return GI.MultiLineString{false, false, Vector{_ResultLine}, Nothing, Nothing}(
+            _ResultLine[], nothing, nothing)
     end
     #-- dim == 0 (point)
     return GI.MultiPoint{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}(

@@ -31,39 +31,59 @@
 #
 # Nothing here is exported; the public surface is `OverlayNG` (api.jl).
 
-# Empty component list for the dimension the non-point input does not have.
-# `_create_result_geometry` only ever tests it with `isempty`.
-const _NO_COMPONENTS = Any[]
-
 # Port of `getResult` (with the constructor's dimensional naming inlined).
-function _overlay_mixed_points(m::Manifold, op::_OverlayOpCode, a, b, dim_a, dim_b; exact)
+#
+# Both halves of the work are targetable and both are worth eliding: locating
+# every input point is the whole cost of the point half (this is the "which of my
+# points are inside" query), and `_nonpoint_components` deep-copies the entire
+# non-point input through `tuples`. An areal target on a point ∪ polygon skips
+# the first; a point target on the same skips the second.
+function _overlay_mixed_points(m::Manifold, op::_OverlayOpCode, a, b, dim_a, dim_b,
+        target = nothing; exact)
     #-- name the dimensional geometries (JTS constructor)
     if dim_a == 0
         geom_point, geom_non_point, non_point_dim, is_point_rhs = a, b, dim_b, false
     else
         geom_point, geom_non_point, non_point_dim, is_point_rhs = b, a, dim_a, true
     end
-
-    locator = _mixed_point_locator(m, geom_non_point, non_point_dim; exact)
-    coords = _point_map(m, geom_point)
+    result_dim = _result_dimension(op, dim_a, dim_b)
 
     if op == OVERLAY_INTERSECTION
-        return _create_point_result(_find_points(locator, coords, true))
+        points = _mixed_points(m, geom_point, geom_non_point, non_point_dim, true, target; exact)
+        return _dimensional_result(target, result_dim, _NO_COMPONENTS, _NO_COMPONENTS, points)
     elseif op == OVERLAY_UNION || op == OVERLAY_SYMDIFFERENCE
         #-- UNION and SYMDIFFERENCE have the same output: the non-point input
         #-- plus the points lying outside it
-        points = _find_points(locator, coords, false)
-        comps = _nonpoint_components(geom_non_point)
-        polys = non_point_dim == 2 ? comps : _NO_COMPONENTS
-        lines = non_point_dim == 1 ? comps : _NO_COMPONENTS
-        isempty(polys) && isempty(lines) && isempty(points) &&
-            return _empty_geom(_result_dimension(op, dim_a, dim_b))
-        return _create_result_geometry(polys, lines, points)
+        points = _mixed_points(m, geom_point, geom_non_point, non_point_dim, false, target; exact)
+        polys, lines = _mixed_components(geom_non_point, non_point_dim, target)
+        return _dimensional_result(target, result_dim, polys, lines, points)
     end
     #-- OVERLAY_DIFFERENCE: removing points from a higher-dimension geometry
     #-- changes nothing, so A survives untouched when the points are on the RHS
-    is_point_rhs && return _copy_non_point(geom_non_point, non_point_dim)
-    return _create_point_result(_find_points(locator, coords, false))
+    if is_point_rhs
+        polys, lines = _mixed_components(geom_non_point, non_point_dim, target)
+        return _dimensional_result(target, result_dim, polys, lines, _NO_POINTS)
+    end
+    points = _mixed_points(m, geom_point, geom_non_point, non_point_dim, false, target; exact)
+    return _dimensional_result(target, result_dim, _NO_COMPONENTS, _NO_COMPONENTS, points)
+end
+
+# The input points the op keeps: those covered by the non-point input, or those
+# outside it. Neither the locator nor the point map is built when the target
+# excludes points.
+function _mixed_points(m::Manifold, geom_point, geom_non_point, non_point_dim::Integer,
+        is_covered::Bool, target; exact)
+    _target_needs_dim(target, 0) || return _NO_POINTS
+    locator = _mixed_point_locator(m, geom_non_point, non_point_dim; exact)
+    return _find_points(locator, _point_map(m, geom_point), is_covered)
+end
+
+# The non-point input's components as `(polys, lines)`, one of which is always
+# empty — and both are when the target excludes the non-point dimension.
+function _mixed_components(geom_non_point, non_point_dim::Integer, target)
+    comps = _target_needs_dim(target, non_point_dim) ?
+        _nonpoint_components(geom_non_point) : _NO_COMPONENTS
+    return non_point_dim == 2 ? (comps, _NO_COMPONENTS) : (_NO_COMPONENTS, comps)
 end
 
 # Port of `createLocator`.
@@ -98,12 +118,7 @@ function _nonpoint_components(geom)
     return [tuples(geom)]
 end
 
-# Port of `copyNonPoint`. Java copies because its precision-reduction step may
-# have aliased the input; here `tuples` is the copy. Routed through
-# `_nonpoint_components` so an empty component is dropped rather than converted.
-function _copy_non_point(geom, dim::Integer)
-    comps = _nonpoint_components(geom)
-    isempty(comps) && return _empty_geom(dim)
-    length(comps) == 1 && return comps[1]
-    return dim == 2 ? GI.MultiPolygon(comps) : GI.MultiLineString(comps)
-end
+#-- `copyNonPoint` is not a separate function here: Java copies because its
+#-- precision-reduction step may have aliased the input, and `_nonpoint_components`
+#-- (whose `tuples` is that copy) already does the job, with `_dimensional_result`
+#-- picking the atomic-vs-multi form exactly as `copyNonPoint` did.

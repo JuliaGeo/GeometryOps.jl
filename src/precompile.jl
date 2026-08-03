@@ -86,6 +86,9 @@ using PrecompileTools: @setup_workload, @compile_workload
             intersection(ovl, _pc_mpoly_d, _pc_poly2)
             intersection(ovl, _pc_ovl_line, _pc_poly1)
             intersection(ovl, _pc_pt, _pc_poly1)
+            #-- a target is a singleton type, so it specializes the driver and
+            #-- the extractor afresh; the areal one is the case worth caching
+            intersection(ovl, _pc_poly1, _pc_poly2; target = GI.MultiPolygonTrait())
         end
     end
 end

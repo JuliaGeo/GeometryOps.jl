@@ -460,3 +460,238 @@ end
         @test tested >= 2
     end
 end
+
+# ---------------------------------------------------------------------------
+# 7. `target`: narrowing the result to one dimension
+# ---------------------------------------------------------------------------
+
+# The dimension of a geometry, by trait.
+gdim(g) = (t = GI.trait(g);
+    (t isa GI.PolygonTrait || t isa GI.MultiPolygonTrait) ? 2 :
+    (t isa GI.LineStringTrait || t isa GI.LinearRingTrait ||
+     t isa GI.MultiLineStringTrait) ? 1 : 0)
+
+# The dimension-`dim` atomic components of an UNtargeted result, which is a
+# single geometry, a Multi, or a GeometryCollection.
+function untargeted_parts(r, dim)
+    t = GI.trait(r)
+    t isa GI.GeometryCollectionTrait &&
+        return collect(Iterators.flatten(untargeted_parts(g, dim) for g in GI.getgeom(r)))
+    gdim(r) == dim || return Any[]
+    (t isa GI.MultiPolygonTrait || t isa GI.MultiLineStringTrait ||
+     t isa GI.MultiPointTrait) && return collect(GI.getgeom(r))
+    return Any[r]
+end
+
+# The atomic components of a TARGETED result, whichever container it came in.
+targeted_parts(r) = r isa AbstractVector ? r : collect(GI.getgeom(r))
+
+coordlist(v) = [GI.coordinates(g) for g in v]
+
+const TARGETS = ((GI.PolygonTrait(),         GI.MultiPolygonTrait(),    2),
+                 (GI.LineStringTrait(),      GI.MultiLineStringTrait(), 1),
+                 (GI.PointTrait(),           GI.MultiPointTrait(),      0))
+
+@testset "target is exactly the untargeted result, filtered by dimension" begin
+    A  = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    B  = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+    #-- shares one edge only: the intersection is a pure line
+    Cedge = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2.0, 0.0)]])
+    #-- overlaps AND shares a boundary segment: a mixed-dimension result
+    Dmixed = giwkt("POLYGON ((1 0, 4 0, 4 2, 1 2, 1 0))")
+    Etouch = GI.Polygon([[(2.0, 2.0), (4.0, 2.0), (4.0, 4.0), (2.0, 4.0), (2.0, 2.0)]])
+    L  = GI.LineString([(-1.0, 1.0), (3.0, 1.0)])
+    L2 = GI.LineString([(0.5, -1.0), (0.5, 3.0)])
+    P  = GI.MultiPoint([(0.5, 0.5), (5.0, 5.0), (2.0, 2.0)])
+    P2 = GI.MultiPoint([(0.5, 0.5), (9.0, 9.0)])
+
+    pairs = [("area × area", A, B), ("shared edge", A, Cedge), ("mixed dims", A, Dmixed),
+             ("corner touch", A, Etouch), ("line × area", L, A), ("area × line", A, L),
+             ("line × line", L, L2), ("point × area", P, A), ("area × point", A, P),
+             ("point × line", P, L), ("point × point", P, P2)]
+
+    for (name, X, Y) in pairs, op in OPS
+        untargeted = GO._overlay_ng(Planar(), op, X, Y; exact = EX)
+        for (single, multi, dim) in TARGETS
+            want = coordlist(untargeted_parts(untargeted, dim))
+            vec  = GO._overlay_ng(Planar(), op, X, Y; exact = EX, target = single)
+            mul  = GO._overlay_ng(Planar(), op, X, Y; exact = EX, target = multi)
+            @test coordlist(targeted_parts(vec)) == want
+            @test coordlist(targeted_parts(mul)) == want
+            #-- the two container shapes agree with each other, and the Multi one
+            #-- really is a Multi of the right dimension
+            @test GI.trait(mul) === multi
+            @test vec isa AbstractVector
+        end
+    end
+end
+
+@testset "target fixes the return type, empty or not" begin
+    A  = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    B  = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+    Cedge = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2.0, 0.0)]])
+    Far = GI.Polygon([[(9.0, 9.0), (10.0, 9.0), (10.0, 10.0), (9.0, 10.0), (9.0, 9.0)]])
+    alg = GO.OverlayNG()
+
+    for (single, multi, dim) in TARGETS
+        #-- a nonempty-at-this-dimension case and two empty ones (one from the
+        #-- pipeline, one from the disjoint-envelope short circuit)
+        nonempty = dim == 2 ? GO.union(alg, A, B; target = single) :
+                   dim == 1 ? GO.intersection(alg, A, Cedge; target = single) :
+                              GO.intersection(alg, GI.MultiPoint([(1.0, 1.0)]),
+                                              GI.MultiPoint([(1.0, 1.0)]); target = single)
+        empties = (GO.intersection(alg, A, Far; target = single),
+                   GO.difference(alg, A, A; target = single))
+        @test !isempty(nonempty)
+        for e in empties
+            @test isempty(e)
+            @test typeof(e) === typeof(nonempty)
+        end
+
+        nonempty_m = dim == 2 ? GO.union(alg, A, B; target = multi) :
+                     dim == 1 ? GO.intersection(alg, A, Cedge; target = multi) :
+                                GO.intersection(alg, GI.MultiPoint([(1.0, 1.0)]),
+                                                GI.MultiPoint([(1.0, 1.0)]); target = multi)
+        for e in (GO.intersection(alg, A, Far; target = multi),
+                  GO.difference(alg, A, A; target = multi))
+            @test GI.ngeom(e) == 0
+            @test typeof(e) === typeof(nonempty_m)
+        end
+    end
+end
+
+@testset "target above the result dimension short-circuits before noding" begin
+    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    L = GI.LineString([(-1.0, 1.0), (3.0, 1.0)])
+    P = GI.MultiPoint([(0.5, 0.5)])
+    alg = GO.OverlayNG()
+
+    #-- OGC result dimensions: min for intersection, max for union/symdiff, lhs
+    #-- for difference. A target above that is unsatisfiable for ANY input.
+    unsat = [(GO.intersection, L, A, GI.PolygonTrait()),
+             (GO.intersection, A, L, GI.MultiPolygonTrait()),
+             (GO.intersection, P, A, GI.LineStringTrait()),
+             (GO.intersection, P, A, GI.PolygonTrait()),
+             (GO.difference,   L, A, GI.PolygonTrait()),
+             (GO.difference,   P, A, GI.MultiLineStringTrait()),
+             (GO.union,        L, L, GI.PolygonTrait()),
+             (GO.symdifference, P, P, GI.MultiLineStringTrait())]
+    for (f, X, Y, t) in unsat
+        r = f(alg, X, Y; target = t)
+        @test r isa AbstractVector ? isempty(r) : GI.ngeom(r) == 0
+    end
+
+    #-- the short circuit reads the input dimensions only, so it survives inputs
+    #-- the pipeline would reject outright
+    @test isempty(GO.intersection(alg, GI.LineString([(0.0, 0.0), (1.0, 1.0)]), A;
+                                  target = GI.PolygonTrait()))
+    #-- and it does NOT fire when the target is at or below the result dimension
+    @test length(GO.intersection(alg, L, A; target = GI.LineStringTrait())) >= 1
+end
+
+@testset "target elides work it cannot want" begin
+    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    alg = GO.OverlayNG()
+    mpoly, mpt = GI.MultiPolygonTrait(), GI.MultiPointTrait()
+    #-- 5k points against one polygon: locating them is the whole cost of this
+    #-- union, and an areal target must not pay it
+    Pts = GI.MultiPoint([(4 * (i / 5000) - 1, 4 * ((i * 7919) % 5000) / 5000 - 1)
+                         for i in 1:5000])
+
+    #-- the elision is structural, not a timing accident: an areal target builds
+    #-- neither the locator nor the point map, and gets the shared empty list back
+    #-- by identity; a point target skips the `tuples` copy of the non-point input
+    @test GO._mixed_points(Planar(), Pts, A, 2, true, mpoly; exact = EX) === GO._NO_POINTS
+    @test GO._mixed_points(Planar(), Pts, A, 2, true, mpt; exact = EX) !== GO._NO_POINTS
+    let (pc, lc) = GO._mixed_components(A, 2, mpt)
+        @test pc === GO._NO_COMPONENTS && lc === GO._NO_COMPONENTS
+    end
+    @test first(GO._mixed_components(A, 2, mpoly)) !== GO._NO_COMPONENTS
+
+    #-- end to end, in allocations rather than wall clock (CI runs under
+    #-- `--code-coverage`, which taxes timing unevenly — see the perf notes)
+    GO.union(alg, Pts, A); GO.union(alg, Pts, A; target = mpoly)   # warm up
+    @test @allocated(GO.union(alg, Pts, A; target = mpoly)) <
+          @allocated(GO.union(alg, Pts, A)) ÷ 10
+
+    #-- and the answer is still right: A survives the union untouched
+    @test GI.ngeom(GO.union(alg, Pts, A; target = mpoly)) == 1
+    @test GO.area(GO.union(alg, Pts, A; target = mpoly)) == GO.area(A)
+
+    #-- the builder elision leaves the areal answer identical to the untargeted one
+    B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+    for op in OPS
+        plain = GO._overlay_ng(Planar(), op, A, B; exact = EX)
+        tgt = GO._overlay_ng(Planar(), op, A, B; exact = EX, target = GI.MultiPolygonTrait())
+        @test isapprox(GO.area(tgt), GO.area(plain); rtol = 1e-12)
+    end
+end
+
+@testset "target on the sphere, and the full-sphere gate" begin
+    A = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    B = GI.Polygon([[(5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0), (5.0, 5.0)]])
+    sph = GO.OverlayNG(Spherical())
+    #-- targeting is manifold-agnostic: same area as the untargeted result
+    for op in OPS
+        plain = GO._overlay_ng(Spherical(), op, A, B; exact = EX)
+        tgt = GO._overlay_ng(Spherical(), op, A, B; exact = EX,
+                             target = GI.MultiPolygonTrait())
+        @test isapprox(GO.area(Spherical(), tgt), GO.area(Spherical(), plain); rtol = 1e-12)
+    end
+    @test GI.ngeom(GO.intersection(sph, A, B; target = GI.MultiPolygonTrait())) == 1
+
+    #-- the full-sphere rejection is areal, so it fires for an areal target (and
+    #-- for no target) and is skipped for a target that excludes areas
+    inp = GO._OverlayInput(Spherical(), A, A, 2, 2, EX, false, false, nothing, nothing)
+    @test_throws ArgumentError GO._resolve_empty_result(Spherical(), GO.OVERLAY_UNION, inp)
+    for t in (GI.PolygonTrait(), GI.MultiPolygonTrait())
+        @test_throws ArgumentError GO._resolve_empty_result(Spherical(), GO.OVERLAY_UNION,
+                                                            inp, t)
+    end
+    for t in (GI.LineStringTrait(), GI.MultiLineStringTrait(),
+              GI.PointTrait(), GI.MultiPointTrait())
+        r = GO._resolve_empty_result(Spherical(), GO.OVERLAY_UNION, inp, t)
+        @test r isa AbstractVector ? isempty(r) : GI.ngeom(r) == 0
+    end
+end
+
+@testset "target accepts the Foster–Hormann spellings and rejects the rest" begin
+    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+    alg = GO.OverlayNG()
+    want = GO.intersection(alg, A, B; target = GI.PolygonTrait())
+    #-- trait instance, trait type, and TraitTarget all mean the same thing
+    for t in (GI.PolygonTrait(), GI.PolygonTrait, GO.TraitTarget(GI.PolygonTrait()),
+              GO.TraitTarget(GI.PolygonTrait))
+        r = GO.intersection(alg, A, B; target = t)
+        @test typeof(r) === typeof(want)
+        @test coordlist(r) == coordlist(want)
+    end
+    #-- no target is the default, and stays the untargeted geometry
+    @test GI.trait(GO.intersection(alg, A, B; target = nothing)) isa GI.PolygonTrait
+
+    #-- everything else is rejected, including a Union of traits (no single
+    #-- result dimension) and the traits this engine cannot emit
+    for bad in (GI.LinearRingTrait(), GI.GeometryCollectionTrait(), GI.FeatureTrait(),
+                GO.TraitTarget(GI.PolygonTrait(), GI.PointTrait()),
+                GO.TraitTarget{Union{GI.PolygonTrait, GI.LineStringTrait}}(), 42, "polygon")
+        @test_throws ArgumentError GO.intersection(alg, A, B; target = bad)
+    end
+end
+
+@testset "target on all four public operations, including symdifference" begin
+    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+    alg = GO.OverlayNG()
+    for f in (GO.intersection, GO.union, GO.difference, GO.symdifference)
+        r = f(alg, A, B; target = GI.MultiPolygonTrait())
+        @test GI.trait(r) isa GI.MultiPolygonTrait
+        @test isapprox(GO.area(r), GO.area(f(alg, A, B)); rtol = 1e-12)
+    end
+    #-- symdifference's algorithm-free and manifold forms take it too
+    @test GI.trait(GO.symdifference(A, B; target = GI.MultiPolygonTrait())) isa GI.MultiPolygonTrait
+    @test GI.trait(GO.symdifference(Planar(), A, B; target = GI.MultiPolygonTrait())) isa GI.MultiPolygonTrait
+    @test isapprox(GO.area(Spherical(),
+                           GO.symdifference(Spherical(), A, B; target = GI.MultiPolygonTrait())),
+                   GO.area(Spherical(), GO.symdifference(Spherical(), A, B)); rtol = 1e-12)
+end

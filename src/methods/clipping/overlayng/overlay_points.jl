@@ -80,7 +80,10 @@ end
 
 # ## The overlay (port of `getResult`)
 
-function _overlay_points(m::Manifold, op::_OverlayOpCode, a, b)
+# Point × point, so the result is dimension 0 under every op. A target above that
+# never reaches here — `_overlay_ng` answers it before dispatching — so there is
+# nothing to elide, only the result shape to honour.
+function _overlay_points(m::Manifold, op::_OverlayOpCode, a, b, target = nothing)
     map_a = _point_map(m, a)
     map_b = _point_map(m, b)
 
@@ -95,7 +98,7 @@ function _overlay_points(m::Manifold, op::_OverlayOpCode, a, b)
         _points_difference!(result, map_a, map_b)
         _points_difference!(result, map_b, map_a)
     end
-    return _create_point_result(result)
+    return _dimensional_result(target, 0, _NO_COMPONENTS, _NO_COMPONENTS, result)
 end
 
 function _points_intersection!(result, map_a::_PointMap, map_b::_PointMap)
@@ -121,12 +124,4 @@ function _points_union!(result, map_a::_PointMap, map_b::_PointMap)
         haskey(map_a, k) || push!(result, map_b.coords[k])
     end
     return result
-end
-
-# The most specific dimension-0 geometry over the result coordinates
-# (`GeometryFactory.buildGeometry` restricted to points).
-function _create_point_result(coords::Vector{Tuple{Float64, Float64}})
-    isempty(coords) && return _empty_geom(0)
-    length(coords) == 1 && return GI.Point(coords[1])
-    return GI.MultiPoint(coords)
 end

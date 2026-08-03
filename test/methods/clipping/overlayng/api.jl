@@ -182,10 +182,13 @@ end
         @test_throws ArgumentError gof(GO.OverlayNG(), gc, A)
         @test_throws ArgumentError gof(GO.OverlayNG(), A, gc)
     end
-    #-- the Foster–Hormann keywords are not accepted (one result, always Float64)
-    @test_throws MethodError GO.intersection(GO.OverlayNG(), A, B; target = GI.PolygonTrait())
+    #-- of the Foster–Hormann keywords, `target` IS accepted (see the `target`
+    #-- testsets in overlay_ng.jl); `T` and `fix_multipoly` are not — the result
+    #-- is always emitted at Float64, and there is nothing to fix
+    @test GO.intersection(GO.OverlayNG(), A, B; target = GI.PolygonTrait()) isa AbstractVector
+    @test GO.symdifference(GO.OverlayNG(), A, B; target = GI.PolygonTrait()) isa AbstractVector
     @test_throws MethodError GO.intersection(GO.OverlayNG(), A, B, Float32)
-    @test_throws MethodError GO.symdifference(GO.OverlayNG(), A, B; target = GI.PolygonTrait())
+    @test_throws MethodError GO.intersection(GO.OverlayNG(), A, B; fix_multipoly = nothing)
 end
 
 # ---------------------------------------------------------------------------
