@@ -679,6 +679,52 @@ end
     end
 end
 
+#=
+Type stability is the point of `target`, so it is asserted rather than assumed.
+Untargeted, the return type is a 7-member `Union` — `Point`, `LineString`,
+`MultiLineString`, `MultiPoint`, `Polygon`, `MultiPolygon`, `GeometryCollection`
+— because the engine returns the most specific geometry over whatever survived,
+which inference cannot know. Targeted, every combination below infers to one
+concrete type, and it is the same one for every input shape, op and manifold.
+
+`Base.return_types` over a closure is the instrument, not `@inferred`: it asks
+what the compiler can prove at a call site where the target is a compile-time
+constant (which is what `target = GI.PolygonTrait()` is), independent of what
+this particular pair of inputs happens to produce.
+=#
+@testset "target makes the return type concrete and input-independent" begin
+    A  = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    B  = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+    MB = GI.MultiPolygon([B])
+    L  = GI.LineString([(-1.0, 1.0), (3.0, 1.0)])
+    P  = GI.MultiPoint([(0.5, 0.5), (5.0, 5.0)])
+    argtypes = [Tuple{typeof(A), typeof(B)}, Tuple{typeof(A), typeof(MB)},
+                Tuple{typeof(L), typeof(A)}, Tuple{typeof(P), typeof(A)}]
+
+    for (single, multi, _) in TARGETS, t in (single, multi)
+        inferred = Type[]
+        for m in (Planar(), Spherical()),
+            f in (GO.intersection, GO.union, GO.difference, GO.symdifference),
+            Ts in argtypes
+            probe = (a, b) -> f(GO.OverlayNG(m), a, b; target = t)
+            R = Base.return_types(probe, Ts)[1]
+            @test isconcretetype(R)
+            push!(inferred, R)
+        end
+        #-- and it is ONE type across every op, manifold and input shape
+        @test length(unique(inferred)) == 1
+        #-- which is exactly the type the call actually returns
+        @test only(unique(inferred)) === typeof(GO.intersection(GO.OverlayNG(), A, B; target = t))
+    end
+
+    #-- the contrast: untargeted, inference can only give the 7-member Union of
+    #-- everything the engine is allowed to emit
+    untargeted = Base.return_types((a, b) -> GO.intersection(GO.OverlayNG(), a, b),
+                                   Tuple{typeof(A), typeof(B)})[1]
+    @test untargeted isa Union
+    @test !isconcretetype(untargeted)
+end
+
 @testset "target on all four public operations, including symdifference" begin
     A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
     B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
