@@ -492,6 +492,18 @@ const TARGETS = ((GI.PolygonTrait(),         GI.MultiPolygonTrait(),    2),
                  (GI.LineStringTrait(),      GI.MultiLineStringTrait(), 1),
                  (GI.PointTrait(),           GI.MultiPointTrait(),      0))
 
+# A pair whose intersection is genuinely mixed-dimension, i.e. the one shape that
+# reaches `_create_result_geometry`'s GeometryCollection branch. Getting there
+# takes a multipolygon: one component must overlap A in an area while another
+# meets it in a line only, and the two must stay disjoint for the input to be
+# valid. (A single polygon that overlaps and shares boundary yields just the
+# polygon — the shared segment is interior to the result area and is dropped.)
+const MIXED_A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+const MIXED_B = GI.MultiPolygon([
+    GI.Polygon([[(1.0, 0.0), (3.0, 0.0), (3.0, 1.0), (1.0, 1.0), (1.0, 0.0)]]),   # overlaps
+    GI.Polygon([[(-2.0, 0.0), (0.0, 0.0), (0.0, 2.0), (-2.0, 2.0), (-2.0, 0.0)]]) # touches
+])
+
 @testset "target is exactly the untargeted result, filtered by dimension" begin
     A  = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
     B  = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
@@ -505,10 +517,18 @@ const TARGETS = ((GI.PolygonTrait(),         GI.MultiPolygonTrait(),    2),
     P  = GI.MultiPoint([(0.5, 0.5), (5.0, 5.0), (2.0, 2.0)])
     P2 = GI.MultiPoint([(0.5, 0.5), (9.0, 9.0)])
 
-    pairs = [("area × area", A, B), ("shared edge", A, Cedge), ("mixed dims", A, Dmixed),
+    pairs = [("area × area", A, B), ("shared edge", A, Cedge), ("overlap+boundary", A, Dmixed),
              ("corner touch", A, Etouch), ("line × area", L, A), ("area × line", A, L),
              ("line × line", L, L2), ("point × area", P, A), ("area × point", A, P),
-             ("point × line", P, L), ("point × point", P, P2)]
+             ("point × line", P, L), ("point × point", P, P2),
+             #-- the only pair here that produces a GeometryCollection, so the
+             #-- only one exercising the mixed-dimension branch on both sides
+             ("mixed dims", MIXED_A, MIXED_B), ("mixed dims swapped", MIXED_B, MIXED_A)]
+
+    #-- guard the guard: if this stops being a collection the sweep silently
+    #-- stops covering `untargeted_parts`' flattening branch
+    @test GI.trait(GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, MIXED_A, MIXED_B;
+                                  exact = EX)) isa GI.GeometryCollectionTrait
 
     for (name, X, Y) in pairs, op in OPS
         untargeted = GO._overlay_ng(Planar(), op, X, Y; exact = EX)
@@ -723,6 +743,28 @@ this particular pair of inputs happens to produce.
                                    Tuple{typeof(A), typeof(B)})[1]
     @test untargeted isa Union
     @test !isconcretetype(untargeted)
+    #-- but every MEMBER of it is concrete, which is only true because the
+    #-- GeometryCollection branch builds a `Vector{_ResultComponent}` rather than
+    #-- a `Vector{Any}`: with `Any` elements the wrapper's hasz/hasm detection
+    #-- cannot fold either, and that member degrades to a `where {_A,_B}`
+    members(U) = U isa Union ? vcat(members(U.a), members(U.b)) : Any[U]
+    ms = members(untargeted)
+    @test length(ms) == 7
+    @test all(isconcretetype, ms)
+end
+
+@testset "a mixed-dimension result is a typed collection, not Vector{Any}" begin
+    gc = GO.intersection(GO.OverlayNG(), MIXED_A, MIXED_B)
+    @test GI.trait(gc) isa GI.GeometryCollectionTrait
+    #-- the components iterate as the engine's three-way Union, so a caller
+    #-- walking them union-splits instead of dispatching dynamically per element
+    @test eltype(GI.getgeom(gc)) === GO._ResultComponent
+    @test isconcretetype(typeof(gc))
+    #-- and the collection really is mixed-dimension, with its parts intact
+    traits = [GI.trait(g) for g in GI.getgeom(gc)]
+    @test any(t -> t isa GI.PolygonTrait, traits)
+    @test any(t -> t isa GI.LineStringTrait, traits)
+    @test all(g -> g isa GO._ResultComponent, GI.getgeom(gc))
 end
 
 @testset "target on all four public operations, including symdifference" begin

@@ -175,6 +175,20 @@ function _extract_result(m::Manifold, op::_OverlayOpCode, g::OverlayGraph, input
     return _target_result(target, polys, lines, points)
 end
 
+# ## Result component types
+#
+# The concrete wrappers every path in the engine emits: `_ring_to_polygon` and
+# `_edge_line` build them from the graph, and `tuples` (the mixed-point path)
+# reconstructs the same ones from the input. Named because two guarantees rest
+# on them — an empty result matches the type of a non-empty one at the same
+# dimension (`_empty_geom`, `_target_result`), and a targeted result has one
+# concrete return type.
+const _ResultRing  = GI.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}
+const _ResultPoly  = GI.Polygon{false, false, Vector{_ResultRing}, Nothing, Nothing}
+const _ResultLine  = GI.LineString{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}
+const _ResultPoint = GI.Point{false, false, Tuple{Float64, Float64}, Nothing}
+const _ResultComponent = Union{_ResultPoly, _ResultLine, _ResultPoint}
+
 # Port of `OverlayUtil.createResultGeometry` + `GeometryFactory.buildGeometry`:
 # the most specific geometry over the A, L, P components.
 function _create_result_geometry(polys, lines, points)
@@ -188,8 +202,22 @@ function _create_result_geometry(polys, lines, points)
     elseif !has_p && !has_l && has_pt
         return length(points) == 1 ? GI.Point(points[1]) : GI.MultiPoint(points)
     end
-    #-- mixed dimensions: a geometry collection in A, L, P order
-    comps = Any[]
+    #=
+    Mixed dimensions: a geometry collection in A, L, P order. The element type is
+    the small Union of what the builders emit, NOT `Any`, and that buys two
+    things. A `Vector{Any}` parent leaves the collection's `hasz`/`hasm`
+    parameters uninferrable too — the wrapper detects them by inspecting the
+    elements — so the whole wrapper type stays abstract even though it is always
+    `{false, false}` at runtime; with the Union it infers concretely. And
+    `GI.getgeom` on the result then iterates a three-way Union rather than `Any`,
+    so a caller walking the components union-splits instead of dispatching
+    dynamically on each one.
+
+    The cost is that this now *rejects* a component of any other type rather than
+    silently widening to `Any`. That is deliberate: these three types are the
+    engine's contract (see above), and the targeted path already enforces it.
+    =#
+    comps = _ResultComponent[]
     append!(comps, polys)
     append!(comps, lines)
     for p in points
@@ -220,20 +248,20 @@ the one multi-geometry:
 
 An empty result is the empty `Vector` or the empty multi-geometry of that same
 concrete type — never a geometry of another dimension, which is what the
-untargeted `_empty_geom` would give. That promise is only worth making because
-every path in the engine agrees on the component types below: `_ring_to_polygon`
-and `tuples` (the mixed-point path) construct the same wrappers.
+untargeted `_empty_geom` would give. That promise rests on the `_Result*`
+component types above, which every path in the engine agrees on.
+
+The consequence is that a targeted call is type STABLE: `target` is a singleton,
+so `_target_result` resolves to one method, and both its branches (empty and
+not) return the same concrete type. Untargeted, the return type is a Union of
+all seven geometries the engine may emit, since inference cannot know which
+dimensions survive.
 
 Targeting also *removes work*, in two places: `_target_above_result` answers
 without noding whenever the target is above the OGC result dimension (an areal
 target on a line × area intersection is empty for every possible input), and
 `_extract_result` skips the builds the target cannot want.
 =#
-
-const _ResultRing  = GI.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}
-const _ResultPoly  = GI.Polygon{false, false, Vector{_ResultRing}, Nothing, Nothing}
-const _ResultLine  = GI.LineString{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}
-const _ResultPoint = GI.Point{false, false, Tuple{Float64, Float64}, Nothing}
 
 const _OverlayTarget = Union{GI.PointTrait, GI.MultiPointTrait,
                              GI.LineStringTrait, GI.MultiLineStringTrait,
