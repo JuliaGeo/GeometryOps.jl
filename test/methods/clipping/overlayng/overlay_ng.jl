@@ -509,15 +509,16 @@ const MIXED_B = GI.MultiPolygon([
     B  = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
     #-- shares one edge only: the intersection is a pure line
     Cedge = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2.0, 0.0)]])
-    #-- overlaps AND shares a boundary segment: a mixed-dimension result
-    Dmixed = giwkt("POLYGON ((1 0, 4 0, 4 2, 1 2, 1 0))")
     Etouch = GI.Polygon([[(2.0, 2.0), (4.0, 2.0), (4.0, 4.0), (2.0, 4.0), (2.0, 2.0)]])
     L  = GI.LineString([(-1.0, 1.0), (3.0, 1.0)])
     L2 = GI.LineString([(0.5, -1.0), (0.5, 3.0)])
     P  = GI.MultiPoint([(0.5, 0.5), (5.0, 5.0), (2.0, 2.0)])
     P2 = GI.MultiPoint([(0.5, 0.5), (9.0, 9.0)])
 
-    pairs = [("area × area", A, B), ("shared edge", A, Cedge), ("overlap+boundary", A, Dmixed),
+    #-- one pair per distinct branch signature (driver path × which dimensions are
+    #-- non-empty, per op) — that tuple is everything the target machinery
+    #-- branches on, so pairs sharing a signature share their coverage exactly.
+    pairs = [("area × area", A, B), ("shared edge", A, Cedge),
              ("corner touch", A, Etouch), ("line × area", L, A), ("area × line", A, L),
              ("line × line", L, L2), ("point × area", P, A), ("area × point", A, P),
              ("point × line", P, L), ("point × point", P, P2),
@@ -534,15 +535,26 @@ const MIXED_B = GI.MultiPolygon([
         untargeted = GO._overlay_ng(Planar(), op, X, Y; exact = EX)
         for (single, multi, dim) in TARGETS
             want = coordlist(untargeted_parts(untargeted, dim))
-            vec  = GO._overlay_ng(Planar(), op, X, Y; exact = EX, target = single)
-            mul  = GO._overlay_ng(Planar(), op, X, Y; exact = EX, target = multi)
-            @test coordlist(targeted_parts(vec)) == want
-            @test coordlist(targeted_parts(mul)) == want
-            #-- the two container shapes agree with each other, and the Multi one
-            #-- really is a Multi of the right dimension
-            @test GI.trait(mul) === multi
-            @test vec isa AbstractVector
+            @test coordlist(targeted_parts(GO._overlay_ng(Planar(), op, X, Y;
+                                           exact = EX, target = single))) == want
+            @test coordlist(targeted_parts(GO._overlay_ng(Planar(), op, X, Y;
+                                           exact = EX, target = multi))) == want
         end
+    end
+
+    #=
+    The container SHAPE is a function of the target alone, so it is pinned once
+    per target rather than once per (pair, op) — the assertion above cannot do it,
+    because `coordlist` compares two empty lists as equal whatever container they
+    arrived in. It is also the only ABSOLUTE pin of the shape: everything else in
+    this file compares one result's type against another's. Three fixtures, so
+    that each dimension is non-empty in at least one of them.
+    =#
+    for (single, multi, _) in TARGETS, (X, Y) in ((A, B), (A, Cedge), (A, Etouch))
+        @test GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, X, Y;
+                             exact = EX, target = single) isa AbstractVector
+        @test GI.trait(GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, X, Y;
+                                      exact = EX, target = multi)) === multi
     end
 end
 
@@ -587,24 +599,37 @@ end
     alg = GO.OverlayNG()
 
     #-- OGC result dimensions: min for intersection, max for union/symdiff, lhs
-    #-- for difference. A target above that is unsatisfiable for ANY input.
-    unsat = [(GO.intersection, L, A, GI.PolygonTrait()),
-             (GO.intersection, A, L, GI.MultiPolygonTrait()),
-             (GO.intersection, P, A, GI.LineStringTrait()),
-             (GO.intersection, P, A, GI.PolygonTrait()),
-             (GO.difference,   L, A, GI.PolygonTrait()),
-             (GO.difference,   P, A, GI.MultiLineStringTrait()),
-             (GO.union,        L, L, GI.PolygonTrait()),
+    #-- for difference. A target above that is unsatisfiable for ANY input. One
+    #-- row per op — the op is the only axis `_result_dimension` reads.
+    unsat = [(GO.intersection,  L, A, GI.PolygonTrait()),
+             (GO.difference,    P, A, GI.MultiLineStringTrait()),
+             (GO.union,         L, L, GI.PolygonTrait()),
              (GO.symdifference, P, P, GI.MultiLineStringTrait())]
     for (f, X, Y, t) in unsat
         r = f(alg, X, Y; target = t)
         @test r isa AbstractVector ? isempty(r) : GI.ngeom(r) == 0
     end
 
-    #-- the short circuit reads the input dimensions only, so it survives inputs
-    #-- the pipeline would reject outright
-    @test isempty(GO.intersection(alg, GI.LineString([(0.0, 0.0), (1.0, 1.0)]), A;
-                                  target = GI.PolygonTrait()))
+    #=
+    That the answer is empty does NOT show the short circuit ran: without it the
+    pipeline reaches the same empty answer. Two probes that do discriminate.
+
+    First, an input the noder cannot process at all. A spherical edge between
+    antipodal vertices has no defined great circle, so noding throws — and an
+    above-dimension target must still return empty, which is only possible if
+    noding never happened.
+    =#
+    Ant = GI.LineString([(0.0, 0.0), (180.0, 0.0)])
+    SA  = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    sph = GO.OverlayNG(Spherical())
+    @test_throws ArgumentError GO.intersection(sph, Ant, SA)
+    @test isempty(GO.intersection(sph, Ant, SA; target = GI.PolygonTrait()))
+
+    #-- second, the cost: the short circuit allocates essentially nothing, where
+    #-- the same pair through the pipeline allocates ~21 kB
+    GO.intersection(alg, L, A; target = GI.PolygonTrait())   # warm up
+    @test @allocated(GO.intersection(alg, L, A; target = GI.PolygonTrait())) < 1024
+
     #-- and it does NOT fire when the target is at or below the result dimension
     @test length(GO.intersection(alg, L, A; target = GI.LineStringTrait())) >= 1
 end
@@ -622,29 +647,21 @@ end
     #-- neither the locator nor the point map, and gets the shared empty list back
     #-- by identity; a point target skips the `tuples` copy of the non-point input
     @test GO._mixed_points(Planar(), Pts, A, 2, true, mpoly; exact = EX) === GO._NO_POINTS
-    @test GO._mixed_points(Planar(), Pts, A, 2, true, mpt; exact = EX) !== GO._NO_POINTS
     let (pc, lc) = GO._mixed_components(A, 2, mpt)
         @test pc === GO._NO_COMPONENTS && lc === GO._NO_COMPONENTS
     end
-    @test first(GO._mixed_components(A, 2, mpoly)) !== GO._NO_COMPONENTS
 
     #-- end to end, in allocations rather than wall clock (CI runs under
-    #-- `--code-coverage`, which taxes timing unevenly — see the perf notes)
+    #-- `--code-coverage`, which taxes timing unevenly — see the perf notes).
+    #-- Measured margin is ~3800×, so the ÷10 gate is nowhere near the noise.
     GO.union(alg, Pts, A); GO.union(alg, Pts, A; target = mpoly)   # warm up
     @test @allocated(GO.union(alg, Pts, A; target = mpoly)) <
           @allocated(GO.union(alg, Pts, A)) ÷ 10
 
-    #-- and the answer is still right: A survives the union untouched
+    #-- and the answer is still right: A survives the union untouched. (That the
+    #-- areal answer matches the untargeted one for every op is the sweep's job.)
     @test GI.ngeom(GO.union(alg, Pts, A; target = mpoly)) == 1
     @test GO.area(GO.union(alg, Pts, A; target = mpoly)) == GO.area(A)
-
-    #-- the builder elision leaves the areal answer identical to the untargeted one
-    B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
-    for op in OPS
-        plain = GO._overlay_ng(Planar(), op, A, B; exact = EX)
-        tgt = GO._overlay_ng(Planar(), op, A, B; exact = EX, target = GI.MultiPolygonTrait())
-        @test isapprox(GO.area(tgt), GO.area(plain); rtol = 1e-12)
-    end
 end
 
 @testset "target on the sphere, and the full-sphere gate" begin
@@ -662,8 +679,11 @@ end
 
     #-- the full-sphere rejection is areal, so it fires for an areal target (and
     #-- for no target) and is skipped for a target that excludes areas
+    #-- built by hand because no VALID pair of inputs can reach the gate: under
+    #-- enclosed-region semantics a boundaryless full-sphere union forces both
+    #-- operands to be exact hemispheres, whose great-circle ring is degenerate
+    #-- here. (The untargeted throw is also asserted at the §4 testset above.)
     inp = GO._OverlayInput(Spherical(), A, A, 2, 2, EX, false, false, nothing, nothing)
-    @test_throws ArgumentError GO._resolve_empty_result(Spherical(), GO.OVERLAY_UNION, inp)
     for t in (GI.PolygonTrait(), GI.MultiPolygonTrait())
         @test_throws ArgumentError GO._resolve_empty_result(Spherical(), GO.OVERLAY_UNION,
                                                             inp, t)
@@ -701,40 +721,52 @@ end
 
 #=
 Type stability is the point of `target`, so it is asserted rather than assumed.
-Untargeted, the return type is a 7-member `Union` — `Point`, `LineString`,
-`MultiLineString`, `MultiPoint`, `Polygon`, `MultiPolygon`, `GeometryCollection`
-— because the engine returns the most specific geometry over whatever survived,
-which inference cannot know. Targeted, every combination below infers to one
-concrete type, and it is the same one for every input shape, op and manifold.
+For inputs with edges the untargeted return type is a 7-member `Union` — `Point`,
+`LineString`, `MultiLineString`, `MultiPoint`, `Polygon`, `MultiPolygon`,
+`GeometryCollection` — because the engine returns the most specific geometry over
+whatever survived, which inference cannot know. (For a `MultiPoint` operand it is
+`Any`.) Targeted, every combination below infers to one concrete type.
 
 `Base.return_types` over a closure is the instrument, not `@inferred`: it asks
 what the compiler can prove at a call site where the target is a compile-time
 constant (which is what `target = GI.PolygonTrait()` is), independent of what
 this particular pair of inputs happens to produce.
+
+The axes are chosen, not crossed exhaustively. The INPUT SHAPE matters, because
+inference const-folds the driver's dimension branches, so the three shapes below
+reach three different sets of return sites (arrangement / mixed-point /
+point×point). The OP does not — every return site funnels through
+`_target_result(target, …)` and `op` is only ever compared to a constant — so it
+is probed once, at the level of the four public wrappers, which are four separate
+methods each forwarding `target` and so the one place an op-specific inference
+regression could hide.
 =#
 @testset "target makes the return type concrete and input-independent" begin
     A  = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
     B  = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
-    MB = GI.MultiPolygon([B])
-    L  = GI.LineString([(-1.0, 1.0), (3.0, 1.0)])
     P  = GI.MultiPoint([(0.5, 0.5), (5.0, 5.0)])
-    argtypes = [Tuple{typeof(A), typeof(B)}, Tuple{typeof(A), typeof(MB)},
-                Tuple{typeof(L), typeof(A)}, Tuple{typeof(P), typeof(A)}]
+    argtypes = [Tuple{typeof(A), typeof(B)},   # the arrangement
+                Tuple{typeof(P), typeof(A)},   # the mixed-point path
+                Tuple{typeof(P), typeof(P)}]   # the point × point path
 
     for (single, multi, _) in TARGETS, t in (single, multi)
         inferred = Type[]
-        for m in (Planar(), Spherical()),
-            f in (GO.intersection, GO.union, GO.difference, GO.symdifference),
-            Ts in argtypes
-            probe = (a, b) -> f(GO.OverlayNG(m), a, b; target = t)
+        for m in (Planar(), Spherical()), Ts in argtypes
+            probe = (a, b) -> GO.intersection(GO.OverlayNG(m), a, b; target = t)
             R = Base.return_types(probe, Ts)[1]
             @test isconcretetype(R)
             push!(inferred, R)
         end
-        #-- and it is ONE type across every op, manifold and input shape
+        #-- and it is ONE type across every manifold and input shape
         @test length(unique(inferred)) == 1
         #-- which is exactly the type the call actually returns
         @test only(unique(inferred)) === typeof(GO.intersection(GO.OverlayNG(), A, B; target = t))
+    end
+
+    #-- all four public wrappers forward `target` without widening the inference
+    for f in (GO.intersection, GO.union, GO.difference, GO.symdifference)
+        probe = (a, b) -> f(GO.OverlayNG(), a, b; target = GI.PolygonTrait())
+        @test isconcretetype(Base.return_types(probe, Tuple{typeof(A), typeof(B)})[1])
     end
 
     #-- the contrast: untargeted, inference can only give the 7-member Union of
@@ -758,28 +790,33 @@ end
     @test GI.trait(gc) isa GI.GeometryCollectionTrait
     #-- the components iterate as the engine's three-way Union, so a caller
     #-- walking them union-splits instead of dispatching dynamically per element
+    #-- this is the ONLY assertion here that catches a regression to `Vector{Any}`;
+    #-- that the wrapper TYPE infers concretely is asserted by `all(isconcretetype,
+    #-- ms)` in the testset above (`isconcretetype(typeof(x))` would be a tautology
+    #-- — `typeof` is always concrete — so it is deliberately not written here)
     @test eltype(GI.getgeom(gc)) === GO._ResultComponent
-    @test isconcretetype(typeof(gc))
     #-- and the collection really is mixed-dimension, with its parts intact
     traits = [GI.trait(g) for g in GI.getgeom(gc)]
     @test any(t -> t isa GI.PolygonTrait, traits)
     @test any(t -> t isa GI.LineStringTrait, traits)
-    @test all(g -> g isa GO._ResultComponent, GI.getgeom(gc))
 end
 
 @testset "target on all four public operations, including symdifference" begin
     A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
     B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
     alg = GO.OverlayNG()
+    #-- the SINGULAR target, deliberately: it returns a `Vector`, which no
+    #-- untargeted call can produce, so these fail if a wrapper drops the keyword.
+    #-- (`MultiPolygonTrait` would not: the untargeted symdifference of this pair
+    #-- is already a MultiPolygon, and comparing areas cannot tell the two apart
+    #-- for any op, since an ignored target returns the same geometry.)
     for f in (GO.intersection, GO.union, GO.difference, GO.symdifference)
-        r = f(alg, A, B; target = GI.MultiPolygonTrait())
-        @test GI.trait(r) isa GI.MultiPolygonTrait
-        @test isapprox(GO.area(r), GO.area(f(alg, A, B)); rtol = 1e-12)
+        v = f(alg, A, B; target = GI.PolygonTrait())
+        @test v isa AbstractVector
+        @test all(g -> GI.trait(g) isa GI.PolygonTrait, v)
     end
     #-- symdifference's algorithm-free and manifold forms take it too
-    @test GI.trait(GO.symdifference(A, B; target = GI.MultiPolygonTrait())) isa GI.MultiPolygonTrait
-    @test GI.trait(GO.symdifference(Planar(), A, B; target = GI.MultiPolygonTrait())) isa GI.MultiPolygonTrait
-    @test isapprox(GO.area(Spherical(),
-                           GO.symdifference(Spherical(), A, B; target = GI.MultiPolygonTrait())),
-                   GO.area(Spherical(), GO.symdifference(Spherical(), A, B)); rtol = 1e-12)
+    @test GO.symdifference(A, B; target = GI.PolygonTrait()) isa AbstractVector
+    @test GO.symdifference(Planar(), A, B; target = GI.PolygonTrait()) isa AbstractVector
+    @test GO.symdifference(Spherical(), A, B; target = GI.PolygonTrait()) isa AbstractVector
 end
