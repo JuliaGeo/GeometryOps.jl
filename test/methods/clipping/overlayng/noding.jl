@@ -4,11 +4,9 @@
 # censuses on a small Natural Earth subset.
 
 using Test
-import GeometryOps as GO
+include(joinpath(@__DIR__, "common.jl"))
 import GeometryOps: Planar, Spherical, True, False
 import GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
-import GeoInterface as GI
-import Extents
 using LinearAlgebra: cross, dot, norm
 
 # ---------------------------------------------------------------------------
@@ -22,17 +20,13 @@ _crossing_ids(arr) = [Int32(i) for i in 1:GO.num_nodes(arr) if arr.nodes.keys[i]
 # no NodedEdge is zero-length (invariant 3).
 function check_invariants(arr, na_strings)
     @test length(unique(arr.nodes.keys)) == GO.num_nodes(arr)          # 2
-    for e in arr.edges
-        @test e.node_lo != e.node_hi                                   # 3
-    end
-    for cid in _crossing_ids(arr)
-        a_hits = 0; b_hits = 0
+    @test all(e -> e.node_lo != e.node_hi, arr.edges)                  # 3
+    @test all(_crossing_ids(arr)) do cid                               # 1
+        a_hits = b_hits = 0
         for ((si, _), ids) in arr.seg_nodes
-            if cid in ids
-                si <= na_strings ? (a_hits += 1) : (b_hits += 1)
-            end
+            cid in ids && (si <= na_strings ? (a_hits += 1) : (b_hits += 1))
         end
-        @test a_hits >= 1 && b_hits >= 1                               # 1
+        a_hits >= 1 && b_hits >= 1
     end
 end
 
@@ -51,10 +45,6 @@ function exact_order_sph(arr, s0, s1, ids)
     Ne = GO._cross3(GO._vec3(True(), s0), GO._vec3(True(), s1))
     dir(id) = GO._exact_node_dir(True(), arr.nodes.keys[id])
     return sort(ids; lt = (i, j) -> GO._dot3(GO._cross3(dir(i), dir(j)), Ne) > 0)
-end
-
-shift_geom(g, dx, dy) = GO.apply(GI.PointTrait(), g) do p
-    (GI.x(p) + dx, GI.y(p) + dy)
 end
 
 # ---------------------------------------------------------------------------
@@ -77,9 +67,10 @@ end
 end
 
 @testset "degree-6 node (tier-2 merge of distinct keys)" begin
-    # two A lines and one B line all through the origin -> two distinct crossing
-    # keys, crossing_node(lineA1,B) and crossing_node(lineA2,B), coincident at the
-    # origin: tier 2 must merge them into one node.
+    # two A lines and one B line all through the origin -> THREE distinct crossing
+    # keys coincident there: crossing_node(lineA1,B), crossing_node(lineA2,B), and
+    # crossing_node(lineA1,lineA2) from A's own self-noding. Tier 2 must merge all
+    # three into one node — which is what makes the node degree 6.
     A = GI.MultiLineString([[(-1.0, -1.0), (1.0, 1.0)], [(-1.0, 1.0), (1.0, -1.0)]])
     B = GI.LineString([(-1.0, 0.0), (1.0, 0.0)])
     for m in (Planar(), Spherical())
@@ -116,8 +107,9 @@ end
     B = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2.0, 0.0)]])
     for m in (Planar(), Spherical())
         arr = GO.NodedArrangement(m, A, B; exact = True())
-        @test length(_crossing_ids(arr)) == 0                  # zero phantom crossings
-        @test sum(length, values(arr.seg_nodes); init = 0) == 0  # zero interior splits
+        #-- zero phantom crossings: a crossing node is interned only alongside
+        #-- its two interior records, so an empty `seg_nodes` implies none exists
+        @test sum(length, values(arr.seg_nodes); init = 0) == 0
     end
 end
 
@@ -147,10 +139,12 @@ end
     @test length(ids) == 200
     s0 = arr.segstrings[1].pts[1]; s1 = arr.segstrings[1].pts[2]
     @test ids == exact_order(arr, s0, s1, ids)          # elementwise
-    # strictly increasing along the segment
-    for c in 2:length(ids)
-        @test GO.rk_compare_along_segment(Planar(), s0, s1, arr.nodes.keys[ids[c-1]], arr.nodes.keys[ids[c]]; exact = True()) < 0
-    end
+    #-- strictly increasing along the segment. The line above already checks the
+    #-- order against an independent `Rational{BigInt}` oracle; this adds only
+    #-- comparator antisymmetry, so it does not need 199 assertions to say it.
+    @test all(c -> GO.rk_compare_along_segment(Planar(), s0, s1,
+                  arr.nodes.keys[ids[c-1]], arr.nodes.keys[ids[c]]; exact = True()) < 0,
+              2:length(ids))
 end
 
 @testset "dense comb ordering matches exact (spherical)" begin
@@ -172,21 +166,22 @@ end
     Ag = GI.MultiLineString([[(Float64(k) * 4.0, 0.0), (Float64(k) * 4.0 + 0.31, 1000.0)] for k in 1:60])
     Bg = GI.MultiLineString([[(0.0, Float64(j) * 4.0), (1000.0, Float64(j) * 4.0 + 0.29)] for j in 1:60])
     arr = GO.NodedArrangement(Planar(), Ag, Bg; exact = True())
-    ncert = 0; ntot = 0
+    #-- accumulated, the way the spherical sibling below already does it: the
+    #-- per-node form asserted 7 202 times to establish three properties
+    ncert = 0; ntot = 0; cert_ok = true; emit_ok = true
     for i in _crossing_ids(arr)
         k = arr.nodes.keys[i]
         (x, y, cert) = GO._certified_crossing(k.pt, k.a1, k.b0, k.b1)
         rx, ry = GO._exact_crossing_point(k)
         rat = (Float64(rx), Float64(ry))
         ntot += 1
-        if cert
-            ncert += 1
-            @test (x, y) == rat                      # certified must equal rational
-        end
-        @test GO.node_point(arr, i) == rat            # node_point rounds to rational either way
+        cert && (ncert += 1; ((x, y) == rat) || (cert_ok = false))
+        (GO.node_point(arr, i) == rat) || (emit_ok = false)
     end
     @test ntot > 1000
     @test ncert == ntot                               # 100% certified on clean data (S3)
+    @test cert_ok                                     # certified => equal to the rational answer
+    @test emit_ok                                     # node_point is the rational answer either way
 end
 
 @testset "spherical emission: direction within bound of exact" begin
@@ -208,104 +203,87 @@ end
 # 4 & 5. Natural Earth subset: rounded-arrangement audit + classification census
 # ---------------------------------------------------------------------------
 
-# direct A×B classification census (proper/touch/collinear counts, flag check)
-function classify_census(m, ssa, ssb)
-    ta = GO._relate_edge_index(m, ssa); tb = GO._relate_edge_index(m, ssb)
-    (ta === nothing || tb === nothing) && return (0, 0, 0, true)
-    nprop = 0; ntouch = 0; ncol = 0; flags_ok = true
-    GO.SpatialTreeInterface.dual_depth_first_search(Extents.intersects, ta, tb) do ia, ib
-        (sa, ka) = ta.data[ia]; (sb, kb) = tb.data[ib]
-        a0 = ssa[sa].pts[ka]; a1 = ssa[sa].pts[ka+1]
-        b0 = ssb[sb].pts[kb]; b1 = ssb[sb].pts[kb+1]
-        c = GO.rk_classify_intersection(m, a0, a1, b0, b1; exact = True())
-        if c.kind == GO.SS_PROPER
-            nprop += 1
-        elseif c.kind == GO.SS_TOUCH
-            ntouch += 1
-            (c.a0_on_b || c.a1_on_b || c.b0_on_a || c.b1_on_a) || (flags_ok = false)
-        elseif c.kind == GO.SS_COLLINEAR
-            ncol += 1
-            (c.a0_on_b || c.a1_on_b || c.b0_on_a || c.b1_on_a) || (flags_ok = false)
-        end
-        return nothing
-    end
-    return (nprop, ntouch, ncol, flags_ok)
-end
+# Rounded-arrangement audit — the one assertion in this file about the property
+# the whole substrate exists to guarantee: rounding at emission does not
+# introduce topology. No edge incident to a crossing node may properly cross an
+# OPPOSITE-SIDE edge once both are realized as Float64.
+#
+# The scope has to reach PAST the shared node. This function used to compare only
+# edges incident to the *same* crossing node, and every such pair carries that
+# node's single emitted coordinate as an endpoint — two segments sharing an
+# endpoint are `SS_TOUCH` by construction and can never be `SS_PROPER`. Measured
+# on the five fixtures below, the old audit examined 184 / 88 / 36 / 136 / 200
+# pairs and every one of them shared an endpoint, so it returned 0 by
+# construction and would have returned 0 for any arrangement whatsoever.
+#
+# The corrected audit is discriminating: with emission snapped to 0.1° it finds
+# 7 / 0 / 2 / 4 / 8 introduced crossings on the same fixtures, where the old one
+# still reports 0.
+#
+# `m` is the manifold the emitted coordinates are interpreted in, and it is the
+# arrangement's own — a spherical arrangement emits lon/lat that downstream
+# stages read as spherical, so a lon/lat-planar audit of it would be asking a
+# different question than the one the guarantee is about. Emission is lon/lat on
+# both manifolds, so the spherical audit lifts back to the kernel's unit vectors
+# first; that lift is exactly what the graph builder does with the same points.
+emitted_pt(::Planar, p) = p
+emitted_pt(::Spherical, p) = UnitSphericalPoint(GI.PointTrait(), p)
 
-# rounded-arrangement audit: the crossing-incident edges of the emitted geometry
-# must not properly cross each other (only crossing nodes move, so re-classifying
-# their incident edges suffices — S3). Returns the count of introduced crossings.
-function rounded_crossings(arr)
-    incident = Dict{Int32, Vector{GO.NodedEdge}}()
-    for e in arr.edges
-        if arr.nodes.keys[e.node_lo].is_crossing
-            push!(get!(() -> GO.NodedEdge[], incident, e.node_lo), e)
-        end
-        if arr.nodes.keys[e.node_hi].is_crossing
-            push!(get!(() -> GO.NodedEdge[], incident, e.node_hi), e)
-        end
-    end
+function rounded_crossings(m, arr)
+    ends = [(emitted_pt(m, GO.node_point(arr, e.node_lo)),
+             emitted_pt(m, GO.node_point(arr, e.node_hi))) for e in arr.edges]
+    is_a = [arr.segstrings[e.string_idx].is_a for e in arr.edges]
+    incident = [n for (n, e) in enumerate(arr.edges)
+                if arr.nodes.keys[e.node_lo].is_crossing || arr.nodes.keys[e.node_hi].is_crossing]
     introduced = 0
-    for (_, es) in incident
-        for i in 1:length(es), j in (i+1):length(es)
-            ea = es[i]; eb = es[j]
-            # only audit A-vs-B incident pairs (opposite sides can spuriously cross)
-            (arr.segstrings[ea.string_idx].is_a == arr.segstrings[eb.string_idx].is_a) && continue
-            pa0 = GO.node_point(arr, ea.node_lo); pa1 = GO.node_point(arr, ea.node_hi)
-            pb0 = GO.node_point(arr, eb.node_lo); pb1 = GO.node_point(arr, eb.node_hi)
-            GO.rk_classify_intersection(Planar(), pa0, pa1, pb0, pb1; exact = True()).kind == GO.SS_PROPER &&
-                (introduced += 1)
+    for n in incident
+        (pa0, pa1) = ends[n]
+        for mi in eachindex(arr.edges)
+            mi == n && continue
+            is_a[mi] == is_a[n] && continue          # opposite side only
+            (pb0, pb1) = ends[mi]
+            GO.rk_classify_intersection(m, pa0, pa1, pb0, pb1; exact = True()).kind ==
+                GO.SS_PROPER && (introduced += 1)
         end
     end
     return introduced
 end
 
-ne_ok = false
-ne_names = String[]; ne_geoms = Any[]
-try
+ne_ok = try
     import NaturalEarth, GeoJSON
-    fc = NaturalEarth.naturalearth("admin_0_countries", 110)
-    for f in fc
-        g = GeoJSON.geometry(f)
-        (g === nothing || GI.npoint(g) == 0) && continue
-        nm = try; string(f.NAME); catch; "?"; end
-        push!(ne_names, nm); push!(ne_geoms, GO.tuples(g))
-    end
-    global ne_ok = length(ne_geoms) > 0
+    include(joinpath(@__DIR__, "..", "..", "..", "data", "natural_earth_pairs.jl"))
+    global ne_names, ne_geoms = load_ne(110)
+    length(ne_geoms) > 0
 catch err
     @info "Natural Earth subset skipped (data unavailable)" err
+    false
 end
 
-@testset "Natural Earth subset (rounded-arrangement + census)" begin
+# The flag check this block used to run — "every touch/collinear classification
+# carries a vertex-incidence flag", via a `classify_census` helper that
+# re-enumerated the A×B candidate pairs with the same index, the same traversal
+# and the same kernel call the noder uses — is a live `@assert` inside
+# `collect.jl` three lines from the classification itself. A test-side
+# reimplementation of noding stage 1 is not a second opinion; it is the same
+# opinion, computed twice.
+@testset "Natural Earth subset (rounded-arrangement audit)" begin
     if !ne_ok
         @test_skip "Natural Earth data unavailable"
     else
-        import LibGEOS as LG
         picks = String["Brazil", "France", "Egypt", "India", "Australia"]
         tested = 0
         for nm in picks
             idx = findfirst(==(nm), ne_names)
             idx === nothing && continue
             A = ne_geoms[idx]
-            LG.isValid(GI.convert(LG, A)) || continue
             B = shift_geom(A, 0.5, 0.0)
             tested += 1
-            # census: planar & spherical proper-crossing multiset identical, flags ok
-            ssa_p = GO._overlay_segstrings(Planar(), A, true); ssb_p = GO._overlay_segstrings(Planar(), B, false)
-            ssa_s = GO._overlay_segstrings(Spherical(), A, true); ssb_s = GO._overlay_segstrings(Spherical(), B, false)
-            (pp, pt, pc, pf) = classify_census(Planar(), ssa_p, ssb_p)
-            (sp, st, sc, sf) = classify_census(Spherical(), ssa_s, ssb_s)
-            @test pf && sf                              # every touch/collinear carries a flag (§2.3)
-            #-- NB: proper counts differ across manifolds on real coastlines
-            #-- (great-circle arcs bow, so they cross a shifted copy differently
-            #-- than straight segments) — genuine geometry, validated independently
-            #-- by the rounded-arrangement audit below on each manifold.
-            @test pp > 0 && sp > 0
-            # rounded-arrangement audit on both manifolds
-            arr_p = GO.NodedArrangement(Planar(), ssa_p, ssb_p; exact = True())
-            arr_s = GO.NodedArrangement(Spherical(), ssa_s, ssb_s; exact = True())
-            @test rounded_crossings(arr_p) == 0
-            @test rounded_crossings(arr_s) == 0
+            arr_p = GO.NodedArrangement(Planar(), A, B; exact = True())
+            arr_s = GO.NodedArrangement(Spherical(), A, B; exact = True())
+            #-- the fixture must actually cross, or the audit below is vacuous
+            @test !isempty(_crossing_ids(arr_p)) && !isempty(_crossing_ids(arr_s))
+            @test rounded_crossings(Planar(), arr_p) == 0
+            @test rounded_crossings(Spherical(), arr_s) == 0
         end
         @test tested >= 2
     end

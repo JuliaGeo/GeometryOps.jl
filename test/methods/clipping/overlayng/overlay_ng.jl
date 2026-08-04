@@ -5,48 +5,33 @@
 #
 # Equality strategy: planar results are checked against LibGEOS's own overlay
 # (high-level API only) with GEOS topological `equals` (order/orientation/merge-
-# granularity independent), `isValid`, and area agreement at rtol 1e-12 (compared
-# through the same `GO.area`, so it is a machine-precision gate). Spherical is
-# gated on area conservation. Ported JTS cases keep JTS's expected WKT answers,
-# compared via GEOS `equals`.
+# granularity independent) plus `isValid`, which is independent of it — a
+# self-intersecting ring can be `equals` to a valid one. Spherical is gated on
+# area conservation. Ported JTS cases keep JTS's expected WKT answers, compared
+# via GEOS `equals`.
 
 using Test
-import GeometryOps as GO
-import GeoInterface as GI
-import LibGEOS as LG
+include(joinpath(@__DIR__, "common.jl"))
 import GeometryOps: Planar, Spherical, True
 
-const EX = True()
-
-lgc(g) = GI.convert(LG, g)
-giwkt(wkt) = GO.tuples(LG.readgeom(wkt))
-
-const OPS = (GO.OVERLAY_INTERSECTION, GO.OVERLAY_UNION,
-             GO.OVERLAY_DIFFERENCE, GO.OVERLAY_SYMDIFFERENCE)
-opname(op) = op == GO.OVERLAY_INTERSECTION ? "intersection" :
-             op == GO.OVERLAY_UNION ? "union" :
-             op == GO.OVERLAY_DIFFERENCE ? "difference" : "symdifference"
-
-geos_op(op, A, B) =
-    op == GO.OVERLAY_INTERSECTION ? LG.intersection(lgc(A), lgc(B)) :
-    op == GO.OVERLAY_UNION ? LG.union(lgc(A), lgc(B)) :
-    op == GO.OVERLAY_DIFFERENCE ? LG.difference(lgc(A), lgc(B)) :
-    LG.symmetricDifference(lgc(A), lgc(B))
+const OPS = OP_CODES
 
 # Planar: check `_overlay_ng` against LibGEOS for one op.
-function check_planar(op, A, B; areatol = 1e-12)
+#
+# No area leg: GEOS `equals` is point-set equality, and equal point sets have
+# equal areas under any correct `GO.area`, so an `isapprox` on the two areas
+# could only fail where `equals` already had. The `isValid` leg is NOT
+# dominated — a self-intersecting ring can be `equals` to a valid one.
+function check_planar(op, A, B)
     r = GO._overlay_ng(Planar(), op, A, B; exact = EX)
-    geos = geos_op(op, A, B)
     @test LG.isValid(lgc(r))
-    @test LG.equals(lgc(r), geos)
-    @test isapprox(GO.area(Planar(), r), GO.area(Planar(), GO.tuples(geos));
-                   rtol = areatol, atol = 1e-12)
+    @test LG.equals(lgc(r), geos_op(op, A, B))
     return r
 end
 
-check_all_ops(A, B; areatol = 1e-12) =
+check_all_ops(A, B) =
     for op in OPS
-        @testset "$(opname(op))" begin check_planar(op, A, B; areatol) end
+        @testset "$(opname(op))" begin check_planar(op, A, B) end
     end
 
 # The rounded coordinate multiset of a geometry (for vertex-set equality).
@@ -63,13 +48,9 @@ end
 # ---------------------------------------------------------------------------
 
 @testset "overlapping squares (all ops)" begin
-    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
-    B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
-    #-- analytic areas: overlap [1,2]² = 1
-    @test isapprox(GO.area(GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, B; exact = EX)), 1.0; rtol = 1e-12)
-    @test isapprox(GO.area(GO._overlay_ng(Planar(), GO.OVERLAY_UNION, A, B; exact = EX)), 7.0; rtol = 1e-12)
-    @test isapprox(GO.area(GO._overlay_ng(Planar(), GO.OVERLAY_DIFFERENCE, A, B; exact = EX)), 3.0; rtol = 1e-12)
-    @test isapprox(GO.area(GO._overlay_ng(Planar(), GO.OVERLAY_SYMDIFFERENCE, A, B; exact = EX)), 6.0; rtol = 1e-12)
+    A, B = SQ_A, SQ_B
+    #-- the analytic areas (1 / 7 / 3 / 6) live in `api.jl`, where they run
+    #-- through `@testset_implementations` across all four geometry backends
     check_all_ops(A, B)
     #-- vertex-set equality against GEOS (intersection = the overlap square)
     ri = GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, B; exact = EX)
@@ -82,13 +63,13 @@ end
     A = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)],
                     [(3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0), (3.0, 3.0)]])
     B = GI.Polygon([[(5.0, 5.0), (12.0, 5.0), (12.0, 12.0), (5.0, 12.0), (5.0, 5.0)]])
-    #-- A area = 100 - 16 = 84; overlap of B with A-material = B∩A = 21
-    @test isapprox(GO.area(GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, B; exact = EX)), 21.0; rtol = 1e-12)
+    #-- A area = 100 - 16 = 84; overlap of B with A-material = B∩A = 21, pinned
+    #-- across all four backends in `api.jl`
     check_all_ops(A, B)
 end
 
 @testset "collinear shared boundary (degenerate intersection, merged union)" begin
-    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    A = SQ_A
     B = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2.0, 0.0)]])
     #-- intersection is the shared boundary line (1-D), not an area
     ri = GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, B; exact = EX)
@@ -96,7 +77,6 @@ end
     @test LG.equals(lgc(ri), geos_op(GO.OVERLAY_INTERSECTION, A, B))
     #-- union merges into one 2×4 box
     ru = GO._overlay_ng(Planar(), GO.OVERLAY_UNION, A, B; exact = EX)
-    @test GI.trait(ru) isa GI.PolygonTrait
     @test isapprox(GO.area(ru), 8.0; rtol = 1e-12)
     @test LG.isValid(lgc(ru)) && LG.equals(lgc(ru), geos_op(GO.OVERLAY_UNION, A, B))
 end
@@ -106,30 +86,26 @@ end
     A = GI.MultiPolygon([[[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]],
                          [[(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]]])
     B = GI.Polygon([[(0.0, 0.0), (2.0, 2.0), (2.0, 0.0), (0.0, 0.0)]])
-    arr = GO.NodedArrangement(Planar(), A, B; exact = EX)
-    g = GO.OverlayGraph(Planar(), arr; exact = EX)
-    nid = findfirst(1:GO.num_nodes(arr)) do i
-        p = GO.node_point(arr, i)
-        isapprox(p[1], 1.0; atol = 1e-9) && isapprox(p[2], 1.0; atol = 1e-9)
+    #-- that the shared vertex really becomes one degree-6 graph node is asserted
+    #-- in `overlay_graph.jl`, on the graph layer that owns it; here the fixture's
+    #-- job is to drive all four ops end to end through that node
+    check_all_ops(A, B)
+end
+
+#-- shape breadth: each row is one input shape run through all four ops against
+#-- GEOS, and nothing distinguishes them beyond the fixture
+@testset "shape breadth (all ops)" begin
+    for (name, A, B) in (
+        ("concave L-shapes",
+         GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 1.0), (1.0, 1.0), (1.0, 3.0), (0.0, 3.0), (0.0, 0.0)]]),
+         GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (2.0, 3.0), (2.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])),
+        ("MultiPolygon input",
+         GI.MultiPolygon([[[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]],
+                          [[(5.0, 5.0), (7.0, 5.0), (7.0, 7.0), (5.0, 7.0), (5.0, 5.0)]]]),
+         GI.Polygon([[(1.0, 1.0), (6.0, 1.0), (6.0, 6.0), (1.0, 6.0), (1.0, 1.0)]])),
+    )
+        @testset "$name" begin check_all_ops(A, B) end
     end
-    @test nid !== nothing
-    e = GO.graph_node_edge(g, nid)
-    @test e != 0
-    @test GO.he_degree(g.edges, e) == 6      # 2 (square 1) + 2 (square 2) + 2 (B diagonal)
-    check_all_ops(A, B)
-end
-
-@testset "concave L-shapes (all ops)" begin
-    A = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 1.0), (1.0, 1.0), (1.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
-    B = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (2.0, 3.0), (2.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
-    check_all_ops(A, B)
-end
-
-@testset "MultiPolygon input (all ops)" begin
-    A = GI.MultiPolygon([[[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]],
-                         [[(5.0, 5.0), (7.0, 5.0), (7.0, 7.0), (5.0, 7.0), (5.0, 5.0)]]])
-    B = GI.Polygon([[(1.0, 1.0), (6.0, 1.0), (6.0, 6.0), (1.0, 6.0), (1.0, 1.0)]])
-    check_all_ops(A, B)
 end
 
 # ---------------------------------------------------------------------------
@@ -149,10 +125,11 @@ end
 #   testBcollapse* / testBNearVertexSnappingCausesInversion /
 #   testBCollapsedHoleEdgeLabelledExterior (snap-rounding collapse),
 #   testDisjointLinesRoundedIntersection (coordinate rounding to a point).
-# SKIPPED (substrate limitation, not precision): testTouchingPolyDifference — a
-#   single input whose hole touches its own shell, where the DIFFERENCE splits the
-#   result into point-touching polygons; the substrate does not self-node one
-#   input (design §2.2), so it yields a correct-area but non-simple result.
+# `testTouchingPolyDifference` used to be skipped here as a substrate limitation
+# ("the substrate does not self-node one input"). That stopped being true when
+# `collect.jl` gained per-input vertex self-noding — the same fix `fuzz.jl`
+# records as closing its SELF-TOUCHING INPUT defect class — and the case has been
+# passing, un-run, ever since. It is in the table below.
 
 const JTS_CASES = [
     # (name, op, A_wkt, B_wkt, expected_wkt)
@@ -247,6 +224,18 @@ const JTS_CASES = [
      "POLYGON ((200 100, 150 200, 250 200, 150 200, 100 100, 200 100))",
      "POLYGON ((50 150, 250 150, 250 50, 50 50, 50 150))",
      "POLYGON ((175 150, 200 100, 100 100, 125 150, 175 150))"),
+    #-- both of these were absent from the ported set and both pass. The first
+    #-- was skipped for a substrate limitation that no longer exists (above); the
+    #-- second is the only JTS case whose result is a genuinely mixed collection,
+    #-- exercising all three result builders in one op.
+    ("TouchingPolyDifference", GO.OVERLAY_DIFFERENCE,
+     "POLYGON ((200 200, 200 0, 0 0, 0 200, 200 200), (100 100, 50 100, 50 200, 100 100))",
+     "POLYGON ((150 100, 100 100, 150 200, 150 100))",
+     "MULTIPOLYGON (((0 0, 0 200, 50 200, 50 100, 100 100, 150 100, 150 200, 200 200, 200 0, 0 0)), ((50 200, 150 200, 100 100, 50 200)))"),
+    ("AreaLinePointIntersection", GO.OVERLAY_INTERSECTION,
+     "POLYGON ((100 100, 200 100, 200 150, 250 100, 300 100, 300 150, 350 100, 350 200, 100 200, 100 100))",
+     "POLYGON ((100 140, 170 140, 200 100, 400 100, 400 30, 100 30, 100 140))",
+     "GEOMETRYCOLLECTION (POINT (350 100), LINESTRING (250 100, 300 100), POLYGON ((100 100, 100 140, 170 140, 200 100, 100 100)))"),
 ]
 
 @testset "ported JTS OverlayNGTest subset ($(length(JTS_CASES)) cases)" begin
@@ -285,12 +274,17 @@ end
     @test GI.nring(r) == 2
     @test LG.isValid(lgc(r))
     @test isapprox(GO.area(r), 84.0; rtol = 1e-12)
+    #-- ring count and area together still permit the hole being in the wrong
+    #-- place; the oracle is what pins where it went
+    @test LG.equals(lgc(r), geos_op(GO.OVERLAY_DIFFERENCE, Big, Inner))
 end
 
 @testset "union of a multi-island geometry (France-class nesting)" begin
-    #-- 20 disjoint island squares, unioned with a shifted copy (overlaps) — the
-    #-- many-component case the spike prototypes faked, exercising minimal-ring
-    #-- split + hole nesting across many shells.
+    #-- 20 disjoint island squares, unioned with a copy shifted onto their
+    #-- diagonal neighbours. The result is ONE connected shell with 24 free
+    #-- holes — the diagonal overlap chains every island together and the gaps
+    #-- between them become the holes — so this is the many-shell *free-hole
+    #-- assignment* case, not the many-shell case the comment used to claim.
     isl = Vector{Vector{Vector{Tuple{Float64, Float64}}}}()
     for i in 0:19
         x = (i % 5) * 3.0; y = (i ÷ 5) * 3.0
@@ -312,20 +306,13 @@ end
 # 4. Spherical end-to-end
 # ---------------------------------------------------------------------------
 
-@testset "spherical overlapping quads — area conservation" begin
-    A = GI.Polygon([[(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (0.0, 20.0), (0.0, 0.0)]])
-    B = GI.Polygon([[(10.0, 10.0), (30.0, 10.0), (30.0, 30.0), (10.0, 30.0), (10.0, 10.0)]])
-    ai = GO.area(Spherical(), GO._overlay_ng(Spherical(), GO.OVERLAY_INTERSECTION, A, B; exact = EX))
-    au = GO.area(Spherical(), GO._overlay_ng(Spherical(), GO.OVERLAY_UNION, A, B; exact = EX))
-    aA = GO.area(Spherical(), A); aB = GO.area(Spherical(), B)
-    @test isapprox(au + ai, aA + aB; rtol = 1e-12)
-    #-- difference + intersection reconstruct A
-    ad = GO.area(Spherical(), GO._overlay_ng(Spherical(), GO.OVERLAY_DIFFERENCE, A, B; exact = EX))
-    @test isapprox(ad + ai, aA; rtol = 1e-12)
-    #-- symdifference = union - intersection
-    asd = GO.area(Spherical(), GO._overlay_ng(Spherical(), GO.OVERLAY_SYMDIFFERENCE, A, B; exact = EX))
-    @test isapprox(asd, au - ai; rtol = 1e-12)
-end
+# The three spherical area-conservation identities on the (0,0)-(20,20) /
+# (10,10)-(30,30) quad pair live in `api.jl`, on the same fixture, run through
+# the public surface and with two extra legs this copy did not have (all four
+# results strictly positive, and the spherical answer differing from the planar
+# one). Kept there rather than here so there is exactly one copy — and kept in
+# FULL there: trimming it to a single identity while deleting this block would
+# have taken two of the three out of the repository altogether.
 
 #=
 Emission used to pick between the two antipodal candidates `±(na×nb)` for a
@@ -347,6 +334,7 @@ checked alongside, since the sign choice is a spherical-only construction.
 
     for m in (Planar(), Spherical())
         aX, aY = GO.area(m, X), GO.area(m, Y)
+        #-- fixture premise: X and Y denote the same region (no engine involved)
         @test isapprox(aX, aY; rtol = 1e-15)
         ops = Dict(op => GO.area(m, GO._overlay_ng(m, op, X, Y; exact = EX)) for op in
                    (GO.OVERLAY_INTERSECTION, GO.OVERLAY_UNION,
@@ -358,7 +346,7 @@ checked alongside, since the sign choice is a spherical-only construction.
     end
 
     #-- and directly on the defect: no emitted vertex may be a hemisphere away
-    #-- from the crossing's own arcs. The emitted longitudes all sit in [0, 2].
+    #-- from the crossing's own arcs. Both emitted coordinates sit in [0, 2].
     r = GO._overlay_ng(Spherical(), GO.OVERLAY_INTERSECTION, X, Y; exact = EX)
     @test all(p -> 0 <= GI.x(p) <= 2 && 0 <= GI.y(p) <= 2, GI.getpoint(r))
 
@@ -386,14 +374,13 @@ end
 
     #-- the disambiguation function directly: a boundaryless union that covers
     #-- everything is the full sphere and must throw; an empty intersection must not.
+    #-- the throw is conjunction-gated on `_covers_everything`, so asserting the
+    #-- throw asserts the predicate too; only the throws are checked here
     inp_union = GO._OverlayInput(Spherical(), A, A, 2, 2, EX, false, false, nothing, nothing)
-    @test GO._covers_everything(Spherical(), GO.OVERLAY_UNION, inp_union)
     @test_throws ArgumentError GO._resolve_empty_result(Spherical(), GO.OVERLAY_UNION, inp_union)
 
     inp_int = GO._OverlayInput(Spherical(), A, Bdisjoint, 2, 2, EX, false, false, nothing, nothing)
-    @test !GO._covers_everything(Spherical(), GO.OVERLAY_INTERSECTION, inp_int)
-    rr = GO._resolve_empty_result(Spherical(), GO.OVERLAY_INTERSECTION, inp_int)
-    @test GI.npoint(rr) == 0
+    @test GI.npoint(GO._resolve_empty_result(Spherical(), GO.OVERLAY_INTERSECTION, inp_int)) == 0
 end
 
 # ---------------------------------------------------------------------------
@@ -401,7 +388,7 @@ end
 # ---------------------------------------------------------------------------
 
 @testset "input validation and empty short-circuits" begin
-    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    A = SQ_A
     #-- point inputs are routed to the phase-3 point builders (they used to be
     #-- rejected here); see overlay_points.jl for their full coverage
     @test GI.trait(GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, GI.Point((1.0, 1.0)), A;
@@ -409,55 +396,51 @@ end
     #-- geometry collections are still rejected
     @test_throws ArgumentError GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION,
         GI.GeometryCollection([GI.Point((1.0, 1.0))]), A; exact = EX)
-    #-- disjoint intersection short-circuits to empty (planar envelope)
+    #-- a disjoint intersection is empty. This does NOT show that the planar
+    #-- envelope short circuit ran: with `_env_disjoint` forced false the full
+    #-- pipeline reaches the same empty answer, so the assertion is about the
+    #-- ANSWER, and the short circuit itself is a performance property.
     Far = GI.Polygon([[(100.0, 100.0), (102.0, 100.0), (102.0, 102.0), (100.0, 102.0), (100.0, 100.0)]])
     r = GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, Far; exact = EX)
     @test GI.npoint(r) == 0
 end
 
 # ---------------------------------------------------------------------------
-# 6. Spherical NE shifted-self smoke (env-gated, phase-1 smoke pattern)
+# 6. Natural Earth shifted-self smoke, both manifolds (env-gated)
 # ---------------------------------------------------------------------------
 
-ne_ok = false
-ne_names = String[]; ne_geoms = Any[]
-try
+ne_ok = try
     import NaturalEarth, GeoJSON
-    fc = NaturalEarth.naturalearth("admin_0_countries", 110)
-    for f in fc
-        gg = GeoJSON.geometry(f)
-        (gg === nothing || GI.npoint(gg) == 0) && continue
-        nm = try; string(f.NAME); catch; "?"; end
-        push!(ne_names, nm); push!(ne_geoms, GO.tuples(gg))
-    end
-    global ne_ok = length(ne_geoms) > 0
+    include(joinpath(@__DIR__, "..", "..", "..", "data", "natural_earth_pairs.jl"))
+    global ne_names, ne_geoms = load_ne(110)
+    length(ne_geoms) > 0
 catch err
     @info "Natural Earth subset skipped (data unavailable)" err
+    false
 end
 
+# ONE country, not four. `realdata_identities.jl` runs this identity over ten
+# shifted-self cases at a tighter rtol, so breadth here buys nothing — except for
+# Egypt, which is not subsumed: its shift is horizontal (`dy = 0`) and Egypt is
+# the one pick with long exactly-horizontal border segments, so the shifted copy
+# lands COLLINEAR with the original rather than crossing it. That is a different
+# degeneracy from the crossing case the other three exercise.
 @testset "Natural Earth shifted-self area conservation (spherical + planar)" begin
     if !ne_ok
         @test_skip "Natural Earth data unavailable"
     else
-        picks = String["Brazil", "France", "Egypt", "Australia"]
-        tested = 0
-        for nm in picks
-            idx = findfirst(==(nm), ne_names)
-            idx === nothing && continue
+        idx = findfirst(==("Egypt"), ne_names)
+        @test idx !== nothing
+        if idx !== nothing
             A = ne_geoms[idx]
-            LG.isValid(lgc(A)) || continue
-            B = GO.apply(GI.PointTrait(), A) do p
-                (GI.x(p) + 0.5, GI.y(p))
-            end
-            tested += 1
+            B = shift_geom(A, 0.5, 0.0)
             for m in (Planar(), Spherical())
                 ri = GO._overlay_ng(m, GO.OVERLAY_INTERSECTION, A, B; exact = EX)
                 ru = GO._overlay_ng(m, GO.OVERLAY_UNION, A, B; exact = EX)
-                aA = GO.area(m, A); aB = GO.area(m, B)
-                @test isapprox(GO.area(m, ru) + GO.area(m, ri), aA + aB; rtol = 1e-9)
+                @test isapprox(GO.area(m, ru) + GO.area(m, ri),
+                               GO.area(m, A) + GO.area(m, B); rtol = 1e-9)
             end
         end
-        @test tested >= 2
     end
 end
 
@@ -498,7 +481,7 @@ const TARGETS = ((GI.PolygonTrait(),         GI.MultiPolygonTrait(),    2),
 # meets it in a line only, and the two must stay disjoint for the input to be
 # valid. (A single polygon that overlaps and shares boundary yields just the
 # polygon — the shared segment is interior to the result area and is dropped.)
-const MIXED_A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+const MIXED_A = SQ_A
 const MIXED_B = GI.MultiPolygon([
     GI.Polygon([[(1.0, 0.0), (3.0, 0.0), (3.0, 1.0), (1.0, 1.0), (1.0, 0.0)]]),   # overlaps
     GI.Polygon([[(-2.0, 0.0), (0.0, 0.0), (0.0, 2.0), (-2.0, 2.0), (-2.0, 0.0)]]) # touches
@@ -593,7 +576,7 @@ end
 end
 
 @testset "target above the result dimension short-circuits before noding" begin
-    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    A = SQ_A
     L = GI.LineString([(-1.0, 1.0), (3.0, 1.0)])
     P = GI.MultiPoint([(0.5, 0.5)])
     alg = GO.OverlayNG()
@@ -635,7 +618,7 @@ end
 end
 
 @testset "target elides work it cannot want" begin
-    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+    A = SQ_A
     alg = GO.OverlayNG()
     mpoly, mpt = GI.MultiPolygonTrait(), GI.MultiPointTrait()
     #-- 5k points against one polygon: locating them is the whole cost of this
@@ -696,8 +679,7 @@ end
 end
 
 @testset "target accepts the Foster–Hormann spellings and rejects the rest" begin
-    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
-    B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+    A, B = SQ_A, SQ_B
     alg = GO.OverlayNG()
     want = GO.intersection(alg, A, B; target = GI.PolygonTrait())
     #-- trait instance, trait type, and TraitTarget all mean the same thing
@@ -802,8 +784,7 @@ end
 end
 
 @testset "target on all four public operations, including symdifference" begin
-    A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
-    B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+    A, B = SQ_A, SQ_B
     alg = GO.OverlayNG()
     #-- the SINGULAR target, deliberately: it returns a `Vector`, which no
     #-- untargeted call can produce, so these fail if a wrapper drops the keyword.

@@ -72,10 +72,9 @@
 #   GO_S2_REPORTS    disagreements printed in full (default 5)
 
 using Test
-import GeometryOps as GO
 import GeometryOpsCore
-import GeoInterface as GI
 using GeometryOpsTestHelpers: write_wkb, parse_wkb, WKBWriteError
+include(joinpath(@__DIR__, "common.jl"))
 
 include(joinpath(@__DIR__, "..", "..", "..", "external", "s2geography", "s2geography.jl"))
 using .S2Geog
@@ -84,10 +83,18 @@ const S2_PAIRS = something(tryparse(Int, get(ENV, "GO_S2_PAIRS", "")), 30)
 const S2_NE10_PAIRS = something(tryparse(Int, get(ENV, "GO_S2_NE10", "")), 4)
 const S2_REPORTS = something(tryparse(Int, get(ENV, "GO_S2_REPORTS", "")), 5)
 
-const EX = GO.True()
-const OPS = (:intersection, :union, :difference, :symdifference)
-const OPCODE = Dict(:intersection => GO.OVERLAY_INTERSECTION, :union => GO.OVERLAY_UNION,
-                    :difference => GO.OVERLAY_DIFFERENCE, :symdifference => GO.OVERLAY_SYMDIFFERENCE)
+# A missing oracle records a skip by default; under `GO_REQUIRE_DATA=1` (which
+# CI sets) it fails instead, so a runner that has quietly lost `S2Geography_jll`
+# cannot report this file as green having compared nothing.
+const REQUIRE_DATA = get(ENV, "GO_REQUIRE_DATA", "") == "1"
+function missing_data(what)
+    if REQUIRE_DATA
+        println("REQUIRED DATASET MISSING: ", what)
+        @test false
+    else
+        @test_skip what
+    end
+end
 
 # s2geography measures on 6371010.0, GeometryOps on 6371008.8; areas scale with R².
 const RADIUS_RATIO = (S2Geog.S2_RADIUS / GeometryOpsCore.WGS84_EARTH_MEAN_RADIUS)^2
@@ -128,11 +135,11 @@ const RADIUS_RTOL = 1e-12
 
 mutable struct S2Census
     n_op::Int; n_agree::Int; n_unresolved::Int; n_subareal::Int; n_collapsed::Int; n_seam::Int
-    n_broken::Int; n_disagree::Int
+    n_disagree::Int
     l1::Vector{Float64}; area::Vector{Float64}; radius::Vector{Float64}
     worst::Dict{String, Tuple{Float64, String}}
 end
-S2Census() = S2Census(0, 0, 0, 0, 0, 0, 0, 0, Float64[], Float64[], Float64[],
+S2Census() = S2Census(0, 0, 0, 0, 0, 0, 0, Float64[], Float64[], Float64[],
                       Dict{String, Tuple{Float64, String}}())
 const CENSUS = S2Census()
 
@@ -154,7 +161,6 @@ function report_census()
 
     Spherical OverlayNG vs s2geography ($(CENSUS.n_op) ops)
       agree                 : $(CENSUS.n_agree)
-      known disagreement    : $(CENSUS.n_broken)
       disagree (failed)     : $(CENSUS.n_disagree)
       sub-areal on both     : $(CENSUS.n_subareal)  (both punctual, or both empty)
       dimension-collapsed   : $(CENSUS.n_collapsed)  (ours linear, s2 areal-only — see header)
@@ -238,19 +244,15 @@ function differential(A, B, label)
     wa, wb = write_wkb(A), write_wkb(B)
     scale = s2_area(wa) + s2_area(wb)
     scale > 0 || return nothing
-    for op in OPS
+    for op in OP_SYMS
         key = "$label/$op"
         CENSUS.n_op += 1
-        known = get(S2_KNOWN_DISAGREEMENTS, key, nothing)
         ok, detail = try
             check_op(op, A, B, wa, wb, scale, key)
         catch err
             (false, "ERROR: " * first(sprint(showerror, err), 200))
         end
-        if known !== nothing
-            ok || (CENSUS.n_broken += 1)
-            @test_broken ok
-        elseif ok
+        if ok
             @test true
         else
             CENSUS.n_disagree += 1
@@ -363,11 +365,15 @@ end
 #
 # DISCIPLINE, as in `test/external/jts/overlay_skiplist.jl`: every entry MUST
 # carry a diagnosis explaining exactly why the two engines differ and which side
-# is wrong. Entries without one must not be merged. Pinned cases run as
-# `@test_broken`, so a fix and a regression are equally visible.
-
-# Whole-op pins: the op is scored `@test_broken` and nothing about it is asserted.
-const S2_KNOWN_DISAGREEMENTS = Dict{String, String}()
+# is wrong. Entries without one must not be merged.
+#
+# There is exactly one ledger, and it is narrow by construction. A second,
+# whole-op ledger used to sit here — `S2_KNOWN_DISAGREEMENTS`, scoring a case
+# `@test_broken` and asserting nothing about it — and it stayed empty for its
+# whole life while carrying three lines of unreachable branch in the hot loop.
+# If a whole-op pin is ever genuinely needed, the honest move is to widen this
+# ledger with the diagnosis attached, not to reinstate a mechanism that turns
+# an op into a no-op.
 
 # ## The antimeridian seam: a different partition of the SAME region
 #
@@ -438,7 +444,7 @@ end
 
 @testset "s2geography availability" begin
     if !S2_OK
-        @test_skip "S2Geography_jll unavailable on this platform"
+        missing_data("S2Geography_jll on this platform")
     else
         @test length(S2Geog.s2_kernel_names()) > 0
         #-- the oracle is wired up correctly: a lat/lon square's geodesic area
@@ -473,7 +479,7 @@ if NE_OK
 
     @testset "Natural Earth 10m — spherical overlay vs s2geography" begin
         if !ne10_ok
-            @test_skip "Natural Earth 10m unavailable"
+            missing_data("Natural Earth 10m")
         else
             pairs = neighbour_pairs(ne10_names, ne10_geoms, S2_NE10_PAIRS)
             @test !isempty(pairs)
@@ -500,7 +506,7 @@ if NE_OK
     # alphabetical and never reaches Russia.
     @testset "Natural Earth 10m antimeridian — Russia vs s2geography" begin
         if !ne10_ok
-            @test_skip "Natural Earth 10m unavailable"
+            missing_data("Natural Earth 10m")
         else
             ir = findfirst(==("Russia"), ne10_names)
             @test ir !== nothing
@@ -518,6 +524,40 @@ if NE_OK
             end
         end
     end
+
+    # -----------------------------------------------------------------------
+    # Census pins
+    # -----------------------------------------------------------------------
+    #
+    # The header calls the census the deliverable of this suite, and until now
+    # nothing asserted any of it: every number was printed and discarded. That
+    # is the gap a `_build_lines -> []` mutation walks straight through — it
+    # moves `n_collapsed` 41 → 40 and `n_subareal` 0 → 1 while every per-op
+    # check still passes, because a dropped shared border turns a
+    # dimension-collapsed agreement into a sub-areal one and both are scored
+    # `agree`. The classification is the only thing that moves, so the
+    # classification is what has to be pinned.
+    #
+    # Calibrated for the default corpus only; a widened sweep re-measures. To
+    # refresh after a deliberate change, run the file and copy the printed
+    # census.
+    @testset "census" begin
+        if S2_PAIRS == 30 && S2_NE10_PAIRS == 4 && ne10_ok
+            @test CENSUS.n_op == 204
+            @test CENSUS.n_agree == 204
+            @test CENSUS.n_disagree == 0
+            @test CENSUS.n_collapsed == 41      # ours linear where s2 is areal-only
+            @test CENSUS.n_subareal == 0
+            @test CENSUS.n_seam == 14           # every ledger entry still fires
+            @test CENSUS.n_unresolved <= 35     # s2 could not build the symdifference
+        else
+            @test_skip "census pins are calibrated for the default corpus"
+        end
+    end
+else
+    @testset "Natural Earth — spherical overlay vs s2geography" begin
+        missing_data(S2_OK ? "Natural Earth" : "S2Geography_jll")
+    end
 end
 
 # ---------------------------------------------------------------------------
@@ -533,29 +573,86 @@ end
 # geographies under S2's snapped model, while `GO.equals` is exact set equality;
 # on distinct real-world inputs both are simply false, so the comparison would
 # assert nothing.
-
+#
+# ## The fixtures are chosen so that every predicate takes both values
+#
+# This block used to sweep all `S2_PAIRS` neighbour pairs, and measured out at
+# `intersects` true×30, `disjoint` false×30, `contains` false×30, `within`
+# false×30 — 120 assertions, four constant bits, 4.1 s. `intersects` is true by
+# construction (`neighbour_pairs` filters on `LG.intersects`), and no pair of
+# *neighbours* can ever contain the other, so a constant-`false` `contains`
+# and `within` passed 60 of the 120 against an oracle that never contradicted
+# them.
+#
+# Enclaves are the obvious repair and they do NOT work: Natural Earth's country
+# polygons partition the land, so an enclave is modelled as a *hole* in its
+# neighbour — NE110 South Africa does not contain Lesotho, it abuts it, and
+# `contains` is correctly false. (This block asserted the polarity before it
+# asserted the fixture, and the polarity assertion is what caught it.)
+#
+# What does give genuine 2-D containment on real linework is a MultiPolygon
+# country against one of its own component polygons: the component's interior
+# lies in the country's interior and its boundary on the country's boundary,
+# which is `contains` in one direction and `within` in the other.
+#
+# Antimeridian-spanning countries are excluded from that construction by an
+# explicit rule rather than by luck, and the reason is a live disagreement:
+# on NE110 **Fiji**, whose first component crosses lon ±180, we answer
+# `contains(Fiji, part) = true` — which is unarguable, the part is a subset of
+# the whole — and s2 answers `false`. That is a seam-import question about the
+# oracle, in the same family as the `S2_SEAM_COMPONENT_SPLIT` ledger above, and
+# it does not belong in a block whose job is to check ordinary predicate
+# agreement. It is recorded here so the next person does not rediscover it as a
+# flake.
 if NE_OK
     @testset "spherical predicates vs s2geography" begin
         names, geoms = load_ne(110)
-        pairs = neighbour_pairs(names, geoms, S2_PAIRS)
-        @test !isempty(pairs)
         alg = GO.RelateNG(; manifold = GO.Spherical())
         preds = ((:intersects, GO.intersects), (:disjoint, GO.disjoint),
                  (:contains, GO.contains), (:within, GO.within))
-        nchecked = 0
-        for (i, j) in pairs
-            A, B = geoms[i], geoms[j]
+
+        #-- a handful of neighbours (the bits they exercise are constant across
+        #-- the corpus, so the marginal pair buys nothing), one far-apart pair,
+        #-- and component-vs-whole pairs in both argument orders
+        cases = Tuple{String, Any, Any}[]
+        for (i, j) in first(neighbour_pairs(names, geoms, S2_PAIRS), 4)
+            push!(cases, ("$(names[i]) x $(names[j])", geoms[i], geoms[j]))
+        end
+        ib, ia = findfirst(==("Brazil"), names), findfirst(==("Australia"), names)
+        @test ib !== nothing && ia !== nothing
+        push!(cases, ("Brazil x Australia", geoms[ib], geoms[ia]))   # disjoint
+
+        spans_seam(g) = (e = GI.extent(g); e.X[2] - e.X[1] > 180)
+        ncomposite = 0
+        for k in eachindex(names)
+            ncomposite >= 2 && break
+            GI.trait(geoms[k]) isa GI.MultiPolygonTrait || continue
+            GI.ngeom(geoms[k]) >= 2 || continue
+            spans_seam(geoms[k]) && continue                # see the header note
+            part = GI.getgeom(geoms[k], 1)
+            spans_seam(part) && continue
+            ncomposite += 1
+            push!(cases, ("$(names[k]) contains its 1st part", geoms[k], part))
+            push!(cases, ("$(names[k])'s 1st part within it", part, geoms[k]))
+        end
+        @test ncomposite == 2
+
+        seen = Dict(nm => Set{Bool}() for (nm, _) in preds)
+        for (label, A, B) in cases
             wa, wb = write_wkb(A), write_wkb(B)
             for (nm, f) in preds
                 ours = f(alg, A, B)
                 theirs = s2_predicate(nm, wa, wb)
-                ours == theirs || println("S2 PREDICATE [$(names[i]) x $(names[j])/$nm] ",
-                                          "ours=$ours s2=$theirs")
+                ours == theirs || println("S2 PREDICATE [$label/$nm] ours=$ours s2=$theirs")
                 @test ours == theirs
-                nchecked += 1
+                push!(seen[nm], ours)
             end
         end
-        println("spherical predicates checked against s2geography: $nchecked")
+        #-- the assertion the old block was missing: a predicate that only ever
+        #-- returned one value was not being compared, it was being echoed
+        for (nm, _) in preds
+            @test seen[nm] == Set((true, false))
+        end
     end
 end
 

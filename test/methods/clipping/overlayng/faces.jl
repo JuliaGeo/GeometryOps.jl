@@ -8,11 +8,8 @@
 # `overlay_labeller.jl`.
 
 using Test
-import GeometryOps as GO
-import GeoInterface as GI
-import LibGEOS as LG
+include(joinpath(@__DIR__, "common.jl"))
 
-const EX = GO.True()
 const PL = GO.Planar()
 
 locname(l) = l == GO.LOC_INTERIOR ? "INT" : l == GO.LOC_EXTERIOR ? "EXT" :
@@ -184,13 +181,18 @@ end
     op_extract!(g)
     @test_throws GO._OverlayTopologyError GO._build_faces(PL, g; exact = EX)
 
-    # the hygiene pass is not an extraction: it writes no linkage, so it leaves
-    # the graph extractable (and the message names the real problem when it is not)
-    g = labelled_graph(PL, A, B, 2, 2)
+    # The hygiene pass is not an extraction: it writes no linkage, so it leaves
+    # the graph extractable (and the message names the real problem when it is
+    # not). This ran on the two-squares fixture, where every node has degree 2 or
+    # 4 — so `_remove_dangles!` returned an empty list, set no flag, and the block
+    # established only that a no-op is a no-op. It needs a graph with a dangle.
+    pd = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    ld = GI.LineString([(5.0, -5.0), (5.0, 5.0)])
+    g = labelled_graph(PL, pd, ld, 2, 1)
     @test !GO._graph_is_ring_consumed(g)
-    GO._remove_dangles!(g)
-    @test !GO._graph_is_ring_consumed(g)
-    @test length(GO._build_faces(PL, g; exact = EX).edge_rings) == 4
+    @test !isempty(GO._remove_dangles!(g))          # the pass really removed something
+    @test !GO._graph_is_ring_consumed(g)            # ...and still wrote no linkage
+    @test length(GO._build_faces(PL, g; exact = EX).edge_rings) == 2
     @test_throws GO._OverlayTopologyError GO._remove_dangles!(g)   # now consumed
 
     err = try; GO._build_faces(PL, g; exact = EX); catch e; e; end
@@ -282,7 +284,15 @@ end
     @test length(ctx.edge_rings) == 2
     @test bounded_areas(ctx) == [100.0]
     sq = only(r for r in ctx.edge_rings if !r.is_hole)
-    @test sq.ring_pts == [(5.0, 0.0), (0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0), (5.0, 0.0)]
+    #-- rotation-invariant: which vertices survive and how the cycle winds are
+    #-- behaviour, but which node it STARTS at is just the lowest half-edge index,
+    #-- i.e. whatever order `_merge_noded_edges` happened to emit in
+    @test length(sq.ring_pts) == 6 && sq.ring_pts[1] == sq.ring_pts[end]
+    @test Set(sq.ring_pts) ==
+        Set([(5.0, 0.0), (0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0)])
+    @test signed_ring_area(sq.ring_pts) < 0      # the bounded cycle is CW
+    #-- (5,0) is the load-bearing member: the dangle's attachment node survives
+    #-- as a degree-2 vertex rather than being swept up with the dangle
 end
 
 @testset "hygiene removes the dangle a face ring would otherwise double" begin
@@ -359,4 +369,78 @@ end
     @test isempty(ctx.shell_list) && isempty(ctx.free_hole_list)
     @test isempty(GO._build_face_polygons(PL, labelled_graph(PL, A, B, 1, 1),
                                           (a, b) -> true; exact = EX))
+end
+
+# ---------------------------------------------------------------------------
+@testset "_face_ring_location's boundary-edge preference agrees with its fallback" begin
+    # `_face_ring_location` (polygon_builder.jl) walks the whole cycle looking for
+    # a boundary edge of `gi`, whose side locations are authoritative, and only
+    # falls back to the START edge's boundary-or-line location if it finds none.
+    # Design §5.1 calls the preference out explicitly — and nothing exercised it:
+    # replacing the body with just the fallback left every assertion in this file
+    # passing, because on every fixture here the start edge already IS a boundary
+    # edge, or the two answers coincide.
+    #
+    # What is established below is the weaker, checkable claim: over a spread of
+    # fixtures chosen to make the start edge a NON-boundary edge of `gi` while a
+    # later edge of the same cycle is one, the preference and the fallback return
+    # the same location — every time, on both inputs. There is a structural reason
+    # to expect that (a face is a connected region of the arrangement complement,
+    # so it has ONE location per input, and a non-boundary edge's line location is
+    # the location of the region containing it — the same region).
+    #
+    # This is NOT a proof that the preference is dead code, and the loop is
+    # deliberately left in `polygon_builder.jl`: absence of a discriminating
+    # fixture is a fact about the fixtures. If one is ever found, this testset is
+    # where it belongs, and it will fail here first.
+    function preference_and_fallback(ctx, er, gi)
+        edges = ctx.edges
+        start = ctx.edge_rings[er].start_edge
+        pref = nothing; later_boundary = false
+        e = start
+        while true
+            if GO.is_boundary(GO.oe_label(edges, e), gi)
+                pref === nothing && (pref = GO.oe_get_location(edges, e, gi, GO.POS_RIGHT))
+                e != start && (later_boundary = true)
+            end
+            e = GO.oe_next_result(edges, e)
+            e == start && break
+        end
+        fb = GO.oe_get_location_boundary_or_line(edges, start, gi, GO.POS_RIGHT)
+        start_is_boundary = GO.is_boundary(GO.oe_label(edges, start), gi)
+        #-- the preference branch is *taken* only when the start edge is not a
+        #-- boundary of `gi` and some later edge of the cycle is
+        return (something(pref, fb), fb, !start_is_boundary && later_boundary)
+    end
+
+    sq = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    fixtures = [
+        ("square x crossing line",  sq, GI.LineString([(-5.0, 5.0), (15.0, 5.0)]), 2, 1),
+        ("square x entering line",  sq, GI.LineString([(5.0, -5.0), (5.0, 5.0)]), 2, 1),
+        ("square x outside pocket", sq,
+            GI.LineString([(10.0, 2.0), (15.0, 2.0), (15.0, 8.0), (10.0, 8.0)]), 2, 1),
+        ("square x inside chord",   sq, GI.LineString([(0.0, 3.0), (10.0, 7.0)]), 2, 1),
+        ("square x two chords",     sq, GI.MultiLineString(
+            [[(-2.0, 3.0), (12.0, 3.0)], [(-2.0, 7.0), (12.0, 7.0)]]), 2, 1),
+        ("holed square x line",
+            GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)],
+                        [(3.0, 3.0), (3.0, 7.0), (7.0, 7.0), (7.0, 3.0), (3.0, 3.0)]]),
+            GI.LineString([(-2.0, 5.0), (12.0, 5.0)]), 2, 1),
+        #-- the one that actually enters the branch: on an area x area overlay a
+        #-- face cycle alternates between A-boundary and B-boundary edges, so for
+        #-- either input the start edge is often a boundary of the OTHER one
+        ("two overlapping squares", sq,
+            GI.Polygon([[(5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0), (5.0, 5.0)]]), 2, 2),
+    ]
+    reached = 0
+    for (nm, A, B, da, db) in fixtures
+        ctx = GO._build_faces(PL, labelled_graph(PL, A, B, da, db); exact = EX)
+        for er in eachindex(ctx.edge_rings), gi in (0, 1)
+            (pref, fb, took_preference) = preference_and_fallback(ctx, er, gi)
+            took_preference && (reached += 1)
+            @test (nm, pref) == (nm, fb)
+        end
+    end
+    #-- and the branch really is entered, so the agreement above is not vacuous
+    @test reached >= 4
 end

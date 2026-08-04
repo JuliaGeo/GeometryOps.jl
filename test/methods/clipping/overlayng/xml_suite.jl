@@ -24,19 +24,13 @@
 # Runtime: ~15 s warm for both runs.
 
 using Test
-import GeometryOps as GO
-import GeoInterface as GI
-import LibGEOS as LG
-
+include(joinpath(@__DIR__, "common.jl"))
 include(joinpath(@__DIR__, "..", "..", "..", "external", "jts", "overlay_runner.jl"))
 
 const JTS_OVERLAY_DIR = joinpath(@__DIR__, "..", "..", "..", "data", "jts", "overlay")
 const JTS_ROBUST_DIR = joinpath(@__DIR__, "..", "..", "..", "data", "jts", "overlay_robust")
 
-const OPCODE = Dict(:intersection => GO.OVERLAY_INTERSECTION, :union => GO.OVERLAY_UNION,
-                    :difference => GO.OVERLAY_DIFFERENCE, :symdifference => GO.OVERLAY_SYMDIFFERENCE)
-
-go_overlay(op, a, b) = GO._overlay_ng(GO.Planar(), OPCODE[op], a, b; exact = GO.True())
+go_overlay(op, a, b) = GO._overlay_ng(GO.Planar(), OPCODE[op], a, b; exact = EX)
 
 _xml_files(dir) = sort!(filter!(f -> endswith(f, ".xml"), readdir(dir; join = true)))
 
@@ -56,26 +50,33 @@ end
 # 1. Expected-result conformance over the general/misc overlay suites
 # ---------------------------------------------------------------------------
 
-# Expected (pass, skip) counts per file, pinned as of this branch.
-# All 346 skips are structural and recorded by the runner: 310 ops with a point
-# operand (`TestOverlayP*`, `TestNGOverlayP`, and the point half of the two
-# Empty files) and 36 with a GEOMETRYCOLLECTION operand (`TestNGOverlayGC`, the
-# GC half of `TestNGOverlayEmpty`) — both unsupported by the engine on this
-# branch — plus the 6 documented `OVERLAY_SKIPLIST` entries.
+# Expected (pass, skip) counts per file, pinned as of this branch: 699 ops run,
+# 41 skipped. Every skip is structural and recorded by the runner — 36 with a
+# GEOMETRYCOLLECTION operand (`TestNGOverlayGC`, and the GC half of
+# `TestNGOverlayEmpty`), which the engine does not accept, plus the 5 documented
+# `OVERLAY_SKIPLIST` entries.
+#
+# These pins were stale, and stale in the direction that hides coverage rather
+# than inventing it: they were written when point *inputs* were unsupported, and
+# the 310 point-operand ops they recorded as skips have been running for some
+# time. `TestOverlayEmpty.xml` alone went from a pinned (132, 162) to a measured
+# (294, 0). Because the loop that reads this table took a `n_pass >= pinned`
+# branch whenever `POINT_INPUTS_SUPPORTED` was true, six of the thirteen files
+# were asserting `n_pass >= 0`. The branch is gone; these are exact.
 const OVERLAY_EXPECTED_COUNTS = [
     ("TestNGOverlayA.xml",      88,   0),
-    ("TestNGOverlayEmpty.xml",  29,  50),
+    ("TestNGOverlayEmpty.xml",  59,  20),
     ("TestNGOverlayGC.xml",      0,  16),
     ("TestNGOverlayL.xml",      55,   0),
-    ("TestNGOverlayP.xml",       0,  60),
+    ("TestNGOverlayP.xml",      60,   0),
     ("TestOverlayAA.xml",       44,   0),
-    ("TestOverlayEmpty.xml",   132, 162),
+    ("TestOverlayEmpty.xml",   294,   0),
     ("TestOverlayLA.xml",       16,   0),
     ("TestOverlayLL.xml",       25,   0),
     ("TestOverlayMisc.xml",      0,   5),
-    ("TestOverlayPA.xml",        0,   9),
-    ("TestOverlayPL.xml",        0,  20),
-    ("TestOverlayPP.xml",        0,  29),
+    ("TestOverlayPA.xml",        9,   0),
+    ("TestOverlayPL.xml",       20,   0),
+    ("TestOverlayPP.xml",       29,   0),
 ]
 
 @testset "JTS overlay XML conformance suite" begin
@@ -87,21 +88,14 @@ const OVERLAY_EXPECTED_COUNTS = [
     end
     @test sum(s -> s.n_fail, summary.per_file) == 0
     for (s, (file, n_pass, n_skip)) in zip(summary.per_file, OVERLAY_EXPECTED_COUNTS)
-        @test s.file == file
-        if POINT_INPUTS_SUPPORTED
-            #-- point support turns skipped ops into executed ones; the pins
-            #-- become lower bounds rather than going stale.
-            @test (s.file, s.n_pass >= n_pass) == (file, true)
-        else
-            @test (s.file, s.n_pass) == (file, n_pass)
-            @test (s.file, s.n_skip) == (file, n_skip)
-        end
+        @test (s.file, s.n_pass, s.n_skip) == (file, n_pass, n_skip)
     end
-    #-- every skip is one of the four accounted-for kinds
-    for sk in summary.skipped
-        @test sk.reason in ("in skiplist", "point input unsupported",
-            "geometry collection input unsupported", "binary op without a B geometry")
-    end
+    #-- every skip is one of the accounted-for kinds. Point inputs are supported
+    #-- on this branch, so "point input unsupported" is no longer among them —
+    #-- if it reappears, the probe above has gone false and the pins are stale.
+    @test Set(sk.reason for sk in summary.skipped) ⊆
+        Set(("in skiplist", "geometry collection input unsupported",
+             "binary op without a B geometry"))
 end
 
 # ---------------------------------------------------------------------------
@@ -158,10 +152,10 @@ end
     ours2 = overlay_to_lg(go_overlay(:union, a2, b2))
     geos2 = LG.union(overlay_to_lg(a2), overlay_to_lg(b2))
     @test LG.isValid(ours2)
+    #-- `equals` to GEOS plus GEOS ≠ the XML gives ours ≠ the XML and the equal
+    #-- symmetric differences, so neither is asserted separately
     @test LG.equals(ours2, geos2)
     @test !LG.equals(geos2, want2)
-    @test isapprox(LG.area(LG.symmetricDifference(ours2, want2)),
-                   LG.area(LG.symmetricDifference(geos2, want2)); rtol = 1e-12)
 end
 
 # ---------------------------------------------------------------------------
@@ -183,6 +177,17 @@ end
 lg_area(g) = LG.area(overlay_to_lg(g))
 lg_valid(g) = try LG.isValid(overlay_to_lg(g)) catch; false end
 
+# How a robust-corpus case failed, from the runner's own detail string. The
+# ledger below pins *which* cases fail; without this it does not pin *how*, and
+# a ledgered case that silently traded its invalid-geometry defect for a 146 %
+# area error would keep the same membership and stay green.
+function defect_kind(detail)
+    startswith(detail, "invalid result geometry") && return :invalid
+    startswith(detail, "area identity residual") && return :area
+    startswith(detail, "ERROR") && return :error
+    return :unknown
+end
+
 @testset "JTS robust overlay corpus — area identities + validity" begin
     files = _xml_files(JTS_ROBUST_DIR)
     @test length(files) == 44
@@ -203,9 +208,16 @@ lg_valid(g) = try LG.isValid(overlay_to_lg(g)) catch; false end
     end
     @test isempty(newly_failing)
     @test isempty(newly_passing)
+    #-- ...and every one of them fails in the ledgered WAY. All 50 entries are
+    #-- the collapsed-ring class, which shows up as an invalid result geometry;
+    #-- an area identity residual or a thrown error on a ledgered case is a
+    #-- different defect wearing the same name.
+    @test all(f -> defect_kind(f.detail) === :invalid, summary.failures)
+    #-- the area identities hold on every case that is NOT ledgered, and hold
+    #-- tightly: measured worst is 1.3e-11, so this leaves ~75x of headroom
+    @test summary.worst.rel <= 1e-9
     n_run = sum(s -> s.n_pass + s.n_fail, summary.per_file)
     @test n_run >= 60          # the corpus must not silently shrink
-    @test length(summary.skipped) == sum(s -> s.n_skip, summary.per_file)
 end
 
 # ---------------------------------------------------------------------------

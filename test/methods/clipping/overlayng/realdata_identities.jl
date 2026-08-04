@@ -14,6 +14,12 @@
 #   4. validity       every result is `isValid` (planar; the spherical results
 #                     get the coordinate-sanity + non-negative-area check that
 #                     is meaningful without a spherical validity oracle)
+#   5. dimension      on the plane only, each result's per-dimension signature
+#                     agrees with GEOS's. Identities 1-3 are all areal, so a
+#                     result that silently drops its 1-D components (a shared
+#                     border) or its 0-D ones (a corner touch) satisfies every
+#                     one of them — neighbouring countries meet along borders,
+#                     so that is the common case here, not an exotic one.
 #
 # Identity 1 is a machine-precision gate since the signed-area fix `69e416484`:
 # these are lon/lat coordinates (|x| ≤ 180), so the shoelace has no
@@ -28,30 +34,38 @@
 # Env knobs (all optional):
 #   GO_OVERLAYNG_NE_PAIRS   neighbour pairs per resolution (default 60)
 #   GO_OVERLAYNG_NE10       set to 1 to widen the 10 m sweep to the full budget
-#   GO_OVERLAYNG_SPH_PAIRS  spherical neighbour pairs (default 30; spherical
-#                           overlay is ~5x the cost of planar)
+#   GO_OVERLAYNG_SPH_PAIRS  spherical neighbour pairs (default 8; spherical
+#                           overlay is ~5x the cost of planar, and
+#                           `s2_differential.jl` sweeps the same 30 pairs
+#                           against a real oracle — this file's spherical run
+#                           exists to keep *some* spherical real-data coverage
+#                           on a platform without `S2Geography_jll`)
+#   GO_REQUIRE_DATA         set to 1 to turn a missing dataset into a failure
+#                           instead of a skip
 
 using Test
-import GeometryOps as GO
-import GeoInterface as GI
-import LibGEOS as LG
+include(joinpath(@__DIR__, "common.jl"))
 
-const EX = GO.True()
 const NE_PAIRS = something(tryparse(Int, get(ENV, "GO_OVERLAYNG_NE_PAIRS", "")), 60)
-const SPH_PAIRS = something(tryparse(Int, get(ENV, "GO_OVERLAYNG_SPH_PAIRS", "")), 30)
+const SPH_PAIRS = something(tryparse(Int, get(ENV, "GO_OVERLAYNG_SPH_PAIRS", "")), 8)
 const NE10_WIDE = get(ENV, "GO_OVERLAYNG_NE10", "") == "1"
 
-ovl(m, op, a, b) = GO._overlay_ng(m, op, a, b; exact = EX)
-const OPS = (GO.OVERLAY_INTERSECTION, GO.OVERLAY_UNION, GO.OVERLAY_DIFFERENCE, GO.OVERLAY_SYMDIFFERENCE)
-
-function result_to_lg(g)
-    t = GI.trait(g)
-    t isa GI.PointTrait && return LG.Point(Float64(GI.x(g)), Float64(GI.y(g)))
-    t isa GI.GeometryCollectionTrait &&
-        return LG.GeometryCollection(LG.Geometry[result_to_lg(s) for s in GI.getgeom(g)])
-    GI.npoint(g) == 0 && return LG.readgeom("GEOMETRYCOLLECTION EMPTY")
-    return GI.convert(LG, g)
+# A missing optional dataset records a skip by default; under `GO_REQUIRE_DATA=1`
+# (which CI sets) it fails instead. Without this gate a runner that has lost its
+# Natural Earth cache reports the whole file as passing having run zero engine
+# assertions — which is how the stale `@test_broken` pins described below
+# survived for as long as they did.
+const REQUIRE_DATA = get(ENV, "GO_REQUIRE_DATA", "") == "1"
+function missing_data(what)
+    if REQUIRE_DATA
+        println("REQUIRED DATASET MISSING: ", what)
+        @test false
+    else
+        @test_skip what
+    end
 end
+
+ovl(m, op, a, b) = GO._overlay_ng(m, op, a, b; exact = EX)
 
 function all_finite(g)
     t = GI.trait(g)
@@ -132,15 +146,30 @@ function identity_sweep(m, A, B, label; rtol = 1e-12)
             return (false, "symdiff-as-two-differences residual $(rel(aSD - (aDab + aDba))) at $label")
         rel(aSD - (aU - aI)) <= rtol ||
             return (false, "symdiff-as-union-minus-intersection residual $(rel(aSD - (aU - aI))) at $label")
-        #-- 4. validity
-        for (nm, g) in (("intersection", I), ("union", U), ("difference", Dab),
-                        ("reverse difference", Dba), ("symdifference", SD))
+        #-- 4. validity, and 5. dimension
+        for (nm, g, geos) in (("intersection", I, () -> geos_op(:intersection, A, B)),
+                              ("union", U, () -> geos_op(:union, A, B)),
+                              ("difference", Dab, () -> geos_op(:difference, A, B)),
+                              ("reverse difference", Dba, () -> geos_op(:difference, B, A)),
+                              ("symdifference", SD, () -> geos_op(:symdifference, A, B)))
             all_finite(g) || return (false, "non-finite coordinate in $nm at $label")
-            GO.area(m, g) >= -1e-12 || return (false, "negative area from $nm at $label")
             if m isa GO.Planar
-                LG.isValid(result_to_lg(g)) ||
+                lg = result_to_lg(g)
+                LG.isValid(lg) ||
                     return (false, "invalid $nm result at $label: " *
-                        first(LG.isValidReason(result_to_lg(g)), 80))
+                        first(LG.isValidReason(lg), 80))
+                #-- the only check in this file that can see a dropped line or
+                #-- point: everything above reduces the result to an area, and
+                #-- neighbouring countries meet along shared borders, so 1-D
+                #-- intersection content is the common case here
+                signatures_agree(m, lg, geos()) ||
+                    return (false, "$nm dimension signature $(dim_signature(m, lg)) != " *
+                        "GEOS $(dim_signature(m, geos())) at $label")
+            else
+                #-- `GO.area(Planar())` is `abs`-wrapped, so non-negativity only
+                #-- has teeth on the sphere, where a ring orientation surviving
+                #-- into the result can genuinely come back negative
+                GO.area(m, g) >= -1e-12 || return (false, "negative area from $nm at $label")
             end
         end
         return (true, "")
@@ -162,15 +191,14 @@ end
 include(joinpath(@__DIR__, "..", "..", "..", "data", "natural_earth_pairs.jl"))
 
 # Nothing is pinned: every pair of every sweep must satisfy every identity on
-# both manifolds. `Spherical NE10 Azerbaijan x Russia` and
-# `Spherical NE10 Belarus x Russia` were pinned `@test_broken` here for the
-# antimeridian seam defect (`OverlayTopologyError: side location conflict` from
-# the 5 of Russia's 214 polygons that reach lon ±180). Both clear all four
-# identities now, in both argument orders — conservation 5.3e-15 / 5.6e-15,
-# reconstruction 9.9e-18 / 1.6e-17, all four ops completing. They only ever ran
-# in the widened sweep (GO_OVERLAYNG_NE10=1 with a large GO_OVERLAYNG_NE_PAIRS),
-# never in the CI default, which is why the stale pins were never reported as
-# unexpectedly passing.
+# both manifolds. Two pairs used to be — `Spherical NE10 Azerbaijan x Russia`
+# and `Spherical NE10 Belarus x Russia`, for the antimeridian seam defect
+# (`OverlayTopologyError: side location conflict` from the 5 of Russia's 214
+# polygons that reach lon ±180) — and both cleared long before anyone noticed,
+# because they only ever ran in the widened sweep (GO_OVERLAYNG_NE10=1 with a
+# large GO_OVERLAYNG_NE_PAIRS) and a `@test_broken` that never executes is never
+# reported as unexpectedly passing. That is the argument for `GO_REQUIRE_DATA`
+# above: a pin outside the default sweep is a pin nobody is reading.
 function run_sweep(m, label, cases; rtol = 1e-12)
     mname = string(typeof(m).name.name)
     for (name, A, B) in cases
@@ -219,7 +247,7 @@ if NE_AVAILABLE
 
     @testset "Natural Earth 10m — overlay identities" begin
         if !ne10_ok
-            @test_skip "Natural Earth 10m unavailable"
+            missing_data("Natural Earth 10m")
         else
             #-- 10 m rings are one to two orders of magnitude denser, so the CI
             #-- default is a small slice; GO_OVERLAYNG_NE10=1 widens it.
@@ -234,37 +262,8 @@ if NE_AVAILABLE
             end
         end
     end
-end
-
-# GADM (full-resolution national boundaries) is only reachable from the docs
-# environment — it is not a test dependency, and its GeoPackages download on
-# first use. Gated exactly like the Natural Earth block: available or skipped,
-# never failing.
-@testset "GADM — overlay identities" begin
-    gadm_ok = try
-        import GADM
-        true
-    catch err
-        @info "GADM overlay identity sweep skipped (GADM.jl unavailable in the test environment)" err
-        false
-    end
-    if !gadm_ok
-        @test_skip "GADM unavailable"
-    else
-        cases = Any[]
-        for (x, y) in (("EGY", "SDN"), ("FRA", "ITA"), ("GRC", "TUR"))
-            try
-                A = GO.tuples(GI.getgeom(GADM.get(x), 1))
-                B = GO.tuples(GI.getgeom(GADM.get(y), 1))
-                push!(cases, ("$x x $y", A, B))
-            catch err
-                @info "GADM pair unavailable" x y err
-            end
-        end
-        @test !isempty(cases)
-        @testset "planar" begin run_sweep(GO.Planar(), "GADM", cases) end
-        @testset "spherical" begin run_sweep(GO.Spherical(), "GADM", cases) end
-    end
+else
+    @testset "Natural Earth — overlay identities" begin missing_data("Natural Earth") end
 end
 
 println("Worst overlay conservation residual observed (relative to area(A)+area(B)):")

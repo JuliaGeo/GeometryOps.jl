@@ -22,7 +22,12 @@
 #   i.e. every emitted vertex may sit up to a few ulps off the exact
 #   arrangement, and a boundary of length L displaced by δ sweeps area ≤ L·δ.
 #   Anything outside the band is a genuine divergence and fails the run.
-# 3. Independently of the comparison, every result must be `LG.isValid`.
+# 3. The **per-dimension signature** (`common.jl`), because step 2 is an area and
+#   an area cannot see a missing line. A result inside the band is only benign if
+#   its areal, lineal and punctual content all match GEOS's. `shared_boundary_pair`
+#   produces an abutting pair whose intersection is a LINESTRING in 50 of 50
+#   draws, so this is the common case here and not a corner.
+# 4. Independently of the comparison, every result must be `LG.isValid`.
 #
 # ## Known open defects
 #
@@ -59,10 +64,7 @@
 
 using Test
 using Random
-import GeometryOps as GO
-import GeoInterface as GI
-import LibGEOS as LG
-
+include(joinpath(@__DIR__, "common.jl"))
 include(joinpath(@__DIR__, "..", "..", "..", "data", "polygon_generation.jl"))
 
 VersionNumber(LG.GEOS_VERSION) >= v"3.9" ||
@@ -72,33 +74,10 @@ const FUZZ_N = something(tryparse(Int, get(ENV, "GO_OVERLAYNG_FUZZ_N", "")), 400
 # How many known-defect instances to print in full (they are all the same class;
 # a handful of reproducers is enough, and a deep sweep would drown the log).
 const FUZZ_BROKEN_REPORTS = something(tryparse(Int, get(ENV, "GO_OVERLAYNG_FUZZ_REPORTS", "")), 3)
-const EX = GO.True()
-
-const OPS = (:intersection, :union, :difference, :symdifference)
-const OPCODE = Dict(:intersection => GO.OVERLAY_INTERSECTION, :union => GO.OVERLAY_UNION,
-                    :difference => GO.OVERLAY_DIFFERENCE, :symdifference => GO.OVERLAY_SYMDIFFERENCE)
-
-to_lg(g) = GI.convert(LG, g)
-geos_op(op, la, lb) =
-    op === :intersection ? LG.intersection(la, lb) :
-    op === :union ? LG.union(la, lb) :
-    op === :difference ? LG.difference(la, lb) : LG.symmetricDifference(la, lb)
 
 # Full-precision WKT, so a printed divergence reproduces the exact doubles.
 const WKT_WRITER = LG.WKTWriter(LG.get_global_context(); trim = true, roundingprecision = 17)
 full_wkt(g) = LG.writegeom(g isa LG.AbstractGeometry ? g : to_lg(g), WKT_WRITER, LG.get_global_context())
-
-# Our result → LibGEOS. Empty results become one canonical empty geometry:
-# GEOS `equals` is true between any two empties, and the *type* of an empty
-# overlay result is what `xml_suite.jl`'s TestOverlayEmpty run checks.
-function result_to_lg(g)
-    t = GI.trait(g)
-    t isa GI.PointTrait && return LG.Point(Float64(GI.x(g)), Float64(GI.y(g)))
-    t isa GI.GeometryCollectionTrait &&
-        return LG.GeometryCollection(LG.Geometry[result_to_lg(s) for s in GI.getgeom(g)])
-    GI.npoint(g) == 0 && return LG.readgeom("GEOMETRYCOLLECTION EMPTY")
-    return to_lg(g)
-end
 
 max_abs_coord(g) = maximum(p -> max(abs(GI.x(p)), abs(GI.y(p))), GI.getpoint(g); init = 0.0)
 
@@ -129,7 +108,7 @@ const CENSUS = FuzzCensus()
 function check_pair(a, b, label)
     la, lb = to_lg(a), to_lg(b)
     mag = max(max_abs_coord(a), max_abs_coord(b))
-    for op in OPS
+    for op in OP_SYMS
         CENSUS.n_op += 1
         geos = geos_op(op, la, lb)
         ours = try
@@ -183,7 +162,12 @@ function check_pair(a, b, label)
                         "\n  ours = ", first(full_wkt(lo), 400))
             end
             @test_broken false
-        elseif within_band
+        elseif within_band && signatures_agree(GO.Planar(), lo, geos)
+            #-- the signature check is what makes "benign" mean benign. `sd` is an
+            #-- AREA, so a result that silently drops its 1-D components scores a
+            #-- symmetric difference of exactly zero and lands here — the whole
+            #-- 1600-op sweep stayed green under a `_build_lines -> []` mutation,
+            #-- with the benign count moving 4 -> 26 and nothing reading it.
             CENSUS.n_benign += 1
             if sd > CENSUS.worst_benign
                 CENSUS.worst_benign = sd
@@ -193,7 +177,9 @@ function check_pair(a, b, label)
             @test true
         else
             CENSUS.n_divergent += 1
-            println("FUZZ DIVERGENCE [$label/$op] symdiff area $sd > band $band, valid=$valid",
+            println("FUZZ DIVERGENCE [$label/$op] symdiff area $sd vs band $band, valid=$valid, ",
+                    "dims ours=", dim_signature(GO.Planar(), lo),
+                    " geos=", dim_signature(GO.Planar(), geos),
                     "\n  A    = ", full_wkt(la), "\n  B    = ", full_wkt(lb),
                     "\n  ours = ", first(full_wkt(lo), 600),
                     "\n  geos = ", first(full_wkt(geos), 600))
@@ -207,8 +193,20 @@ end
 #
 # Each returns a pair of VALID geometries (the engine contracts on valid input,
 # design §2.2), and each deliberately targets a shape that breaks naive engines.
+#
+# Several draw deliberately degenerate shapes, so a draw can come out invalid and
+# every such generator falls back to a simpler pair. A fallback is a generator
+# NOT producing the shape it exists to produce, so each one is counted and the
+# counts are asserted after the sweep. That accounting is not hypothetical:
+# `shared_boundary_pair` fell back on 100 % of draws for its whole life — its B
+# ring was never closed, deterministically, for every draw — and the suite stayed
+# green throughout because `grid_rect_pair` silently stood in for it. A generator
+# that never runs is indistinguishable from one that always passes.
 
 lg_valid(g) = try LG.isValid(to_lg(g)) catch; false end
+
+const FALLBACKS = Dict{String, Int}()
+fallback!(nm) = (FALLBACKS[nm] = get(FALLBACKS, nm, 0) + 1)
 
 function random_poly(rng)
     x, y = 4rand(rng) - 2, 4rand(rng) - 2
@@ -252,10 +250,14 @@ function shared_boundary_pair(rng)
     chain = [(Float64(x0 + w), y) for y in ys]
     ra = vcat([(Float64(x0), Float64(y0))], chain, [(Float64(x0), Float64(y0 + h)), (Float64(x0), Float64(y0))])
     w2 = rand(rng, 1:5)
-    rb = vcat(reverse(chain), [(Float64(x0 + w + w2), Float64(y0 + h)),
-        (Float64(x0 + w + w2), Float64(y0)), (Float64(x0 + w), Float64(y0))])
+    #-- down the shared chain, then bottom-right, top-right, and back to the
+    #-- chain's own first vertex — CCW, and CLOSED, which it was not before
+    down = reverse(chain)
+    rb = vcat(down, [(Float64(x0 + w + w2), Float64(y0)),
+        (Float64(x0 + w + w2), Float64(y0 + h)), first(down)])
     a, b = GI.Polygon([ra]), GI.Polygon([rb])
-    return (lg_valid(a) && lg_valid(b)) ? (a, b) : grid_rect_pair(rng)
+    (lg_valid(a) && lg_valid(b)) && return (a, b)
+    fallback!("shared boundaries"); return grid_rect_pair(rng)
 end
 
 # A polygon whose hole reaches its own shell, against a rectangle that cuts
@@ -280,7 +282,8 @@ function hole_touching_shell_pair(rng)
                     [(1.0, ty), (s - 2, ty - 1), (s - 2, ty + 1), (1.0, ty)]])
     end
     b = rect(rand(rng, -3:2), rand(rng, -3:2), rand(rng, 2:8), rand(rng, 2:8))
-    return lg_valid(a) ? (a, b) : grid_rect_pair(rng)
+    lg_valid(a) && return (a, b)
+    fallback!("holes touching shells"); return grid_rect_pair(rng)
 end
 
 # Many-island multipolygon against a shifted copy of itself (the France/355-island
@@ -311,7 +314,9 @@ function near_collinear_pair(rng)
     a = GI.Polygon([vcat(top, [(x0 + dx, y0 + dy - 1.0), (x0, y0 - 1.0)], [top[1]])])
     bot = [(x0 + t * dx, y0 + t * dy + jitter()) for t in range(0, 1; length = n)]
     b = GI.Polygon([vcat(reverse(bot), [(x0, y0 + 1.0), (x0 + dx, y0 + dy + 1.0)], [bot[end]])])
-    return (lg_valid(a) && lg_valid(b)) ? (a, b) : (random_valid_polygon(rng), random_valid_polygon(rng))
+    (lg_valid(a) && lg_valid(b)) && return (a, b)
+    fallback!("clustered near-collinear")
+    return (random_valid_polygon(rng), random_valid_polygon(rng))
 end
 
 # Near-degenerate slivers: a triangle whose three vertices are almost collinear,
@@ -323,7 +328,9 @@ function sliver_pair(rng)
     a = GI.Polygon([[(x0, y0), (x0 + rand(rng), y0 + rand(rng)),
                      (x0 + eps_, y0 + eps_ * (1 + rand(rng))), (x0, y0)]])
     b = rect(round(x0) - rand(rng, 1:20), round(y0) - rand(rng, 1:20), rand(rng, 5:40), rand(rng, 5:40))
-    return lg_valid(a) ? (a, b) : (random_valid_polygon(rng), random_valid_polygon(rng))
+    lg_valid(a) && return (a, b)
+    fallback!("near-degenerate slivers")
+    return (random_valid_polygon(rng), random_valid_polygon(rng))
 end
 
 # Rectangles whose shared edge is off by 1–3 ulps: crossing/touch decisions land
@@ -336,7 +343,8 @@ function ulp_pair(rng)
     xe = nudge(rng, x0 + w)
     ylo, yhi = nudge(rng, y0), nudge(rng, y0 + h)
     b = GI.Polygon([[(xe, ylo), (xe + w, ylo), (xe + w, yhi), (xe, yhi), (xe, ylo)]])
-    return (lg_valid(a) && lg_valid(b)) ? (a, b) : grid_rect_pair(rng)
+    (lg_valid(a) && lg_valid(b)) && return (a, b)
+    fallback!("ulp-offset shared edges"); return grid_rect_pair(rng)
 end
 
 const GENERATORS = [
@@ -361,6 +369,25 @@ const CASES_PER_GENERATOR = max(1, cld(FUZZ_N, length(GENERATORS)))
                 check_pair(a, b, name)
             end
         end
+    end
+end
+
+# The census was printed and never read. Both numbers below move under defects
+# the per-op checks pass: dropping every result line takes `n_benign` 4 -> 26
+# without a single op failing, and a generator that stops producing its shape
+# shows up nowhere else at all.
+@testset "fuzz census" begin
+    @test CENSUS.n_op == 4 * CASES_PER_GENERATOR * length(GENERATORS)
+    @test CENSUS.n_divergent == 0
+    @test CENSUS.n_benign <= 8              # measured control: 4
+    #-- generators that should always produce their own shape
+    for nm in ("shared boundaries", "clustered near-collinear", "ulp-offset shared edges")
+        @test get(FALLBACKS, nm, 0) == 0
+    end
+    #-- these two draw deliberately degenerate shapes, so some draws are
+    #-- legitimately invalid input and fall back; they must not fall back often
+    for nm in ("holes touching shells", "near-degenerate slivers")
+        @test get(FALLBACKS, nm, 0) <= CASES_PER_GENERATOR ÷ 4
     end
 end
 
@@ -391,7 +418,7 @@ end
     B = GO.tuples(LG.readgeom("POLYGON ((0 1, 3 1, 3 9, 0 9, 0 1))"))
     @test LG.isValid(to_lg(A))       # the input satisfies the engine's contract
     @test LG.isValid(to_lg(B))
-    for op in OPS
+    for op in OP_SYMS
         r = GO._overlay_ng(GO.Planar(), OPCODE[op], A, B; exact = EX)
         @test LG.isValid(result_to_lg(r))
         @test LG.equals(result_to_lg(r), geos_op(op, to_lg(A), to_lg(B)))

@@ -16,18 +16,10 @@
 # GEOS `equals` cannot distinguish empties of different dimension.
 
 using Test
-import GeometryOps as GO
-import GeoInterface as GI
-import LibGEOS as LG
+include(joinpath(@__DIR__, "common.jl"))
 import GeometryOps: Planar, Spherical, True
 
-const EX = True()
-
-lgc(g) = GI.convert(LG, g)
-wkt(s) = LG.readgeom(s)
-
-const OPS = (GO.OVERLAY_INTERSECTION, GO.OVERLAY_UNION,
-             GO.OVERLAY_DIFFERENCE, GO.OVERLAY_SYMDIFFERENCE)
+const OPS = OP_CODES
 
 ov(m, op, a, b) = GO._overlay_ng(m, op, a, b; exact = EX)
 
@@ -49,66 +41,76 @@ function is_empty_dim(r, dim::Integer)
 end
 
 # ---------------------------------------------------------------------------
-# 1. Ported JTS OverlayNGPointsTest (point × point)
+# 1 & 2. Ported JTS OverlayNGPointsTest / OverlayNGMixedPointsTest
 # ---------------------------------------------------------------------------
+#
+# Table-driven: each row is one JTS case, and the name travels as data so a
+# failure still says which case it was. `want` is the expected WKT, compared
+# topologically, or an `Int` meaning "an empty result of that dimension".
 #
 # SKIPPED, with reasons (fixed-precision cases that cannot apply to a
 # floating-only, non-snapping engine — design §0):
 #   testDisjointPointsRoundedIntersection — POINT(10.1 10) ∩ POINT(10 10.1) is
 #     only nonempty after rounding both to the unit grid.
+#   testPointLineIntersectionPrec — its expectation ("result is empty because
+#     Line is not rounded") is entirely an artifact of the fixed precision
+#     model; at floating precision the point is simply not on the line, which
+#     `mixed-dimension symmetry` covers.
 # testSimpleMergeIntersection is kept, restated at floating precision (the
 # extra A points simply do not participate).
+#
+# COVERED ELSEWHERE (ported, then found to be bit-identical calls to a case that
+# is still here — deleted rather than duplicated, with the survivor named):
+#   SimpleUnion             -> EmptyInputUnion, same op, same merge path
+#   EmptyInputIntersection  -> EmptyIntersection (an empty B and a non-matching
+#                              B take the same `_ov_isempty` short circuit)
+#   SimpleLineIntersection  -> LinePointInOutIntersection, which is the same
+#                              call with one extra off-line point
+#   SimpleLineUnion / SimpleLineDifference / SimpleLineSymDifference
+#                           -> `mixed-dimension symmetry`, which runs all three
+#                              ops on the same line/point pair in both orders
+#   PolygonInsideIntersection -> `mixed-dimension symmetry` (PG, Pin) and
+#                              `boundary points count as covered`
+#   PolygonDisjointIntersection -> never reached `_find_points` at all: the
+#                              point is envelope-disjoint from the polygon, so
+#                              `_empty_result_short_circuit` answers first
 
-@testset "JTS OverlayNGPointsTest (point × point)" begin
-    @testset "SimpleIntersection" begin
-        a = wkt("MULTIPOINT ((1 1), (2 1))"); b = wkt("POINT (2 1)")
-        @test eqw(ov(Planar(), GO.OVERLAY_INTERSECTION, a, b), "POINT (2 1)")
+const POINT_CASES = (
+    #  name                          op                       A                                                  B                                              want
+    ("SimpleIntersection",           GO.OVERLAY_INTERSECTION,  "MULTIPOINT ((1 1), (2 1))",                        "POINT (2 1)",                                 "POINT (2 1)"),
+    ("SimpleMergeIntersection",      GO.OVERLAY_INTERSECTION,  "MULTIPOINT ((1 1), (1.5 1.1), (2 1), (2.1 1.1))",  "POINT (2 1)",                                 "POINT (2 1)"),
+    ("SimpleDifference",             GO.OVERLAY_DIFFERENCE,    "MULTIPOINT ((1 1), (2 1))",                        "POINT (2 1)",                                 "POINT (1 1)"),
+    ("SimpleSymDifference",          GO.OVERLAY_SYMDIFFERENCE, "MULTIPOINT ((1 2), (1 1), (2 2), (2 1))",          "MULTIPOINT ((2 2), (2 1), (3 2), (3 1))",     "MULTIPOINT ((1 2), (1 1), (3 2), (3 1))"),
+    ("SimpleFloatUnion",             GO.OVERLAY_UNION,         "MULTIPOINT ((1 1), (1.5 1.1), (2 1), (2.1 1.1))",  "MULTIPOINT ((1.5 1.1), (2 1), (2 1.2))",      "MULTIPOINT ((1 1), (1.5 1.1), (2 1), (2 1.2), (2.1 1.1))"),
+    ("EmptyIntersection",            GO.OVERLAY_INTERSECTION,  "MULTIPOINT ((1 1), (3 1))",                        "POINT (2 1)",                                 0),
+    ("EmptyInputUnion",              GO.OVERLAY_UNION,         "MULTIPOINT ((1 1), (3 1))",                        "POINT EMPTY",                                 "MULTIPOINT ((1 1), (3 1))"),
+    ("EmptyDifference",              GO.OVERLAY_DIFFERENCE,    "MULTIPOINT ((1 1), (3 1))",                        "MULTIPOINT ((1 1), (2 1), (3 1))",            0),
+    ("LinePointInOutIntersection",   GO.OVERLAY_INTERSECTION,  "LINESTRING (1 1, 9 1)",                            "MULTIPOINT ((5 1), (15 1))",                  "POINT (5 1)"),
+    ("PointEmptyLinestringUnion",    GO.OVERLAY_UNION,         "LINESTRING EMPTY",                                 "POINT (10 10)",                               "POINT (10 10)"),
+    ("LinestringEmptyPointUnion",    GO.OVERLAY_UNION,         "LINESTRING (10 10, 20 20)",                        "POINT EMPTY",                                 "LINESTRING (10 10, 20 20)"),
+)
+
+@testset "JTS OverlayNGPointsTest / OverlayNGMixedPointsTest" begin
+    for (name, op, a, b, want) in POINT_CASES
+        r = ov(Planar(), op, wkt(a), wkt(b))
+        ok = want isa Integer ? is_empty_dim(r, want) : eqw(r, want)
+        @test (name, ok) == (name, true)
     end
-    @testset "SimpleMergeIntersection (floating)" begin
-        a = wkt("MULTIPOINT ((1 1), (1.5 1.1), (2 1), (2.1 1.1))"); b = wkt("POINT (2 1)")
-        @test eqw(ov(Planar(), GO.OVERLAY_INTERSECTION, a, b), "POINT (2 1)")
-    end
-    @testset "SimpleUnion" begin
-        a = wkt("MULTIPOINT ((1 1), (2 1))"); b = wkt("POINT (2 1)")
-        @test eqw(ov(Planar(), GO.OVERLAY_UNION, a, b), "MULTIPOINT ((1 1), (2 1))")
-    end
-    @testset "SimpleDifference" begin
-        a = wkt("MULTIPOINT ((1 1), (2 1))"); b = wkt("POINT (2 1)")
-        @test eqw(ov(Planar(), GO.OVERLAY_DIFFERENCE, a, b), "POINT (1 1)")
-    end
-    @testset "SimpleSymDifference" begin
-        a = wkt("MULTIPOINT ((1 2), (1 1), (2 2), (2 1))")
-        b = wkt("MULTIPOINT ((2 2), (2 1), (3 2), (3 1))")
-        @test eqw(ov(Planar(), GO.OVERLAY_SYMDIFFERENCE, a, b),
-                  "MULTIPOINT ((1 2), (1 1), (3 2), (3 1))")
-    end
-    @testset "SimpleFloatUnion" begin
-        a = wkt("MULTIPOINT ((1 1), (1.5 1.1), (2 1), (2.1 1.1))")
-        b = wkt("MULTIPOINT ((1.5 1.1), (2 1), (2 1.2))")
-        @test eqw(ov(Planar(), GO.OVERLAY_UNION, a, b),
-                  "MULTIPOINT ((1 1), (1.5 1.1), (2 1), (2 1.2), (2.1 1.1))")
-    end
-    @testset "EmptyIntersection" begin
-        a = wkt("MULTIPOINT ((1 1), (3 1))"); b = wkt("POINT (2 1)")
-        @test is_empty_dim(ov(Planar(), GO.OVERLAY_INTERSECTION, a, b), 0)
-    end
-    @testset "EmptyInputIntersection" begin
-        a = wkt("MULTIPOINT ((1 1), (3 1))"); b = wkt("POINT EMPTY")
-        @test is_empty_dim(ov(Planar(), GO.OVERLAY_INTERSECTION, a, b), 0)
-    end
-    @testset "EmptyInputUnion" begin
-        a = wkt("MULTIPOINT ((1 1), (3 1))"); b = wkt("POINT EMPTY")
-        @test eqw(ov(Planar(), GO.OVERLAY_UNION, a, b), "MULTIPOINT ((1 1), (3 1))")
-    end
-    @testset "EmptyDifference" begin
-        a = wkt("MULTIPOINT ((1 1), (3 1))"); b = wkt("MULTIPOINT ((1 1), (2 1), (3 1))")
-        @test is_empty_dim(ov(Planar(), GO.OVERLAY_DIFFERENCE, a, b), 0)
+
+    #-- kept out of the table: it asserts the result's TYPE as well as its points
+    @testset "LinePointSymDifference" begin
+        r = ov(Planar(), GO.OVERLAY_SYMDIFFERENCE, wkt("LINESTRING (1 1, 9 1)"), wkt("POINT (15 1)"))
+        @test GI.trait(r) isa GI.GeometryCollectionTrait
+        @test eqw(r, "GEOMETRYCOLLECTION (POINT (15 1), LINESTRING (1 1, 9 1))")
     end
 end
 
 @testset "point merge and output order" begin
     #-- duplicates merge; the first occurrence supplies the output coordinate,
-    #-- and output order is input order (A then the B points not in A)
+    #-- and output order is input order (A then the B points not in A). The
+    #-- planar `(1 1)` duplicate cannot show first-vs-last provenance — both
+    #-- occurrences have the same coordinate — so the spherical asserts below,
+    #-- where the two occurrences differ in the last bits, are what pin it.
     a = wkt("MULTIPOINT ((1 1), (2 1), (1 1))")
     b = wkt("MULTIPOINT ((2 1), (3 1))")
     r = ov(Planar(), GO.OVERLAY_UNION, a, b)
@@ -120,58 +122,14 @@ end
     #-- signed zeros identify (kernel-point normalization)
     @test npts(ov(Planar(), GO.OVERLAY_INTERSECTION,
                        GI.Point((-0.0, 0.0)), GI.Point((0.0, -0.0)))) == 1
-end
-
-# ---------------------------------------------------------------------------
-# 2. Ported JTS OverlayNGMixedPointsTest (point × line, point × area)
-# ---------------------------------------------------------------------------
-#
-# SKIPPED, with reasons:
-#   testPointLineIntersectionPrec — its expectation ("result is empty because
-#     Line is not rounded") is entirely an artifact of the fixed precision
-#     model; at floating precision the point is simply not on the line, which
-#     the "point off the line" case below covers.
-
-@testset "JTS OverlayNGMixedPointsTest (mixed dimensions)" begin
-    L = wkt("LINESTRING (1 1, 9 1)")
-    P = wkt("POINT (5 1)")
-    @testset "SimpleLineIntersection" begin
-        @test eqw(ov(Planar(), GO.OVERLAY_INTERSECTION, L, P), "POINT (5 1)")
-    end
-    @testset "LinePointInOutIntersection" begin
-        b = wkt("MULTIPOINT ((5 1), (15 1))")
-        @test eqw(ov(Planar(), GO.OVERLAY_INTERSECTION, L, b), "POINT (5 1)")
-    end
-    @testset "SimpleLineUnion" begin
-        @test eqw(ov(Planar(), GO.OVERLAY_UNION, L, P), "LINESTRING (1 1, 9 1)")
-    end
-    @testset "SimpleLineDifference" begin
-        @test eqw(ov(Planar(), GO.OVERLAY_DIFFERENCE, L, P), "LINESTRING (1 1, 9 1)")
-    end
-    @testset "SimpleLineSymDifference" begin
-        @test eqw(ov(Planar(), GO.OVERLAY_SYMDIFFERENCE, L, P), "LINESTRING (1 1, 9 1)")
-    end
-    @testset "LinePointSymDifference" begin
-        r = ov(Planar(), GO.OVERLAY_SYMDIFFERENCE, L, wkt("POINT (15 1)"))
-        @test GI.trait(r) isa GI.GeometryCollectionTrait
-        @test eqw(r, "GEOMETRYCOLLECTION (POINT (15 1), LINESTRING (1 1, 9 1))")
-    end
-    @testset "PolygonInsideIntersection" begin
-        a = wkt("POLYGON ((4 2, 6 2, 6 0, 4 0, 4 2))")
-        @test eqw(ov(Planar(), GO.OVERLAY_INTERSECTION, a, P), "POINT (5 1)")
-    end
-    @testset "PolygonDisjointIntersection" begin
-        a = wkt("POLYGON ((4 2, 6 2, 6 0, 4 0, 4 2))")
-        @test is_empty_dim(ov(Planar(), GO.OVERLAY_INTERSECTION, a, wkt("POINT (15 1)")), 0)
-    end
-    @testset "PointEmptyLinestringUnion" begin
-        r = ov(Planar(), GO.OVERLAY_UNION, wkt("LINESTRING EMPTY"), wkt("POINT (10 10)"))
-        @test eqw(r, "POINT (10 10)")
-    end
-    @testset "LinestringEmptyPointUnion" begin
-        r = ov(Planar(), GO.OVERLAY_UNION, wkt("LINESTRING (10 10, 20 20)"), wkt("POINT EMPTY"))
-        @test eqw(r, "LINESTRING (10 10, 20 20)")
-    end
+    #-- FIRST occurrence supplies the coordinate: on the sphere two lon/lat pairs
+    #-- a few ulps apart map to the same kernel point, so the pair that survives
+    #-- says which occurrence the merge kept.
+    p1 = (1.0, 1.0); p2 = (nextfloat(1.0, 2), 1.0)
+    sa = GI.MultiPoint([p1, (2.0, 1.0), p2])
+    @test coords(ov(Spherical(), GO.OVERLAY_UNION, sa, GI.MultiPoint([(2.0, 1.0)])))[1] == p1
+    @test coords(ov(Spherical(), GO.OVERLAY_UNION, GI.MultiPoint([p2, p1]),
+                                  GI.MultiPoint([(2.0, 1.0)])))[1] == p2
 end
 
 @testset "mixed-dimension symmetry (point on either side)" begin
@@ -207,7 +165,18 @@ end
     @test eqw(r, "GEOMETRYCOLLECTION (POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0)), " *
                  "POLYGON ((5 5, 7 5, 7 7, 5 7, 5 5)), POINT (10 10))")
 
-    ML = wkt("MULTILINESTRING ((0 0, 2 0), (5 0, 7 0))")
+    #-- SHAPE, not just point set: one surviving component must come back as the
+    #-- atomic geometry and several as the `Multi` form. GEOS `equals` cannot see
+    #-- the difference — `POINT (2 1)` and `MULTIPOINT ((2 1))` are equal to it —
+    #-- so every assertion above passes against a result that always emits the
+    #-- `Multi` form, and `_dimensional_result`'s whole job goes unchecked.
+    @test GI.trait(ov(Planar(), GO.OVERLAY_INTERSECTION, MP, wkt("POINT (1 1)"))) isa GI.PointTrait
+    @test GI.trait(ov(Planar(), GO.OVERLAY_UNION, MP, wkt("MULTIPOINT ((1 1), (6 6))"))) isa
+          GI.MultiPolygonTrait
+
+    #-- an EMPTY member inside a MULTILINESTRING / MULTIPOINT is skipped rather
+    #-- than treated as a component at the origin
+    ML = wkt("MULTILINESTRING ((0 0, 2 0), EMPTY, (5 0, 7 0))")
     @test eqw(ov(Planar(), GO.OVERLAY_INTERSECTION, ML, wkt("MULTIPOINT ((1 0), (6 0), (3 0))")),
               "MULTIPOINT ((1 0), (6 0))")
 end
@@ -240,14 +209,12 @@ end
 end
 
 @testset "createEmptyResult dimensions" begin
-    for (dim, T) in ((0, GI.MultiPointTrait), (1, GI.MultiLineStringTrait),
-                     (2, GI.MultiPolygonTrait))
-        g = GO._empty_geom(dim)
-        @test GI.trait(g) isa T
-        @test GI.npoint(g) == 0
-        #-- `GI.isempty` falls back to `false` for GeoInterface's own wrappers,
-        #-- which is what the engine emits, so the driver uses `_ov_isempty`
-        @test GO._ov_isempty(g)
+    #-- `_empty_geom`'s trait/point-count at each dimension is asserted through the
+    #-- driver by "both inputs empty" below; what only shows here is that
+    #-- `GI.isempty` falls back to `false` for GeoInterface's own wrappers — which
+    #-- is what the engine emits — and that is why `_ov_isempty` exists
+    for dim in (0, 1, 2)
+        @test GO._ov_isempty(GO._empty_geom(dim))
     end
     @test GO._ov_isempty(wkt("POINT EMPTY"))
     @test !GO._ov_isempty(GI.Point((1.0, 2.0)))
@@ -319,20 +286,24 @@ end
     b = GI.MultiPoint([(-180.0, 10.0)])
     @test npts(ov(Spherical(), GO.OVERLAY_INTERSECTION, a, b)) == 1
     @test npts(ov(Spherical(), GO.OVERLAY_UNION, a, b)) == 2
-    #-- planar treats them as distinct
-    @test npts(ov(Planar(), GO.OVERLAY_INTERSECTION, a, b)) == 0
+    #-- planar treats them as distinct. Asserted through UNION, not INTERSECTION:
+    #-- these fixtures are envelope-disjoint on the plane, so a planar `∩` never
+    #-- reaches the point path at all — `_empty_result_short_circuit` answers
+    #-- first and the assertion holds however the locator behaves.
     @test npts(ov(Planar(), GO.OVERLAY_UNION, a, b)) == 3
     #-- the north pole has an arbitrary longitude
     n1 = GI.Point((0.0, 90.0)); n2 = GI.Point((123.0, 90.0))
     @test npts(ov(Spherical(), GO.OVERLAY_INTERSECTION, n1, n2)) == 1
-    @test npts(ov(Planar(), GO.OVERLAY_INTERSECTION, n1, n2)) == 0
+    @test npts(ov(Planar(), GO.OVERLAY_UNION, n1, n2)) == 2
 end
 
 @testset "spherical point × area uses the kernel locator" begin
     #-- the ring (0,0)-(90,0)-(90,60)-(0,60): its northern edge is a great-circle
     #-- arc bowing to ~67.8°N at lon 45, so (45, 62) is INSIDE on the sphere and
-    #-- outside the planar lat/lon rectangle. A planar even-odd test on the
-    #-- emitted coordinates would get this wrong.
+    #-- outside the planar lat/lon rectangle. The planar contrast is pinned by the
+    #-- DIFFERENCE leg below: DIFFERENCE has no disjoint-envelope short circuit,
+    #-- so it runs the planar locator; the planar INTERSECTION here is answered by
+    #-- that short circuit, since (45, 62) is outside the ring's lat/lon box.
     PG = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (90.0, 60.0), (0.0, 60.0), (0.0, 0.0)]])
     inside = GI.Point((45.0, 62.0))
     @test eqw(ov(Spherical(), GO.OVERLAY_INTERSECTION, PG, inside), "POINT (45 62)")

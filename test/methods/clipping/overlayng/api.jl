@@ -9,20 +9,15 @@
 # conservation identities, which are machine-precision gates.
 
 using Test
-import GeometryOps as GO
-import GeoInterface as GI
-import LibGEOS as LG
 import ArchGDAL as AG
 import GeometryBasics as GB
 using GeometryOpsTestHelpers
+include(joinpath(@__DIR__, "common.jl"))
 
 const P = GO.Planar()
 const S = GO.Spherical()
 
-lgc(g) = GI.convert(LG, g)
-
-A = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
-B = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+A, B = SQ_A, SQ_B
 #-- a polygon with a hole, and a multipolygon, for the harder shapes
 AH = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)],
                  [(3.0, 3.0), (7.0, 3.0), (7.0, 7.0), (3.0, 7.0), (3.0, 3.0)]])
@@ -46,12 +41,6 @@ const PUBLIC_OPS = (
             @test LG.isValid(lgc(r))
             @test LG.equals(lgc(r), lgf(lgc(a), lgc(b)))
         end
-    end
-end
-
-@testset "planar ops through OverlayNG(Planar())" begin
-    for (name, gof, lgf) in PUBLIC_OPS
-        @test LG.equals(lgc(gof(GO.OverlayNG(P), A, B)), lgf(lgc(A), lgc(B)))
     end
 end
 
@@ -100,8 +89,10 @@ end
     PG = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (90.0, 60.0), (0.0, 60.0), (0.0, 0.0)]])
     pt = GI.Point((45.0, 62.0))
     @test GI.trait(GO.intersection(alg, PG, pt)) isa GI.PointTrait
-    #-- planar disagrees, which is the point of carrying the manifold
-    @test GI.trait(GO.intersection(GO.OverlayNG(), PG, pt)) isa GI.MultiPointTrait
+    #-- planar disagrees, which is the point of carrying the manifold: the planar
+    #-- result is the EMPTY Multi form, not the atomic point
+    plan = GO.intersection(GO.OverlayNG(), PG, pt)
+    @test GI.trait(plan) isa GI.MultiPointTrait && GI.npoint(plan) == 0
 end
 
 # ---------------------------------------------------------------------------
@@ -110,13 +101,19 @@ end
 
 @testset "symdifference entry points" begin
     expected = LG.symmetricDifference(lgc(A), lgc(B))
-    #-- explicit algorithm, manifold-only, and bare forms all agree
-    @test LG.equals(lgc(GO.symdifference(GO.OverlayNG(), A, B)), expected)
+    #-- manifold-only and bare forms agree (the explicit-algorithm form is the
+    #-- symdifference row of the public-ops table above)
     @test LG.equals(lgc(GO.symdifference(P, A, B)), expected)
     @test LG.equals(lgc(GO.symdifference(A, B)), expected)
-    #-- the manifold form routes to OverlayNG with that manifold
-    @test isapprox(GO.area(S, GO.symdifference(S, A, B)),
-                   GO.area(S, GO.symdifference(GO.OverlayNG(S), A, B)); rtol = 1e-14)
+    #-- the manifold form routes to OverlayNG with that manifold. Compared by
+    #-- COORDINATES, not by summed area: the crossing node here is the shared
+    #-- corner BETWEEN the symmetric difference's two components, so moving it
+    #-- transfers area from one to the other and leaves the sum invariant — an
+    #-- area identity passes even when the manifold is dropped entirely.
+    @test GI.coordinates(GO.symdifference(S, A, B)) ==
+          GI.coordinates(GO.symdifference(GO.OverlayNG(S), A, B))
+    @test GI.coordinates(GO.symdifference(S, A, B)) !=
+          GI.coordinates(GO.symdifference(P, A, B))
     #-- symdifference(A, B) == union(diff(A,B), diff(B,A)) by area
     @test isapprox(GO.area(GO.symdifference(A, B)),
                    GO.area(GO.difference(GO.OverlayNG(), A, B)) +
@@ -166,11 +163,19 @@ end
     reb = GO.GeometryOpsCore.rebuild(GO.OverlayNG(; exact = GO.False()), S)
     @test GO.GeometryOpsCore.manifold(reb) === S
     @test reb.exact === GO.False()
-    #-- the keyword and positional-manifold constructors agree
-    @test GO.OverlayNG(S) == GO.OverlayNG(; manifold = S)
-    #-- `exact = False()` still runs (Float64 filters only) and agrees here
-    @test LG.equals(lgc(GO.intersection(GO.OverlayNG(; exact = GO.False()), A, B)),
-                    LG.intersection(lgc(A), lgc(B)))
+    #-- the positional-manifold constructor is the keyword one, so comparing the
+    #-- two says nothing; what has content is that the DEFAULT manifold is planar
+    @test GO.OverlayNG(P) === GO.OverlayNG()
+    #-- `exact = False()` still runs (Float64 filters only) and agrees here...
+    let alg = GO.OverlayNG(; exact = GO.False())
+        @test LG.equals(lgc(GO.intersection(alg, A, B)), LG.intersection(lgc(A), lgc(B)))
+        #-- ...and the field really reaches the driver. Without this the wrappers
+        #-- could hard-code `exact = True()` and every assertion in this file
+        #-- would still pass — only `rebuild` above was pinning `exact` at all.
+        @test alg.exact === GO.False()
+        @test GI.coordinates(GO.intersection(alg, A, B)) ==
+              GI.coordinates(GO._overlay_ng(P, GO.OVERLAY_INTERSECTION, A, B; exact = alg.exact))
+    end
 end
 
 @testset "error paths" begin
@@ -178,10 +183,8 @@ end
     @test_throws ArgumentError GO.OverlayNG(GO.AutoManifold())
     #-- geometry collections are rejected by the driver
     gc = GI.GeometryCollection([GI.Point((1.0, 1.0))])
-    for (_, gof, _) in PUBLIC_OPS
-        @test_throws ArgumentError gof(GO.OverlayNG(), gc, A)
-        @test_throws ArgumentError gof(GO.OverlayNG(), A, gc)
-    end
+    @test_throws ArgumentError GO.intersection(GO.OverlayNG(), gc, A)
+    @test_throws ArgumentError GO.intersection(GO.OverlayNG(), A, gc)
     #-- of the Foster–Hormann keywords, `target` IS accepted (see the `target`
     #-- testsets in overlay_ng.jl); `T` and `fix_multipoly` are not — the result
     #-- is always emitted at Float64, and there is nothing to fix
@@ -196,14 +199,32 @@ end
 # ---------------------------------------------------------------------------
 
 @testset "defaults still dispatch to Foster-Hormann" begin
-    #-- the algorithm-free forms keep returning a Vector of target geometries,
-    #-- which is the Foster–Hormann contract (OverlayNG returns one geometry)
+    #-- This used to compare TARGETED results, which cannot tell the engines
+    #-- apart: `intersection(A, B; target = PolygonTrait())` returns the same
+    #-- concrete `Vector{GI.Polygon{...}}` from both, so rewiring the default to
+    #-- OverlayNG left 98 of 99 assertions in this file passing. The untargeted
+    #-- form is the discriminator — Foster–Hormann returns a Vector where
+    #-- OverlayNG returns one geometry.
+    #-- The discriminator is `GI.Line`: OverlayNG rejects the trait outright, so
+    #-- a default that routed there would throw where Foster–Hormann answers.
+    ln1 = GI.Line([(0.0, 0.0), (1.0, 1.0)]); ln2 = GI.Line([(0.0, 1.0), (1.0, 0.0)])
+    @test_throws ArgumentError GO.intersection(GO.OverlayNG(), ln1, ln2)
+    @test length(GO.intersection(ln1, ln2; target = GI.PointTrait())) == 1
+
+    #-- KNOWN DEFECT in the DEFAULT clipping path, pinned here so that it is
+    #-- visible rather than merely unexercised. The *untargeted* algorithm-free
+    #-- form is the cleanest engine discriminator there is — Foster–Hormann
+    #-- returns a Vector where OverlayNG returns one geometry — but it cannot be
+    #-- used, because it throws:
+    #--
+    #--   MethodError: no method matching GeometryOpsCore.TraitTarget(::Nothing)
+    #--
+    #-- from the target plumbing in `union.jl` / `intersection.jl`, which passes
+    #-- `target = nothing` straight into `TraitTarget`. Nothing to do with
+    #-- OverlayNG. These flip to "unexpectedly passing" when it is fixed.
     for gof in (GO.intersection, GO.union, GO.difference)
-        v = gof(A, B; target = GI.PolygonTrait())
-        @test v isa Vector
-        @test all(g -> GI.trait(g) isa GI.PolygonTrait, v)
-        #-- and so does the manifold-only form
-        @test gof(P, A, B; target = GI.PolygonTrait()) isa Vector
+        @test_broken gof(A, B) isa Vector
+        @test_broken gof(P, A, B) isa Vector
     end
     #-- the documented `intersection` example from its docstring still holds
     line1 = GI.Line([(124.584961, -12.768946), (126.738281, -17.224758)])

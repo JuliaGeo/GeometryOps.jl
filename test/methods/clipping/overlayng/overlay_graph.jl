@@ -3,14 +3,11 @@
 # `OverlayLabel`, the node-pair edge merger, and the CCW-ordered half-edge stars.
 
 using Test
-import GeometryOps as GO
+include(joinpath(@__DIR__, "common.jl"))
 import GeometryOps: Planar, Spherical, True, False
 import GeometryOps: POS_LEFT, POS_RIGHT, POS_ON
 import GeometryOps: LOC_INTERIOR, LOC_EXTERIOR, LOC_BOUNDARY, LOC_NONE
 import GeometryOps: DIM_A, DIM_L, DIM_COLLAPSE, DIM_NOT_PART
-import GeoInterface as GI
-
-const EX = True()
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -34,44 +31,68 @@ end
 
 # Every half-edge has a well-formed sym, every node's star is a CCW-ordered
 # permutation of its outgoing edges, and degrees match the arrangement incidence.
-function check_graph(m, g)
+#
+# `fold = true` reports one assertion per property instead of one per element.
+# The Natural Earth loop passes it: over 30 country pairs the per-element form
+# ran 36,668 assertions to establish the same seven properties the synthetic
+# fixtures establish, and a conjunction fails exactly when one of its terms does.
+# The small fixtures stay per-element, where a failing index is the diagnosis.
+#
+# `dest == sym.origin` used to be checked here and is not, because
+# `he_dest(edges, i)` is DEFINED as `edges[he_sym(edges, i)].origin`
+# (`half_edge.jl:46`) — substituting the definition makes the assertion `x == x`.
+function check_graph(m, g; fold = false)
+    chk(v) = fold ? v : (@test(v); true)
+    sym_ok = true
     for i in eachindex(g.edges)
         s = GO.he_sym(g.edges, i)
-        @test GO.he_sym(g.edges, s) == i                       # sym is involutive
-        @test s != i                                           # a half-edge is never its own sym
-        @test g.edges[s].origin == GO.he_dest(g.edges, i)      # dest == sym.origin
+        sym_ok &= chk(GO.he_sym(g.edges, s) == i)              # sym is involutive
+        sym_ok &= chk(s != i)                                  # never its own sym
     end
+    deg_ok = true; origin_ok = true; ccw_ok = true
     for nid in 1:GO.num_nodes(g.arr)
         star = star_of(g, nid)
         isempty(star) && continue
         incidence = count(i -> g.edges[i].origin == nid, eachindex(g.edges))
-        @test length(star) == incidence                        # degree == incidence
-        @test GO.he_degree(g.edges, star[1]) == incidence
-        @test all(i -> g.edges[i].origin == nid, star)         # all share the origin
+        deg_ok &= chk(length(star) == incidence)               # degree == incidence
+        deg_ok &= chk(GO.he_degree(g.edges, star[1]) == incidence)
+        origin_ok &= chk(all(i -> g.edges[i].origin == nid, star))
         #-- strictly CCW-increasing from the representative (lowest) edge
         for t in 1:(length(star) - 1)
-            @test GO.he_compare_angular(m, g.edges, g.arr.nodes.keys, star[t], star[t + 1]; exact = EX) < 0
+            ccw_ok &= chk(GO.he_compare_angular(m, g.edges, g.arr.nodes.keys,
+                                                star[t], star[t + 1]; exact = EX) < 0)
         end
     end
+    if fold
+        @test sym_ok
+        @test deg_ok
+        @test origin_ok
+        @test ccw_ok
+    end
+    return nothing
 end
 
 # ---------------------------------------------------------------------------
 # 1. Angular star ordering torture set (§3.1)
 # ---------------------------------------------------------------------------
 
-@testset "degree-6 coincidence-merged node (foreign-direction slow path)" begin
-    # two A lines and one B line through the origin -> one merged node of degree 6
-    # (each line contributes an in- and an out-going half-edge), exercising
+@testset "crossing-node star ordering (both manifolds)" begin
+    # row 1: two A lines and one B line through the origin -> one merged node of
+    # degree 6 (each line contributes an in- and an out-going half-edge), exercising
     # rk_compare_edge_dir's exact-rational foreign-direction path at a crossing apex.
-    A = GI.MultiLineString([[(-1.0, -1.0), (1.0, 1.0)], [(-1.0, 1.0), (1.0, -1.0)]])
-    B = GI.LineString([(-1.0, 0.0), (1.0, 0.0)])
-    for m in (Planar(), Spherical())
+    # row 2: a near-equatorial line and a meridian crossing at (0,0) -> degree 4,
+    # the spherical tangent-ordering case.
+    for (A, B, deg) in (
+            (GI.MultiLineString([[(-1.0, -1.0), (1.0, 1.0)], [(-1.0, 1.0), (1.0, -1.0)]]),
+             GI.LineString([(-1.0, 0.0), (1.0, 0.0)]), 6),
+            (GI.LineString([(-10.0, 0.0), (10.0, 0.0)]),
+             GI.LineString([(0.0, -10.0), (0.0, 10.0)]), 4),
+        ), m in (Planar(), Spherical())
         arr = GO.NodedArrangement(m, A, B; exact = EX)
         g = GO.OverlayGraph(m, arr; exact = EX)
         cid = findfirst(i -> arr.nodes.keys[i].is_crossing, 1:GO.num_nodes(arr))
         @test cid !== nothing
-        ne = GO.graph_node_edge(g, cid)
-        @test GO.he_degree(g.edges, ne) == 6
+        @test GO.he_degree(g.edges, GO.graph_node_edge(g, cid)) == deg
         check_graph(m, g)
     end
 end
@@ -112,21 +133,6 @@ end
     @test GO.is_boundary_touch(lbl)                                 # two areas meeting
 end
 
-@testset "spherical crossing node tangent ordering (both manifolds)" begin
-    # a near-equatorial line and a meridian crossing at (0,0): the crossing node
-    # has degree 4 and its star is CCW-consistent on both manifolds.
-    A = GI.LineString([(-10.0, 0.0), (10.0, 0.0)])
-    B = GI.LineString([(0.0, -10.0), (0.0, 10.0)])
-    for m in (Planar(), Spherical())
-        arr = GO.NodedArrangement(m, A, B; exact = EX)
-        g = GO.OverlayGraph(m, arr; exact = EX)
-        cid = findfirst(i -> arr.nodes.keys[i].is_crossing, 1:GO.num_nodes(arr))
-        @test cid !== nothing
-        @test GO.he_degree(g.edges, GO.graph_node_edge(g, cid)) == 4
-        check_graph(m, g)
-    end
-end
-
 # ---------------------------------------------------------------------------
 # 2. Depth-delta algebra and Edge.merge semantics (§2.7, §3.3)
 # ---------------------------------------------------------------------------
@@ -138,15 +144,21 @@ end
         ccw = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]
         kccw = GO._to_kernel_points(m, GI.LinearRing(ccw))
         d = GO._ring_depth_delta(m, kccw, false; exact = EX)
-        # CCW shell has material interior on the left -> delta -1 -> L=INT, R=EXT
-        moil = GO._ring_material_interior_on_left(m, kccw, false; exact = EX)
-        @test d == (moil ? -1 : 1)
-        @test GO._location_left(d)  == (moil ? LOC_INTERIOR : LOC_EXTERIOR)
-        @test GO._location_right(d) == (moil ? LOC_EXTERIOR : LOC_INTERIOR)
+        #-- the expectations are LITERALS, not expressions in `moil`. `_ring_depth_delta`
+        #-- IS `moil ? -1 : 1` (edge_source.jl:39-41), so writing them that way made this
+        #-- testset an implementation mirror: with `_ring_material_interior_on_left`
+        #-- inverted at runtime, `d`, `moil` and both side locations flip together and
+        #-- all ten assertions still pass. The convention this testset is named for was
+        #-- being computed, never checked.
+        @test GO._ring_material_interior_on_left(m, kccw, false; exact = EX)   # CCW shell: interior LEFT
+        @test d == -1                                                         # ...so JTS's delta is -1
+        @test GO._location_left(d)  == LOC_INTERIOR
+        @test GO._location_right(d) == LOC_EXTERIOR
         # reversing the ring flips the delta and the side locations
         kcw = GO._to_kernel_points(m, GI.LinearRing(reverse(ccw)))
         dcw = GO._ring_depth_delta(m, kcw, false; exact = EX)
-        @test dcw == -d
+        @test !GO._ring_material_interior_on_left(m, kcw, false; exact = EX)
+        @test dcw == 1
         @test GO._location_left(dcw) == GO._location_right(d)
     end
 end
@@ -158,8 +170,11 @@ end
     d_shell = GO._ring_depth_delta(m, shell, false; exact = EX)
     d_hole  = GO._ring_depth_delta(m, shell, true;  exact = EX)
     @test d_hole == -d_shell
-    # line source carries no side labelling
-    li = GO.EdgeSourceInfo(Int8(0), DIM_L, false, Int8(0))
+    #-- a line source carries no side labelling. Asserted through `_edge_source_info`,
+    #-- which is what actually decides this: constructing an `EdgeSourceInfo` by hand
+    #-- and reading its fields back only tests Julia's default constructor.
+    line = GI.LineString([(0.0, 0.0), (1.0, 1.0)])
+    li = GO._edge_source_info(m, GO._overlay_segstrings(m, line, true)[1]; exact = EX)
     @test li.dim == DIM_L && li.depth_delta == 0
 end
 
@@ -277,51 +292,41 @@ end
 # 4. Graph invariants on small real inputs (env-gated, phase-1 smoke pattern)
 # ---------------------------------------------------------------------------
 
-ne_ok = false
-ne_names = String[]; ne_geoms = Any[]
-try
+ne_ok = try
     import NaturalEarth, GeoJSON
-    fc = NaturalEarth.naturalearth("admin_0_countries", 110)
-    for f in fc
-        gg = GeoJSON.geometry(f)
-        (gg === nothing || GI.npoint(gg) == 0) && continue
-        nm = try; string(f.NAME); catch; "?"; end
-        push!(ne_names, nm); push!(ne_geoms, GO.tuples(gg))
-    end
-    global ne_ok = length(ne_geoms) > 0
+    include(joinpath(@__DIR__, "..", "..", "..", "data", "natural_earth_pairs.jl"))
+    global ne_names, ne_geoms = load_ne(110)
+    length(ne_geoms) > 0
 catch err
     @info "Natural Earth subset skipped (data unavailable)" err
+    false
 end
 
 @testset "Natural Earth country-pair graph invariants" begin
     if !ne_ok
         @test_skip "Natural Earth data unavailable"
     else
-        import LibGEOS as LG
         picks = String["Brazil", "France", "Egypt", "India", "Australia"]
         tested = 0
         for nm in picks
             idx = findfirst(==(nm), ne_names)
             idx === nothing && continue
             A = ne_geoms[idx]
-            LG.isValid(GI.convert(LG, A)) || continue
-            B = GO.apply(GI.PointTrait(), A) do p
-                (GI.x(p) + 0.5, GI.y(p))
-            end
+            B = shift_geom(A, 0.5, 0.0)
             tested += 1
             for m in (Planar(), Spherical())
                 arr = GO.NodedArrangement(m, A, B; exact = EX)
                 g = GO.OverlayGraph(m, arr; exact = EX)
                 #-- every half-edge has a sym; stars are CCW-consistent; degrees
-                #-- match arrangement incidence (checks all invariants at once)
-                check_graph(m, g)
-                #-- each merged edge yields exactly one symmetric pair
-                @test iseven(length(g.edges))
-                #-- node_edges representatives all originate at their node
-                for nid in 1:GO.num_nodes(arr)
-                    e = GO.graph_node_edge(g, nid)
-                    e == 0 || @test g.edges[e].origin == nid
-                end
+                #-- match arrangement incidence (checks all invariants at once).
+                #-- Folded: this loop's job is breadth over real linework, and one
+                #-- assertion per property says the same thing as 36,668 of them.
+                #--
+                #-- Two assertions used to follow and are gone: `iseven(length(g.edges))`
+                #-- (half-edges are pushed in sym pairs, so it is true by construction)
+                #-- and a per-node `g.edges[e].origin == nid` loop, which is a strict
+                #-- subset of the degree/origin checks `check_graph` already runs.
+                check_graph(m, g; fold = true)
             end
         end
         @test tested >= 2
