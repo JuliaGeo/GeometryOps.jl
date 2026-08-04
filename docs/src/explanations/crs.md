@@ -6,13 +6,13 @@ In a mathematical sense, coordinate reference systems can be thought of defining
 
 ## Geographic CRS
 
-If a CRS is _geographic_, that means that it refers to coordinates on a sphere.  Such coordinates should ideally be handled using a spherical geometry library like Google's s2.  GeometryOps does not currently handle spherical geometry computations except in special cases (e.g., [`segmentize`](@ref) with the [`Geodesic`](@ref) manifold).
+If a CRS is _geographic_, its coordinates describe longitude and latitude rather than a flat plane.  `GO.area` defaults to `AutoManifold()`: when Proj is available and recognizes the CRS, it uses an ellipsoid-aware `Geodesic` calculation and returns square metres.  Without Proj, geographic coordinates use a degree longitude/latitude `Spherical` calculation.
 
-A non-geographic CRS is assumed to be in Cartesian space.
+Use [`Planar`](@ref) explicitly when area in the geometry's native coordinate units is required.
 
 ## Projected CRS
 
-Projected CRS are generally treated as Cartesian.
+Projected geometries, geometries with an unknown CRS trait, and geometries without a CRS use `Planar` calculations in native square units.  A projected map area represents physical area only for an equal-area projection.
 
 ## Ways to describe CRS
 

@@ -6,7 +6,7 @@ and these are all the spaces that are relevant to geographic geometry.
 
 ## What manifolds are available?
 
-GeometryOps has three [`Manifold`](@ref) types: [`Planar`](@ref), [`Spherical`](@ref), and [`Geodesic`](@ref).
+GeometryOps has four [`Manifold`](@ref) types: [`Planar`](@ref), [`Spherical`](@ref), [`Geodesic`](@ref), and [`AutoManifold`](@ref).
 
 - `Planar()` is, as the name suggests, a perfectly Cartesian, usually 2-dimensional, space.  The shortest path from one point to another is a straight line.
 - `Spherical(; radius)` describes points on the surface of a sphere of a given radius.  
@@ -18,6 +18,7 @@ GeometryOps has three [`Manifold`](@ref) types: [`Planar`](@ref), [`Spherical`](
   ellipsoid.
 
   For `Geodesic`, we need an `AbstractGeodesic` that can wrap representations from Proj.jl and SphericalGeodesics.jl.
+- `AutoManifold()` selects a manifold from a geometry's CRS when an operation supports automatic selection.
 
 The idea here is that the manifold describes how the geometry needs to be treated.  
 
@@ -30,22 +31,16 @@ which is plainly nonsensical.
 
 ## How this is done
 
-In order to avoid this, we've introduced three complementary CRS-related systems to the JuliaGeo ecosystem.  
+In order to avoid this, GeometryOps combines CRS traits with manifolds.
 
-1. GeoInterface's `crstrait`.  This is a method that returns the ideal CRS _type_ of a geometry, either Cartesian or Geographic.
-2. Proj's `PreparedCRS` type, which extracts ellipsoid parameters and the nature of the projection from a coordinate reference system, and
-   caches the results in a struct.  This allows GeometryOps to quickly determine the correct manifold to use for a given geometry.
-3. GeometryOps's `Manifold` type, which defines the surface on which to perform operations.  This is what allows GeometryOps to perform
-   calculations correctly depending on the nature of the geometry.
+1. GeoInterface's `crstrait`, which describes the CRS type of a geometry.
+2. GeometryOps's `Manifold` type, which defines the surface on which to perform operations.
+3. Proj, when loaded, which recognizes CRS definitions, supplies ellipsoid parameters, and converts projected linear units.
 
 
-The way this flow works, is that when you load a geometry using GeoDataFrames, its CRS is extracted and parsed into a `PreparedCRS` type.
-This is then used to determine the manifold to use for the geometry, and the geometry is converted to the manifold's coordinate system.
+`GO.area` uses `AutoManifold()` by default.  With Proj, a recognized geographic CRS selects an ellipsoid-aware `Geodesic` calculation in square metres.  Without Proj, a geographic CRS selects a degree longitude/latitude `Spherical` calculation.  Projected, unknown, and CRS-less geometries use `Planar` native square units.
 
-There is a table of known geographic coordinate systems in GeoFormatTypes.jl, and anything else is assumed to be 
-a Cartesian or planar coordinate system.  CRStrait is used as the cheap determinant, but PreparedCRS is more general and better to use if possible.
-
-When GeometryOps sees a geometry, it first checks its CRS to see if it is a geographic coordinate system.  If it is, it uses the `PreparedCRS`, or falls back to `crstrait` and geographic defaults to determine the manifold.
+Passing `Planar()` explicitly always computes in native coordinate units.  A map-plane area is a physical area only in an equal-area projection.
 
 ## Algorithms and manifolds
 

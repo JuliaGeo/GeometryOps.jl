@@ -25,6 +25,7 @@ end
 @safetestset "RobustCrossProduct" begin include("utils/robustcrossproduct.jl") end
 # Methods
 @safetestset "Angles" begin include("methods/angles.jl") end
+@safetestset "Area without Proj" begin include("methods/area_no_proj.jl") end
 @safetestset "Area" begin include("methods/area.jl") end
 @safetestset "Perimeter" begin include("methods/perimeter.jl") end
 @safetestset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end

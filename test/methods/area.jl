@@ -2,6 +2,7 @@ using Test
 import GeoInterface as GI
 import GeometryOps as GO 
 import LibGEOS as LG
+import GeoFormatTypes
 import Proj
 using GeometryOpsTestHelpers
 
@@ -101,6 +102,131 @@ end
 
 
 highlat_poly = LG.Polygon([[[70., 70.], [70., 80.], [80., 80.], [80., 70.], [70., 70.]]])
+
+@testset "CRS-aware automatic area" begin
+    geographic_square = GI.Polygon(
+        [[
+            (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0),
+        ]];
+        crs=GeoFormatTypes.EPSG(4326),
+    )
+    @test GI.crstrait(geographic_square) isa GI.UnknownTrait
+    @test GO.area(geographic_square) == GO.area(GO.Geodesic(), geographic_square)
+    @test GO.area(geographic_square) ≈ 1.2308778361469452e10 rtol=1e-10
+    @test GO.area(geographic_square) != GO.area(GO.Spherical(), geographic_square)
+
+    foot_side = 3.280833333333333
+    projected_square = GI.Polygon(
+        [[
+            (0.0, 0.0), (foot_side, 0.0), (foot_side, foot_side),
+            (0.0, foot_side), (0.0, 0.0),
+        ]];
+        crs=GeoFormatTypes.EPSG(2263),
+    )
+    @test GO.area(projected_square) == GO.area(GO.Planar(), projected_square) == foot_side^2
+
+    threaded_crsless_collection = GI.GeometryCollection(fill(projected_square, 256))
+    @test GO.area(threaded_crsless_collection; threaded=true) ≈ 256 * foot_side^2
+
+    @test GO.area([geographic_square]) == GO.area(geographic_square)
+    @test GO.area([geographic_square, projected_square]) ==
+          GO.area(geographic_square) + GO.area(projected_square)
+    crsless_feature_collection = GI.FeatureCollection([
+        GI.Feature(geographic_square),
+        GI.Feature(projected_square),
+    ])
+    @test GO.area(crsless_feature_collection) ==
+          GO.area(geographic_square) + GO.area(projected_square)
+
+    plain_square = GI.Polygon([[
+        (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0),
+    ]])
+    geographic_feature = GI.Feature(plain_square; crs=GeoFormatTypes.EPSG(4326))
+    crsless_feature_collection = GI.FeatureCollection([geographic_feature])
+    @test GO.area(crsless_feature_collection) == GO.area(geographic_feature)
+    @test GO.area(crsless_feature_collection) == GO.area(GO.Geodesic(), geographic_feature)
+
+    grads_square = GI.Polygon([[
+        (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0),
+    ]]; crs=GeoFormatTypes.EPSG(4807))
+    @test GO.area(grads_square) ≈ 9.969411479067013e9 rtol=1e-10
+
+    proj_crs_projected_square = GI.Polygon(
+        [[
+            (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0),
+        ]];
+        crs=Proj.CRS(GeoFormatTypes.EPSG(2263)),
+    )
+    @test GO.area(proj_crs_projected_square) ==
+          GO.area(GO.Planar(), proj_crs_projected_square) == 1.0
+
+    mixed_crs_collection = GI.GeometryCollection([geographic_square, proj_crs_projected_square])
+    @test isnothing(GI.crs(mixed_crs_collection))
+    @test GO.area(mixed_crs_collection) == GO.area(GO.Planar(), mixed_crs_collection)
+
+    crsless_multipolygon = GI.MultiPolygon([geographic_square, plain_square])
+    @test isnothing(GI.crs(crsless_multipolygon))
+    @test GO.area(crsless_multipolygon) == GO.area(GO.Planar(), crsless_multipolygon)
+
+    geographic_collection = GI.GeometryCollection(
+        [plain_square, projected_square]; crs=GeoFormatTypes.EPSG(4326),
+    )
+    @test GO.area(geographic_collection) ==
+          GO.area(GO.Geodesic(), geographic_collection)
+
+    spherical_crs_square = GI.Polygon(
+        [[
+            (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0),
+        ]];
+        crs=GeoFormatTypes.ProjString("+proj=longlat +R=6371000 +type=crs"),
+    )
+    spherical_crs_area = GO.area(spherical_crs_square)
+    @test isfinite(spherical_crs_area)
+    @test spherical_crs_area ≈ 1.2363997753679907e10 rtol=1e-10
+
+    geographic_point = GI.Point((0.0, 0.0); crs=GeoFormatTypes.EPSG(4326))
+    geographic_multipoint = GI.MultiPoint([(0.0, 0.0), (1.0, 1.0)]; crs=GeoFormatTypes.EPSG(4326))
+    geographic_linestring = GI.LineString([(0.0, 0.0), (1.0, 1.0)]; crs=GeoFormatTypes.EPSG(4326))
+    geographic_ring = GI.LinearRing([(0.0, 0.0), (1.0, 0.0), (0.0, 0.0)]; crs=GeoFormatTypes.EPSG(4326))
+    @test GO.area(geographic_point) == 0.0
+    @test GO.area(geographic_multipoint) == 0.0
+    @test GO.area(geographic_linestring) == 0.0
+    @test GO.area(geographic_ring) == 0.0
+end
+
+@testset "Geodesic polygon area" begin
+    crs = GeoFormatTypes.EPSG(4326)
+    exterior = [
+        (0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0),
+    ]
+    hole = [
+        (0.5, 0.5), (1.5, 0.5), (1.5, 1.5), (0.5, 1.5), (0.5, 0.5),
+    ]
+    exterior_poly = GI.Polygon([exterior]; crs)
+    reversed_exterior_poly = GI.Polygon([reverse(exterior)]; crs)
+    hole_poly = GI.Polygon([hole]; crs)
+    poly_with_hole = GI.Polygon([exterior, hole]; crs)
+    poly_with_reversed_hole = GI.Polygon([exterior, reverse(hole)]; crs)
+
+    exterior_area = GO.area(GO.Geodesic(), exterior_poly)
+    hole_area = GO.area(GO.Geodesic(), hole_poly)
+    @test GO.area(GO.Geodesic(), exterior_poly; init=2.0) == exterior_area + 2.0
+    @test GO.area(GO.Geodesic(), reversed_exterior_poly) ≈ exterior_area rtol=1e-10
+    @test GO.area(GO.Geodesic(), poly_with_hole) ≈ exterior_area - hole_area rtol=1e-10
+    @test GO.area(GO.Geodesic(), poly_with_reversed_hole) ≈ exterior_area - hole_area rtol=1e-10
+
+    second_poly = GI.Polygon([[
+        (3.0, 0.0), (4.0, 0.0), (4.0, 1.0), (3.0, 1.0), (3.0, 0.0),
+    ]]; crs)
+    multipoly = GI.MultiPolygon([exterior_poly, second_poly]; crs)
+    @test GO.area(GO.Geodesic(), multipoly) ≈
+          exterior_area + GO.area(GO.Geodesic(), second_poly) rtol=1e-10
+
+    threaded_multipoly = GI.MultiPolygon(fill(second_poly, 256); crs)
+    threaded_area = GO.area(GO.Geodesic(), threaded_multipoly; threaded=true)
+    @test GO.area(GO.Geodesic(), threaded_multipoly; threaded=true, init=2.0) ==
+          threaded_area + 2.0
+end
 
 @testset_implementations "Spherical/geodesic" begin
     @test GO.area(GO.Planar(), $highlat_poly) == 100
