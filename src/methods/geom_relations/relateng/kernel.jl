@@ -194,6 +194,79 @@ struct NodeKey{P}
     b1::P
 end
 
+#=
+`NodeKey` is isbits and its equality is Julia's default for an immutable struct:
+`==` falls through to `===`, i.e. BITWISE equality, and `isequal` follows `==`.
+That is exactly the intended semantics only because both constructors
+canonicalize — `vertex_node` writes the signed-zero-normalized coordinate into
+all four point fields, and `crossing_node` orders each segment and then the pair
+— so two keys denote the same node iff their bytes agree. Nothing here relies on
+field-by-field comparison, and there are no "unused" fields carrying junk.
+
+The default `hash` for such a type is `hash(objectid(x), h)`, and `objectid` of a
+72-byte isbits value is a memhash of all 72 bytes: **55 ns**, against 6 ns to
+hash one coordinate tuple. Every `_intern_node!` pays it — twice per segment in
+`split.jl` alone — so it is the single hottest non-predicate operation in the
+noder. This method hashes only what distinguishes the key: the discriminant plus
+the ONE coordinate for a vertex node, all four for a crossing node.
+
+Because the equality being matched is BITWISE, the coordinates are hashed by
+their raw bit patterns (`reinterpret(UInt64, ::Float64)`), not through
+`Base.hash(::Float64)`. Two consequences, both wanted:
+
+  * Agreement with `===` is exact — equal bytes give equal words give equal
+    hash — where `Base.hash(::Float64)` is *value*-based and deliberately
+    unifies bit patterns that are not `===` (`-0.0`/`0.0`, and every NaN
+    payload). Nothing here needs that unification: `_pos_zero` in `_node_point`
+    has already collapsed signed zeros before a key is ever constructed, and a
+    NaN coordinate would be a corrupt input, not two spellings of one node.
+  * It removes `Base.hash(::Float64)`'s integer-collapse, under which
+    integer-valued floats route through `hash(::Int64)` and collide at rates far
+    above chance on grid-aligned data (measured: 2 collisions over a 300×300
+    integer grid; the bit fold gives 0 there, matching `objectid`). Grid-aligned
+    coordinates are exactly what test suites and rasterized data produce.
+
+The per-word mix is the same shape as `Base.hash_mix`: xor the word into the
+state, widen-multiply by the golden-ratio odd constant, and fold the 128-bit
+product's halves together with xor. The fold is what makes it usable here — a
+plain `(h ⊻ w) * K` propagates bits only *upward*, and the bit pattern of a
+small-magnitude Float64 carries all of its entropy in the high bits (`1.0` is
+`0x3ff0…0`), so an upward-only mix leaves ~20 usable bits and collides at
+birthday rates on grid data (measured: 2193 collisions over the same 300×300
+integer grid). Folding the high half back down diffuses in both directions and
+restores random-level behaviour; no separate finalizer is then needed.
+
+It stays generic in `P`: coordinates are read through `GI.x`/`GI.y`/`GI.z` under
+the same `booltype(GI.is3d(p))` dispatch `_node_point` uses, so the planar
+`Tuple{Float64,Float64}` and the spherical `UnitSphericalPoint{Float64}`
+(a `FieldVector{3,Float64}`) both fold all of their components' bits, and any
+other coordinate type falls back to `hash`.
+=#
+@inline _nk_word(x::Float64) = reinterpret(UInt64, x)
+@inline _nk_word(x) = UInt64(hash(x))  # non-Float64 coordinates: still value-determined
+
+@inline function _nk_mix(h::UInt64, w::UInt64)
+    x = widemul(h ⊻ w, 0x9e3779b97f4a7c15)
+    return (x % UInt64) ⊻ ((x >> 64) % UInt64)
+end
+
+@inline _nk_mix_point(h::UInt64, p) = _nk_mix_point(booltype(GI.is3d(p)), h, p)
+@inline _nk_mix_point(::False, h::UInt64, p) =
+    _nk_mix(_nk_mix(h, _nk_word(GI.x(p))), _nk_word(GI.y(p)))
+@inline _nk_mix_point(::True, h::UInt64, p) =
+    _nk_mix(_nk_mix(_nk_mix(h, _nk_word(GI.x(p))), _nk_word(GI.y(p))), _nk_word(GI.z(p)))
+
+function Base.hash(k::NodeKey, h::UInt)
+    x = _nk_mix(UInt64(h), k.is_crossing ? 0x6e6f64656b657901 : 0x6e6f64656b657900)
+    x = _nk_mix_point(x, k.pt)
+    if k.is_crossing
+        x = _nk_mix_point(x, k.a1)
+        x = _nk_mix_point(x, k.b0)
+        x = _nk_mix_point(x, k.b1)
+    end
+    return x % UInt
+end
+
 # Normalize signed zeros: -0.0 + 0.0 == +0.0 exactly, every other finite
 # value is unchanged. Keeps bit-pattern key equality == coordinate equality.
 @inline _pos_zero(x) = x + zero(x)
