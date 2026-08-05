@@ -72,6 +72,8 @@ This is computed slightly differently for different geometries:
   recognized projected CRSs use native-unit `Planar()` calculations. Without
   Proj, geographic geometries use degree-based `Spherical()` calculations,
   while projected and unknown geometries use native-unit `Planar()` calculations.
+  The manifold is selected once from the top-level input's CRS and applies to
+  all geometries contained in that input.
 - `Planar()`: Uses the shoelace formula in native coordinate units squared,
   regardless of CRS.
 - `Spherical()`: Uses Girard's theorem for spherical polygons. Coordinates
@@ -108,46 +110,7 @@ function area(geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: A
 end
 
 function area(::AutoManifold, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
-    _area_auto(GI.trait(geom), GI.crstrait(geom), GI.crs(geom), geom, T; threaded, kwargs...)
-end
-
-_area_auto(
-    ::GI.AbstractGeometryTrait, trait::GI.AbstractCRSTrait, crs, geom, ::Type{T}; kwargs...
-) where T = _area_auto(trait, crs, geom, T; kwargs...)
-
-function _area_auto(
-    ::Union{Nothing,GI.FeatureCollectionTrait},
-    trait::GI.AbstractCRSTrait,
-    crs,
-    geom,
-    ::Type{T};
-    threaded=false,
-    kwargs...,
-) where T
-    # A CRS-less outer container has no authoritative CRS, so resolve each child independently.
-    isnothing(crs) || return _area_auto(trait, crs, geom, T; threaded, kwargs...)
-    target = GI.trait(geom) isa GI.FeatureCollectionTrait ?
-        TraitTarget{GI.FeatureTrait}() : TraitTarget{GI.AbstractGeometryTrait}()
-    _area_auto_children(geom, target, T; threaded, kwargs...)
-end
-
-function _area_auto_children(children, target, ::Type{T}; threaded=false, kwargs...) where T
-    applyreduce(
-        WithTrait((_, child) -> area(AutoManifold(), child, T; threaded=false, kwargs...)),
-        +,
-        target,
-        children;
-        threaded,
-        init=zero(T),
-    )
-end
-
-function _area_auto(
-    ::GI.FeatureTrait, trait::GI.AbstractCRSTrait, crs, feature, ::Type{T}; threaded=false, kwargs...
-) where T
-    # A feature CRS applies to its CRS-less geometry.
-    isnothing(crs) && return area(AutoManifold(), GI.geometry(feature), T; threaded, kwargs...)
-    _area_auto(trait, crs, GI.geometry(feature), T; threaded, kwargs...)
+    _area_auto(GI.crstrait(geom), GI.crs(geom), geom, T; threaded, kwargs...)
 end
 
 function _area_auto(trait::GI.AbstractCRSTrait, crs, geom, ::Type{T}; threaded=false, kwargs...) where T

@@ -18,7 +18,7 @@ GeometryOps has four [`Manifold`](@ref) types: [`Planar`](@ref), [`Spherical`](@
   ellipsoid.
 
   For `Geodesic`, we need an `AbstractGeodesic` that can wrap representations from Proj.jl and SphericalGeodesics.jl.
-- `AutoManifold()` selects a manifold from a geometry's CRS when an operation supports automatic selection.
+- `AutoManifold()` selects a manifold from the top-level input's CRS when an operation supports automatic selection. The selected manifold applies to the entire input, including collections.
 
 The idea here is that the manifold describes how the geometry needs to be treated.  
 
@@ -38,7 +38,7 @@ In order to avoid this, GeometryOps combines CRS traits with manifolds.
 3. Proj, when loaded, which recognizes CRS definitions, supplies ellipsoid parameters, and converts projected linear units.
 
 
-`GO.area` uses `AutoManifold()` by default.  With Proj, a recognized geographic CRS selects an ellipsoid-aware `Geodesic` calculation in square metres.  Without Proj, a geographic CRS selects a degree longitude/latitude `Spherical` calculation.  Projected, unknown, and CRS-less geometries use `Planar` native square units.
+`GO.area` uses `AutoManifold()` by default. With Proj, a recognized geographic CRS selects an ellipsoid-aware `Geodesic` calculation in square metres. Without Proj, a geographic CRS selects a degree longitude/latitude `Spherical` calculation. Projected, unknown, and CRS-less inputs use `Planar` native square units. For a collection, `GO.area` selects the manifold once from the collection's CRS; it does not inspect child CRSs.
 
 Passing `Planar()` explicitly always computes in native coordinate units.  A map-plane area is a physical area only in an equal-area projection.
 

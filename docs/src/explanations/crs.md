@@ -6,7 +6,7 @@ In a mathematical sense, coordinate reference systems can be thought of defining
 
 ## Geographic CRS
 
-If a CRS is _geographic_, its coordinates describe longitude and latitude rather than a flat plane.  `GO.area` defaults to `AutoManifold()`: when Proj is available and recognizes the CRS, it uses an ellipsoid-aware `Geodesic` calculation and returns square metres.  Without Proj, geographic coordinates use a degree longitude/latitude `Spherical` calculation.
+If a CRS is _geographic_, its coordinates describe longitude and latitude rather than a flat plane. `GO.area` defaults to `AutoManifold()`: when Proj is available and recognizes the top-level input's CRS, it uses an ellipsoid-aware `Geodesic` calculation and returns square metres. Without Proj, geographic coordinates use a degree longitude/latitude `Spherical` calculation. For collections, this choice applies to every child.
 
 Use [`Planar`](@ref) explicitly when area in the geometry's native coordinate units is required.
 

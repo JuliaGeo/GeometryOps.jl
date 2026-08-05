@@ -128,23 +128,29 @@ highlat_poly = LG.Polygon([[[70., 70.], [70., 80.], [80., 80.], [80., 70.], [70.
     threaded_crsless_collection = GI.GeometryCollection(fill(projected_square, 256))
     @test GO.area(threaded_crsless_collection; threaded=true) ≈ 256 * foot_side^2
 
-    @test GO.area([geographic_square]) == GO.area(geographic_square)
+    @test GO.area([geographic_square]) == GO.area(GO.Planar(), geographic_square)
     @test GO.area([geographic_square, projected_square]) ==
-          GO.area(geographic_square) + GO.area(projected_square)
+          GO.area(GO.Planar(), [geographic_square, projected_square])
     crsless_feature_collection = GI.FeatureCollection([
         GI.Feature(geographic_square),
         GI.Feature(projected_square),
     ])
     @test GO.area(crsless_feature_collection) ==
-          GO.area(geographic_square) + GO.area(projected_square)
+          GO.area(GO.Planar(), crsless_feature_collection)
 
     plain_square = GI.Polygon([[
         (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0),
     ]])
     geographic_feature = GI.Feature(plain_square; crs=GeoFormatTypes.EPSG(4326))
     crsless_feature_collection = GI.FeatureCollection([geographic_feature])
-    @test GO.area(crsless_feature_collection) == GO.area(geographic_feature)
-    @test GO.area(crsless_feature_collection) == GO.area(GO.Geodesic(), geographic_feature)
+    @test GO.area(crsless_feature_collection) ==
+          GO.area(GO.Planar(), crsless_feature_collection)
+
+    geographic_feature_collection = GI.FeatureCollection(
+        [GI.Feature(plain_square)]; crs=GeoFormatTypes.EPSG(4326),
+    )
+    @test GO.area(geographic_feature_collection) ==
+          GO.area(GO.Geodesic(), geographic_feature_collection)
 
     grads_square = GI.Polygon([[
         (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0),
