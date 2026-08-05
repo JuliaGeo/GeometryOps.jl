@@ -37,7 +37,7 @@ FlexiJoins.supports_mode(::FlexiJoins.Mode.Tree, ::FlexiJoins.ByPred{F}, datas) 
 
 # In theory, one could extract the tree from e.g a GeoPackage or some future GeoDataFrame.
 
-function spatialtree(X, selector)
+function _spatialtree(X, selector)
     tree_or_geometries = selector(X)
     tree_or_geometries === nothing && return nothing
     ismissing(tree_or_geometries) && return nothing
@@ -45,7 +45,7 @@ function spatialtree(X, selector)
     return spatialtree(tree_or_geometries)
 end
 
-FlexiJoins.prepare_for_join(::FlexiJoins.Mode.Tree, X, cond::FlexiJoins.ByPred{<: GO_DE9IM_FUNCS}) = (X, spatialtree(X, cond.Rf))
+FlexiJoins.prepare_for_join(::FlexiJoins.Mode.Tree, X, cond::FlexiJoins.ByPred{<: GO_DE9IM_FUNCS}) = (X, _spatialtree(X, cond.Rf))
 function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{F}, ix_a, a, (B, tree)::Tuple, multi::typeof(identity)) where F<:GO_DE9IM_FUNCS
     # Implementation note:
     # here, `a` is a row, and `b` is the full table.
