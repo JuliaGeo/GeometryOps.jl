@@ -85,6 +85,9 @@ Fields:
 - `seg_nodes`: per-parent-segment ordered interior node-id lists, keyed by
   `(string_idx, seg_idx)`; absent for unsplit segments.
 - `edges`: every noded sub-segment of every parent segment.
+- `truncated`: node ids whose incident-edge set was *reduced* by clip pruning
+  (see `clip_a`/`clip_b` below). Empty (`BitVector()`) whenever no pruning ran,
+  which is every construction that does not pass a clip envelope.
 
 Construct with `NodedArrangement(m, a, b)` (raw geometries) or
 `NodedArrangement(m, ssa, ssb)` (pre-ingested segment strings).
@@ -94,6 +97,7 @@ struct NodedArrangement{P}
     nodes      :: NodeTable{P}
     seg_nodes  :: Dict{Tuple{Int32, Int32}, Vector{Int32}}
     edges      :: Vector{NodedEdge}
+    truncated  :: BitVector
 end
 
 num_nodes(arr::NodedArrangement) = num_nodes(arr.nodes)
@@ -116,19 +120,33 @@ _overlay_segstrings(m::Manifold, geom, is_a::Bool; exact = True()) =
 # ## Construction
 
 # From raw geometries: ingest each side, then arrange.
-function NodedArrangement(m::Manifold, a, b; exact = True(), tree_a = nothing, tree_b = nothing)
+function NodedArrangement(m::Manifold, a, b; exact = True(), tree_a = nothing, tree_b = nothing,
+        clip_a = nothing, clip_b = nothing)
     ssa = _overlay_segstrings(m, a, true; exact)
     ssb = _overlay_segstrings(m, b, false; exact)
-    return NodedArrangement(m, ssa, ssb; exact, tree_a, tree_b)
+    return NodedArrangement(m, ssa, ssb; exact, tree_a, tree_b, clip_a, clip_b)
 end
 
-# From pre-ingested segment strings. `tree_a`/`tree_b` accept caller-supplied
-# prebuilt segment indices (a `PreparedRelate` carries exactly `_relate_edge_index`
-# output) — an optional argument only, no new prepare type (design §2.3).
+#=
+From pre-ingested segment strings. `tree_a`/`tree_b` accept caller-supplied
+prebuilt segment indices (a `PreparedRelate` carries exactly `_relate_edge_index`
+output) — an optional argument only, no new prepare type (design §2.3).
+
+`clip_a`/`clip_b` are the optional per-side **clip envelopes** (planar
+`Extents.Extent`s): a parent segment whose bounding box misses its side's
+envelope contributes no `NodedEdge`, so the arrangement carries only the
+linework that can bound the result of the op the caller has in mind. This is the
+construct-free stand-in for GEOS's `RingClipper` — nothing is clipped, no
+coordinate is synthesized on the box, and the surviving chains are simply left
+OPEN in the graph. The caller owns the soundness argument (see
+`_overlay_clip_envelopes` in overlay_ng.jl); `nothing` (the default) is
+byte-for-byte today's behaviour.
+=#
 function NodedArrangement(m::Manifold,
         ssa::AbstractVector{RelateSegmentString{P}},
         ssb::AbstractVector{RelateSegmentString{P}};
-        exact = True(), tree_a = nothing, tree_b = nothing) where {P}
+        exact = True(), tree_a = nothing, tree_b = nothing,
+        clip_a = nothing, clip_b = nothing) where {P}
     na = length(ssa)
     segstrings = Vector{RelateSegmentString{P}}(undef, na + length(ssb))
     @inbounds for i in 1:na
@@ -141,11 +159,13 @@ function NodedArrangement(m::Manifold,
     table = NodeTable{P}()
     seg_nodes = Dict{Tuple{Int32, Int32}, Vector{Int32}}()
     # stage 1
-    _collect_crossings!(m, table, seg_nodes, ssa, ssb, Int32(na); exact, tree_a, tree_b)
+    _collect_crossings!(m, table, seg_nodes, ssa, ssb, Int32(na);
+                        exact, tree_a, tree_b, clip_a, clip_b)
     # stage 3
     _merge_coincident_nodes!(m, table, seg_nodes; exact)
     # stages 2 + 4
-    edges = _split_edges!(m, table, seg_nodes, segstrings; exact)
+    edges, truncated = _split_edges!(m, table, seg_nodes, segstrings, Int32(na),
+                                     clip_a, clip_b; exact)
     _ensure_coord_cache!(table)
-    return NodedArrangement{P}(segstrings, table, seg_nodes, edges)
+    return NodedArrangement{P}(segstrings, table, seg_nodes, edges, truncated)
 end

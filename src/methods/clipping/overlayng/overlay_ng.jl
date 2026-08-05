@@ -112,8 +112,12 @@ function _overlay_ng(m::Manifold, op::_OverlayOpCode, a, b;
     #-- contain, so it is answered without noding at all
     _target_above_result(tgt, op, dim_a, dim_b) && return _empty_result(op, input, tgt)
 
+    #-- the planar input envelopes this op can use, computed once: the disjoint
+    #-- short circuit and the clip pruning below are the two readers
+    ea, eb = _overlay_envelopes(m, op, input)
+
     #-- empty-input / disjoint-envelope short circuits (port of isEmptyResult)
-    _empty_result_short_circuit(m, op, input) && return _empty_result(op, input, tgt)
+    _empty_result_short_circuit(m, op, input, ea, eb) && return _empty_result(op, input, tgt)
 
     #-- point paths (port of the `getResult` dispatch): points cannot node
     #-- anything, so they never reach the arrangement
@@ -123,7 +127,8 @@ function _overlay_ng(m::Manifold, op::_OverlayOpCode, a, b;
         return _overlay_mixed_points(m, op, a, b, dim_a, dim_b, tgt; exact)  # hasPoints
     end
 
-    arr = NodedArrangement(m, a, b; exact, tree_a, tree_b)
+    clip_a, clip_b = _overlay_clip_envelopes(op, ea, eb)
+    arr = NodedArrangement(m, a, b; exact, tree_a, tree_b, clip_a, clip_b)
     g = OverlayGraph(m, arr; exact)
 
     _compute_labelling!(g, input)
@@ -359,12 +364,14 @@ end
 # ## Empty / full-sphere handling
 
 # Port of `OverlayUtil.isEmptyResult` (the input-driven short circuit). Whether
-# the inputs alone force an empty result, so the pipeline need not run.
-function _empty_result_short_circuit(m::Manifold, op::_OverlayOpCode, input::_OverlayInput)
+# the inputs alone force an empty result, so the pipeline need not run. `ea`/`eb`
+# are the input envelopes `_overlay_envelopes` produced for this op, or `nothing`.
+function _empty_result_short_circuit(m::Manifold, op::_OverlayOpCode, input::_OverlayInput,
+        ea, eb)
     if op == OVERLAY_INTERSECTION
         (input.empty_a || input.empty_b) && return true
         #-- disjoint-envelope reject (planar only; the spherical box is unreliable)
-        m isa Planar && _env_disjoint(input.a, input.b) && return true
+        _env_disjoint(ea, eb) && return true
     elseif op == OVERLAY_DIFFERENCE
         input.empty_a && return true
     else # UNION / SYMDIFFERENCE
@@ -373,11 +380,80 @@ function _empty_result_short_circuit(m::Manifold, op::_OverlayOpCode, input::_Ov
     return false
 end
 
-@inline function _env_disjoint(a, b)
-    ea = GI.extent(a); eb = GI.extent(b)
-    (ea === nothing || eb === nothing) && return false
-    return !Extents.intersects(ea, eb)
+@inline _env_disjoint(ea, eb) =
+    !(ea === nothing || eb === nothing) && !Extents.intersects(ea, eb)
+
+# ## Clip pruning (the construct-free `RingClipper`)
+
+#=
+GEOS clips both inputs to the intersection envelope before noding
+(`RingClipper`), which is most of why its `intersection` is several times cheaper
+than its own `union`. Closing a clipped ring along the box constructs coordinates
+that then feed the noder, so that form cannot be adopted here (design §0). The
+construct-free equivalent is to prune rather than clip: a parent segment whose
+bbox misses the box simply produces no `NodedEdge`, and the surviving chains stay
+OPEN — see the long note in noding/split.jl for why the arrangement tolerates
+that, and `_compute_labelling!` for the one pass that has to know.
+
+What this function owns is the remaining premise: **every edge that can be in the
+result lies inside the box it prunes against**.
+
+  * INTERSECTION — the result is contained in `env(A) ∩ env(B)`, and so is every
+    piece of either boundary that bounds it. Prune both sides to that box.
+  * DIFFERENCE (A − B) — the result is contained in A. Its boundary is made of
+    pieces of ∂A (so A is never pruned) and pieces of ∂B lying inside A, hence
+    inside `env(A)`. Prune only B, to `env(A)`.
+  * UNION / SYMDIFFERENCE — the result reaches everywhere either input does, so
+    there is no box to prune against. GEOS does not clip these either.
+
+Spherical is excluded: the lon/lat box is unreliable across the antimeridian and
+the poles, which is the same reason the disjoint-envelope short circuit above is
+planar-only. A non-`_OverlayOpCode` `op` (the labeller accepts any
+`(loc0, loc1) -> Bool`) is excluded too — an arbitrary predicate has no result
+containment to appeal to.
+=#
+
+# The input envelopes this op can make use of, or `nothing`s. Computing them here
+# rather than inside each consumer keeps `GI.extent` to one traversal per side,
+# and keeps it off the ops that have no use for it. An EMPTY operand is excluded
+# too: it can have no envelope (LibGEOS raises on one), and every op that would
+# read it short circuits on the emptiness first.
+@inline function _overlay_envelopes(m::Manifold, op::_OverlayOpCode, input::_OverlayInput)
+    m isa Planar || return (nothing, nothing)
+    if op == OVERLAY_INTERSECTION
+        (input.empty_a || input.empty_b) && return (nothing, nothing)
+        return (GI.extent(input.a), GI.extent(input.b))
+    elseif op == OVERLAY_DIFFERENCE
+        input.empty_a && return (nothing, nothing)
+        return (GI.extent(input.a), nothing)
+    end
+    return (nothing, nothing)
 end
+@inline _overlay_envelopes(m::Manifold, op, input::_OverlayInput) = (nothing, nothing)
+
+# The per-side clip boxes for `op`, given the envelopes above.
+@inline function _overlay_clip_envelopes(op::_OverlayOpCode, ea, eb)
+    if op == OVERLAY_INTERSECTION
+        e = _clip_box(ea, eb)
+        return (e, e)
+    elseif op == OVERLAY_DIFFERENCE
+        return (nothing, _clip_box(ea))
+    end
+    return (nothing, nothing)
+end
+@inline _overlay_clip_envelopes(op, ea, eb) = (nothing, nothing)
+
+# An envelope as the concrete XY box `_seg_in_clip` tests against.
+@inline _clip_box(::Nothing) = nothing
+@inline _clip_box(e) = Extents.Extent((X = (Float64(e.X[1]), Float64(e.X[2])),
+                                       Y = (Float64(e.Y[1]), Float64(e.Y[2]))))
+
+@inline _clip_box(::Nothing, eb) = nothing
+@inline _clip_box(ea, ::Nothing) = nothing
+@inline _clip_box(::Nothing, ::Nothing) = nothing
+@inline _clip_box(ea, eb) = Extents.Extent((
+    X = (max(Float64(ea.X[1]), Float64(eb.X[1])), min(Float64(ea.X[2]), Float64(eb.X[2]))),
+    Y = (max(Float64(ea.Y[1]), Float64(eb.Y[1])), min(Float64(ea.Y[2]), Float64(eb.Y[2])))))
 
 # Port of `OverlayUtil.resultDimension`.
 function _result_dimension(op::_OverlayOpCode, d0::Integer, d1::Integer)

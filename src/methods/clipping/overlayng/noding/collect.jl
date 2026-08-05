@@ -17,7 +17,8 @@ end
 function _collect_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
         ssa::AbstractVector{RelateSegmentString{P}},
         ssb::AbstractVector{RelateSegmentString{P}}, na::Int32;
-        exact = True(), tree_a = nothing, tree_b = nothing) where {P}
+        exact = True(), tree_a = nothing, tree_b = nothing,
+        clip_a = nothing, clip_b = nothing) where {P}
     ta = tree_a === nothing ? _relate_edge_index(m, ssa) : tree_a
     tb = tree_b === nothing ? _relate_edge_index(m, ssb) : tree_b
     if !(ta === nothing || tb === nothing)
@@ -30,13 +31,67 @@ function _collect_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
         end
     end
     #-- design §2.2 amendment: each input must additionally be self-noded, in two
-    #-- passes of different scope (see below)
-    _collect_self_crossings!(m, table, seg_nodes, ssa, Int32(0); exact)
-    _collect_self_crossings!(m, table, seg_nodes, ssb, na; exact)
-    _collect_self_vertex_nodes!(m, table, seg_nodes, ssa, Int32(0), ta; exact)
-    _collect_self_vertex_nodes!(m, table, seg_nodes, ssb, na, tb; exact)
+    #-- passes of different scope (see below). Both are restricted to the side's
+    #-- clip box when it has one — see "Self-noding under clip pruning".
+    _collect_self_crossings!(m, table, seg_nodes, ssa, Int32(0); exact, clip = clip_a)
+    _collect_self_crossings!(m, table, seg_nodes, ssb, na; exact, clip = clip_b)
+    _collect_self_vertex_nodes!(m, table, seg_nodes, ssa, Int32(0), ta; exact, clip = clip_a)
+    _collect_self_vertex_nodes!(m, table, seg_nodes, ssb, na, tb; exact, clip = clip_b)
     return nothing
 end
+
+#=
+## Self-noding under clip pruning
+
+The A×B pass above needs no clip filter: a pruned A segment's bbox misses
+`env(B)` (that is what pruning to `env(A) ∩ env(B)`, or to `env(A)`, means), so
+it never shares an extent with any B segment and the dual traversal already
+never enumerates it. Self-noding is different — a side's own segments overlap
+each other constantly, there is no pruning to be had from the data, and the pass
+is O(all segments) whatever the box. Measured on Natural Earth 10 m Brazil
+against a 2° box, it was 947 µs of a 1.83 ms query with every other stage already
+pruned.
+
+So both self-noding passes take the side's clip box and restrict the traversal
+to it: a tree node whose extent misses the box is never descended into, and a
+segment whose extent misses the box is never paired. That is exactly the same
+kept/pruned test `split.jl` applies (`_segment_extent(::Planar, p, q)` IS the
+endpoint bbox), so the two stages agree segment for segment.
+
+**What this drops, and why it is sound.** Only pairs with at least one PRUNED
+member. A pruned segment lies wholly outside the box, so any node such a pair
+would create lies outside the box too. Three cases:
+
+  * both pruned — neither emits an edge, so the node would reference nothing;
+  * a pruned segment's vertex inside a KEPT segment — the kept segment is then
+    left unsplit there;
+  * a kept segment's vertex inside a PRUNED segment — the pruned segment emits
+    no edge either way, so only the node's existence is lost.
+
+The middle case is the one that changes the graph, and it cannot change the
+result. The A×B pass is untouched, so every kept segment is still split at every
+incidence with the OTHER input; between consecutive nodes a kept edge therefore
+has a uniform location with respect to the other input, and its label — from the
+ring's own `depth_delta` plus that uniform location — is correct along its whole
+length. An edge marked in-result consequently lies wholly on the result boundary,
+hence inside the result's closure, hence inside the box; an edge spanning a
+dropped same-side node runs through a point outside the box and so is never
+marked. What is lost is only the subdivision of NON-result linework at
+same-side touch points outside the box.
+
+Two invariants survive verbatim. **Every node inside the box keeps its full
+star**, and the arrangement restricted to the box is identical to the unpruned
+one: any incidence at a point in the box involves only segments whose bbox meets
+the box, and those are all still in the traversal. And coincident segments have
+identical extents, so they prune together and are noded in lockstep — the edge
+merger never sees a half-split pair. Ring assembly, which only ever links
+in-result edges, is therefore reading exactly the graph it would have read.
+
+The stars that DO thin are handled by `arr.truncated`, which `split.jl` derives
+positionally (a vertex node outside the box) rather than from a record of what
+each stage dropped — which is what lets this pass drop nodes without having to
+report them.
+=#
 
 #=
 ## Self-noding (design §2.2 amendment)
@@ -106,7 +161,7 @@ crossing node on an input that should not have one — but it is not where the
 time went.
 =#
 function _collect_self_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
-        ss::AbstractVector{RelateSegmentString{P}}, off::Int32; exact) where {P}
+        ss::AbstractVector{RelateSegmentString{P}}, off::Int32; exact, clip = nothing) where {P}
     lin = Int32[Int32(i) for i in eachindex(ss) if ss[i].dim == DIM_L]
     isempty(lin) && return nothing
     sub = [ss[i] for i in lin]
@@ -114,7 +169,7 @@ function _collect_self_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
     sum(s -> length(s.pts) - 1, sub; init = 0) < 2 && return nothing
     t = _relate_edge_index(m, sub)
     t === nothing && return nothing
-    _self_pair_search(m, t) do i1, i2
+    _self_pair_search(m, t, clip) do i1, i2
         (s1, k1) = t.data[i1]
         (s2, k2) = t.data[i2]
         _classify_pair!(m, table, seg_nodes, sub, s1, off + lin[s1], Int32(k1),
@@ -147,11 +202,12 @@ already a node of that segment and needs no split, and rejecting it early keeps
 every adjacent-segment and shared-ring-vertex pair off the predicate entirely.
 =#
 function _collect_self_vertex_nodes!(m::Manifold, table::NodeTable{P}, seg_nodes,
-        ss::AbstractVector{RelateSegmentString{P}}, off::Int32, tree; exact) where {P}
+        ss::AbstractVector{RelateSegmentString{P}}, off::Int32, tree;
+        exact, clip = nothing) where {P}
     tree === nothing && return nothing
     #-- an all-linear side is fully covered by the pass above
     all(s -> s.dim == DIM_L, ss) && return nothing
-    _self_pair_search(m, tree) do i1, i2
+    _self_pair_search(m, tree, clip) do i1, i2
         (s1, k1) = tree.data[i1]
         (s2, k2) = tree.data[i2]
         p1 = ss[s1].pts; p2 = ss[s2].pts
@@ -194,16 +250,37 @@ pairwise; it is threaded through the recursion and reused, so the whole traversa
 allocates once. That makes `f` non-reentrant here — it must not start another
 search — which neither caller does.
 =#
-function _self_pair_search(f::F, m::Manifold, tree) where {F}
+function _self_pair_search(f::F, m::Manifold, tree, clip = nothing) where {F}
     buf = Tuple{Int, _segment_extent_type(m)}[]
-    _self_pair_search(f, Extents.intersects, tree, buf)
+    _self_pair_search(f, _clip_pair_pred(clip), tree, buf, clip)
     return nothing
 end
-function _self_pair_search(f::F, pred::PR, node::N, buf::Vector) where {F, PR, N}
+
+# Whether an extent (a tree node's, or a leaf segment's) meets the clip box.
+# Closed-interval, exactly like `_seg_in_clip` in split.jl — and on the same
+# quantity, since a planar segment extent IS its endpoint bbox.
+@inline _ext_in_clip(::Nothing, e) = true
+@inline function _ext_in_clip(clip::Extents.Extent, e)
+    (xlo, xhi) = clip.X
+    (ylo, yhi) = clip.Y
+    (ex_lo, ex_hi) = e.X
+    (ey_lo, ey_hi) = e.Y
+    return (ex_lo <= xhi) & (ex_hi >= xlo) & (ey_lo <= yhi) & (ey_hi >= ylo)
+end
+
+# The pair predicate: extents must meet each other AND both meet the clip box, so
+# the same test prunes the cross-child `dual_depth_first_search` descent too.
+_clip_pair_pred(::Nothing) = Extents.intersects
+_clip_pair_pred(clip) = (ea, eb) ->
+    Extents.intersects(ea, eb) && _ext_in_clip(clip, ea) && _ext_in_clip(clip, eb)
+
+function _self_pair_search(f::F, pred::PR, node::N, buf::Vector, clip) where {F, PR, N}
     if SpatialTreeInterface.isleaf(node)
         empty!(buf)
         for ie in SpatialTreeInterface.child_indices_extents(node)
-            push!(buf, ie)
+            #-- a pruned segment can pair with nothing that matters; drop it here
+            #-- rather than in `pred`, so it does not cost a comparison per pair
+            _ext_in_clip(clip, ie[2]) && push!(buf, ie)
         end
         @inbounds for a in 1:length(buf), b in (a + 1):length(buf)
             pred(buf[a][2], buf[b][2]) && f(buf[a][1], buf[b][1])
@@ -212,10 +289,12 @@ function _self_pair_search(f::F, pred::PR, node::N, buf::Vector) where {F, PR, N
         nc = SpatialTreeInterface.nchild(node)
         for a in 1:nc
             ca = SpatialTreeInterface.getchild(node, a)
-            #-- pairs inside this child ...
-            _self_pair_search(f, pred, ca, buf)
-            #-- ... then pairs spanning it and a later sibling
             ea = SpatialTreeInterface.node_extent(ca)
+            #-- a subtree wholly outside the clip box holds only pruned segments
+            _ext_in_clip(clip, ea) || continue
+            #-- pairs inside this child ...
+            _self_pair_search(f, pred, ca, buf, clip)
+            #-- ... then pairs spanning it and a later sibling
             for b in (a + 1):nc
                 cb = SpatialTreeInterface.getchild(node, b)
                 pred(ea, SpatialTreeInterface.node_extent(cb)) &&

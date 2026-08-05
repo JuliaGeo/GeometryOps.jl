@@ -68,9 +68,30 @@ end
 
 # ## computeLabelling — the five passes, in order (port of `computeLabelling`)
 
+#=
+Pass 1 is the one pass that reads a node's star as a CLOSED cycle — it walks it
+CCW carrying a side location and checks every boundary edge against it. Clip
+pruning (split.jl) can leave a node with only part of its star, which would make
+that walk report a phantom side-location conflict, so those nodes are skipped.
+
+Skipping is information-losing, never wrong: the edges pass 1 would have labelled
+stay unknown and are resolved by passes 2–5, the last of which locates against
+the ORIGINAL input by point-in-area and is total. `arr.truncated` is empty on
+every unclipped arrangement, so the guard is inert on the default path.
+
+It also cannot cost anything that matters. A truncated node lies strictly outside
+the clip box, and every node inside the box keeps its full star (split.jl); a
+node outside the box carries edges from ONE input only, because a node shared by
+both inputs lies on a segment of each, hence inside both envelopes, hence inside
+the box. So the star pass 1 is denied was never going to relate the two inputs to
+each other.
+=#
 function _compute_labelling!(g::OverlayGraph, input)
     edges = g.edges
+    truncated = g.arr.truncated
+    any_truncated = !isempty(truncated)
     for ne in graph_node_edges(g)
+        (any_truncated && truncated[he_origin(edges, ne)]) && continue
         _propagate_area_locations!(edges, input, ne, 0)
         _input_has_edges(input, 1) && _propagate_area_locations!(edges, input, ne, 1)
     end

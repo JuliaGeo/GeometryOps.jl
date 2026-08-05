@@ -406,6 +406,262 @@ end
 end
 
 # ---------------------------------------------------------------------------
+# 5b. Clip-envelope pruning (the construct-free `RingClipper`)
+# ---------------------------------------------------------------------------
+#
+# `_overlay_ng` prunes input SEGMENTS whose bbox misses a per-op clip box before
+# they ever become `NodedEdge`s (`OVERLAY_INTERSECTION`: both sides to
+# `env(A) ∩ env(B)`; `OVERLAY_DIFFERENCE`: B only, to `env(A)`), leaving the
+# surviving chains open in the graph. The correctness claim is that a pruned
+# edge's location is recovered by point-in-area against the ORIGINAL input, so
+# the cases below are chosen to prune a WHOLE side away and then demand the right
+# answer — which only the original-geometry fallback can supply.
+#
+# Every one of them asserts that pruning actually fired, by counting the noded
+# edges each side contributed; without that an "A ∩ hugeB == A" test is satisfied
+# by the unpruned pipeline too and proves nothing about this path.
+
+#-- the driver's own envelope rule, so these prune exactly as `_overlay_ng` does
+clip_for(op, A, B) = GO._overlay_clip_envelopes(op, GI.extent(A), GI.extent(B))
+
+function clipped_arr(op, A, B)
+    ca, cb = clip_for(op, A, B)
+    return GO.NodedArrangement(Planar(), A, B; exact = EX, clip_a = ca, clip_b = cb)
+end
+
+#-- noded edges contributed by one side (`is_a = true` → A)
+side_edges(arr, is_a) = count(e -> arr.segstrings[e.string_idx].is_a == is_a, arr.edges)
+
+#-- the same pipeline with pruning switched OFF, for a like-for-like comparison
+#-- (area × area only, which is all this section builds)
+function overlay_unpruned(op, A, B)
+    arr = GO.NodedArrangement(Planar(), A, B; exact = EX)
+    g = GO.OverlayGraph(Planar(), arr; exact = EX)
+    input = GO._OverlayInput(Planar(), A, B, 2, 2, EX, false, false, nothing, nothing)
+    GO._compute_labelling!(g, input)
+    GO._mark_result_area_edges!(g, op)
+    GO._unmark_duplicate_edges_from_result_area!(g)
+    return GO._extract_result(Planar(), op, g, input, nothing; exact = EX)
+end
+
+const CLIP_A_UNIT = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+const CLIP_B_HUGE = GI.Polygon([[(-100.0, -100.0), (100.0, -100.0), (100.0, 100.0),
+                                 (-100.0, 100.0), (-100.0, -100.0)]])
+#-- the same huge square with a hole that swallows the unit square whole
+const CLIP_B_HOLE = GI.Polygon([[(-100.0, -100.0), (100.0, -100.0), (100.0, 100.0),
+                                 (-100.0, 100.0), (-100.0, -100.0)],
+                                [(-50.0, -50.0), (-50.0, 50.0), (50.0, 50.0),
+                                 (50.0, -50.0), (-50.0, -50.0)]])
+
+@testset "A strictly inside a huge B — every B edge prunes away" begin
+    A, B = CLIP_A_UNIT, CLIP_B_HUGE
+    arr = clipped_arr(GO.OVERLAY_INTERSECTION, A, B)
+    #-- B's shell never enters env(A), so the arrangement holds NO B linework:
+    #-- the answer below can only come from locating A's edges against the
+    #-- original B (labeller pass 5), which is the whole point of the spike
+    @test side_edges(arr, false) == 0
+    @test side_edges(arr, true) == side_edges(GO.NodedArrangement(Planar(), A, B; exact = EX), true)
+
+    ri = GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, B; exact = EX)
+    @test LG.isValid(lgc(ri))
+    @test LG.equals(lgc(ri), lgc(A))
+    @test isapprox(GO.area(ri), 1.0; rtol = 1e-12)
+
+    #-- union is NOT pruned (there is no box the result stays inside), so it is
+    #-- unaffected — and it would be wrong if the intersection box leaked into it
+    ru = GO._overlay_ng(Planar(), GO.OVERLAY_UNION, A, B; exact = EX)
+    @test LG.equals(lgc(ru), lgc(B))
+    @test isapprox(GO.area(ru), 40000.0; rtol = 1e-12)
+    @test GO.num_edges(clipped_arr(GO.OVERLAY_UNION, A, B)) ==
+          GO.num_edges(GO.NodedArrangement(Planar(), A, B; exact = EX))
+end
+
+@testset "A inside B's hole — intersection empty, difference untouched" begin
+    A, B = CLIP_A_UNIT, CLIP_B_HOLE
+    arr = clipped_arr(GO.OVERLAY_INTERSECTION, A, B)
+    #-- neither B ring comes near env(A): the whole of B prunes, and the hole's
+    #-- EXTERIOR verdict likewise comes from the original geometry
+    @test side_edges(arr, false) == 0
+    ri = GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, B; exact = EX)
+    @test GI.npoint(ri) == 0
+
+    #-- A ∖ B is all of A, and here too B prunes to nothing (to `env(A)`)
+    arrd = clipped_arr(GO.OVERLAY_DIFFERENCE, A, B)
+    @test side_edges(arrd, false) == 0
+    rd = GO._overlay_ng(Planar(), GO.OVERLAY_DIFFERENCE, A, B; exact = EX)
+    @test LG.isValid(lgc(rd))
+    @test LG.equals(lgc(rd), lgc(A))
+    @test isapprox(GO.area(rd), 1.0; rtol = 1e-12)
+end
+
+@testset "difference against a far-away B — B prunes to nothing, A survives" begin
+    A = SQ_A
+    B = GI.Polygon([[(100.0, 100.0), (102.0, 100.0), (102.0, 102.0), (100.0, 102.0), (100.0, 100.0)]])
+    #-- DIFFERENCE never prunes A, and prunes B to `env(A)` — which B misses
+    ca, cb = clip_for(GO.OVERLAY_DIFFERENCE, A, B)
+    @test ca === nothing
+    arr = clipped_arr(GO.OVERLAY_DIFFERENCE, A, B)
+    @test side_edges(arr, false) == 0
+    @test side_edges(arr, true) == 4
+    r = GO._overlay_ng(Planar(), GO.OVERLAY_DIFFERENCE, A, B; exact = EX)
+    @test LG.equals(lgc(r), lgc(A))
+    @test isapprox(GO.area(r), 4.0; rtol = 1e-12)
+end
+
+@testset "MultiPolygon with a far component — only that component prunes" begin
+    A = SQ_A
+    #-- one component straddles A, one sits far away; env(B) spans both, so the
+    #-- intersection box is env(A) ∩ env(B) and only the far component leaves it
+    B = GI.MultiPolygon([[[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]],
+                         [[(50.0, 50.0), (52.0, 50.0), (52.0, 52.0), (50.0, 52.0), (50.0, 50.0)]]])
+    plain = GO.NodedArrangement(Planar(), A, B; exact = EX)
+    arr = clipped_arr(GO.OVERLAY_INTERSECTION, A, B)
+    @test side_edges(arr, false) < side_edges(plain, false)   # pruning fired ...
+    @test side_edges(arr, false) > 0                          # ... but not to nothing
+    for op in OPS
+        r = GO._overlay_ng(Planar(), op, A, B; exact = EX)
+        @test LG.isValid(lgc(r))
+        @test LG.equals(lgc(r), geos_op(op, A, B))
+        @test LG.equals(lgc(r), lgc(overlay_unpruned(op, A, B)))
+    end
+end
+
+@testset "a truncated star outside the box does not raise a topology error" begin
+    #-- FOUR valid B components meeting at one apex far outside env(A). Three of
+    #-- them reach back to A with both of their apex edges (which therefore
+    #-- survive); the third component's SHORT apex edge (100,5)->(99,4) has a bbox
+    #-- that misses the box, so exactly one ray of its wedge is pruned and the
+    #-- apex star loses an edge from the MIDDLE of its CCW order.
+    #--
+    #-- That is the shape `_propagate_area_locations!` cannot read: it walks the
+    #-- star as a closed cycle, so the half-open wedge reads as a side-location
+    #-- conflict. Verified: running pass 1 over this graph WITHOUT the
+    #-- truncated-node skip in `_compute_labelling!` raises
+    #-- `_OverlayTopologyError("side location conflict: arg 1")`. (The middle of
+    #-- the order matters — pass 1 never re-checks its own start edge, so a wedge
+    #-- broken at the star's wrap-around point is silently tolerated.)
+    A = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    apex = (100.0, 5.0)
+    B = GI.MultiPolygon([
+        [[(0.0, 1.0), apex, (0.0, 3.0), (0.0, 1.0)]],
+        [[(0.0, 7.0), apex, (0.0, 9.0), (0.0, 7.0)]],
+        [[apex, (99.0, 4.0), (0.0, 0.5), apex]],
+        [[apex, (10.0, -100.0), (9.0, -100.0), apex]]])
+    @test LG.isValid(lgc(B))
+    arr = clipped_arr(GO.OVERLAY_INTERSECTION, A, B)
+    @test side_edges(arr, false) < side_edges(GO.NodedArrangement(Planar(), A, B; exact = EX), false)
+    #-- the apex is exactly the node whose star lost an edge
+    @test count(arr.truncated) > 0
+    for op in OPS
+        r = GO._overlay_ng(Planar(), op, A, B; exact = EX)
+        @test LG.isValid(lgc(r))
+        @test LG.equals(lgc(r), geos_op(op, A, B))
+    end
+end
+
+# ## Self-noding under the clip box
+#
+# The clip box also restricts BOTH self-noding passes (collect.jl), which is
+# where the time actually was. The cases below are the adversarial ones: a
+# same-side incidence between a KEPT segment and a PRUNED one, outside the box,
+# so the kept segment is deliberately left unsplit at a point where the input
+# touches itself. Each asserts the drop really happened (`self_nodes`) and then
+# demands the same answer as both the unpruned pipeline and GEOS.
+
+#-- interior nodes the self-noding passes record for one side, with and without
+#-- the clip box. This is the direct measurement of "the pruned path fired".
+function self_nodes(A, B, op)
+    P = Planar()
+    ssa = GO._overlay_segstrings(P, A, true; exact = EX)
+    ssb = GO._overlay_segstrings(P, B, false; exact = EX)
+    ca, cb = clip_for(op, A, B)
+    ta = GO._relate_edge_index(P, ssa)
+    tb = GO._relate_edge_index(P, ssb)
+    function census(ss, off, tree, clip)
+        t = GO.NodeTable{Tuple{Float64, Float64}}()
+        sn = Dict{Tuple{Int32, Int32}, Vector{Int32}}()
+        GO._collect_self_crossings!(P, t, sn, ss, Int32(off); exact = EX, clip)
+        GO._collect_self_vertex_nodes!(P, t, sn, ss, Int32(off), tree; exact = EX, clip)
+        return sum(length, values(sn); init = 0)
+    end
+    return (a_clipped = census(ssa, 0, ta, ca), a_plain = census(ssa, 0, ta, nothing),
+            b_clipped = census(ssb, length(ssa), tb, cb),
+            b_plain = census(ssb, length(ssa), tb, nothing))
+end
+
+function check_prune_agrees(A, B; ops = OPS)
+    for op in ops
+        r = GO._overlay_ng(Planar(), op, A, B; exact = EX)
+        @test LG.isValid(lgc(r))
+        @test LG.equals(lgc(r), geos_op(op, A, B))
+    end
+end
+
+@testset "same-side vertex touch outside the box (two A components)" begin
+    #-- A2's apex lies STRICTLY INSIDE A1's bottom edge at (15,0), well outside
+    #-- the box. A1's bottom edge survives (its bbox spans into the box), A2's two
+    #-- apex segments do not — so the self-vertex pass drops a node that the
+    #-- unpruned pass finds, and A1's bottom edge is left unsplit there.
+    A = GI.MultiPolygon([[[(0.0, 0.0), (20.0, 0.0), (20.0, 1.0), (0.0, 1.0), (0.0, 0.0)]],
+                         [[(15.0, 0.0), (20.0, -5.0), (10.0, -5.0), (15.0, 0.0)]]])
+    B = GI.Polygon([[(0.0, -1.0), (4.0, -1.0), (4.0, 2.0), (0.0, 2.0), (0.0, -1.0)]])
+    @test LG.isValid(lgc(A))
+    c = self_nodes(A, B, GO.OVERLAY_INTERSECTION)
+    @test c.a_plain > 0                 # the touch really is a self-node ...
+    @test c.a_clipped < c.a_plain       # ... and the clip box really drops it
+    ri = GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, B; exact = EX)
+    @test LG.equals(lgc(ri), lgc(overlay_unpruned(GO.OVERLAY_INTERSECTION, A, B)))
+    @test isapprox(GO.area(ri), 4.0; rtol = 1e-12)   # the bar clipped to x ∈ [0,4]
+    check_prune_agrees(A, B)
+end
+
+@testset "shell–hole vertex touch outside the box" begin
+    #-- the hole touches the shell's bottom edge at (15,0), outside the box. The
+    #-- shell edge is kept, all three hole segments prune.
+    A = GI.Polygon([[(0.0, 0.0), (20.0, 0.0), (20.0, 10.0), (0.0, 10.0), (0.0, 0.0)],
+                    [(15.0, 0.0), (12.0, 4.0), (18.0, 4.0), (15.0, 0.0)]])
+    B = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (4.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    @test LG.isValid(lgc(A))
+    c = self_nodes(A, B, GO.OVERLAY_INTERSECTION)
+    @test c.a_plain > 0
+    @test c.a_clipped < c.a_plain
+    ri = GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, B; exact = EX)
+    @test LG.equals(lgc(ri), lgc(overlay_unpruned(GO.OVERLAY_INTERSECTION, A, B)))
+    @test isapprox(GO.area(ri), 40.0; rtol = 1e-12)  # B is entirely inside A
+    check_prune_agrees(A, B)
+end
+
+@testset "self-crossing LineString, crossing outside the box" begin
+    #-- the linear all-pairs pass, not the vertex pass: A crosses ITSELF at
+    #-- (15,5), outside the box, and crosses B inside it. The long horizontal
+    #-- segment survives; the vertical one that produces the self-crossing does
+    #-- not, so the crossing node is dropped and the survivor stays unsplit.
+    A = GI.LineString([(0.0, 5.0), (20.0, 5.0), (20.0, 0.0), (15.0, 0.0), (15.0, 10.0)])
+    B = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (4.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    c = self_nodes(A, B, GO.OVERLAY_INTERSECTION)
+    @test c.a_plain > 0
+    @test c.a_clipped < c.a_plain
+    ri = GO._overlay_ng(Planar(), GO.OVERLAY_INTERSECTION, A, B; exact = EX)
+    @test LG.equals(lgc(ri), geos_op(GO.OVERLAY_INTERSECTION, A, B))
+    @test isapprox(GO.perimeter(ri), 4.0; rtol = 1e-12)  # the (0,5)–(4,5) stub
+    #-- every op, against GEOS (`overlay_unpruned` is area×area only)
+    check_prune_agrees(A, B)
+end
+
+@testset "pruning is answer-preserving on the ordinary pairs" begin
+    #-- the direct pruned-vs-unpruned comparison, on shapes whose linework
+    #-- straddles the box rather than sitting wholly inside or outside it
+    Ring = GI.Polygon([[(0.0, 0.0), (12.0, 0.0), (12.0, 12.0), (0.0, 12.0), (0.0, 0.0)],
+                       [(3.0, 3.0), (3.0, 9.0), (9.0, 9.0), (9.0, 3.0), (3.0, 3.0)]])
+    Bar = GI.Polygon([[(6.0, -5.0), (20.0, -5.0), (20.0, 6.0), (6.0, 6.0), (6.0, -5.0)]])
+    pairs = ((SQ_A, SQ_B), (Ring, Bar), (Ring, CLIP_A_UNIT), (CLIP_A_UNIT, CLIP_B_HOLE))
+    for (A, B) in pairs, op in OPS
+        r = GO._overlay_ng(Planar(), op, A, B; exact = EX)
+        @test LG.equals(lgc(r), lgc(overlay_unpruned(op, A, B)))
+    end
+end
+
+# ---------------------------------------------------------------------------
 # 6. Natural Earth shifted-self smoke, both manifolds (env-gated)
 # ---------------------------------------------------------------------------
 
