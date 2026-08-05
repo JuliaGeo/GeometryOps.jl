@@ -86,11 +86,11 @@ function query(tree::RTree, geom)
     return query(tree, ext)
 end
 
-function spatialtree(geometries)
+function spatialtree(geometries, manifold=nothing)  # to be made Planar()
     valid = nonmissingtype(eltype(geometries))[]
     positions = Int[]
     for (i, geom) in enumerate(geometries)
-        if geom === nothing || ismissing(geom)
+        if (isnothing(geom) || ismissing(geom) || GI.isempty(geom))
             continue
         end
         push!(valid, geom)

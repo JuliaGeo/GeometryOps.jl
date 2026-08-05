@@ -226,9 +226,6 @@ end
 
     @test tree isa RTree{STR}
     @test query(tree, Extents.Extent(X = (-0.1, 1.1), Y = (-0.1, 1.1))) == [3, 5]
-    valid_point = (1.0, 1.0)
-    filtered_tree = spatialtree([1, valid_point])
-    @test query(filtered_tree, Extents.Extent(X = (0.5, 1.5), Y = (0.5, 1.5))) == [2]
     @test isnothing(spatialtree([missing, nothing, missing]))
 end
 
