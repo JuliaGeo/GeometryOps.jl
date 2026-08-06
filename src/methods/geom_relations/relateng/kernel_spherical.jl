@@ -463,21 +463,103 @@ end
 # `db` the nodes' on-sphere directions (`_exact_node_dir`): `da` precedes `db`
 # along `s0 → s1` iff the discriminant is positive (both directions lie strictly
 # interior to the minor arc, so they sit in the half where `N` points out of the
-# turning plane). The float filter uses the `False()` (Float64) directions; it
-# is trusted only when `|disc|` clears a conditioning-inflated bound (a
-# near-tangent crossing has a large-error direction and must escalate). The exact
-# fallback recomputes the discriminant over `Rational{BigInt}` directions.
+# turning plane). The float filter uses the `False()` (Float64) directions and is
+# trusted only when `|disc|` clears a bound that carries those directions' OWN
+# error; the exact fallback recomputes the discriminant over `Rational{BigInt}`
+# directions.
+
+# A float cross product with a bound on the Euclidean norm of its rounding
+# error. Each component `aⱼbₖ − aₖbⱼ` costs two roundings on the products and one
+# on the difference, so `2u·(|aⱼbₖ| + |aₖbⱼ|)` bounds it; the 1-norm of the three
+# component bounds is an upper bound on their Euclidean norm, and is cheaper.
+@inline function _cross3_err(a, b)
+    p1 = a[2]*b[3]; q1 = a[3]*b[2]
+    p2 = a[3]*b[1]; q2 = a[1]*b[3]
+    p3 = a[1]*b[2]; q3 = a[2]*b[1]
+    e = eps(Float64) * ((abs(p1) + abs(q1)) + (abs(p2) + abs(q2)) + (abs(p3) + abs(q3)))
+    return ((p1 - q1, p2 - q2, p3 - q3), e)
+end
+
+#=
+The float node direction together with a bound on its RELATIVE error — the
+quantity the filter above was missing.
+
+A vertex node's direction is its stored coordinate, converted exactly: error 0.
+
+A crossing node's is `±(na × nb)`, `na = a0×a1`, `nb = b0×b1`, and it is
+ill-conditioned in two independent ways, both of them ordinary in real data:
+
+  * `na` is a cross product of two nearly equal unit vectors. Its components are
+    differences of `O(1)` products, so its ABSOLUTE error stays at ~ulp while its
+    magnitude shrinks with the segment: a 1e-6 rad segment gives `|na| ≈ 1e-6`
+    and a relative error ~1e-10.
+  * `na × nb` is a cross product of two nearly PARALLEL normals when the arcs are
+    near-tangent — which is exactly the near-coincident-boundary case — and loses
+    accuracy as `1/sin θ`.
+
+Both fall out of one bound. Writing `Δ` for absolute errors,
+
+    |Δd| ≤ |Δna||nb| + |na||Δnb| + (rounding of na×nb)
+
+and `|d| = |na||nb| sin θ`, so the relative error of the direction is
+
+    ε = (|Δna||nb| + |na||Δnb| + Δ(na×nb)) / |d|
+
+which grows as the segments shorten AND as the arcs approach tangency, with no
+threshold to pick. `|d| == 0` (parallel normals — collinear arcs) gives `Inf`,
+which is the honest answer and escalates.
+=#
+@inline function _float_node_dir_err(k::NodeKey)
+    k.is_crossing || return (_vec3(False(), k.pt), 0.0)
+    A0 = _vec3(False(), k.pt); A1 = _vec3(False(), k.a1)
+    B0 = _vec3(False(), k.b0); B1 = _vec3(False(), k.b1)
+    na, e_na = _cross3_err(A0, A1)
+    nb, e_nb = _cross3_err(B0, B1)
+    d,  e_d  = _cross3_err(na, nb)
+    dn = sqrt(_dot3(d, d))
+    #-- the sign choice is exact on both paths (`_crossing_dir_is_positive`) and
+    #-- does not touch the magnitudes
+    dir = _crossing_dir_is_positive(k) ? d : _neg3(d)
+    dn == 0 && return (dir, Inf)
+    rel = (e_na * sqrt(_dot3(nb, nb)) + e_nb * sqrt(_dot3(na, na)) + e_d) / dn
+    return (dir, rel)
+end
+
+#=
+The filter's escalation trigger is the relative error of `disc` itself: the two
+directions' relative errors plus the arc normal's, plus the handful of roundings
+in the cross-and-dot that forms `disc`.
+
+This SUBSUMES a `_SPH_TANGENT_GATE`-style hard gate on `|na×nb|² ≥ g²|na|²|nb|²`
+rather than needing one alongside it. `|disc| ≤ |da||db||N| = mag` always, so as
+soon as `rel ≥ 1` the bound is `≥ mag ≥ |disc|` and the float path can never be
+taken — and `rel ≥ 1` is precisely "the direction has no significant digits
+left", which is what near-tangency produces. A fixed gate would have had to be
+paired with an inflated tolerance anyway: a crossing just above a 1e-9 gate still
+carries ~1e-7 relative error, which the old `64·eps·mag` bound would have
+happily certified.
+
+The bound this replaces read `64 * eps * mag`, with a comment asserting the
+directions were "amplified for crossing nodes by their arc geometry". They were
+not: `mag` is computed FROM the degraded directions, so it shrank together with
+the accuracy instead of against it, and the filter certified noise. Measured on
+the two crossings of one segment in the near-coincident-boundary reproducer
+(`labeller_robustness.jl`): `|disc| = 8.7e-45` against `tol = 2.2e-58`, returning
+the opposite of the exact answer.
+=#
 function rk_compare_along_segment(m::Spherical, s0, s1, na::NodeKey, nb::NodeKey; exact)
     S0 = _vec3(False(), s0); S1 = _vec3(False(), s1)
-    N = _cross3(S0, S1)
-    da = _exact_node_dir(False(), na); db = _exact_node_dir(False(), nb)
+    N, e_N = _cross3_err(S0, S1)
+    da, rel_a = _float_node_dir_err(na)
+    db, rel_b = _float_node_dir_err(nb)
     disc = _dot3(_cross3(da, db), N)
-    #-- |disc| ≈ |da||db||N| sin(Δ); the directions carry ≲ few·ulp relative
-    #-- error (unit-ish vectors), amplified for crossing nodes by their arc
-    #-- geometry. 64 ulp of the product magnitude is a conservative escalation
-    #-- trigger — coincident/near-coincident pairs fall to the exact path.
-    mag = sqrt(_dot3(da, da) * _dot3(db, db) * _dot3(N, N))
-    tol = 64 * eps(Float64) * mag
+    nN = sqrt(_dot3(N, N))
+    mag = sqrt(_dot3(da, da) * _dot3(db, db)) * nN
+    #-- 16 ulp covers the cross-then-dot that forms `disc` (6 products, 5 adds)
+    rel = rel_a + rel_b + (nN == 0 ? Inf : e_N / nN) + 16 * eps(Float64)
+    tol = rel * mag
+    #-- `tol` is NaN only if `rel` is `Inf` and `mag` is 0, i.e. fully degenerate;
+    #-- either way the comparison is false and the exact path decides
     abs(disc) > tol && return disc > 0 ? -1 : 1
     #-- exact fallback (lazy): rational directions, exact for Float64 inputs.
     Se0 = _vec3(True(), s0); Se1 = _vec3(True(), s1); Ne = _cross3(Se0, Se1)

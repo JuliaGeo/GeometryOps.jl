@@ -284,3 +284,86 @@ end
     @test k1 == k2
     @test k1.pt isa UnitSphericalPoint       # USP preserved through canonicalization
 end
+
+# ---------------------------------------------------------------------------
+# Spherical `rk_compare_along_segment`: the float filter's error model
+# ---------------------------------------------------------------------------
+#
+# The filter certifies its sign against a bound that carries the FLOAT node
+# directions' own relative error (`_float_node_dir_err`). It used to compare
+# against `64 * eps * mag` with `mag` computed from those same directions, so on
+# an ill-conditioned crossing the bound shrank together with the accuracy and the
+# filter certified noise.
+#
+# The case below is the two crossings of one segment in the near-coincident
+# boundary reproducer of `test/methods/clipping/overlayng/labeller_robustness.jl`
+# (n = 7, k = 1) — reconstructed here from its four defining segments alone, so
+# this test depends on nothing but the kernel. Both node keys are bit-identical
+# to the ones the arrangement interns for that pair.
+
+@testset "spherical along-segment filter escalates on ill-conditioned crossings" begin
+    ms = GO.Spherical()
+    kp(lon, lat) = GO._to_kernel_point(ms, (lon, lat))
+
+    #-- A's segment, and the two B segments that cross it, all on the lon=1
+    #-- meridian with latitudes a single ulp apart
+    a0  = kp(1.0, 49.25);              a1  = kp(1.0, 49.375)
+    b2s = kp(1.0, prevfloat(49.125));  b2e = kp(1.0, nextfloat(49.25))
+    b3s = b2e;                         b3e = kp(1.0, prevfloat(49.375))
+    k2 = GO.crossing_node(a0, a1, b2s, b2e)
+    k3 = GO.crossing_node(a0, a1, b3s, b3e)
+    @test k2 != k3
+
+    #-- ground truth, computed here in `Rational{BigInt}` and independent of the
+    #-- comparator: order the two crossing directions by their in-plane
+    #-- parameter along a0 -> a1, `t = (d·m)/(d·a0)` with `m = (a0×a1)×a0`
+    let R = Rational{BigInt}
+        v(p) = (R(p[1]), R(p[2]), R(p[3]))
+        c3(u, w) = (u[2]*w[3]-u[3]*w[2], u[3]*w[1]-u[1]*w[3], u[1]*w[2]-u[2]*w[1])
+        d3(u, w) = u[1]*w[1] + u[2]*w[2] + u[3]*w[3]
+        P = v(a0); mv = c3(c3(P, v(a1)), P)
+        t(k) = (d = GO._sph_crossing_dir(True(), k); dv = (R(d[1]), R(d[2]), R(d[3]));
+                d3(dv, mv) // d3(dv, P))
+        @test t(k2) < t(k3)              # k2 genuinely precedes k3 along a0 -> a1
+    end
+
+    #-- ...and that is what the comparator answers, in both argument orders
+    @test GO.rk_compare_along_segment(ms, a0, a1, k2, k3; exact = True()) == -1
+    @test GO.rk_compare_along_segment(ms, a0, a1, k3, k2; exact = True()) == 1
+    #-- reversing the segment reverses the order
+    @test GO.rk_compare_along_segment(ms, a1, a0, k2, k3; exact = True()) == 1
+
+    #-- the numbers behind it: the float directions here have NO significant
+    #-- digits (relative error bound in the hundreds), the discriminant is a
+    #-- sizeable fraction of `mag` and therefore looks perfectly certifiable, and
+    #-- the retired `64 * eps * mag` rule did certify it — with the wrong sign
+    S0 = GO._vec3(False(), a0); S1 = GO._vec3(False(), a1)
+    N, _ = GO._cross3_err(S0, S1)
+    da, rel_a = GO._float_node_dir_err(k2)
+    db, rel_b = GO._float_node_dir_err(k3)
+    disc = GO._dot3(GO._cross3(da, db), N)
+    mag = sqrt(GO._dot3(da, da) * GO._dot3(db, db) * GO._dot3(N, N))
+    @test rel_a > 1 && rel_b > 1                       # direction accuracy is gone
+    @test abs(disc) > 64 * eps(Float64) * mag          # the OLD filter trusted it
+    @test disc < 0                                     # ...and trusting it answers 1
+    @test abs(disc) <= (rel_a + rel_b) * mag           # the new bound escalates
+    #-- a vertex node's direction is its stored coordinate: exact, error 0
+    @test GO._float_node_dir_err(GO.vertex_node(a0))[2] == 0.0
+end
+
+@testset "spherical along-segment filter still resolves well-conditioned pairs" begin
+    #-- the escalation criterion must not swallow ordinary crossings: transversal
+    #-- crossings on a long arc stay on the float path and stay monotone
+    ms = GO.Spherical()
+    usp(lon, lat) = GO.UnitSpherical.UnitSphereFromGeographic()((lon, lat))
+    s0, s1 = usp(0.0, 0.0), usp(10.0, 0.0)
+    ks = [GO.crossing_node(s0, s1, usp(x, -1.0), usp(x, 1.0)) for x in 1.0:0.5:9.0]
+    for k in ks
+        #-- well-conditioned: the relative-error bound is at the ulp level, so the
+        #-- filter's tolerance is not inflated at all
+        @test GO._float_node_dir_err(k)[2] < 1e-13
+    end
+    order = sortperm(collect(eachindex(ks));
+        lt = (i, j) -> GO.rk_compare_along_segment(ms, s0, s1, ks[i], ks[j]; exact = True()) < 0)
+    @test order == collect(eachindex(ks))
+end
