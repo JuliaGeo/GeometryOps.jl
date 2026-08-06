@@ -43,6 +43,10 @@ end
 #=
 ## Self-noding under clip pruning
 
+(Scope, as in split.jl: a clip box exists only for a PLANAR intersection or
+difference. `clip` is `nothing` on the sphere and for every union, and the
+filters below then reduce to their `::Nothing` methods.)
+
 The A×B pass above needs no clip filter: a pruned A segment's bbox misses
 `env(B)` (that is what pruning to `env(A) ∩ env(B)`, or to `env(A)`, means), so
 it never shares an extent with any B segment and the dual traversal already

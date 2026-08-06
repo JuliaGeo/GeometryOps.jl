@@ -123,11 +123,37 @@ const OVERLAY_SKIPLIST = Set{Tuple{String, Int, String, String}}([
 # sliver from a genuine thin polygon. Closing that gap needs a decision about the
 # design premise (§0) — it is what JTS's snapping/snap-rounding ladder is for —
 # and is deliberately NOT done here.
+#
+# ## Sub-grid ring collapse (2026-08-06) — eight entries removed
+#
+# `_ring_is_collapsed` gained a second half. The first half only ever caught a
+# ring whose emitted image had fewer than three distinct vertices; the new one
+# (`_ring_is_subgrid`, maximal_edge_ring.jl) drops a ring whose EXACT mean width
+# is finer than the output format resolves where the ring sits — the "close but
+# not equal, 1–30 ULP" half of the class the paragraph above called deliberately
+# not done. It is decided on the arrangement's node coordinates, exactly, and the
+# threshold is derived from `eps` at the ring's own coordinates rather than from
+# any tolerance; see `docs/plans/2026-08-05-overlayng-sliver-collapse-fix.md` for
+# the calibration and for what it costs (GEOS emits such faces, so we no longer
+# match GEOS coordinate-for-coordinate on them).
+#
+# Healed outright: `TestOverlay-geos-358` case 1, `TestOverlay-misc-1` cases 2, 4
+# and 5, `TestOverlay-misc-2` case 2, `TestOverlay-misc-4` case 5,
+# `TestOverlay-qgis-29400` case 6, `TestOverlay-rsf-794` case 1.
+#
+# `TestOverlay-misc-4` case 5 is worth its own line: dropping a sub-grid SHELL
+# briefly orphaned its interior hole, which `_place_free_holes!` then could not
+# assign, turning an invalid result into a THROW — strictly worse. Two things fix
+# it. The collapse test now escalates its perimeter to the arrangement's exact
+# node coordinates instead of giving up when the Float64 bound (driven by
+# coordinate MAGNITUDE, ~9e-9 here) swamps the quantity (~4e-9), so the hole is
+# now recognised as sub-grid in its own right; and a hole orphaned by a dropped
+# shell is re-offered to the surviving shells and only dropped if none contains
+# it, so the throw cannot come back through that route.
 const ROBUST_KNOWN_DEFECTS = Set{Tuple{String, Int}}([
     ("TestOverlay-geos-1051.xml", 1),                    # invalid result geometry from difference, symdifference
     ("TestOverlay-geos-275.xml", 1),                     # invalid result geometry from symdifference
     ("TestOverlay-geos-350.xml", 1),                     # invalid result geometry from intersection, difference, symdifference
-    ("TestOverlay-geos-358.xml", 1),                     # invalid result geometry from symdifference
     ("TestOverlay-geos-368.xml", 1),                     # invalid result geometry from union, difference, symdifference
     ("TestOverlay-geos-398.xml", 1),                     # invalid result geometry from symdifference
     ("TestOverlay-geos-522.xml", 1),                     # invalid result geometry from union, difference, symdifference
@@ -140,12 +166,8 @@ const ROBUST_KNOWN_DEFECTS = Set{Tuple{String, Int}}([
     ("TestOverlay-jts-798.xml", 1),                      # invalid result geometry from union, difference, symdifference
     ("TestOverlay-jts-798.xml", 2),                      # invalid result geometry from union, difference, symdifference
     ("TestOverlay-jts-798.xml", 3),                      # invalid result geometry from union, difference, symdifference
-    ("TestOverlay-misc-1.xml", 2),                       # invalid result geometry from symdifference
     ("TestOverlay-misc-1.xml", 3),                       # invalid result geometry from difference, symdifference
-    ("TestOverlay-misc-1.xml", 4),                       # invalid result geometry from symdifference
-    ("TestOverlay-misc-1.xml", 5),                       # invalid result geometry from symdifference
     ("TestOverlay-misc-2.xml", 1),                       # invalid result geometry from union, symdifference
-    ("TestOverlay-misc-2.xml", 2),                       # invalid result geometry from union, symdifference
     ("TestOverlay-misc-2.xml", 3),                       # invalid result geometry from intersection, symdifference
     ("TestOverlay-misc-2.xml", 4),                       # invalid result geometry from intersection, symdifference
     ("TestOverlay-misc-2.xml", 5),                       # invalid result geometry from intersection, symdifference
@@ -155,7 +177,6 @@ const ROBUST_KNOWN_DEFECTS = Set{Tuple{String, Int}}([
     ("TestOverlay-misc-3.xml", 2),                       # invalid result geometry from union, symdifference
     ("TestOverlay-misc-3.xml", 3),                       # invalid result geometry from intersection, difference, symdifference
     ("TestOverlay-misc-3.xml", 4),                       # invalid result geometry from symdifference
-    ("TestOverlay-misc-4.xml", 5),                       # invalid result geometry from difference, symdifference
     ("TestOverlay-osmwater.xml", 1),                     # invalid result geometry from intersection, difference, symdifference
     ("TestOverlay-osmwater.xml", 2),                     # invalid result geometry from difference, symdifference
     # Was the corpus's worst residual (61.993 on a total of 1396.0, 4.44e-2
@@ -176,7 +197,6 @@ const ROBUST_KNOWN_DEFECTS = Set{Tuple{String, Int}}([
     ("TestOverlay-qgis-29400.xml", 2),                   # invalid result geometry from difference, symdifference
     ("TestOverlay-qgis-29400.xml", 3),                   # invalid result geometry from difference, symdifference
     ("TestOverlay-qgis-29400.xml", 4),                   # invalid result geometry from symdifference — and the corpus's worst area identity residual, 1.3e-11 relative
-    ("TestOverlay-qgis-29400.xml", 6),                   # invalid result geometry from symdifference
     ("TestOverlay-qgis-37032.xml", 2),                   # invalid result geometry from union, symdifference
     # Same story as pg-2055 case 1: the identity residual was 1.3488 on a total of
     # 1104.87 (1.22e-3 relative) from the same needle-driven role flip, and
@@ -185,5 +205,4 @@ const ROBUST_KNOWN_DEFECTS = Set{Tuple{String, Int}}([
     ("TestOverlay-qgis-37032.xml", 3),                   # invalid result geometry from union, symdifference
     ("TestOverlay-qgis-37032.xml", 4),                   # invalid result geometry from intersection, difference, symdifference
     ("TestOverlay-qgis-37032.xml", 5),                   # invalid result geometry from difference, symdifference
-    ("TestOverlay-rsf-794.xml", 1),                      # invalid result geometry from symdifference
 ])

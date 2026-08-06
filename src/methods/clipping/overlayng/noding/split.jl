@@ -13,6 +13,20 @@
 #=
 ## Clip pruning (the construct-free `RingClipper`)
 
+SCOPE, because it is easy to over-read this section. Clip pruning is inert
+outside a narrow case, and any behaviour observed there is NOT its doing:
+
+  * it is PLANAR-ONLY — `_overlay_envelopes` returns `(nothing, nothing)` for
+    every non-`Planar` manifold, so no spherical query ever receives a box; and
+  * it applies to INTERSECTION and DIFFERENCE only — `_overlay_clip_envelopes`
+    returns `(nothing, nothing)` for UNION and SYMDIFFERENCE, which need every
+    edge of both inputs.
+
+So both `clip_a` and `clip_b` are `nothing` for a spherical op, and for a union
+on either manifold, and every `_seg_in_clip` / `_ext_in_clip` / `_pt_in_clip`
+test below degenerates to its `::Nothing` method. In particular, nothing in this
+file participates in a spherical cascaded union.
+
 `clip_a` / `clip_b` are optional per-side bounding boxes. A parent segment whose
 own bounding box misses its side's box emits NO `NodedEdge` at all — it is not
 clipped, not shortened, and no coordinate is synthesized on the box, so nothing

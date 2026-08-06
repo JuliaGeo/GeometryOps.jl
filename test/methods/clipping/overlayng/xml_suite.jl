@@ -142,9 +142,11 @@ end
                     LG.intersection(overlay_to_lg(a3), overlay_to_lg(b3)))
 
     #-- case 2 (GEOS ticket 488) used to raise `found two shells in EdgeRing
-    #-- list`; with the collapsed emitted ring dropped it is `equals` to GEOS
-    #-- exactly, and the XML is the outlier — GEOS misses it by the same
-    #-- symmetric difference we do, to 16 digits.
+    #-- list`. GEOS emits one face here that the sub-grid collapse test
+    #-- (`_ring_is_subgrid`) deliberately drops: a triangle 0.00136 long,
+    #-- 2.7e-19 wide — 6e-4 of one Float64 grid step at this location, area
+    #-- 1.8e-22. So exact `equals` to GEOS no longer holds and equality is
+    #-- asserted up to sub-representable faces instead.
     case2 = run.cases[2]
     a2, b2 = jts_overlay_operand(case2.geom_a), jts_overlay_operand(case2.geom_b)
     want2 = overlay_to_lg(first(i for i in case2.items
@@ -152,9 +154,7 @@ end
     ours2 = overlay_to_lg(go_overlay(:union, a2, b2))
     geos2 = LG.union(overlay_to_lg(a2), overlay_to_lg(b2))
     @test LG.isValid(ours2)
-    #-- `equals` to GEOS plus GEOS ≠ the XML gives ours ≠ the XML and the equal
-    #-- symmetric differences, so neither is asserted separately
-    @test LG.equals(ours2, geos2)
+    @test LG.area(LG.symmetricDifference(ours2, geos2)) <= 1e-16
     @test !LG.equals(geos2, want2)
 end
 
@@ -250,15 +250,17 @@ end
     @test LG.isValid(overlay_to_lg(A))
     @test LG.isValid(overlay_to_lg(B))
     #-- INTERSECTION: the whole result is the needle. This used to raise
-    #-- `unable to assign free hole to a shell`: the needle's *rounded* image
-    #-- reads CCW, so the ring was filed as a hole and no shell contained it.
-    #-- With the shell/hole role taken from the ring's exact signed area
-    #-- (`_ring_is_ccw_exact`) it is the shell it actually is, and the result is
-    #-- a valid sliver polygon of the needle's true (sub-picounit) area, where
-    #-- GEOS — having snapped — returns a zero-area MULTILINESTRING.
+    #-- `unable to assign free hole to a shell` (the needle's *rounded* image
+    #-- reads CCW so it was filed as a hole); `_ring_is_ccw_exact` fixed the
+    #-- role, and for a while the result was a valid sliver polygon of the
+    #-- needle's true sub-picounit area. Now the sub-grid collapse test drops
+    #-- it outright — its exact mean width is 0.038 grid steps, 26x inside the
+    #-- drop zone — so the intersection is EMPTY, agreeing with GEOS's 0.0:
+    #-- GEOS reaches that answer by snapping, we reach it by refusing to emit
+    #-- a ring finer than the output format can express.
     r_int = go_overlay(:intersection, A, B)
     @test lg_valid(r_int)
-    @test 0 < lg_area(r_int) < 1e-11
+    @test lg_area(r_int) == 0
     #-- DIFFERENCE is empty and now valid: the collapsed ring is dropped at
     #-- emission (`_ring_is_collapsed`), which is the repaired half of the class
     @test lg_valid(go_overlay(:difference, A, B))

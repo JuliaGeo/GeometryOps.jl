@@ -1057,3 +1057,147 @@ end
     @test GO.symdifference(Planar(), A, B; target = GI.PolygonTrait()) isa AbstractVector
     @test GO.symdifference(Spherical(), A, B; target = GI.PolygonTrait()) isa AbstractVector
 end
+
+# ---------------------------------------------------------------------------
+# ## Sub-grid ring collapse (`_ring_is_subgrid`, the second half of
+# ## `_ring_is_collapsed`)
+#
+# Two inputs that share a boundary can disagree about it by an ULP or two — a
+# cascade of unions manufactures exactly that, because every intermediate result
+# is re-ingested through Float64 coordinates. The exact arrangement then contains
+# genuine needle-shaped faces between the two versions of the edge, and they are
+# real: the operands really do differ there. What they do not have is a faithful
+# Float64 image. Emission rounds each vertex by up to half an ULP, which is
+# enough to push a needle's two sides through each other, and the result is a
+# self-touching or self-crossing "ring" — invalid output produced from a
+# perfectly correct exact face.
+#
+# `_ring_is_subgrid` drops such a ring, deciding on the exact node kernel points
+# and comparing against the resolution of the OUTPUT FORMAT where the ring sits
+# (`_ring_grid_step`). See `maximal_edge_ring.jl` for why that is a format
+# property rather than a tolerance.
+#
+# The fixture: two rectangles sharing a subdivided vertical edge at lon = 1,
+# where B's copy of the shared vertices alternates `k` ULPs either side of A's.
+# Each right-hand excursion opens a needle-shaped gap that the union must either
+# represent faithfully or drop.
+# ---------------------------------------------------------------------------
+
+_ulp(x, k) = k >= 0 ? nextfloat(x, k) : prevfloat(x, -k)
+
+function shared_edge_pair(nsub::Int, k::Int; x0 = 1.0, y0 = 49.0, y1 = 50.0)
+    ys = collect(range(y0, y1; length = nsub + 2))
+    A = GI.Polygon([GI.LinearRing(vcat([(x0 - 1, y0)], [(x0, y) for y in ys],
+                                       [(x0 - 1, y1)], [(x0 - 1, y0)]))])
+    #-- endpoints stay shared exactly; interior vertices alternate -k/+k ULPs
+    pert = [(i == 1 || i == length(ys)) ? (x0, y) :
+            (_ulp(x0, isodd(i) ? k : -k), y) for (i, y) in enumerate(ys)]
+    B = GI.Polygon([GI.LinearRing(vcat([(x0, y0), (x0 + 1, y0), (x0 + 1, y1)],
+                                       reverse(pert)))])
+    return (A, B)
+end
+
+@testset "a sub-grid sliver is dropped, and the union stays valid" begin
+    for nsub in (3, 5, 9)
+        A, B = shared_edge_pair(nsub, 1)
+        for m in (Planar(), Spherical())
+            r = GO.union(GO.OverlayNG(m), A, B)
+            #-- every needle is finer than the output grid, so none survives and
+            #-- the union is the plain 2 x 1 rectangle
+            @test GI.nring(r) == 1
+            @test LG.isValid(lgc(r))
+        end
+        #-- the planar area is exactly the rectangle's: the dropped needles are
+        #-- below Float64 resolution, so they cannot show up in it
+        @test GO.area(GO.union(GO.OverlayNG(), A, B)) == 2.0
+    end
+end
+
+#=
+The failure mode of a collapse test is dropping geometry that IS representable,
+so this is the load-bearing half of the pair: widen the same needles until the
+output format can hold them, and every one must come back.
+
+`nsub` needles at `k` ULPs, and `k = 16` is 4x the threshold — see the boundary
+test below for where it actually sits.
+=#
+@testset "a representable sliver is kept" begin
+    for (nsub, nholes) in ((3, 1), (9, 4))
+        A, B = shared_edge_pair(nsub, 16)
+        for m in (Planar(), Spherical())
+            r = GO.union(GO.OverlayNG(m), A, B)
+            @test GI.nring(r) == 1 + nholes
+            @test LG.isValid(lgc(r))
+        end
+        #-- and each one is a legal ring of representable width, not a sliver of
+        #-- nothing. (Its AREA is deliberately not asserted: at 16 ULPs of width
+        #-- on coordinates of magnitude 1 it is ~1e-15, which a Float64 shoelace
+        #-- over terms of magnitude 50 cannot resolve — `GO.area` returns exactly
+        #-- 2.0 for the whole polygon either way. That the area is invisible to
+        #-- Float64 while the ring is perfectly representable is the distinction
+        #-- this whole testset turns on, so measuring the wrong one here would be
+        #-- worse than measuring nothing.)
+        r = GO.union(GO.OverlayNG(), A, B)
+        for h in GI.gethole(r)
+            pts = collect(GI.getpoint(h))
+            @test length(unique(pts)) >= 3
+            @test maximum(GI.x, pts) > minimum(GI.x, pts)
+        end
+    end
+end
+
+#=
+The threshold is `_RING_GRID_MARGIN` steps of the output grid and nothing else,
+so it must land in the same place on both manifolds and move only with the
+format's resolution — not with the geometry, the manifold, or the operand size.
+
+At `x0 = 1.0` the grid step is `eps(1.0) = 2^-52` (latitude's `eps(50.0)` is
+coarser, and `_ring_grid_step` takes the finer axis). A `k`-ULP excursion makes a
+needle of maximum width `k` steps and hence MEAN width `k/2` steps, so the
+`< 4` test flips between `k = 6` (mean width 3) and `k = 8` (mean width 4).
+Both manifolds, same k, because both are measuring the same output grid.
+=#
+@testset "the collapse threshold is the output grid, and nothing else" begin
+    @test GO._RING_GRID_MARGIN == 4.0
+    for m in (Planar(), Spherical())
+        @test GI.nring(GO.union(GO.OverlayNG(m), shared_edge_pair(3, 6)...)) == 1
+        @test GI.nring(GO.union(GO.OverlayNG(m), shared_edge_pair(3, 8)...)) == 2
+    end
+
+    #-- the grid step itself: the finer of the two axes, and on the sphere
+    #-- converted from degrees to the radians the exact width is measured in
+    pts = [(1.0, 49.0), (1.0, 50.0), (2.0, 50.0), (1.0, 49.0)]
+    @test GO._ring_grid_step(Planar(), pts) == min(eps(2.0), eps(50.0))
+    @test GO._ring_grid_step(Spherical(), pts) ≈
+          min(eps(2.0) * cosd(49.5), eps(50.0)) * (π / 180)
+    #-- it is genuinely LOCAL: the same shape a thousand times further out sits
+    #-- on a grid a thousand times coarser, so the test is scale-free
+    far = [(1024.0 * p[1], 1024.0 * p[2]) for p in pts]
+    @test GO._ring_grid_step(Planar(), far) == 1024 * GO._ring_grid_step(Planar(), pts)
+end
+
+#=
+Half 1 (`_ring_image_is_degenerate`, fewer than three distinct emitted vertices)
+and half 2 are independent: neither implies the other, and the spike population
+that motivated half 2 is invisible to half 1. Measured on the 1384-polygon
+Vancouver watershed cascade, half 1 fires on ZERO of the 2974 minimal rings built
+while half 2 fires on 10 — so a regression that quietly reduced the pair to half
+1 would not show up as an error anywhere, only as invalid output.
+=#
+@testset "half 1 and half 2 of the collapse test are independent" begin
+    A, B = shared_edge_pair(3, 1)
+    m = Spherical()
+    arr = GO.NodedArrangement(m, A, B; exact = EX)
+    g = GO.OverlayGraph(m, arr; exact = EX)
+    GO._compute_labelling!(g, GO._OverlayInput(m, A, B, 2, 2, EX,
+                                               false, false, nothing, nothing))
+    ctx = GO._build_faces(m, g; exact = EX)
+    subgrid = [r for r in ctx.edge_rings if GO._ring_is_subgrid(ctx, r)]
+    @test !isempty(subgrid)
+    #-- the needles have a perfectly ordinary-looking emitted image: three or
+    #-- more distinct vertices, so half 1 sees nothing wrong with any of them
+    @test all(r -> !GO._ring_image_is_degenerate(r), subgrid)
+    #-- but the full test drops them, and the one-argument method does not
+    @test all(r -> GO._ring_is_collapsed(ctx, r), subgrid)
+    @test all(r -> !GO._ring_is_collapsed(r), subgrid)
+end

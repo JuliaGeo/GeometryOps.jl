@@ -107,10 +107,10 @@ end
 # either a shell + its holes, or a set of (connected) holes whose shell is found
 # later (free holes).
 function _assign_shells_and_holes!(ctx, min_rings)
-    #-- rings that collapsed at emission bound no area and are not legal
-    #-- LinearRings; drop them before the shell/hole census, exactly as JTS drops
-    #-- its DIM_COLLAPSE edges before ring building (`_ring_is_collapsed`)
-    rings = filter(er -> !_ring_is_collapsed(ctx.edge_rings[er]), min_rings)
+    #-- rings that collapsed at emission have no faithful, legal LinearRing image;
+    #-- drop them before the shell/hole census, exactly as JTS drops its
+    #-- DIM_COLLAPSE edges before ring building (`_ring_is_collapsed`)
+    rings = filter(er -> !_ring_is_collapsed(ctx, ctx.edge_rings[er]), min_rings)
     isempty(rings) && return nothing
     shell = _find_single_shell(ctx, rings)
     if shell != 0
@@ -119,6 +119,15 @@ function _assign_shells_and_holes!(ctx, min_rings)
         end
         push!(ctx.shell_list, shell)
     else
+        #-- No shell among the survivors. Either this maximal ring never had one
+        #-- (JTS's free-hole case: a connected group of holes whose shell is a
+        #-- different maximal ring), or it had one and the collapse test just
+        #-- dropped it. Those two look identical here but are owed different
+        #-- treatment when placement fails, so the second is recorded.
+        if length(rings) < length(min_rings) &&
+           any(er -> !ctx.edge_rings[er].is_hole, min_rings)
+            append!(ctx.orphan_hole_list, rings)
+        end
         append!(ctx.free_hole_list, rings)
     end
     return nothing
@@ -147,12 +156,37 @@ end
 
 # ## Free-hole placement (port of `placeFreeHoles`)
 
+#=
+A free hole that no shell contains is normally a broken arrangement, and the
+throw below is a real invariant check worth keeping.
+
+There is exactly one way it can happen legitimately: the hole's own shell was a
+sub-grid sliver and `_ring_is_collapsed` dropped it. The hole then has no
+containing shell because the thing that contained it is gone, and it is not a
+defect — it is the second half of the same drop.
+
+Such holes are re-offered to placement first rather than dropped with their
+shell, because the two are not equivalent: a sub-grid shell says nothing about
+its holes' own dimensions (a compact hole can sit inside a long thin shell and
+have a mean width the shell does not share), and if some SURVIVING shell really
+does contain the hole then that is where it belongs. Only when placement genuinely
+fails is the hole concluded to be the interior of the dropped sliver and dropped
+with it. Measured on the JTS robust corpus this re-offer never succeeds — the
+result's shells are disjoint faces, so nothing else contains it — but the check
+costs one pass over a list that is almost always empty and it is the difference
+between a justified drop and an assumed one.
+=#
+@inline _drop_unplaceable(ctx, hole_er) =
+    hole_er in ctx.orphan_hole_list ? true :
+        throw(_OverlayTopologyError("unable to assign free hole to a shell"))
+
 # Planar: prune candidate shells with an `RTree(STR())` over shell extents
 # (design §3 amendment 5, the HPRtree analogue).
 function _place_free_holes!(ctx::_PolyBuilderCtx{<:Planar})
     isempty(ctx.free_hole_list) && return nothing
     shells = ctx.shell_list
     if isempty(shells)
+        all(er -> er in ctx.orphan_hole_list, ctx.free_hole_list) && return nothing
         throw(_OverlayTopologyError("unable to assign free hole to a shell"))
     end
     exts = [_ext_of(ctx.edge_rings[s].bbox) for s in shells]
@@ -165,7 +199,7 @@ function _place_free_holes!(ctx::_PolyBuilderCtx{<:Planar})
             push!(cand, index.data[i])
         end
         shell = _find_edge_ring_containing(ctx, ctx.edge_rings[hole_er], cand)
-        shell == 0 && throw(_OverlayTopologyError("unable to assign free hole to a shell"))
+        shell == 0 && (_drop_unplaceable(ctx, hole_er); continue)
         _set_shell!(ctx, hole_er, shell)
     end
     return nothing
@@ -178,7 +212,7 @@ function _place_free_holes!(ctx::_PolyBuilderCtx{<:Spherical})
     for hole_er in ctx.free_hole_list
         ctx.edge_rings[hole_er].shell == 0 || continue
         shell = _find_edge_ring_containing(ctx, ctx.edge_rings[hole_er], ctx.shell_list)
-        shell == 0 && throw(_OverlayTopologyError("unable to assign free hole to a shell"))
+        shell == 0 && (_drop_unplaceable(ctx, hole_er); continue)
         _set_shell!(ctx, hole_er, shell)
     end
     return nothing
@@ -409,13 +443,14 @@ end
 # This is THE face-selection path — every face consumer runs through it, so that
 # the collapse filter, the shell/hole split and the hole placement are stated
 # once. Collapsed rings are dropped here for the same reason
-# `_assign_shells_and_holes!` drops them from the op result: after repeated-point
-# suppression they have fewer than three distinct vertices, so they bound no area
-# and are not legal `LinearRing`s (`_ring_is_collapsed`; exact, no tolerance).
+# `_assign_shells_and_holes!` drops them from the op result: no Float64 image of
+# them is a legal, faithful `LinearRing` — either they have fewer than three
+# distinct emitted vertices, or their exact width is finer than the output
+# format resolves where they sit (`_ring_is_collapsed`).
 function _select_faces!(ctx, keep::F) where {F}
     for er in 1:length(ctx.edge_rings)
         ring = ctx.edge_rings[er]
-        _ring_is_collapsed(ring) && continue
+        _ring_is_collapsed(ctx, ring) && continue
         keep(_face_ring_location(ctx, er, 0), _face_ring_location(ctx, er, 1)) || continue
         ring.is_hole ? push!(ctx.free_hole_list, Int32(er)) :
                        push!(ctx.shell_list, Int32(er))

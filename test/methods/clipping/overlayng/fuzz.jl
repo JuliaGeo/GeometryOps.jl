@@ -379,7 +379,12 @@ end
 @testset "fuzz census" begin
     @test CENSUS.n_op == 4 * CASES_PER_GENERATOR * length(GENERATORS)
     @test CENSUS.n_divergent == 0
-    @test CENSUS.n_benign <= 8              # measured control: 4
+    #-- measured control: 4 before the sub-grid collapse test, 42 after —
+    #-- 38 ops now differ from GEOS only by a dropped sub-representable sliver
+    #-- face (widths 0.44–3.98 grid steps, the `_RING_GRID_MARGIN` drop zone);
+    #-- all stay valid and inside the rounding band, and `n_divergent` is
+    #-- pinned at 0 above, so the drop is neither silent nor a lost result
+    @test CENSUS.n_benign <= 48
     #-- generators that should always produce their own shape
     for nm in ("shared boundaries", "clustered near-collinear", "ulp-offset shared edges")
         @test get(FALLBACKS, nm, 0) == 0
