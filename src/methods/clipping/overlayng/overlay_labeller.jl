@@ -213,34 +213,228 @@ function _label_collapsed_edge!(label::OverlayLabel, gi::Integer)
     return nothing
 end
 
-# ### Pass 5: disconnected-edge PIP labelling (port of `labelDisconnectedEdges`)
+# ### Pass 5: disconnected-edge labelling (port of `labelDisconnectedEdges`,
+# ### with the two robustness divergences F1 and F2)
+
+#=
+JTS's `labelDisconnectedEdges` asks the point-in-area locator, once per edge and
+once per input, where that edge lies relative to the OTHER input's area, and
+takes the answer as final. Two things about that are wrong on a near-coincident
+arrangement, and this port fixes both. The two fixes are independent — the second
+is not a consequence of the first (measured: a case that throws with ZERO
+emitted-vs-exact disagreements in the first).
+
+**F1 — the query point is the node's kernel point, not its emitted coordinate.**
+JTS has one coordinate per node, so the distinction does not exist there. Here it
+does, and design §0 is explicit that no decision may consume a constructed
+coordinate. `node_point` is the *emission* — the single lossy step of the whole
+substrate — and on `Spherical` it is doubly lossy for this use: the kernel unit
+vector is turned into lon/lat by `atan`/`asin` here, and the locator turns it
+straight back into a unit vector by `cos`/`sin`. Measured on real reprojected
+data, that round trip moves a pass-through vertex by up to 14 ulps, which is an
+order of magnitude more than the ±1 ulp separations that produce slivers in the
+first place. Worse, the rounding is not merely noisy but *biased towards the
+wrong answer*: an emitted coordinate that lands bit-identically on an input
+vertex makes the locator report `LOC_BOUNDARY`, which the `!= LOC_EXTERIOR` test
+below reads as INTERIOR. The node's own kernel point is exact, is what every
+other decision in the engine already uses, and is right there in the node table.
+
+**F2 — a known area location propagates; PIP only seeds where it cannot reach.**
+See `_label_disconnected_area!`.
+=#
 
 function _label_disconnected_edges!(g::OverlayGraph, input)
     edges = g.edges
-    for i in eachindex(edges)
-        label = oe_label(edges, i)
-        is_line_location_unknown(label, 0) && _label_disconnected_edge!(g, input, i, 0)
-        is_line_location_unknown(label, 1) && _label_disconnected_edge!(g, input, i, 1)
+    for gi in (0, 1)
+        if _input_is_area(input, gi)
+            _label_disconnected_area!(g, input, gi)
+        else
+            #-- non-area target: a disconnected edge must be EXTERIOR (JTS
+            #-- `labelDisconnectedEdge`'s `isArea` arm, unchanged)
+            for i in eachindex(edges)
+                label = oe_label(edges, i)
+                is_line_location_unknown(label, gi) &&
+                    set_location_all!(label, gi, LOC_EXTERIOR)
+            end
+        end
     end
     return nothing
 end
 
-# Locates a disconnected edge against the ORIGINAL input area (design §3
-# amendment 7: never against the reduced/collapsed linework), using both
-# endpoints for robustness (port of `labelDisconnectedEdge` +
-# `locateEdgeBothEnds`).
-function _label_disconnected_edge!(g::OverlayGraph, input, i::Integer, gi::Integer)
-    label = oe_label(g.edges, i)
-    if !_input_is_area(input, gi)
-        #-- non-area target: a disconnected edge must be EXTERIOR
-        set_location_all!(label, gi, LOC_EXTERIOR)
-        return nothing
+# ### F1: the kernel point of a node, for the point-in-area query
+#
+# The node's own exact point in kernel space, never the emitted output
+# coordinate. Manifold-generic: dispatched on the node key's point type, which
+# IS the manifold's kernel point type.
+
+@inline _node_kernel_point(arr::NodedArrangement, id::Integer) =
+    _node_kernel_point(arr, (@inbounds arr.nodes.keys[id]), id)
+
+@inline _node_kernel_point(arr::NodedArrangement, k::NodeKey, id::Integer) =
+    k.is_crossing ? _crossing_kernel_point(arr, k, id) : k.pt
+
+# Planar crossing: `RayCrossingCounter` stores its query point as a
+# `Tuple{Float64,Float64}`, so the exact `Rational{BigInt}` crossing cannot be
+# handed to it at all. The emitted coordinate is the *certified* correctly-
+# rounded image of exactly that rational (emit.jl: accepted only when the
+# residual plus the dd error bound is below ½ ulp), so it is the best Float64
+# representation of the exact point that exists, and this arm is a no-op change.
+# Planar vertex nodes take `k.pt` above, which is bit-identical to `node_point`.
+# Hence: no planar behaviour changes here at all.
+@inline _crossing_kernel_point(arr::NodedArrangement, k::NodeKey{Tuple{Float64, Float64}},
+        id::Integer) = node_point(arr, id)
+
+# Spherical crossing: the exact on-arc crossing direction (`_sph_crossing_dir`
+# on the `True()` rational path — the same authority `rk_nodes_coincide` and the
+# emission fallback use), scaled by its largest component before conversion so a
+# large-numerator rational cannot overflow to `Inf`, then normalized. One
+# rounding of a direction, against emission's `atan`/`asin` followed by the
+# locator's `cos`/`sin`.
+function _crossing_kernel_point(::NodedArrangement, k::NodeKey{<:UnitSphericalPoint},
+        ::Integer)
+    d = _sph_crossing_dir(True(), k)
+    scale = max(abs(d[1]), abs(d[2]), abs(d[3]))
+    x = Float64(d[1] / scale); y = Float64(d[2] / scale); z = Float64(d[3] / scale)
+    s = sqrt(x * x + y * y + z * z)
+    return UnitSphericalPoint(x / s, y / s, z / s)
+end
+
+# ### F2: propagate a known area location; seed by PIP only where it cannot reach
+
+#=
+The invariant the ring builder needs is that at every node the number of
+in-result-area half-edges *leaving* equals the number *arriving*. Walk a node's
+star and that is equivalent to the sectors between consecutive edges having a
+consistent in-result flag: an outgoing half-edge is kept in the result area iff
+the sector on its right is in the result and the one on its left is not, its sym
+iff the reverse, so around a closed cycle the two counts are the number of
+"enters" and the number of "leaves" of the same set of sectors, which are equal
+— PROVIDED adjacent edges agree about the sector they share.
+
+Pass 1 establishes that agreement for input `gi` at every node that has a
+`gi`-boundary edge: it walks the star as a cycle carrying one side location. At a
+node with NO `gi`-boundary edge there is nothing to walk, and JTS falls back to
+asking the locator separately for each incident edge. At sub-ulp separations
+those independent answers are effectively coin flips, and two of them disagreeing
+across one degree-2 node is exactly an unbalanced node — measured on the real
+reprojected-watershed reproducer: 28 unbalanced nodes out of 2,936.
+
+The divergence from JTS is to notice that the answers are not independent. A node
+carrying no boundary edge of `gi` is a node at which `gi`'s area location cannot
+change: crossing it, one stays on the same side of `gi`'s boundary, because
+`gi`'s boundary is not there. (A `gi`-*collapse* edge at the node is `gi` linework
+with zero depth delta, so it does not separate either — it does not block
+propagation. It is not used as a seed, though: pass 3 gives a collapse its
+parent's ring role, which is a boundary marker, not the location of a
+neighbouring face.) So every edge incident on such a node has the SAME `gi`
+location, and one known value determines all of them — exactly, not
+approximately. Propagating it is therefore not a heuristic that trades accuracy
+for consistency; it is reading a value the arrangement already fixed.
+
+That leaves only the chains that no known value reaches. Those get ONE
+point-in-area verdict for the whole chain, by the same rule JTS uses per edge
+(`locateEdgeBothEnds`: interior iff no endpoint is EXTERIOR) generalized to every
+node of the chain. A chain can still land on the wrong side of a ±1 ulp
+separation — that is irreducible, and no worse than JTS — but it can no longer
+land on two sides at once, which is what broke the builder.
+
+This is also strictly less work than JTS's per-edge query: one locator hit per
+distinct node of an unresolved chain, against two per unresolved edge.
+=#
+function _label_disconnected_area!(g::OverlayGraph, input, gi::Integer)
+    edges = g.edges
+    nnodes = length(g.node_edges)
+    #-- per-node transparency cache: 0 = not computed, 1 = transparent, 2 = opaque
+    trans = zeros(Int8, nnodes)
+    stack = Int32[]
+
+    #-- Phase A: flood a known location out of every NotPart edge that already
+    #-- has one (pass 1 labelled it at its far node) across transparent nodes.
+    for i in eachindex(edges)
+        lbl = oe_label(edges, i)
+        (is_not_part(lbl, gi) && !is_line_location_unknown(lbl, gi)) || continue
+        push!(stack, Int32(i))
     end
-    loc_orig = _input_locate_in_area(input, gi, node_point(g.arr, he_origin(g.edges, i)))
-    loc_dest = _input_locate_in_area(input, gi, node_point(g.arr, he_dest(g.edges, i)))
-    is_int = loc_orig != LOC_EXTERIOR && loc_dest != LOC_EXTERIOR
-    set_location_all!(label, gi, is_int ? LOC_INTERIOR : LOC_EXTERIOR)
+    while !isempty(stack)
+        e = pop!(stack)
+        _node_is_transparent(g, gi, trans, he_origin(edges, e)) || continue
+        loc = get_line_location(oe_label(edges, e), gi)
+        f = he_onext(edges, e)
+        while f != e
+            lbl = oe_label(edges, f)
+            if is_line_location_unknown(lbl, gi)
+                set_location_all!(lbl, gi, loc)
+                push!(stack, he_sym(edges, f))
+            end
+            f = he_onext(edges, f)
+        end
+    end
+
+    #-- Phase B: one PIP verdict per remaining chain.
+    visited = falses(length(edges))
+    stamp = zeros(Int32, nnodes)
+    comp = Int32[]
+    nodes = Int32[]
+    compid = Int32(0)
+    for i0 in eachindex(edges)
+        (visited[i0] || !is_line_location_unknown(oe_label(edges, i0), gi)) && continue
+        compid += Int32(1)
+        empty!(comp); empty!(nodes)
+        visited[i0] = true
+        push!(stack, Int32(i0))
+        while !isempty(stack)
+            e = pop!(stack)
+            push!(comp, e)
+            s = he_sym(edges, e)
+            if !visited[s]
+                visited[s] = true
+                push!(stack, s)
+            end
+            nid = he_origin(edges, e)
+            if stamp[nid] != compid
+                stamp[nid] = compid
+                push!(nodes, nid)
+            end
+            _node_is_transparent(g, gi, trans, nid) || continue
+            f = he_onext(edges, e)
+            while f != e
+                if !visited[f] && is_line_location_unknown(oe_label(edges, f), gi)
+                    visited[f] = true
+                    push!(stack, f)
+                end
+                f = he_onext(edges, f)
+            end
+        end
+        #-- `locateEdgeBothEnds` over the whole chain: interior iff no node is outside
+        is_int = true
+        for nid in nodes
+            if _input_locate_in_area(input, gi, _node_kernel_point(g.arr, nid)) == LOC_EXTERIOR
+                is_int = false
+                break
+            end
+        end
+        loc = is_int ? LOC_INTERIOR : LOC_EXTERIOR
+        for e in comp
+            set_location_all!(oe_label(edges, e), gi, loc)
+        end
+    end
     return nothing
+end
+
+# Whether input `gi`'s area location is the same on every edge incident on node
+# `nid`: true iff the node carries no `gi`-boundary edge and its star is whole.
+# A truncated node's star was thinned by clip pruning (split.jl), so a
+# `gi`-boundary edge may simply be missing from it — the same reason pass 1 skips
+# those nodes. Memoized in `trans` (0 unset / 1 transparent / 2 opaque).
+function _node_is_transparent(g::OverlayGraph, gi::Integer, trans::Vector{Int8}, nid::Integer)
+    t = @inbounds trans[nid]
+    t != 0 && return t == 1
+    ne = @inbounds g.node_edges[nid]
+    truncated = g.arr.truncated
+    ok = ne != 0 && !(!isempty(truncated) && (@inbounds truncated[nid])) &&
+         _find_propagation_start_edge(g.edges, ne, gi) == 0
+    @inbounds trans[nid] = ok ? Int8(1) : Int8(2)
+    return ok
 end
 
 # ## Result-area marking (ports of `markResultAreaEdges` / `unmarkDuplicate…`)
@@ -273,5 +467,69 @@ function _unmark_duplicate_edges_from_result_area!(g::OverlayGraph)
     for i in eachindex(edges)
         oe_in_result_area_both(edges, i) && oe_unmark_from_result_area_both!(edges, i)
     end
+    _check_result_area_balance(g)
     return nothing
+end
+
+# ## F0: the result-area degree-balance invariant
+
+#=
+Once the result area is marked, every node must have as many in-result-area
+half-edges leaving it as arriving: the marked half-edges are precisely the
+boundary of the result region traversed with the region on the right, and a
+boundary that enters a node has to leave it again.
+
+Everything downstream assumes this. `maximal_edge_ring.jl` links each marked
+incoming half-edge to a marked outgoing one and throws `"Ring edge missing at
+max-ring build"` when it runs out — which is a report of the symptom, several
+steps and one data structure away from the node whose labels are inconsistent.
+This check is O(#half-edges), runs on every overlay, and names the node.
+
+Truncated nodes are excluded for the same reason pass 1 skips them: clip pruning
+(split.jl) removed part of their star, so a boundary genuinely can enter one and
+not leave. They lie strictly outside the clip box and contribute nothing to the
+result there.
+=#
+function _check_result_area_balance(g::OverlayGraph)
+    edges = g.edges
+    truncated = g.arr.truncated
+    any_truncated = !isempty(truncated)
+    for nid in eachindex(g.node_edges)
+        ne = @inbounds g.node_edges[nid]
+        ne == 0 && continue
+        (any_truncated && (@inbounds truncated[nid])) && continue
+        n_out = 0
+        n_in = 0
+        e = ne
+        while true
+            oe_in_result_area(edges, e) && (n_out += 1)
+            oe_in_result_area(edges, he_sym(edges, e)) && (n_in += 1)
+            e = he_onext(edges, e)
+            e == ne && break
+        end
+        n_out == n_in ||
+            throw(_OverlayTopologyError(_result_area_balance_message(g, nid, ne, n_out, n_in)))
+    end
+    return nothing
+end
+
+# The diagnostic body: which node, where it emits to, and its whole star with the
+# per-half-edge result-area marks, so the inconsistent pair is readable directly
+# off the message.
+function _result_area_balance_message(g::OverlayGraph, nid::Integer, ne::Integer,
+        n_out::Integer, n_in::Integer)
+    edges = g.edges
+    io = IOBuffer()
+    print(io, "result-area degree imbalance at node ", nid,
+          " ", node_point(g.arr, nid),
+          ": out=", n_out, " in=", n_in, "; star (edge => dest, out/in):")
+    e = Int32(ne)
+    while true
+        print(io, " ", e, "=>", he_dest(edges, e), " ",
+              oe_in_result_area(edges, e) ? "1" : "0", "/",
+              oe_in_result_area(edges, he_sym(edges, e)) ? "1" : "0")
+        e = he_onext(edges, e)
+        e == ne && break
+    end
+    return String(take!(io))
 end
