@@ -50,19 +50,29 @@ module S2Geog
 
 export s2_available, s2_overlay, s2_area, s2_predicate, S2_RADIUS
 
-const AVAILABLE = try
-    @eval import S2Geography_jll
-    true
-catch err
-    @info "s2geography oracle unavailable (S2Geography_jll did not load on this platform)" err
+const AVAILABLE = if Sys.iswindows()
+    # The Windows libs2geography_c loads and answers metadata queries
+    # (`s2_versions`, `s2_kernel_names`), but the first Sedona kernel `execute`
+    # never returns, hanging CI until the 6-hour job kill. Off until the JLL's
+    # Windows build is fixed; oracle coverage remains on the Linux and macOS legs.
+    @info "s2geography oracle disabled on Windows (first kernel execution hangs)"
     false
+else
+    try
+        @eval import S2Geography_jll
+        true
+    catch err
+        @info "s2geography oracle unavailable (S2Geography_jll did not load on this platform)" err
+        false
+    end
 end
 
 """
     s2_available() -> Bool
 
-Whether `S2Geography_jll` loaded. Suites gate on this and skip rather than fail:
-the JLL ships artifacts for all five CI platforms, but a sixth would not have one.
+Whether the s2geography oracle is usable: `S2Geography_jll` loaded and the
+platform is not Windows, where kernel execution hangs (see `AVAILABLE`). Suites
+gate on this and skip rather than fail.
 """
 s2_available() = AVAILABLE
 
