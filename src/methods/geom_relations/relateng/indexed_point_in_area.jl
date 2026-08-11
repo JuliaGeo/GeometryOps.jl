@@ -141,7 +141,12 @@ end
 ==========================================================================#
 
 # Leaf item of the segment index: a ring segment as a pair of node points.
-const _PIASegment = Tuple{Tuple{Float64, Float64}, Tuple{Float64, Float64}}
+# The index stores coordinates at its own precision, so vertices are converted
+# to `_PIAPoint` on the way in (`_interval_index_add_line!`) — a ring with
+# integer coordinates would otherwise build an `Extent{(:Y,), Tuple{Tuple{Int,
+# Int}}}`, which has no conversion to the `_PIAExtent` the R-tree stores.
+const _PIAPoint = Tuple{Float64, Float64}
+const _PIASegment = Tuple{_PIAPoint, _PIAPoint}
 # The segment index: a midpoint-sorted packed tree over the segments'
 # y-intervals (see the header note on how this maps to JTS's
 # SortedPackedIntervalRTree).
@@ -540,10 +545,10 @@ end
 function _interval_index_add_line!(exts, segs, ring)
     n = GI.npoint(ring)
     n < 2 && return nothing
-    first_pt = _node_point(GI.getpoint(ring, 1))
+    first_pt = convert(_PIAPoint, _node_point(GI.getpoint(ring, 1)))
     prev = first_pt
     for i in 2:n
-        pt = _node_point(GI.getpoint(ring, i))
+        pt = convert(_PIAPoint, _node_point(GI.getpoint(ring, i)))
         _interval_index_add_segment!(exts, segs, prev, pt)
         prev = pt
     end

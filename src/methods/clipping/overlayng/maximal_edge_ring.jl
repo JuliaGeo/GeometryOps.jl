@@ -694,9 +694,72 @@ the ingested unit vector for a vertex node, the exact crossing direction
 `±(na × nb)` for a crossing node — instead of the emitted `(lon, lat)` converted
 back through trigonometry. Distinct nodes therefore stay distinct, which
 `_prune_loop_degeneracies` would otherwise collapse.
+
+Two of those directions, though, are not the same kind of object. A vertex
+node's is an input coordinate and is already Float64; a crossing node's is an
+exact `Rational{BigInt}` and reaching a `UnitSphericalPoint` costs a rounding
+(`_node_kernel_point`). So this is the same filter/escalate shape as the planar
+method above, with the certificate stated in the geometry rather than in an
+error term: rounding displaces a vertex by at most a couple of ULPs, so once
+every edge of the ring is *long* compared to that, the rounded ring and the
+exact one have the same combinatorics and the same turn signs, and the Float64
+curvature answers about the ring we meant. Below it they need not, and
+`_ring_is_ccw_dirs` recomputes from the exact directions.
 =#
-_ring_is_ccw_exact(ctx::_PolyBuilderCtx{<:Spherical}, ids::Vector{Int32}) =
-    _ring_is_ccw(ctx.m, [_node_kernel_point(ctx, id) for id in ids]; exact = ctx.exact)
+function _ring_is_ccw_exact(ctx::_PolyBuilderCtx{<:Spherical}, ids::Vector{Int32})
+    length(ids) < 3 && return false
+    ks = [_node_kernel_point(ctx, id) for id in ids]
+    _rounded_ring_is_faithful(ks) && return _ring_is_ccw(ctx.m, ks; exact = ctx.exact)
+    return _ring_is_ccw_dirs([_node_exact_dir(ctx, id) for id in ids])
+end
+
+#=
+Whether the rounded kernel ring can be read as the exact one.
+
+Only ADJACENT and DISTANCE-2 vertex pairs are measured, and that is the whole
+set that matters: those are precisely the pairs `_prune_loop_degeneracies`
+compares (`AA` and `ABA`), and the turn angle at a vertex is a function of its
+two incident edges and nothing else. Two far-apart vertices of the ring landing
+near each other perturbs no term of the curvature. Keeping the test to O(n) also
+means it costs nothing on the long rings where it never fires.
+
+`_RING_ROUNDING_CHORDS` ULPs of headroom over the ~2⁻⁵³ displacement of a single
+rounded component: an edge that long survives rounding with its direction intact
+to a relative error well under one part in a thousand, which no turn-angle sign
+in a non-degenerate ring is closer than.
+=#
+const _RING_ROUNDING_CHORDS = 16 * eps(Float64)
+
+function _rounded_ring_is_faithful(ks::Vector)
+    n = length(ks)
+    @inbounds for i in 1:n
+        p = ks[i]
+        _usp_chord2(p, ks[mod1(i + 1, n)]) > _RING_ROUNDING_CHORDS^2 || return false
+        n > 3 && (_usp_chord2(p, ks[mod1(i + 2, n)]) > _RING_ROUNDING_CHORDS^2 || return false)
+    end
+    return true
+end
+
+@inline function _usp_chord2(a, b)
+    dx = GI.x(a) - GI.x(b); dy = GI.y(a) - GI.y(b); dz = GI.z(a) - GI.z(b)
+    return dx * dx + dy * dy + dz * dz
+end
+
+# The exact sphere direction of node `id` — the counterpart of
+# `_node_kernel_point` that does not round. Unnormalized, as `_ring_is_ccw_dirs`
+# documents: a crossing's `±(na × nb)` has no rational unit-length form, and
+# nothing downstream needs one.
+#
+# `True()` rather than `ctx.exact`: this is only ever reached because the Float64
+# ring was found untrustworthy, so recomputing it in Float64 would be work spent
+# to arrive at the same answer. It is the same reason `_crossing_dir_is_positive`
+# pins its orients exact.
+function _node_exact_dir(ctx::_PolyBuilderCtx{<:Spherical}, id::Integer)
+    k = ctx.arr.nodes.keys[Int(id)]
+    k.is_crossing && return _sph_crossing_dir(True(), k)
+    return (Rational{BigInt}(GI.x(k.pt)), Rational{BigInt}(GI.y(k.pt)),
+            Rational{BigInt}(GI.z(k.pt)))
+end
 
 # The exact sphere position of node `id` as a unit kernel point, memoized per
 # builder (a node is shared by every ring through it, and the exact crossing

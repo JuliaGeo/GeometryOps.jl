@@ -1201,3 +1201,107 @@ while half 2 fires on 10 — so a regression that quietly reduced the pair to ha
     @test all(r -> GO._ring_is_collapsed(ctx, r), subgrid)
     @test all(r -> !GO._ring_is_collapsed(r), subgrid)
 end
+
+#=
+Converting (lon, lat) to xyz rounds `cos(φ)cos(λ)` and `cos(φ)sin(λ)`
+independently, so it does NOT preserve coplanarity along a meridian: two lat/lon
+cells that share the meridian `λ = 8` do not share a great circle, they get two
+that differ by ~1e-17 rad. The arrangement is exact, so it sees the gap and rings
+it — legitimately. Every consumer that assumed a shared grid edge is *exactly*
+shared broke on that, and this is the last of them.
+
+The sliver's four nodes are two vertex nodes and two crossings a fraction of an
+ULP from them. Rounding the crossings' exact directions to `UnitSphericalPoint`
+(`_node_kernel_point`) lands one of them bit-for-bit on a vertex node and the
+other one ULP away, so `_prune_loop_degeneracies` deletes the coincident pair as
+a repeated vertex and the Float64 curvature answers about a degenerate triangle
+instead. It reported the ring as a hole; exactly, the ring is clockwise — a
+shell. Nothing then contained the "hole" and the overlay threw `unable to assign
+free hole to a shell`.
+
+Emitting a ~1e-17-rad-wide sliver is the right answer for the arrangement as
+given, and is not what this tests. What it tests is that the ring's ROLE is read
+off the exact node directions when the rounded ones cannot carry it.
+=#
+@testset "a sub-ULP result ring is oriented from exact node directions" begin
+    m = Spherical()
+    #-- a 1°×1° cell against a polar triangle; they meet along λ = 8. The
+    #-- triangle repeats its pole vertex, as polar cells of real grids do.
+    A = GI.Polygon([[(8.0, -89.0), (9.0, -89.0), (9.0, -88.0), (8.0, -88.0), (8.0, -89.0)]])
+    B = GI.Polygon([[(0.0, -90.0), (0.0, -90.0), (8.0, -86.0), (4.0, -86.0), (0.0, -90.0)]])
+
+    #-- end to end: this used to throw. The regions meet along an edge and
+    #-- nowhere else, so the intersection is empty up to the meridian gap.
+    r = GO._overlay_ng(m, GO.OVERLAY_INTERSECTION, A, B; exact = EX)
+    @test GO.area(m, r) <= 1e-12 * GO.area(m, A)
+
+    #-- and on the ring itself. Rebuild the one minimal ring the result has.
+    arr = GO.NodedArrangement(m, A, B; exact = EX)
+    g = GO.OverlayGraph(m, arr; exact = EX)
+    GO._compute_labelling!(g, GO._OverlayInput(m, A, B, 2, 2, EX,
+                                               false, false, nothing, nothing))
+    GO._mark_result_area_edges!(g, GO.OVERLAY_INTERSECTION)
+    GO._unmark_duplicate_edges_from_result_area!(g)
+    rae = GO.graph_result_area_edges(g)
+    P = typeof(GO._to_kernel_point(m, (0.0, 0.0)))
+    ctx = GO._PolyBuilderCtx(m, g.edges, g.arr, EX, GO._MaxEdgeRing[],
+                             GO._OverlayEdgeRing{P}[], Int32[], Int32[])
+    for e in rae
+        GO._link_result_area_max_ring_at_node!(ctx.edges, e)
+    end
+    mr = only(GO._build_maximal_rings!(ctx, rae))
+    ids = ctx.edge_rings[only(GO._build_minimal_rings!(ctx, ctx.max_rings[mr]))].node_ids
+
+    ks = [GO._node_kernel_point(ctx, i) for i in ids]
+    dirs = [GO._node_exact_dir(ctx, i) for i in ids]
+    #-- the ring is not readable at Float64: two of its four nodes round together
+    @test !GO._rounded_ring_is_faithful(ks)
+    @test length(unique(ks)) < length(unique(ids))
+    #-- so the two tests disagree, and the exact one — every consecutive triple
+    #-- turning the same way, hence convex and clockwise — is the shell
+    @test GO._ring_is_ccw(m, ks; exact = EX) != GO._ring_is_ccw_dirs(dirs)
+    @test all(i -> GO._dot3(GO._cross3(dirs[mod1(i - 1, 4)], dirs[i]),
+                            dirs[mod1(i + 1, 4)]) < 0, 1:4)
+    @test !GO._ring_is_ccw_dirs(dirs)
+end
+
+#=
+The escalation above must not change any answer the Float64 path was entitled to
+give, so the two agree wherever the rounded ring is readable at all — which is
+every ring of an ordinary overlay.
+=#
+@testset "exact and rounded ring orientation agree on readable rings" begin
+    m = Spherical()
+    A = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)],
+                    [(2.0, 2.0), (2.0, 5.0), (5.0, 5.0), (5.0, 2.0), (2.0, 2.0)]])
+    B = GI.Polygon([[(3.0, 3.0), (13.0, 3.0), (13.0, 13.0), (3.0, 13.0), (3.0, 3.0)]])
+    checked = 0
+    for op in OPS
+        arr = GO.NodedArrangement(m, A, B; exact = EX)
+        g = GO.OverlayGraph(m, arr; exact = EX)
+        GO._compute_labelling!(g, GO._OverlayInput(m, A, B, 2, 2, EX,
+                                                   false, false, nothing, nothing))
+        GO._mark_result_area_edges!(g, op)
+        GO._unmark_duplicate_edges_from_result_area!(g)
+        rae = GO.graph_result_area_edges(g)
+        isempty(rae) && continue
+        P = typeof(GO._to_kernel_point(m, (0.0, 0.0)))
+        ctx = GO._PolyBuilderCtx(m, g.edges, g.arr, EX, GO._MaxEdgeRing[],
+                                 GO._OverlayEdgeRing{P}[], Int32[], Int32[])
+        for e in rae
+            GO._link_result_area_max_ring_at_node!(ctx.edges, e)
+        end
+        for mr in GO._build_maximal_rings!(ctx, rae)
+            for er in GO._build_minimal_rings!(ctx, ctx.max_rings[mr])
+                ids = ctx.edge_rings[er].node_ids
+                ks = [GO._node_kernel_point(ctx, i) for i in ids]
+                #-- fixture premise: these rings are nowhere near the threshold
+                @test GO._rounded_ring_is_faithful(ks)
+                @test GO._ring_is_ccw(m, ks; exact = EX) ==
+                      GO._ring_is_ccw_dirs([GO._node_exact_dir(ctx, i) for i in ids])
+                checked += 1
+            end
+        end
+    end
+    @test checked >= 4
+end

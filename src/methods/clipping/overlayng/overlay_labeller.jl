@@ -332,15 +332,57 @@ approximately. Propagating it is therefore not a heuristic that trades accuracy
 for consistency; it is reading a value the arrangement already fixed.
 
 That leaves only the chains that no known value reaches. Those get ONE
-point-in-area verdict for the whole chain, by the same rule JTS uses per edge
-(`locateEdgeBothEnds`: interior iff no endpoint is EXTERIOR) generalized to every
-node of the chain. A chain can still land on the wrong side of a ±1 ulp
-separation — that is irreducible, and no worse than JTS — but it can no longer
-land on two sides at once, which is what broke the builder.
+point-in-area verdict for the whole chain, so a chain can no longer land on two
+sides at once, which is what broke the builder.
 
-This is also strictly less work than JTS's per-edge query: one locator hit per
-distinct node of an unresolved chain, against two per unresolved edge.
+The verdict is a majority over the chain's EDGE INTERIORS, and both halves of
+that — edge interiors rather than nodes, majority rather than JTS's unanimity —
+are answering the same failure.
+
+JTS asks `locateEdgeBothEnds` (interior iff neither endpoint is EXTERIOR) of ONE
+EDGE, where it is a reasonable question. Asked of a whole chain it becomes far
+stronger and far more fragile: one node one ulp on the wrong side condemns every
+edge of the chain. That is not hypothetical. Converting (lon, lat) to xyz rounds
+`cos(φ)cos(λ)` and `cos(φ)sin(λ)` independently, so two lat/lon grid cells that
+share a meridian do NOT share a great circle — they get two ~1e-17 rad apart. A
+cell nested inside a coarser one and sharing its left edge then has two corners a
+hair OUTSIDE it and two a whole degree INSIDE, with no crossings anywhere, and
+unanimity discarded the cell outright: `intersection` returned empty for a
+strictly contained cell and `union` returned two polygons. (Found through
+conservative regridding, where whole grid cells vanished from the weight matrix.)
+
+Nodes are the wrong thing to poll. They are exactly where the two geometries
+touch, so they are the points a sub-ulp separation is most likely to misplace,
+and on a quadrilateral sharing one edge they are also evenly split — two
+ambiguous, two decisive — so no tiebreak over nodes can get both the contained
+case and the merely-adjacent case right. An arrangement edge, by contrast, has no
+crossing in its interior by construction, so its interior lies strictly inside
+one face of the other input: an unambiguous probe. Of a nested cell's four edges
+only the shared one is ambiguous and three vote INTERIOR; of an adjacent cell's
+four only the shared one is ambiguous and three vote EXTERIOR. Both come out
+right, and by 3-to-1 rather than on a tiebreak.
+
+It is still one verdict for the chain and still cannot split a chain across two
+sides; it just declines to decide on its least representative point.
 =#
+
+# A probe strictly inside arrangement edge `(n0, n1)` — its midpoint. Arrangement
+# edges carry no crossing in their interior, so this is inside one face of the
+# other input, which is what makes it a better witness than either endpoint.
+@inline _edge_probe_point(::Planar, arr, n0::Integer, n1::Integer) =
+    let a = _node_kernel_point(arr, n0), b = _node_kernel_point(arr, n1)
+        (0.5 * (GI.x(a) + GI.x(b)), 0.5 * (GI.y(a) + GI.y(b)))
+    end
+
+# On the sphere the midpoint of the CHORD normalizes to the midpoint of the arc,
+# and the chord midpoint is what the labeller wants anyway — the two agree in
+# direction. (An arrangement edge is never a half great circle, so `a + b` cannot
+# vanish: `AntipodalEdgeSplit` is a precondition of noding.)
+@inline _edge_probe_point(::Spherical, arr, n0::Integer, n1::Integer) =
+    let a = _node_kernel_point(arr, n0), b = _node_kernel_point(arr, n1)
+        rk_normalize_usp(UnitSphericalPoint(GI.x(a) + GI.x(b), GI.y(a) + GI.y(b),
+                                            GI.z(a) + GI.z(b)))
+    end
 function _label_disconnected_area!(g::OverlayGraph, input, gi::Integer)
     edges = g.edges
     nnodes = length(g.node_edges)
@@ -372,14 +414,10 @@ function _label_disconnected_area!(g::OverlayGraph, input, gi::Integer)
 
     #-- Phase B: one PIP verdict per remaining chain.
     visited = falses(length(edges))
-    stamp = zeros(Int32, nnodes)
     comp = Int32[]
-    nodes = Int32[]
-    compid = Int32(0)
     for i0 in eachindex(edges)
         (visited[i0] || !is_line_location_unknown(oe_label(edges, i0), gi)) && continue
-        compid += Int32(1)
-        empty!(comp); empty!(nodes)
+        empty!(comp)
         visited[i0] = true
         push!(stack, Int32(i0))
         while !isempty(stack)
@@ -391,10 +429,6 @@ function _label_disconnected_area!(g::OverlayGraph, input, gi::Integer)
                 push!(stack, s)
             end
             nid = he_origin(edges, e)
-            if stamp[nid] != compid
-                stamp[nid] = compid
-                push!(nodes, nid)
-            end
             _node_is_transparent(g, gi, trans, nid) || continue
             f = he_onext(edges, e)
             while f != e
@@ -405,15 +439,18 @@ function _label_disconnected_area!(g::OverlayGraph, input, gi::Integer)
                 f = he_onext(edges, f)
             end
         end
-        #-- `locateEdgeBothEnds` over the whole chain: interior iff no node is outside
-        is_int = true
-        for nid in nodes
-            if _input_locate_in_area(input, gi, _node_kernel_point(g.arr, nid)) == LOC_EXTERIOR
-                is_int = false
-                break
+        #-- one verdict for the chain, from the majority of its EDGE INTERIORS
+        #-- (see the discussion above)
+        nout = 0; nin = 0
+        for e in comp
+            p = _edge_probe_point(input.m, g.arr, he_origin(edges, e), he_dest(edges, e))
+            if _input_locate_in_area(input, gi, p) == LOC_EXTERIOR
+                nout += 1
+            else
+                nin += 1
             end
         end
-        loc = is_int ? LOC_INTERIOR : LOC_EXTERIOR
+        loc = nout > nin ? LOC_EXTERIOR : LOC_INTERIOR
         for e in comp
             set_location_all!(oe_label(edges, e), gi, loc)
         end

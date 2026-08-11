@@ -463,6 +463,25 @@ function _result_dimension(op::_OverlayOpCode, d0::Integer, d1::Integer)
     return max(d0, d1) # SYMDIFFERENCE
 end
 
+#=
+Whether `op` can return the full sphere at all, from the op alone.
+
+`INTERSECTION` and `DIFFERENCE` both return a SUBSET of A, and A is a
+ring-bounded polygon — it has a nonempty boundary, so it is not the full sphere
+and neither is any subset of it. Only the two ops that can return a superset of
+an input (`UNION`, `SYMDIFFERENCE`) can cover everything.
+
+This is not an optimization. `_covers_everything` probes by locating a single
+input VERTEX, and a vertex lies on its own input's boundary by construction —
+the one place where the op's value is not representative of the neighbourhood.
+Two lon/lat cells sharing an edge put that vertex on BOTH boundaries, so the
+probe reported their (empty) intersection as covering the sphere. Restricting
+the question to the ops that can actually answer "yes" removes the false
+positive at its source rather than hardening the probe.
+=#
+@inline _op_can_cover_everything(op::_OverlayOpCode) =
+    op == OVERLAY_UNION || op == OVERLAY_SYMDIFFERENCE
+
 # Resolve a pipeline that produced no components. On the plane an empty result is
 # always the empty geometry. On the sphere (design §3 amendment 6) a boundaryless
 # area result is ambiguous between empty and the whole sphere; disambiguate by
@@ -476,7 +495,7 @@ function _resolve_empty_result(m::Manifold, op::_OverlayOpCode, input::_OverlayI
         target = nothing)
     if m isa Spherical && _target_admits_area(target) &&
        _result_dimension(op, input.dim_a, input.dim_b) == 2 &&
-       _covers_everything(m, op, input)
+       _op_can_cover_everything(op) && _covers_everything(m, op, input)
         throw(ArgumentError(_FULL_SPHERE_MSG))
     end
     return _empty_result(op, input, target)
@@ -515,16 +534,22 @@ const _FULL_SPHERE_MSG =
 # result boundary the result is uniform, so evaluating the op at any single point
 # decides it. Uses a vertex of an area input (boundary counts as interior).
 function _covers_everything(m::Manifold, op::_OverlayOpCode, input::_OverlayInput)
-    p = _first_area_vertex(input)
+    p = _first_area_vertex(m, input)
     loc0 = _input_is_area(input, 0) ? _input_locate_in_area(input, 0, p) : LOC_EXTERIOR
     loc1 = _input_is_area(input, 1) ? _input_locate_in_area(input, 1, p) : LOC_EXTERIOR
     return _is_result_of_op(op, loc0, loc1)
 end
 
-function _first_area_vertex(input::_OverlayInput)
+# The vertex goes straight to the point-in-area locators, so it has to be in the
+# manifold's KERNEL coordinates, not a bare `(x, y)` pair off the input. On the
+# sphere an input vertex may already be xyz (`UnitSphericalPoint`); keeping only
+# its first two components drops z, and the locator then reads the pair back as
+# lon/lat — a different point on a different part of the sphere. Two lat/lon grid
+# cells meeting at the equator located that ghost point as BOUNDARY of both and
+# reported their (empty) intersection as covering the whole sphere.
+function _first_area_vertex(m::Manifold, input::_OverlayInput)
     geom = _input_is_area(input, 0) ? input.a : input.b
-    p = first(GI.getpoint(geom))
-    return (Float64(GI.x(p)), Float64(GI.y(p)))
+    return _to_kernel_point(m, first(GI.getpoint(geom)))
 end
 
 _empty_result(op::_OverlayOpCode, input::_OverlayInput, target = nothing) =

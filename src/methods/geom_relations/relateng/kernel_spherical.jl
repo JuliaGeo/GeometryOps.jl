@@ -347,9 +347,7 @@ end
 # JTS quadrant of the direction toward `P3` around apex `n3` with reference
 # `r3`: NE=0, NW=1, SW=2, SE=3, axis directions on the `>= 0` side.
 @inline function _sph_quadrant3(n3, r3, P3)
-    nn = _dot3(n3, n3); nr = _dot3(n3, r3); pn = _dot3(P3, n3); pr = _dot3(P3, r3)
-    su = pr * nn - nr * pn               # sign of P·u
-    sv = _dot3(_cross3(n3, r3), P3)      # sign of P·v
+    su, sv = _sph_tangent_signs(n3, r3, P3)
     (su == 0 && sv == 0) &&
         throw(ArgumentError("cannot compute the quadrant of a zero-length direction"))
     if su >= 0
@@ -357,6 +355,57 @@ end
     else
         return sv >= 0 ? 1 : 2
     end
+end
+
+#=
+`sign(P·u)` and `sign(P·v)` for the tangent frame at `n3`, exactly.
+
+These two signs ARE the quadrant, and the quadrant is the primary key of the
+node star order (`_compare_angle`), so a wrong one reorders a node's edges and
+every wedge test taken there — `_is_between`, `_compare_between`, and through
+them the labeller's "which input's interior does this edge leave the node into"
+— answers about a different star.
+
+They cannot be read off Float64. Both are determinants that cancel completely
+for a direction lying along a frame axis, and on real data that is the common
+case rather than a corner one: `_ref_axis` picks the coordinate axis least
+aligned with the apex, which at any node between roughly ±45° of latitude is
+`±z`, so `u` points due NORTH. Every meridian-aligned edge — i.e. every
+north-south edge of every lon/lat grid — then has `P·v ≈ 0`, and its Float64
+value is the difference of two ~0.4 terms agreeing to sixteen digits. Two
+adjacent cells sharing a meridian were each labelled as lying in the OTHER's
+interior from such a sign, which is geometrically impossible (their edges are
+two great circles meeting only at the shared corner) and left the result-area
+marking unbalanced.
+
+So they are filtered and escalated like every other predicate in the kernel. The
+filter is cheap and the escalation rare: `r3` is a coordinate axis, so `P·r`,
+`n·r` and `n×r` are exact (a select and a negate), and only `n·n` and `P·n`
+carry error into the bound.
+=#
+@inline _sph_tangent_signs(n3, r3, P3) = _sph_tangent_signs_exact(n3, r3, P3)
+
+@inline function _sph_tangent_signs(n3::NTuple{3, Float64}, r3::NTuple{3, Float64},
+        P3::NTuple{3, Float64})
+    nn = _dot3(n3, n3); nr = _dot3(n3, r3); pn = _dot3(P3, n3); pr = _dot3(P3, r3)
+    su = pr * nn - nr * pn
+    w = _cross3(n3, r3)
+    sv = _dot3(w, P3)
+    #-- `nn` and the |Pᵢnᵢ| sum are the only inexact inputs; 8·eps covers the
+    #-- three dot-product roundings, the two products and the subtraction
+    e = 8 * eps(Float64)
+    pn_mag = abs(P3[1] * n3[1]) + abs(P3[2] * n3[2]) + abs(P3[3] * n3[3])
+    su_bound = e * (abs(pr) * nn + abs(nr) * pn_mag)
+    sv_bound = e * (abs(w[1] * P3[1]) + abs(w[2] * P3[2]) + abs(w[3] * P3[3]))
+    (abs(su) > su_bound && abs(sv) > sv_bound) && return (sign(su), sign(sv))
+    return _sph_tangent_signs_exact(_rat3(n3), _rat3(r3), _rat3(P3))
+end
+
+@inline _rat3(t) = (Rational{BigInt}(t[1]), Rational{BigInt}(t[2]), Rational{BigInt}(t[3]))
+
+@inline function _sph_tangent_signs_exact(n3, r3, P3)
+    nn = _dot3(n3, n3); nr = _dot3(n3, r3); pn = _dot3(P3, n3); pr = _dot3(P3, r3)
+    return (sign(pr * nn - nr * pn), sign(_dot3(_cross3(n3, r3), P3)))
 end
 
 function rk_quadrant(::Spherical, origin, p)
@@ -614,20 +663,20 @@ the closure) — so every remaining vertex has two distinct, non-retracing
 neighbors and its turn angle is well defined. Returns fewer than 3 vertices
 for a completely degenerate loop.
 =#
-function _prune_loop_degeneracies(pts::Vector)
+function _prune_loop_degeneracies(pts::Vector, same = ==)
     vertices = empty(pts)
     sizehint!(vertices, length(pts))
     for v in pts
         if !isempty(vertices)
-            v == vertices[end] && continue                       # AA → A
-            if length(vertices) >= 2 && v == vertices[end - 1]   # ABA → A
+            same(v, vertices[end]) && continue                       # AA → A
+            if length(vertices) >= 2 && same(v, vertices[end - 1])   # ABA → A
                 pop!(vertices)
                 continue
             end
         end
         push!(vertices, v)
     end
-    length(vertices) > 1 && vertices[1] == vertices[end] && pop!(vertices)
+    length(vertices) > 1 && same(vertices[1], vertices[end]) && pop!(vertices)
     m = length(vertices)
     m < 3 && return vertices
     # whiskers straddling the closure (the loop begins with `BA…` and ends
@@ -635,7 +684,7 @@ function _prune_loop_degeneracies(pts::Vector)
     # pairs while the terminal edges retrace each other — guaranteed to stop
     # before consuming the loop (S2: some portion is non-degenerate)
     k = 0
-    while vertices[k + 2] == vertices[m - k] || vertices[k + 1] == vertices[m - k - 1]
+    while same(vertices[k + 2], vertices[m - k]) || same(vertices[k + 1], vertices[m - k - 1])
         k += 1
     end
     return k == 0 ? vertices : vertices[(k + 1):(m - k)]
@@ -718,6 +767,88 @@ function _loop_order_less(o1, o2, loop)
         p1 > p2 && return false
     end
     return false
+end
+
+#=
+## The same orientation test over EXACT vertex directions
+
+`_ring_is_ccw` above takes `UnitSphericalPoint{Float64}` vertices, which is all
+the relate engine ever has: its rings are the input's, and an input vertex is
+already a Float64 direction, so rounding is not in play. Overlay's result rings
+are not — their vertices are arrangement NODES, and a crossing node's position
+is an exact `Rational{BigInt}` direction `±(na × nb)` that has to be rounded to
+reach a `UnitSphericalPoint` (`_node_kernel_point`). That rounding moves a
+vertex by up to ~2⁻⁵³ of a component, which on a sub-ULP ring is larger than the
+ring itself, and the Float64 test then answers about a DIFFERENT ring:
+
+  - two distinct nodes can round to the same direction, and
+    `_prune_loop_degeneracies` deletes the pair as a repeated vertex — the ring
+    loses a side and its curvature becomes noise;
+  - two nodes an ULP apart survive pruning but their edge direction is a
+    difference of nearly-equal Float64s, so the turn angles around it are noise;
+  - `_rk_orient` is exact, but exact ABOUT THE ROUNDED VERTICES, so even the
+    turn SIGNS are the rounded ring's rather than the real one's.
+
+A polar grid cell against a polar triangle hit all three at once: the intended
+shared meridian is not exactly shared (converting (lon, lat) to xyz rounds the
+two horizontal components independently, so two cells' "same" meridian edge are
+two great circles ~1e-17 rad apart), the resulting sliver's four nodes rounded
+down to two, and the ring — exactly clockwise, i.e. a shell — was filed as a
+hole with no shell to hold it.
+
+So the exact directions are used directly. Everything the curvature needs is
+available on them and is *more* accurate than the Float64 path, not less:
+`robust_cross_product` exists to recover an edge normal that Float64 subtraction
+loses, and rational `_cross3` simply does not lose it. Only the turn-angle
+MAGNITUDE leaves the rationals, through one `atan` per vertex evaluated in
+`BigFloat` on exactly-computed arguments; the SIGN — which is what the result
+hinges on — never does.
+
+The vertices here are directions, not unit vectors. That is fine and is why no
+normalization happens: `_sph_turn_angle` is invariant to the positive scaling of
+each argument separately (the sign is a determinant, the magnitude an `atan2` of
+a cross and a dot of two cross products), so scaling cancels in every term.
+=#
+function _ring_is_ccw_dirs(dirs::Vector)
+    loop = _prune_loop_degeneracies(dirs, _dirs_same_point)
+    n = length(loop)
+    n < 3 && return false   # bounds no area (JTS convention for flat rings)
+    return _spherical_loop_curvature_exact(loop) >= -(11.25 * eps(Float64) * n)
+end
+
+# Whether two exact directions denote the same point of the sphere. `==` would
+# be wrong: the directions are unnormalized, so the same point has infinitely
+# many representations, all positive multiples of each other.
+@inline _dirs_same_point(a, b) = _cross3(a, b) == (zero(a[1]), zero(a[1]), zero(a[1])) &&
+    _dot3(a, b) > 0
+
+# `_spherical_loop_curvature` over exact directions. Same canonical order and
+# sign restoration — the reasons for both are unchanged — but the accumulator is
+# `BigFloat`, so Kahan compensation buys nothing and is dropped.
+function _spherical_loop_curvature_exact(loop)
+    n = length(loop)
+    i, dir = _canonical_loop_order(loop)
+    at(k) = loop[mod1(k, n)]
+    total = zero(BigFloat)
+    for _ in 1:n
+        total += _sph_turn_angle_exact(at(i - dir), at(i), at(i + dir))
+        i += dir
+    end
+    return dir * total
+end
+
+# `_sph_turn_angle` over exact directions: exact sign, `BigFloat` magnitude.
+function _sph_turn_angle_exact(a, b, c)
+    angle = _usp_angle_exact(_cross3(a, b), _cross3(b, c))
+    return _dot3(_cross3(a, b), c) > 0 ? angle : -angle
+end
+
+# `_usp_angle` with both arguments exact: `atan2(|u×v|, u·v)`, the cross and dot
+# taken in rational arithmetic and only the final `atan` (and the `sqrt` feeding
+# it) in `BigFloat`.
+function _usp_angle_exact(u, v)
+    w = _cross3(u, v)
+    return atan(sqrt(BigFloat(_dot3(w, w))), BigFloat(_dot3(u, v)))
 end
 
 #=
@@ -957,8 +1088,19 @@ function _sph_interaction_extent(m::Spherical, ::GI.AbstractGeometryTrait, geom)
     return ext
 end
 
-# Converted (kernel-ingest: unit, signed-zero) vertices of a ring/curve.
-_ring_usp(ring) = [_spherical_kernel_point(p) for p in GI.getpoint(ring)]
+# Converted (kernel-ingest: unit, signed-zero) vertices of a ring/curve, in a
+# plain `Vector` — the same reason `_node_points` (kernel.jl) spells out its
+# loop: a comprehension over `GI.getpoint` inherits the iterator's axes, so a
+# ring backed by StaticArrays yields a `SizedVector`, which the point-list
+# consumers (`_orient_ring`, `_ring_is_ccw`) reject.
+function _ring_usp(ring)
+    pts = Vector{UnitSphericalPoint{Float64}}()
+    sizehint!(pts, GI.npoint(ring))
+    for p in GI.getpoint(ring)
+        push!(pts, _spherical_kernel_point(p))
+    end
+    return pts
+end
 
 # `pts[1:n]` (implied closure) with repeated consecutive vertices removed,
 # copying only when one exists; wraparound repeats included.
