@@ -167,16 +167,16 @@ function _geodesic_area(
     function _area_geodesic_inner(::GI.PolygonTrait, poly)
         GI.isempty(poly) && return zero(T)
         exterior_area = abs(_ring_area(GI.getexterior(poly)))
-        hole_area = sum(hole -> abs(_ring_area(hole)), GI.gethole(poly); init=zero(T))
+        hole_area = sum(hole -> abs(_ring_area(hole)), GI.gethole(poly))
         return exterior_area - hole_area
     end
     _area_geodesic_inner(::GI.AbstractGeometryTrait, geom) = zero(T)
 
-    return init + applyreduce(
+    return applyreduce(
         WithTrait(_area_geodesic_inner),
         +,
         GeometryOps._AREA_TARGETS,
-        geom; threaded, init=zero(T), kwargs...
+        geom; threaded, init, kwargs...
     )
 end
 
