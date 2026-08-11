@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Half-edge substrate — the winged-edge algebra (port of JTS `edgegraph/HalfEdge`)
 #
 # Phase 2a of the OverlayNG port (design doc §3). A port of

@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # RelateNG edge segment intersector
 #
 # Port of JTS `EdgeSegmentIntersector.java`: tests segments of

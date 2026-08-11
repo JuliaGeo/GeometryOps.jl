@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # RelateNG topology computer
 #
 # Port of JTS `TopologyComputer.java` — the heart of the topology layer.

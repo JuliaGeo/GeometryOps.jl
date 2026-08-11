@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # RelateNG node sections
 #
 # Ports of JTS `NodeSection.java` and `NodeSections.java`, in this order

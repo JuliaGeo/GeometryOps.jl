@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # RelateNG indexed point-in-area location
 #
 # Prepared-mode point-in-area locator for RelateNG (Task 22). This file holds

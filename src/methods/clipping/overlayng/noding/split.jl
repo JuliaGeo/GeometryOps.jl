@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Stages 2 + 4 — order and split (design §2.5, §2.1)
 #
 # For every parent segment of every string, order its interior nodes along the

@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # DE-9IM matrix, location and dimension codes
 export DE9IM
 export Mod2Boundary, EndpointBoundary, MultivalentEndpointBoundary, MonovalentEndpointBoundary
@@ -78,6 +80,8 @@ end
 
 """
     DE9IM
+
+This functionality is experimental and may change at any time.
 
 An immutable DE-9IM intersection matrix. Entries are dimension codes
 (`DIM_FALSE`, `DIM_P`, `DIM_L`, `DIM_A`) stored row-major over
@@ -241,6 +245,8 @@ end
 """
     BoundaryNodeRule
 
+This functionality is experimental and may change at any time.
+
 Abstract supertype for rules deciding which endpoints of a linear geometry
 are on its boundary, given the number of line ends meeting at the point
 (port of JTS `BoundaryNodeRule`). Concrete rules are [`Mod2Boundary`](@ref)
@@ -253,6 +259,8 @@ abstract type BoundaryNodeRule end
 """
     Mod2Boundary()
 
+This functionality is experimental and may change at any time.
+
 The OGC SFS standard [`BoundaryNodeRule`](@ref) (and the RelateNG default):
 an endpoint is on the boundary iff an odd number of line ends meet it
 (the "Mod-2 rule"; JTS `Mod2BoundaryNodeRule`).
@@ -261,6 +269,8 @@ struct Mod2Boundary <: BoundaryNodeRule end
 
 """
     EndpointBoundary()
+
+This functionality is experimental and may change at any time.
 
 [`BoundaryNodeRule`](@ref) under which any endpoint of a line is on the
 boundary, regardless of how many line ends meet there (JTS
@@ -271,6 +281,8 @@ struct EndpointBoundary <: BoundaryNodeRule end
 """
     MultivalentEndpointBoundary()
 
+This functionality is experimental and may change at any time.
+
 [`BoundaryNodeRule`](@ref) under which an endpoint is on the boundary iff
 **more than one** line end meets it (JTS
 `MultiValentEndPointBoundaryNodeRule`).
@@ -279,6 +291,8 @@ struct MultivalentEndpointBoundary <: BoundaryNodeRule end
 
 """
     MonovalentEndpointBoundary()
+
+This functionality is experimental and may change at any time.
 
 [`BoundaryNodeRule`](@ref) under which an endpoint is on the boundary iff
 **exactly one** line end meets it (JTS

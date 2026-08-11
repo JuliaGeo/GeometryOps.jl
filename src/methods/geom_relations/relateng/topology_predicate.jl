@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Topology predicate framework
 #=
 Port of JTS `TopologyPredicate`, `BasicPredicate`, `IMPredicate`

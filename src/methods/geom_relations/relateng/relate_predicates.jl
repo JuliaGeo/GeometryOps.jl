@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Named DE-9IM relate predicates
 #=
 Port of JTS `RelatePredicate.java` (the `IMPredicate` kinds — the

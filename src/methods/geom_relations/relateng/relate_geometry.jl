@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # RelateNG input geometry facade
 #
 # Ports of two tightly coupled JTS classes (JTS file boundaries preserved as

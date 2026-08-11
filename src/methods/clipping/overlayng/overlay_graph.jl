@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Overlay graph — edge merge, half-edge pairs, and the topology graph
 #
 # Phase 2a of the OverlayNG port (design doc §3). Consumes the phase-1
