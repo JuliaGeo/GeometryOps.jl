@@ -54,22 +54,56 @@ struct Planar <: Manifold
 end
 
 """
-    Spherical(; radius)
+    Spherical(; radius, oriented = false)
 
-A spherical manifold means that the geometry is on the 3-sphere (but is represented by 2-D longitude and latitude).  
+A spherical manifold means that the geometry is on the 3-sphere (but is represented by 2-D longitude and latitude).
+
+`oriented` selects how the interior of a polygon ring is interpreted:
+
+- `oriented = false` (the default): a ring's interior is the region it
+  *encloses* — the smaller of the two regions it bounds — independent of
+  winding direction.  This matches how most of the ecosystem treats
+  unoriented data by default (R's `s2`/`sf`, spherely, BigQuery), and means
+  shapefile-convention data (clockwise shells) is read the same way as
+  counterclockwise data.  No region larger than a hemisphere can be
+  represented.
+- `oriented = true`: polygon ring directions are known to be correct —
+  exterior rings counterclockwise, interior rings clockwise — so the
+  interior of the polygon is the region on the *left* of each ring's stored
+  vertex order (the convention of S2's `S2Polygon::InitOriented`).  This
+  makes regions larger than a hemisphere representable, e.g. "the sphere
+  minus a small cap" as a clockwise ring.
 
 ## Extended help
 
 !!! note
-    The traditional definition of spherical coordinates in physics and mathematics, 
-    ``r, \\theta, \\phi``, uses the _colatitude_, that measures angular displacement from the `z`-axis.  
-    
+    The traditional definition of spherical coordinates in physics and mathematics,
+    ``r, \\theta, \\phi``, uses the _colatitude_, that measures angular displacement from the `z`-axis.
+
     Here, we use the geographic definition of longitude and latitude, meaning
-    that `lon` is longitude between -180 and 180, and `lat` is latitude between 
+    that `lon` is longitude between -180 and 180, and `lat` is latitude between
     `-90` (south pole) and `90` (north pole).
+
+!!! note
+    With `oriented = true`, a ring may denote a region covering most of the
+    sphere.  Operations remain correct on such regions, but extent-based
+    pruning degenerates (the region's bounding box is essentially the whole
+    sphere), so spatial predicates against them fall back to slower paths.
+
+!!! warning "Validity is manifold-dependent"
+    A ring that is valid in lon/lat can be *invalid on the sphere*: two
+    non-adjacent edges may cross when reinterpreted as great-circle arcs
+    (a planar needle a few meters wide is enough — Natural Earth 110m
+    Sudan is a real instance), and no planar validity tool can detect it.
+    Prepared spherical predicates (`GeometryOps.prepare`) therefore
+    validate against this class by default and throw an "edge i crosses
+    edge j" error; the remedy is the `GeometryOps.CrossingEdgeSplit`
+    correction, which splits each ring at its crossing points into
+    separate loops (even-odd semantics).
 """
 Base.@kwdef struct Spherical{T} <: Manifold
     radius::T = WGS84_EARTH_MEAN_RADIUS # this should be theWGS84 defined mean radius
+    oriented::Bool = false
 end
 
 """

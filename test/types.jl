@@ -5,6 +5,17 @@ using GeometryOpsCore
 using GeometryOps: Planar, Spherical, AutoManifold, rebuild, manifold, best_manifold, enforce, get
 using GeometryOps: CLibraryPlanarAlgorithm, GEOS, TG, PROJ
 
+@testset "Spherical manifold" begin
+    # keyword construction, with the polygon-interior mode defaulting to
+    # unoriented (enclosed-region) semantics
+    @test Spherical() isa Spherical{Float64}
+    @test Spherical().oriented == false
+    @test Spherical(; radius = 1.0).radius == 1.0
+    @test Spherical(; radius = 1.0).oriented == false
+    @test Spherical(; oriented = true).oriented == true
+    @test Spherical(; oriented = true).radius == Spherical().radius
+end
+
 @testset "CLibraryPlanarAlgorithm" begin
     # Test that it's a subtype of SingleManifoldAlgorithm{Planar}
     @test CLibraryPlanarAlgorithm <: GeometryOpsCore.SingleManifoldAlgorithm{Planar}

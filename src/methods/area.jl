@@ -219,11 +219,19 @@ function _spherical_triangle_area(::Girard, p1::UnitSphericalPoint, p2::UnitSphe
 end
 
 # Using Eriksson's formula for the area of spherical triangles: https://www.jstor.org/stable/2691141
+# This is the Van Oosterom–Strackee tangent-half-angle form, kept natively SIGNED so that
+# reflex triangles in a fan triangulation subtract (concave rings) instead of adding.
+# `numerator` is the raw signed triple product a ⋅ (b × c); `denominator` is 1 + a⋅b + b⋅c + c⋅a.
+# The `(b - a, c - a)` / `(b + a, c + a)` rewrites are algebraically identical to the commented
+# lines below but better conditioned for tiny triangles (Eriksson 1990), so small-polygon
+# accuracy is preserved. `atan2` also branches correctly when `denominator ≤ 0` (large fan
+# triangles whose true |area| exceeds π), which `atan(abs(t))` cannot represent.
 function _spherical_triangle_area(::Eriksson, a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
-    #t = abs(dot(a, cross(b, c)))
-    #t /= 1 + dot(b,c) + dot(c, a) + dot(a, b)
-    t = abs(dot(a, (cross(b - a, c - a))) / dot(b + a, c + a))
-    return 2*atan(t)
+    #numerator = dot(a, cross(b, c))
+    #denominator = 1 + dot(b,c) + dot(c, a) + dot(a, b)
+    numerator = dot(a, (cross(b - a, c - a)))
+    denominator = dot(b + a, c + a)
+    return 2 * atan(numerator, denominator)
 end
 
 

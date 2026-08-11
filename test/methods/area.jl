@@ -171,6 +171,58 @@ end
     @test area_with_hole ≈ area_exterior - area_hole atol=1e-10
 end
 
+@testset "Concave spherical area (signed fan triangulation)" begin
+    # The spherical area fans each ring from its first vertex and sums the SIGNED
+    # triangle areas. Reflex fan triangles must subtract; the pre-fix code summed
+    # unsigned magnitudes and overcounted every non-convex ring.
+    usph = GO.Spherical(radius = 1.0)
+
+    # (a) A concave L-shape equals the sum of its two convex constituent rectangles.
+    # The L is split along the meridian lon=1 and the equator lat=0 (both great
+    # circles), so the two rectangles tile the L exactly on the sphere.
+    rectA = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 3.0), (0.0, 3.0), (0.0, 0.0)]])
+    rectB = GI.Polygon([[(1.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0), (1.0, 0.0)]])
+    Lverts = [(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0), (1.0, 3.0), (0.0, 3.0)]
+    Lshape = GI.Polygon([[Lverts..., Lverts[1]]])
+    decomp = GO.area(usph, rectA) + GO.area(usph, rectB)
+    @test GO.area(usph, Lshape) ≈ decomp rtol = 1e-12
+    # The pre-fix unsigned fan returned ≈1.83e-3 here (+50%); the true value is ≈1.22e-3.
+    @test GO.area(usph, Lshape) < 1.3e-3
+
+    # (b) Winding independence: reversing the ring gives the same (positive) area.
+    Lrev = GI.Polygon([reverse([Lverts..., Lverts[1]])])
+    @test GO.area(usph, Lrev) ≈ GO.area(usph, Lshape) rtol = 1e-14
+
+    # Fan-apex independence: area is invariant to which vertex the ring starts at.
+    for sh in 1:5
+        Lrot = GI.Polygon([[[Lverts[mod1(i + sh, 6)] for i in 0:5]..., Lverts[mod1(sh, 6)]]])
+        @test GO.area(usph, Lrot) ≈ GO.area(usph, Lshape) rtol = 1e-12
+    end
+
+    # (c) Tiny-polygon accuracy is preserved (Eriksson was chosen for this): a 0.01°
+    # square at the equator matches the BigFloat signed-fan reference to full precision.
+    tiny = GI.Polygon([[(0.0, 0.0), (0.01, 0.0), (0.01, 0.01), (0.0, 0.01), (0.0, 0.0)]])
+    @test GO.area(usph, tiny) ≈ 3.0461741901e-8 rtol = 1e-9
+
+    # A strongly non-convex 5-pointed star. Reference from the BigFloat signed fan;
+    # the pre-fix unsigned fan returned ≈1.63e-2 (+82%).
+    starpts = Tuple{Float64,Float64}[]
+    for k in 0:9
+        r = iseven(k) ? 5.0 : 2.0
+        ang = π / 2 + k * π / 5
+        push!(starpts, (r * cos(ang), r * sin(ang)))
+    end
+    push!(starpts, starpts[1])
+    star = GI.Polygon([starpts])
+    @test GO.area(usph, star) ≈ 8.9519043343e-3 rtol = 1e-10
+
+    # (d) Hole subtraction on a concave shell: holed shell == shell − hole.
+    holering = [(0.2, 0.2), (0.2, 0.7), (0.7, 0.7), (0.7, 0.2), (0.2, 0.2)]
+    holed = GI.Polygon([[Lverts..., Lverts[1]], holering])
+    holepoly = GI.Polygon([holering])
+    @test GO.area(usph, holed) ≈ GO.area(usph, Lshape) - GO.area(usph, holepoly) rtol = 1e-12
+end
+
 @testset "area(Spherical(), geom) dispatch" begin
     # Test that Spherical manifold dispatches correctly
     octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])

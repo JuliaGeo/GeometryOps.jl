@@ -5,7 +5,7 @@ import ..SpatialTreeInterface: isspatialtree, isleaf, nchild, getchild,
     child_indices_extents, depth_first_search
 
 """
-    RTreeNode{A, E}
+    RTreeNode{T, E}
 
 A cursor into one node of an [`RTree`](@ref): the tree, the node's level
 (0-based; the children of a level-`l` node live in `levels[l + 1]`), its
@@ -17,8 +17,8 @@ level, `child_indices_extents` maps leaf slots through `tree.indices`, so
 queries return indices into the original collection despite the packed
 reordering.
 """
-struct RTreeNode{A <: BulkLoadAlgorithm, E <: Extents.Extent}
-    tree::RTree{A, E}
+struct RTreeNode{T <: RTree, E <: Extents.Extent}
+    tree::T
     level::Int      # 0-based; children of a level-l node live in levels[l + 1]
     index::Int      # position within its level
     extent::E
