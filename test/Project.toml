@@ -26,6 +26,7 @@ Polylabel = "49a44318-e865-4b63-9842-695152d634c1"
 Proj = "c94c279d-25a6-4763-9509-64d165bea63e"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Rasters = "a3a2b9e3-a471-40c9-b274-f788e487c689"
+S2Geography_jll = "e70b04b4-ac82-5d66-a4c6-86165034a7c0"
 SafeTestsets = "1bc83da4-3b8d-516f-aca4-4fe02f6d838f"
 Shapefile = "8e980c4a-a4fe-5da2-b3a7-4b4b0353a2f4"
 SortTileRecursiveTree = "746ee33f-1797-42c2-866d-db2fce69d14d"
@@ -39,7 +40,9 @@ XML = "72c71f33-b9b6-44de-8c94-c961784809e2"
 [compat]
 ArchGDAL = "0.10.10"
 GeometryBasics = "0.4.7, 0.5"
+S2Geography_jll = "0.4"
 Test = "1"
+XML = "0.3.8, 0.4"
 
 [sources]
 GeometryOps = {path = ".."}

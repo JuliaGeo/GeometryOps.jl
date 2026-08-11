@@ -6,6 +6,7 @@ import GeometryOps.FlexibleRTrees as FRT
 import GeometryOps.FlexibleRTrees: RTree, STR, HPR, Unsorted, query, hilbert_key
 import GeometryOps.SpatialTreeInterface as STI
 import Extents
+using GeometryOps.UnitSpherical: UnitSphericalPoint, SphericalCap
 using Random: Xoshiro
 
 # Random boxes with side lengths ~5% of the unit cube, in N dims.
@@ -69,6 +70,35 @@ end
     @test occursin("RTree{HPR}", sprint(show, gtree))
 end
 
+@testset "payload data and precomputed extents" begin
+    rng = Xoshiro(11)
+    extents = random_extents(rng, 100, 2)
+    # payload elements with no extent of their own, indexed by the `extents` kwarg
+    payloads = [(i, 100 - i) for i in 1:100]
+    tree = @inferred RTree(STR(), payloads; extents)
+    # query hits are indices into the payload vector, whatever the leaf order
+    for q in random_extents(rng, 10, 2)
+        hits = query(tree, q)
+        @test hits == brute_force(q, extents)
+        @test all(tree.data[i] == (i, 100 - i) for i in hits)
+    end
+    @test tree.data === payloads   # vectors are kept, not copied
+
+    # Unsorted is zero-copy: the extents vector IS the leaf level
+    utree = RTree(Unsorted(), payloads; extents)
+    @test utree.levels[end] === extents
+    @test utree.indices isa Base.OneTo
+    @test query(utree, extents[7]) == brute_force(extents[7], extents)
+
+    # without the kwarg, `data` is still kept (here the extents themselves)
+    @test RTree(HPR(), extents).data === extents
+    # non-vector input is collected so `tree.data[i]` works
+    gtree = RTree(Unsorted(), (e for e in extents))
+    @test gtree.data isa Vector && gtree.data[3] == extents[3]
+
+    @test_throws ArgumentError RTree(STR(), payloads; extents = extents[1:99])
+end
+
 @testset "Hilbert curve properties" begin
     # Order-1 2D curve: the classic U through the four quadrants.
     keys1 = [hilbert_key((UInt32(x), UInt32(y)), 1) for (x, y) in ((0, 0), (0, 1), (1, 1), (1, 0))]
@@ -83,4 +113,37 @@ end
         path = cells[sortperm(keys)]
         @test all(sum(abs.(path[i + 1] .- path[i])) == 1 for i in 1:(length(path) - 1))
     end
+end
+
+@testset "Manifold-aware construction" begin
+    band = [GI.Polygon([[(lon, 60.0), (lon + 30.0, 60.0), (lon + 30.0, 80.0), (lon, 80.0), (lon, 60.0)]])
+            for lon in 0.0:30.0:330.0]
+    cap = GI.Polygon([[(lon, 80.0) for lon in 0.0:30.0:360.0]])  # around the north pole
+    geoms = vcat(band, [cap])
+
+    tree = RTree(GO.Spherical(), HPR(), geoms)
+    @test Extents.extent(tree) isa Extents.Extent{(:X, :Y, :Z)}
+
+    # only the cap's region reaches the pole; every vertex stops at lat 80
+    pole_box = Extents.Extent(X = (-0.01, 0.01), Y = (-0.01, 0.01), Z = (0.99, 1.0))
+    @test query(tree, pole_box) == [13]
+
+    # a SphericalCap query against the 3D leaf boxes, end to end
+    polecap = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), 0.05)
+    @test STI.query(tree, Base.Fix1(Extents.intersects, polecap)) == [13]
+
+    ni = GO.NaturalIndexing.NaturalIndex(GO.Spherical(), geoms)
+    @test Extents.extent(ni) isa Extents.Extent{(:X, :Y, :Z)}
+    @test STI.query(ni, pole_box) == [13]
+
+    # a ring of UnitSphericalPoints needs no geographic conversion
+    z = 0.9; s = sqrt(1 - z^2)
+    usp_ring = GI.LinearRing([UnitSphericalPoint(s * cos(t), s * sin(t), z)
+                              for t in range(0, 2π; length = 9)[1:8]])
+    @test query(RTree(GO.Spherical(), STR(), [usp_ring]), pole_box) == [1]
+
+    # Planar() matches the manifold-less constructors
+    pt = RTree(GO.Planar(), HPR(), band)
+    t = RTree(HPR(), band)
+    @test pt.levels == t.levels && pt.indices == t.indices
 end

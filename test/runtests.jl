@@ -34,8 +34,10 @@ end
 @safetestset "Convex Hull" begin include("methods/convex_hull.jl") end
 @safetestset "Voronoi" begin include("methods/voronoi.jl") end
 @safetestset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
+@safetestset "RelateNG" begin include("methods/relateng/runtests.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end
+@safetestset "Extent" begin include("methods/extent.jl") end
 @safetestset "Minimum Bounding Circle" begin include("methods/minimum_bounding_circle.jl") end
 @safetestset "Polygonize" begin include("methods/polygonize.jl") end
 # Clipping
@@ -44,18 +46,32 @@ end
 @safetestset "Intersection Point" begin include("methods/clipping/intersection_points.jl") end
 @safetestset "Polygon Clipping" begin include("methods/clipping/polygon_clipping.jl") end
 @safetestset "Sutherland-Hodgman" begin include("methods/clipping/sutherland_hodgman.jl") end
+@safetestset "OverlayNG noding" begin include("methods/clipping/overlayng/noding.jl") end
+@safetestset "OverlayNG graph" begin include("methods/clipping/overlayng/overlay_graph.jl") end
+@safetestset "OverlayNG engine" begin include("methods/clipping/overlayng/overlay_ng.jl") end
+@safetestset "OverlayNG faces" begin include("methods/clipping/overlayng/faces.jl") end
+@safetestset "OverlayNG points" begin include("methods/clipping/overlayng/overlay_points.jl") end
+@safetestset "OverlayNG API" begin include("methods/clipping/overlayng/api.jl") end
+@safetestset "OverlayNG JTS XML suites" begin include("methods/clipping/overlayng/xml_suite.jl") end
+@safetestset "OverlayNG fuzz vs LibGEOS" begin include("methods/clipping/overlayng/fuzz.jl") end
+@safetestset "OverlayNG real-data identities" begin include("methods/clipping/overlayng/realdata_identities.jl") end
+@safetestset "OverlayNG spherical vs s2geography" begin include("methods/clipping/overlayng/s2_differential.jl") end
+@safetestset "OverlayNG labeller robustness" begin include("methods/clipping/overlayng/labeller_robustness.jl") end
 # Transformations
 @safetestset "Embed Extent" begin include("transformations/extent.jl") end
 @safetestset "Reproject" begin include("transformations/reproject.jl") end
 @safetestset "Flip" begin include("transformations/flip.jl") end
 @safetestset "Simplify" begin include("transformations/simplify.jl") end
 @safetestset "Segmentize" begin include("transformations/segmentize.jl") end
+@safetestset "Antimeridian Split" begin include("transformations/antimeridian_split.jl") end
 @safetestset "Smooth" begin include("transformations/smooth.jl") end
 @safetestset "Transform" begin include("transformations/transform.jl") end
 @safetestset "Force Dimensions" begin include("transformations/forcedims.jl") end
 @safetestset "Geometry Correction" begin include("transformations/correction/geometry_correction.jl") end
 @safetestset "Closed Rings" begin include("transformations/correction/closed_ring.jl")  end
 @safetestset "Intersecting Polygons" begin include("transformations/correction/intersecting_polygons.jl") end
+@safetestset "Antipodal Edge Split" begin include("transformations/correction/antipodal_edge_split.jl") end
+@safetestset "Crossing Edge Split" begin include("transformations/correction/crossing_edge_split.jl") end
 # Extensions
 @safetestset "FlexiJoins" begin include("extensions/flexijoins.jl") end
 @safetestset "LibGEOS" begin include("extensions/libgeos.jl") end
