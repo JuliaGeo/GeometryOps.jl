@@ -27,12 +27,14 @@ include("dual_depth_first_search.jl")
 
 
 """
-    spatialtree(geometries)
+    spatialtree([manifold::Manifold], geometries)
 
-Build a default packed STR RTree from an iterable of geometries.
+Build a default packed STR RTree from an iterable of geometries, over their
+extents on `manifold` (`Planar()` if not given).
 
-`missing` and `nothing` entries are skipped, as are values whose
-`GI.extent` is `nothing`. If no valid geometries remain, return `nothing`.
+`missing` and `nothing` entries are skipped, as are empty geometries.  Queries
+return indices into `geometries` regardless, so the skipped entries do not
+shift the answers.  If no valid geometries remain, return `nothing`.
 """
 spatialtree() = nothing
 

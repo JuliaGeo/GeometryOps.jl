@@ -86,7 +86,8 @@ function query(tree::RTree, geom)
     return query(tree, ext)
 end
 
-function spatialtree(geometries, manifold=nothing)  # to be made Planar()
+spatialtree(geometries) = spatialtree(Planar(), geometries)
+function spatialtree(manifold::Manifold, geometries)
     valid = nonmissingtype(eltype(geometries))[]
     positions = Int[]
     for (i, geom) in enumerate(geometries)
@@ -97,5 +98,5 @@ function spatialtree(geometries, manifold=nothing)  # to be made Planar()
         push!(positions, i)
     end
     isempty(valid) && return nothing
-    return RTree(STR(), valid; indices=positions)
+    return RTree(manifold, STR(), valid; indices = positions)
 end
