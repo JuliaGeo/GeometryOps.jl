@@ -9,6 +9,7 @@ import AbstractTrees
 # public isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 export query
 export FlatNoTree
+export spatialtree
 
 # The spatial tree interface and its implementations are defined here.
 include("interface.jl")
@@ -23,6 +24,19 @@ include("depth_first_search.jl")
 # than two separate single-tree queries since it can prune branches in tandem as it
 # descends into the trees.
 include("dual_depth_first_search.jl")
+
+
+"""
+    spatialtree([manifold::Manifold], geometries)
+
+Build a default packed STR RTree from an iterable of geometries, over their
+extents on `manifold` (`Planar()` if not given).
+
+`missing` and `nothing` entries are skipped, as are empty geometries.  Queries
+return indices into `geometries` regardless, so the skipped entries do not
+shift the answers.  If no valid geometries remain, return `nothing`.
+"""
+spatialtree() = nothing
 
 
 """

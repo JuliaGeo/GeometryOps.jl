@@ -1,7 +1,7 @@
 # # SpatialTreeInterface
 
 using ..SpatialTreeInterface
-import ..SpatialTreeInterface: isspatialtree, isleaf, nchild, getchild,
+import ..SpatialTreeInterface: spatialtree, isspatialtree, isleaf, nchild, getchild,
     child_indices_extents, depth_first_search
 
 """
@@ -84,4 +84,18 @@ function query(tree::RTree, geom)
     ext = GI.extent(geom)
     isnothing(ext) && throw(ArgumentError("no extent found on $(typeof(geom))"))
     return query(tree, ext)
+end
+
+spatialtree(geometries) = spatialtree(Planar(), geometries)
+function spatialtree(manifold::Manifold, geometries)
+    items = geometries isa AbstractVector ? geometries : collect(geometries)
+    positions = Int[]
+    for (i, geom) in pairs(items)
+        if (isnothing(geom) || ismissing(geom) || GI.isempty(geom))
+            continue
+        end
+        push!(positions, i)
+    end
+    isempty(positions) && return nothing
+    return RTree(manifold, STR(), items; indices = positions)
 end

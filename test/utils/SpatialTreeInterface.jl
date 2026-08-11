@@ -3,7 +3,8 @@ import GeometryOps as GO, GeoInterface as GI
 using GeometryOps.SpatialTreeInterface
 using GeometryOps.SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 using GeometryOps.SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
-using GeometryOps.SpatialTreeInterface: FlatNoTree
+using GeometryOps.SpatialTreeInterface: FlatNoTree, spatialtree
+using GeometryOps.FlexibleRTrees: RTree, STR
 using GeometryOps.NaturalIndexing: NaturalIndex
 using Extents
 using SortTileRecursiveTree: STRtree
@@ -217,6 +218,27 @@ end
     test_dual_query_functionality(STRtree)
     test_geometry_support(STRtree)
     test_find_point_in_all_countries(STRtree)
+end
+
+@testset "spatialtree" begin
+    geometries = [missing, nothing, (0.0, 0.0), nothing, (1.0, 1.0)]
+    tree = spatialtree(geometries)
+
+    @test tree isa RTree{STR}
+    @test query(tree, Extents.Extent(X = (-0.1, 1.1), Y = (-0.1, 1.1))) == [3, 5]
+    @test isnothing(spatialtree([missing, nothing, missing]))
+
+    # the default is `Planar()`
+    @test query(spatialtree(GO.Planar(), geometries),
+        Extents.Extent(X = (-0.1, 1.1), Y = (-0.1, 1.1))) == [3, 5]
+
+    # `Spherical()` indexes the 3D regions on the unit sphere: the cap encloses
+    # the pole none of its vertices reach, and the skipped entries still do not
+    # shift the reported indices
+    cap = GI.Polygon([[(lon, 80.0) for lon in 0.0:30.0:360.0]])
+    spherical = spatialtree(GO.Spherical(), [missing, nothing, cap])
+    @test Extents.extent(spherical) isa Extents.Extent{(:X, :Y, :Z)}
+    @test query(spherical, Extents.Extent(X = (-0.01, 0.01), Y = (-0.01, 0.01), Z = (0.99, 1.0))) == [3]
 end
 
 # Test NaturalIndex implementation

@@ -35,7 +35,7 @@ import GeoInterface as GI
 import Extents
 using StaticArrays: MVector
 
-import ..GeometryOps: Manifold
+import ..GeometryOps: Manifold, Planar
 
 export RTree, BulkLoadAlgorithm, STR, HPR, Unsorted, query
 
