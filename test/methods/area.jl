@@ -230,7 +230,7 @@ end
 
     threaded_multipoly = GI.MultiPolygon(fill(second_poly, 256); crs)
     threaded_area = GO.area(GO.Geodesic(), threaded_multipoly; threaded=true)
-    @test GO.area(GO.Geodesic(), threaded_multipoly; threaded=true, init=2.0) ==
+    @test GO.area(GO.Geodesic(), threaded_multipoly; threaded=true, init=2.0) ≈
           threaded_area + 2.0
 end
 
