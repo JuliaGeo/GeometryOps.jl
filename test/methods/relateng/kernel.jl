@@ -295,11 +295,25 @@ end
 # an ill-conditioned crossing the bound shrank together with the accuracy and the
 # filter certified noise.
 #
-# The case below is the two crossings of one segment in the near-coincident
-# boundary reproducer of `test/methods/clipping/overlayng/labeller_robustness.jl`
-# (n = 7, k = 1) — reconstructed here from its four defining segments alone, so
-# this test depends on nothing but the kernel. Both node keys are bit-identical
-# to the ones the arrangement interns for that pair.
+# The case below is A's segment [49.25, 49.375] from the near-coincident boundary
+# reproducer of `test/methods/clipping/overlayng/labeller_robustness.jl`
+# (n = 7, k = 1) and the two B segments that cross it, reconstructed from those
+# four segments alone so this test depends on nothing but the kernel.
+#
+# One B endpoint is moved a single ulp off the reproducer's own value. That is
+# not cosmetic and is worth stating plainly: `rk_normalize_usp`'s idempotence
+# guard shifts ~23% of ingested points by an ulp, and at this separation an ulp
+# is the whole geometry — on the reproducer's exact coordinates the retired
+# bound now certifies the RIGHT sign by luck, so that instance no longer
+# witnesses the defect. The surrounding family is dense with instances that do
+# (103 within one ulp of this one, 4030 across the near-coincident meridian
+# inputs this class comes from), and the fixture is the nearest of them.
+#
+# The assertions below are therefore DERIVED from the rational ground truth
+# rather than transcribed as `-1`/`1`, and the payload — that the retired bound
+# would have certified the OPPOSITE of the true order — is asserted outright.
+# A future ulp shift can then only make this test fail loudly, never quietly
+# stop testing what it says it tests, which is exactly how it went stale.
 
 @testset "spherical along-segment filter escalates on ill-conditioned crossings" begin
     ms = GO.Spherical()
@@ -307,9 +321,9 @@ end
 
     #-- A's segment, and the two B segments that cross it, all on the lon=1
     #-- meridian with latitudes a single ulp apart
-    a0  = kp(1.0, 49.25);              a1  = kp(1.0, 49.375)
-    b2s = kp(1.0, prevfloat(49.125));  b2e = kp(1.0, nextfloat(49.25))
-    b3s = b2e;                         b3e = kp(1.0, prevfloat(49.375))
+    a0  = kp(1.0, 49.25);    a1  = kp(1.0, 49.375)
+    b2s = kp(1.0, 49.125);   b2e = kp(1.0, nextfloat(49.25))
+    b3s = b2e;               b3e = kp(1.0, prevfloat(49.375))
     k2 = GO.crossing_node(a0, a1, b2s, b2e)
     k3 = GO.crossing_node(a0, a1, b3s, b3e)
     @test k2 != k3
@@ -317,21 +331,23 @@ end
     #-- ground truth, computed here in `Rational{BigInt}` and independent of the
     #-- comparator: order the two crossing directions by their in-plane
     #-- parameter along a0 -> a1, `t = (d·m)/(d·a0)` with `m = (a0×a1)×a0`
-    let R = Rational{BigInt}
+    expected = let R = Rational{BigInt}
         v(p) = (R(p[1]), R(p[2]), R(p[3]))
         c3(u, w) = (u[2]*w[3]-u[3]*w[2], u[3]*w[1]-u[1]*w[3], u[1]*w[2]-u[2]*w[1])
         d3(u, w) = u[1]*w[1] + u[2]*w[2] + u[3]*w[3]
         P = v(a0); mv = c3(c3(P, v(a1)), P)
         t(k) = (d = GO._sph_crossing_dir(True(), k); dv = (R(d[1]), R(d[2]), R(d[3]));
                 d3(dv, mv) // d3(dv, P))
-        @test t(k2) < t(k3)              # k2 genuinely precedes k3 along a0 -> a1
+        t2, t3 = t(k2), t(k3)
+        @test t2 != t3                   # the two crossings are genuinely ordered
+        t2 < t3 ? -1 : 1
     end
 
     #-- ...and that is what the comparator answers, in both argument orders
-    @test GO.rk_compare_along_segment(ms, a0, a1, k2, k3; exact = True()) == -1
-    @test GO.rk_compare_along_segment(ms, a0, a1, k3, k2; exact = True()) == 1
+    @test GO.rk_compare_along_segment(ms, a0, a1, k2, k3; exact = True()) == expected
+    @test GO.rk_compare_along_segment(ms, a0, a1, k3, k2; exact = True()) == -expected
     #-- reversing the segment reverses the order
-    @test GO.rk_compare_along_segment(ms, a1, a0, k2, k3; exact = True()) == 1
+    @test GO.rk_compare_along_segment(ms, a1, a0, k2, k3; exact = True()) == -expected
 
     #-- the numbers behind it: the float directions here have NO significant
     #-- digits (relative error bound in the hundreds), the discriminant is a
@@ -345,7 +361,10 @@ end
     mag = sqrt(GO._dot3(da, da) * GO._dot3(db, db) * GO._dot3(N, N))
     @test rel_a > 1 && rel_b > 1                       # direction accuracy is gone
     @test abs(disc) > 64 * eps(Float64) * mag          # the OLD filter trusted it
-    @test disc < 0                                     # ...and trusting it answers 1
+    #-- ...and the sign it would have certified is the WRONG one. This is the
+    #-- whole point of the fixture; if it ever stops holding, the fixture has
+    #-- drifted off the defect and needs re-siting, not re-baselining.
+    @test (disc > 0 ? -1 : 1) == -expected
     @test abs(disc) <= (rel_a + rel_b) * mag           # the new bound escalates
     #-- a vertex node's direction is its stored coordinate: exact, error 0
     @test GO._float_node_dir_err(GO.vertex_node(a0))[2] == 0.0

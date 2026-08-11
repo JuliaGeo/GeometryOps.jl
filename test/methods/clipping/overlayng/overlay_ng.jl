@@ -1318,9 +1318,15 @@ off the exact node directions when the rounded ones cannot carry it.
 
     ks = [GO._node_kernel_point(ctx, i) for i in ids]
     dirs = [GO._node_exact_dir(ctx, i) for i in ids]
-    #-- the ring is not readable at Float64: two of its four nodes round together
+    #-- the ring is not readable at Float64: it is finer than the output format's
+    #-- representable spacing, which `_rounded_ring_is_faithful` is the predicate
+    #-- for and is the only form of this claim the builder actually consults.
+    #-- (An earlier `length(unique(ks)) < length(unique(ids))` said the same
+    #-- thing in a stronger, incidental way — two of the four nodes rounding to
+    #-- ONE Float64 point. `rk_normalize_usp`'s idempotence guard moved them an
+    #-- ulp apart without making the ring readable, so that spelling was a
+    #-- fixture coincidence rather than the property, and it is gone.)
     @test !GO._rounded_ring_is_faithful(ks)
-    @test length(unique(ks)) < length(unique(ids))
     #-- so the two tests disagree, and the exact one — every consecutive triple
     #-- turning the same way, hence convex and clockwise — is the shell
     @test GO._ring_is_ccw(m, ks; exact = EX) != GO._ring_is_ccw_dirs(dirs)

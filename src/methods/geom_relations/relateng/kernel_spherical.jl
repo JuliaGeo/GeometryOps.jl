@@ -150,7 +150,23 @@ end
 
 # Renormalize to unit length (Float32-sourced data — e.g. Natural Earth GeoJSON
 # converted to Float64 — is ~1e-8 off unit and trips `robust_cross_product`).
-@inline rk_normalize_usp(u) = UnitSphericalPoint(normalize(u))
+#
+# Skip the division when the input is already unit, because `normalize` is not
+# idempotent in floating point: a vector whose norm is itself an ULP off 1.0
+# gets every component shifted by an ULP, and dividing again shifts them back.
+# Ingest would then never reach a fixed point — re-ingesting a kernel point
+# (feeding one spherical overlay's output into the next, now that
+# `UnitSphericalPoint` is the default spherical output type) would oscillate
+# between two representations one ULP apart forever. The 4-ULP window on the
+# *squared* norm is wide enough to swallow any `normalize` output (measured max
+# 3 ULPs over 400k off-unit inputs, so one pass always lands inside it) while
+# staying ~7 orders of magnitude tighter than the ~1e-8 Float32-sourced error
+# this normalization exists to correct.
+@inline function rk_normalize_usp(u)
+    s = u[1] * u[1] + u[2] * u[2] + u[3] * u[3]
+    abs(s - one(s)) <= 4 * eps(one(s)) && return UnitSphericalPoint(u)
+    return UnitSphericalPoint(normalize(u))
+end
 
 # Canonical kernel point of a GeoInterface point: lon/lat (2D) → unit xyz, or an
 # already-3D point treated as xyz; renormalized and signed-zero normalized so
