@@ -56,10 +56,10 @@ end
 ucfirst(str::String) = string(uppercase(str[1]), str[2:end])
 
 function current_module_from_paths(source_path, relative_path)
+    # `source_path` ends with "src" for everything in the main package, so the
+    # submodule checks must dispatch on `relative_path`, before any src catch-all
     if contains(source_path, "GeometryOpsCore")
         return "GeometryOpsCore"
-    elseif endswith(source_path, "src")
-        return "GeometryOps"
     elseif endswith(source_path, "ext")
         return "Base.get_extension(GeometryOps, :$(splitpath(relative_path)[1]))"
     elseif contains(relative_path, "SpatialTreeInterface")
@@ -68,6 +68,10 @@ function current_module_from_paths(source_path, relative_path)
         return "GeometryOps.LoopStateMachine"
     elseif contains(relative_path, "NaturalIndexing")
         return "GeometryOps.NaturalIndexing"
+    elseif contains(relative_path, "UnitSpherical")
+        return "GeometryOps.UnitSpherical"
+    elseif contains(relative_path, "FlexibleRTrees")
+        return "GeometryOps.FlexibleRTrees"
     else
         return "GeometryOps" # default to GO as a last resort
     end

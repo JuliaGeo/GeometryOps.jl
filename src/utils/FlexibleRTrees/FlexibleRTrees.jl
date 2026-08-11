@@ -35,6 +35,8 @@ import GeoInterface as GI
 import Extents
 using StaticArrays: MVector
 
+import ..GeometryOps: Manifold
+
 export RTree, BulkLoadAlgorithm, STR, HPR, Unsorted, query
 
 include("types.jl")         # `BulkLoadAlgorithm`s and the `RTree` type
