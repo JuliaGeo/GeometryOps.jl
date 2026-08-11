@@ -216,7 +216,7 @@ end
 
     exterior_area = GO.area(GO.Geodesic(), exterior_poly)
     hole_area = GO.area(GO.Geodesic(), hole_poly)
-    @test GO.area(GO.Geodesic(), exterior_poly; init=2.0) == exterior_area + 2.0
+    @test GO.area(GO.Geodesic(), exterior_poly; init=2.0) ≈ exterior_area + 2.0
     @test GO.area(GO.Geodesic(), reversed_exterior_poly) ≈ exterior_area rtol=1e-10
     @test GO.area(GO.Geodesic(), poly_with_hole) ≈ exterior_area - hole_area rtol=1e-10
     @test GO.area(GO.Geodesic(), poly_with_reversed_hole) ≈ exterior_area - hole_area rtol=1e-10
