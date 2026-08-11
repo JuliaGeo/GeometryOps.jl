@@ -88,15 +88,14 @@ end
 
 spatialtree(geometries) = spatialtree(Planar(), geometries)
 function spatialtree(manifold::Manifold, geometries)
-    valid = nonmissingtype(eltype(geometries))[]
+    items = geometries isa AbstractVector ? geometries : collect(geometries)
     positions = Int[]
-    for (i, geom) in enumerate(geometries)
+    for (i, geom) in pairs(items)
         if (isnothing(geom) || ismissing(geom) || GI.isempty(geom))
             continue
         end
-        push!(valid, geom)
         push!(positions, i)
     end
-    isempty(valid) && return nothing
-    return RTree(manifold, STR(), valid; indices = positions)
+    isempty(positions) && return nothing
+    return RTree(manifold, STR(), items; indices = positions)
 end

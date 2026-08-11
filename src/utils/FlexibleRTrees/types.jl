@@ -47,21 +47,21 @@ A packed R-tree over the extents of `data` (anything `GI.extent` accepts —
 geometries, or `Extents.Extent`s themselves), of any dimensionality, bulk
 loaded in the order chosen by `algorithm`.
 
-Pass a vector as `extents` (one per element of `data`, in order) to index
-`data` by precomputed extents instead of `GI.extent` — for payload elements
-that carry no extent of their own, or extents computed in another coordinate
-space.  The tree takes ownership of the vector (`Unsorted` aliases it as the
-leaf level rather than copying).
+Pass a vector as `indices` to index only `data[indices]`, leaving the rest of
+`data` out of the tree — for a collection only part of which can be indexed,
+say one with `missing` entries.  `data` stays whole, so queries still report
+positions in it.
 
-Pass a vector as `indices` (one per element of `data`, in order) to have
-queries report those indices instead of positions in `data` — for indexing a
-filtered subset of a larger collection, say one whose `missing` entries were
-dropped, while still addressing the collection it came from.
+Pass a vector as `extents` to index by precomputed extents instead of
+`GI.extent` — for payload elements that carry no extent of their own, or
+extents computed in another coordinate space.  One per indexed element, in
+order: per element of `data` normally, per element of `indices` alongside
+`indices`.  The tree takes ownership of the vector (`Unsorted` aliases it as
+the leaf level rather than copying).
 
 The tree is flat and fully concrete: `levels[1]` is the coarsest level and
 `levels[end]` holds the leaf extents in packed order, with `indices` mapping
-each leaf slot back to its position in `data` (or, when `indices` was given,
-to the caller's index for that element).  Queries through
+each leaf slot back to its position in `data`.  Queries through
 SpatialTreeInterface therefore return indices into `data`, which the tree
 keeps as `tree.data` so hits map straight back to elements wherever the
 tree travels.
@@ -80,17 +80,18 @@ function RTree(algorithm::A, data; nodecapacity::Int = 16,
         indices::Union{Nothing, AbstractVector{Int}} = nothing) where A <: BulkLoadAlgorithm
     nodecapacity >= 2 || throw(ArgumentError("`nodecapacity` must be at least 2, got $nodecapacity"))
     items = data isa AbstractVector ? data : collect(data)
-    isempty(items) && throw(ArgumentError("cannot build an `RTree` from an empty collection"))
+    isnothing(indices) || checkbounds(Bool, items, indices) || throw(ArgumentError(
+        "`indices` must all be indices into `data`, which has $(length(items)) elements"))
+    indexed = isnothing(indices) ? eachindex(items) : indices
+    isempty(indexed) && throw(ArgumentError("cannot build an `RTree` from an empty collection"))
     exts = if extents === nothing
-        E = typeof(GI.extent(first(items)))
-        E[GI.extent(x) for x in items]
+        E = typeof(GI.extent(items[first(indexed)]))
+        E[GI.extent(items[i]) for i in indexed]
     else
-        length(extents) == length(items) || throw(ArgumentError(
-            "`extents` must have one entry per element of `data`, got $(length(extents)) for $(length(items))"))
+        length(extents) == length(indexed) || throw(ArgumentError(
+            "`extents` must have one entry per indexed element, got $(length(extents)) for $(length(indexed))"))
         extents
     end
-    isnothing(indices) || length(indices) == length(items) || throw(ArgumentError(
-        "`indices` must have one entry per element of `data`, got $(length(indices)) for $(length(items))"))
     perm = loadorder(algorithm, exts, nodecapacity)
     leaves = perm isa Base.OneTo ? exts : exts[perm]
     levels = _pack_levels(leaves, nodecapacity)
@@ -110,9 +111,12 @@ and enclosed poles that vertex extents miss.
 function RTree(m::Manifold, algorithm::BulkLoadAlgorithm, data; nodecapacity::Int = 16,
         indices::Union{Nothing, AbstractVector{Int}} = nothing)
     items = data isa AbstractVector ? data : collect(data)
-    isempty(items) && throw(ArgumentError("cannot build an `RTree` from an empty collection"))
+    isnothing(indices) || checkbounds(Bool, items, indices) || throw(ArgumentError(
+        "`indices` must all be indices into `data`, which has $(length(items)) elements"))
+    indexed = isnothing(indices) ? eachindex(items) : indices
+    isempty(indexed) && throw(ArgumentError("cannot build an `RTree` from an empty collection"))
     return RTree(algorithm, items; nodecapacity, indices,
-        extents = [Extents.extent(m, x) for x in items])
+        extents = [Extents.extent(m, items[i]) for i in indexed])
 end
 
 Extents.extent(tree::RTree) = tree.extent

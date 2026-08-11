@@ -65,10 +65,17 @@ end
     # covering the whole square, so extent-intersects finds it too.
     @test query(gtree, Extents.Extent(X = (0.9, 1.1), Y = (0.4, 0.6))) == [2, 3]
 
-    filtered_geometries = extents[[2, 4]]
-    @test query(RTree(STR(), filtered_geometries; indices = [2, 4]), filtered_geometries[1]) == [2]
-    @test_throws ArgumentError RTree(STR(), filtered_geometries; indices = [2])
+    # `indices` indexes part of a collection, which stays whole as `tree.data`
+    partial = RTree(STR(), extents; indices = [2, 4])
+    @test query(partial, extents[2]) == [2]
+    @test partial.data === extents
+    # and nothing else is in the tree, however much the rest overlaps
+    @test query(partial, Extents.extent(partial)) == [2, 4]
+    @test_throws ArgumentError RTree(STR(), extents; indices = [2, length(extents) + 1])
+    @test_throws ArgumentError RTree(STR(), extents; indices = Int[])
+    @test_throws ArgumentError RTree(STR(), extents; indices = [2, 4], extents = extents)
 
+    filtered_geometries = extents[[2, 4]]
     iter_extents = Iterators.filter(_ -> true, filtered_geometries)
     @test query(RTree(STR(), iter_extents), filtered_geometries[1]) == [1]
 
@@ -160,4 +167,11 @@ end
     pt = RTree(GO.Planar(), HPR(), band)
     t = RTree(HPR(), band)
     @test pt.levels == t.levels && pt.indices == t.indices
+
+    # `indices` skips the unindexed elements, so `Extents.extent(m, ...)` is
+    # never asked for an extent they have no way to give
+    unindexable = vcat(Any[missing], geoms)
+    partial = RTree(GO.Spherical(), HPR(), unindexable; indices = 2:length(unindexable))
+    @test query(partial, pole_box) == [14]  # the cap, one along from before
+    @test partial.data === unindexable
 end
