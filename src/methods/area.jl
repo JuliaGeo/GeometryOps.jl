@@ -67,11 +67,22 @@ This is computed slightly differently for different geometries:
 
 ## Manifold support
 
-- `Planar()`: Uses the shoelace formula for 2D Cartesian coordinates (default).
+- `AutoManifold()` (default): When the Proj extension is loaded, recognized
+  geographic CRSs use a geodesic calculation on the CRS ellipsoid and
+  recognized projected CRSs use native-unit `Planar()` calculations. Without
+  Proj, geographic geometries use degree-based `Spherical()` calculations,
+  while projected and unknown geometries use native-unit `Planar()` calculations.
+  The manifold is selected once from the top-level input's CRS and applies to
+  all geometries contained in that input.
+- `Planar()`: Uses the shoelace formula in native coordinate units squared,
+  regardless of CRS.
 - `Spherical()`: Uses Girard's theorem for spherical polygons. Coordinates
    are interpreted as (longitude, latitude) in degrees. Returns area in
    square units of the sphere's radius (default: Earth's mean radius in meters).
 - `Geodesic()`: Uses geodesic calculations (requires Proj extension).
+
+Projected map area is a planar grid measurement and can differ from surface
+area, particularly for projections with distortion.
 
 ## Examples
 
@@ -79,7 +90,7 @@ This is computed slightly differently for different geometries:
 import GeometryOps as GO
 import GeoInterface as GI
 
-# Planar area (default)
+# CRS-free planar area (the AutoManifold default)
 rect = GI.Polygon([[(0,0), (1,0), (1,1), (0,1), (0,0)]])
 GO.area(rect)  # 1.0
 
@@ -95,8 +106,25 @@ Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
 function area(geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
-    area(Planar(), geom, T; threaded, kwargs...)
+    area(AutoManifold(), geom, T; threaded, kwargs...)
 end
+
+function area(::AutoManifold, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
+    _area_auto(GI.crstrait(geom), GI.crs(geom), geom, T; threaded, kwargs...)
+end
+
+function _area_auto(trait::GI.AbstractCRSTrait, crs, geom, ::Type{T}; threaded=false, kwargs...) where T
+    isnothing(crs) && return area(Planar(), geom, T; threaded, kwargs...)
+    _area_auto_with_crs(trait, crs, geom, T; threaded, kwargs...)
+end
+
+# Without Proj, GeoInterface's geographic trait is the only signal to interpret coordinates as lon/lat.
+_area_auto_with_crs(::GI.AbstractGeographicTrait, crs, geom, ::Type{T}; threaded=false, kwargs...) where T =
+    area(Spherical(), geom, T; threaded, kwargs...)
+
+# A projected CRS has map-plane coordinates; preserve their native square units without Proj.
+_area_auto_with_crs(::GI.AbstractProjectedTrait, crs, geom, ::Type{T}; threaded=false, kwargs...) where T =
+    area(Planar(), geom, T; threaded, kwargs...)
 
 function area(::Planar, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
     applyreduce(WithTrait((trait, g) -> _area(T, trait, g)), +, _AREA_TARGETS, geom; threaded, init=zero(T), kwargs...)
