@@ -13,8 +13,8 @@
 
 # Build the result lines from the graph (port of `getLines`: `markResultLines`
 # then `addResultLines`).
-function _build_lines(m::Manifold, g::OverlayGraph, input, has_result_area::Bool,
-        op::_OverlayOpCode; exact)
+function _build_lines(m::Manifold, g::OverlayGraph{P, T}, input, has_result_area::Bool,
+        op::_OverlayOpCode; exact) where {P, T}
     edges = g.edges
     area_index = _input_area_index(input)
     #-- markResultLines
@@ -25,7 +25,7 @@ function _build_lines(m::Manifold, g::OverlayGraph, input, has_result_area::Bool
         end
     end
     #-- addResultLines (raw noded edges)
-    lines = Vector{typeof(_edge_line(g, 1))}()
+    lines = _result_line_type(T)[]
     for i in eachindex(edges)
         oe_in_result_line(edges, i) || continue
         oe_is_visited(edges, i) && continue

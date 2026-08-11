@@ -36,17 +36,23 @@ provisional key to its *final* id, so keys interned later (segment endpoints in
 `coords`/`realized` memoize emitted output coordinates (design §2.6), realized
 lazily by `node_point` and grown as endpoint nodes are interned.
 
+`P` and `T` are two DIFFERENT point types and only coincide by accident: `P` is
+the manifold's kernel point, the space every decision is made in, and `T` is the
+output point the caller asked for. They are equal on the planar path and on the
+spherical default (both `xyz`); they differ when a spherical overlay is asked
+for `(lon, lat)` tuples.
+
 Mutable so tier-2 merging can compact `keys` and re-point `ids` in place.
 =#
-mutable struct NodeTable{P}
+mutable struct NodeTable{P, T}
     ids      :: Dict{NodeKey{P}, Int32}
     keys     :: Vector{NodeKey{P}}
-    coords   :: Vector{Tuple{Float64, Float64}}
+    coords   :: Vector{T}
     realized :: Vector{Bool}
 end
 
-NodeTable{P}() where {P} =
-    NodeTable{P}(Dict{NodeKey{P}, Int32}(), NodeKey{P}[], Tuple{Float64, Float64}[], Bool[])
+NodeTable{P, T}() where {P, T} =
+    NodeTable{P, T}(Dict{NodeKey{P}, Int32}(), NodeKey{P}[], T[], Bool[])
 
 num_nodes(t::NodeTable) = length(t.keys)
 
@@ -63,20 +69,23 @@ end
 
 # Size the (lazily-realized) output-coordinate cache to the final node count.
 # Called once after splitting, so noding itself never touches it.
-function _ensure_coord_cache!(t::NodeTable)
+function _ensure_coord_cache!(t::NodeTable{P, T}) where {P, T}
     n = length(t.keys)
-    t.coords = Vector{Tuple{Float64, Float64}}(undef, n)
+    t.coords = Vector{T}(undef, n)
     t.realized = fill(false, n)
     return nothing
 end
 
 """
-    NodedArrangement{P}
+    NodedArrangement{P,T}
 
 The exactly-noded arrangement of two input geometries (design §2.1). `P` is the
 manifold's kernel point type — exactly two instantiations,
 `Tuple{Float64,Float64}` (planar) and `UnitSphericalPoint{Float64}` (spherical) —
-so the engine is type-erased over the input geometry types.
+so the engine is type-erased over the input geometry types. `T` is the OUTPUT
+point type `node_point` realizes into (`point_type` in the `OverlayNG` API); it
+defaults to `P`, which is what makes an emitted vertex bit-identical to the
+ingested one.
 
 Fields:
 - `segstrings`: the ingested inputs as `RelateSegmentString`s (A side
@@ -90,15 +99,21 @@ Fields:
   which is every construction that does not pass a clip envelope.
 
 Construct with `NodedArrangement(m, a, b)` (raw geometries) or
-`NodedArrangement(m, ssa, ssb)` (pre-ingested segment strings).
+`NodedArrangement(m, ssa, ssb)` (pre-ingested segment strings); both take
+`point_type` to choose `T`.
 """
-struct NodedArrangement{P}
+struct NodedArrangement{P, T}
     segstrings :: Vector{RelateSegmentString{P}}
-    nodes      :: NodeTable{P}
+    nodes      :: NodeTable{P, T}
     seg_nodes  :: Dict{Tuple{Int32, Int32}, Vector{Int32}}
     edges      :: Vector{NodedEdge}
     truncated  :: BitVector
 end
+
+# The arrangement's output point type. Every builder downstream reads it off the
+# arrangement rather than being handed it separately, so there is exactly one
+# place the choice is recorded and no way for two builders to disagree.
+@inline output_point_type(::NodedArrangement{P, T}) where {P, T} = T
 
 num_nodes(arr::NodedArrangement) = num_nodes(arr.nodes)
 num_edges(arr::NodedArrangement) = length(arr.edges)
@@ -120,11 +135,15 @@ _overlay_segstrings(m::Manifold, geom, is_a::Bool; exact = True()) =
 # ## Construction
 
 # From raw geometries: ingest each side, then arrange.
-function NodedArrangement(m::Manifold, a, b; exact = True(), tree_a = nothing, tree_b = nothing,
-        clip_a = nothing, clip_b = nothing)
+NodedArrangement(m::Manifold, a, b; exact = True(), tree_a = nothing, tree_b = nothing,
+        clip_a = nothing, clip_b = nothing, point_type = _kernel_point_type(m)) =
+    _noded_arrangement(m, point_type, a, b, exact, tree_a, tree_b, clip_a, clip_b)
+
+function _noded_arrangement(m::Manifold, ::Type{T}, a, b, exact, tree_a, tree_b,
+        clip_a, clip_b) where {T}
     ssa = _overlay_segstrings(m, a, true; exact)
     ssb = _overlay_segstrings(m, b, false; exact)
-    return NodedArrangement(m, ssa, ssb; exact, tree_a, tree_b, clip_a, clip_b)
+    return _noded_arrangement(m, T, ssa, ssb, exact, tree_a, tree_b, clip_a, clip_b)
 end
 
 #=
@@ -141,12 +160,24 @@ coordinate is synthesized on the box, and the surviving chains are simply left
 OPEN in the graph. The caller owns the soundness argument (see
 `_overlay_clip_envelopes` in overlay_ng.jl); `nothing` (the default) is
 byte-for-byte today's behaviour.
+
+`point_type` reaches the builder POSITIONALLY, through the two-line forwarder
+below. A static parameter bound by a keyword argument does not specialize
+alongside one bound positionally (`P`, off the segment strings), and the whole
+arrangement type — hence every result geometry the engine builds on top of it —
+then infers as a `UnionAll` with the output type free.
 =#
-function NodedArrangement(m::Manifold,
-        ssa::AbstractVector{RelateSegmentString{P}},
+NodedArrangement(m::Manifold, ssa::AbstractVector{RelateSegmentString{P}},
         ssb::AbstractVector{RelateSegmentString{P}};
         exact = True(), tree_a = nothing, tree_b = nothing,
-        clip_a = nothing, clip_b = nothing) where {P}
+        clip_a = nothing, clip_b = nothing,
+        point_type = _kernel_point_type(m)) where {P} =
+    _noded_arrangement(m, point_type, ssa, ssb, exact, tree_a, tree_b, clip_a, clip_b)
+
+function _noded_arrangement(m::Manifold, ::Type{T},
+        ssa::AbstractVector{RelateSegmentString{P}},
+        ssb::AbstractVector{RelateSegmentString{P}},
+        exact, tree_a, tree_b, clip_a, clip_b) where {P, T}
     na = length(ssa)
     segstrings = Vector{RelateSegmentString{P}}(undef, na + length(ssb))
     @inbounds for i in 1:na
@@ -156,7 +187,7 @@ function NodedArrangement(m::Manifold,
         segstrings[na + i] = ssb[i]
     end
 
-    table = NodeTable{P}()
+    table = NodeTable{P, T}()
     seg_nodes = Dict{Tuple{Int32, Int32}, Vector{Int32}}()
     # stage 1
     _collect_crossings!(m, table, seg_nodes, ssa, ssb, Int32(na);
@@ -167,5 +198,5 @@ function NodedArrangement(m::Manifold,
     edges, truncated = _split_edges!(m, table, seg_nodes, segstrings, Int32(na),
                                      clip_a, clip_b; exact)
     _ensure_coord_cache!(table)
-    return NodedArrangement{P}(segstrings, table, seg_nodes, edges, truncated)
+    return NodedArrangement{P, T}(segstrings, table, seg_nodes, edges, truncated)
 end

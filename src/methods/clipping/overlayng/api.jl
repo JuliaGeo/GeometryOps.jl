@@ -69,6 +69,16 @@ i = GO.intersection(sph, a, b)
     (GO.area(GO.Spherical(), a) + GO.area(GO.Spherical(), b)) - 1
 ```
 
+Spherical results come back in the chart the engine works in — unit-sphere
+`xyz`, as `UnitSphericalPoint`s — so a result vertex that is an input vertex is
+bit-for-bit the ingested one, with no lon/lat round trip to lose the last ULP
+in. Ask for `point_type = Tuple{Float64,Float64}` to get `(lon, lat)` degrees
+back instead:
+
+```@example overlayng
+GI.coordinates(GO.intersection(GO.OverlayNG(GO.Spherical(); point_type = Tuple{Float64,Float64}), a, b))
+```
+
 ## Implementation
 
 This file is the public surface of the OverlayNG port; everything it calls is
@@ -95,7 +105,7 @@ ladder would be dead weight.
 =#
 
 """
-    OverlayNG(; manifold = Planar(), exact = True())
+    OverlayNG(; manifold = Planar(), exact = True(), point_type = ...)
     OverlayNG(manifold::Manifold; kwargs...)
 
 The exact-arrangement overlay algorithm, a port of the JTS OverlayNG engine by
@@ -123,6 +133,42 @@ exception — see its docstring.
 - `exact`: `True()` (default) to decide every uncertain filter with an exact
   predicate, `False()` to stay in Float64. Leave it at the default unless you
   are measuring the cost of exactness.
+- `point_type`: the type of the coordinates in the result. Defaults to the
+  manifold's own working point type — `Tuple{Float64,Float64}` on `Planar()`,
+  `UnitSphericalPoint{Float64}` (3D unit-sphere `xyz`) on `Spherical()`. On the
+  sphere `Tuple{Float64,Float64}` is also accepted and gives `(lon, lat)`
+  degrees; see "Output coordinates" below for what that costs.
+
+## Output coordinates
+
+The arrangement is exact and symbolic: rounding to Float64 happens exactly once,
+when a node's coordinate is realized for output. `point_type` chooses the chart
+that rounding lands in, and on the sphere the choice is not neutral.
+
+`Spherical()` works in unit-sphere `xyz` throughout — an input vertex is
+converted to a `UnitSphericalPoint` at ingest and every predicate reads it there
+— so emitting `UnitSphericalPoint{Float64}` is a pass-through for every result
+vertex that is an input vertex: the coordinate that comes out is *bit-for-bit*
+the one that went in, and `GO.area` of a clipped cell agrees with the uncut
+original exactly rather than in all but the last ULP.
+
+Emitting `(lon, lat)` instead sends that vertex back out through `atan`/`asin`,
+which is a rounding of a value that had an exact image in the format it was
+already in. Measured over 200 000 uniformly random directions, the round trip
+displaces a point by up to 3.2 ULPs of the unit sphere below 60° latitude, 7.9
+at 75°, and 126 above 89.5°; swept along single parallels the worst displacement
+is 7.8 ULPs at 89°, 1 364 at 89.99° and 2 915 (6.5e-13 rad) at 89.999°. The
+growth is the chart's, not the arithmetic's — a degree of longitude is
+`cos φ` of an arc — and it is why a polar grid cell survives an overlay in
+`xyz` and does not in lon/lat.
+
+For a crossing node there is no exact Float64 answer in either chart: the
+position is a `Rational{BigInt}` direction with no finite decimal form. What
+`xyz` buys there is rounding once (normalize the direction) rather than twice
+(normalize, then trigonometry).
+
+`Tuple{Float64,Float64}` therefore exists for callers that need lon/lat
+coordinates back and are willing to pay for them, not as a lossless alternative.
 
 ## Result shape
 
@@ -207,21 +253,67 @@ denotes the region bounded by its rings, and a polygon with no rings already
 means the empty geometry, so GeometryOps has no spelling for the full sphere.
 Reformulate such an operation as a `difference` from the covering region.
 """
-struct OverlayNG{M <: Manifold, E} <: GeometryOpsCore.Algorithm{M}
+struct OverlayNG{M <: Manifold, E, P} <: GeometryOpsCore.Algorithm{M}
     manifold::M
     exact::E
+    point_type::Type{P}
 end
 
-function OverlayNG(; manifold::Manifold = Planar(), exact = True())
-    manifold isa Union{Planar, Spherical} || throw(ArgumentError(
+# The manifold is POSITIONAL here and the keyword form forwards to it, not the
+# other way round: `point_type`'s default is `_kernel_point_type(manifold)`, and
+# a keyword argument is not specialized on, so computing it in the keyword-only
+# method leaves the algorithm's third parameter — and with it the return type of
+# every targeted overlay — inferred as `Type` rather than as a constant.
+function OverlayNG(m::Manifold; exact = True(), point_type = nothing)
+    #-- `nothing` rather than `_kernel_point_type(m)` as the default: a keyword
+    #-- default is evaluated before the body, and an unsupported manifold has no
+    #-- kernel point type — spelling the default here would replace the message
+    #-- below with a `MethodError` from RelateNG's ingest.
+    m isa Union{Planar, Spherical} || throw(ArgumentError(
         "OverlayNG supports the `Planar()` and `Spherical()` manifolds; got " *
-        "$(typeof(manifold))"))
-    return OverlayNG(manifold, exact)
+        "$(typeof(m))"))
+    pt = point_type === nothing ? _kernel_point_type(m) : point_type
+    _overlay_supports_point_type(m, pt) ||
+        throw(ArgumentError(_bad_point_type_msg(m, pt)))
+    return OverlayNG(m, exact, pt)
 end
-OverlayNG(m::Manifold; kw...) = OverlayNG(; manifold = m, kw...)
+OverlayNG(; manifold::Manifold = Planar(), kw...) = OverlayNG(manifold; kw...)
+
+#=
+The output point types each manifold can emit. Both lists are closed, and
+deliberately so: the emitter has one method per (kernel point, output point)
+pair, and every one of them is a rounding argument that had to be made
+explicitly (noding/emit.jl). A manifold/point-type pair that is not listed here
+has no such argument behind it, so it is rejected rather than approximated.
+=#
+_overlay_supports_point_type(::Planar, ::Type{Tuple{Float64, Float64}}) = true
+_overlay_supports_point_type(::Spherical, ::Type{Tuple{Float64, Float64}}) = true
+_overlay_supports_point_type(::Spherical, ::Type{UnitSphericalPoint{Float64}}) = true
+_overlay_supports_point_type(::Manifold, ::Any) = false
+
+_bad_point_type_msg(m::Manifold, pt) =
+    "OverlayNG: `point_type = $(pt)` is not a supported output coordinate type " *
+    "on $(typeof(m).name.name)(). $(m isa Planar ?
+        "`Planar()` emits `Tuple{Float64,Float64}` (x, y) only." :
+        "`Spherical()` emits `UnitSphericalPoint{Float64}` (unit-sphere xyz, the " *
+        "default and the chart the engine works in) or `Tuple{Float64,Float64}` " *
+        "((lon, lat) degrees, one extra rounding).")"
 
 GeometryOpsCore.manifold(alg::OverlayNG) = alg.manifold
-GeometryOpsCore.rebuild(alg::OverlayNG, m::Manifold) = OverlayNG(m; exact = alg.exact)
+
+# The output point type is manifold-derived by DEFAULT, so a rebuild onto another
+# manifold re-derives it; only a choice that deviates from the old manifold's
+# default is a choice the caller made, and that one is carried across whenever
+# the new manifold can honour it. (The single deviation available today —
+# `Spherical()` emitting lon/lat tuples — is the planar default, so it survives
+# every rebuild.)
+GeometryOpsCore.rebuild(alg::OverlayNG, m::Manifold) =
+    OverlayNG(m; exact = alg.exact, point_type = _rebuilt_point_type(alg, m))
+
+_rebuilt_point_type(alg::OverlayNG, m::Manifold) =
+    (alg.point_type === _kernel_point_type(alg.manifold) ||
+     !_overlay_supports_point_type(m, alg.point_type)) ?
+        _kernel_point_type(m) : alg.point_type
 
 # ## The four operations
 #
@@ -230,13 +322,16 @@ GeometryOpsCore.rebuild(alg::OverlayNG, m::Manifold) = OverlayNG(m; exact = alg.
 # beside their existing Foster–Hormann ones; `symdifference` is new.
 
 intersection(alg::OverlayNG, geom_a, geom_b; target = nothing) =
-    _overlay_ng(alg.manifold, OVERLAY_INTERSECTION, geom_a, geom_b; exact = alg.exact, target)
+    _overlay_ng(alg.manifold, OVERLAY_INTERSECTION, geom_a, geom_b;
+                exact = alg.exact, point_type = alg.point_type, target)
 
 union(alg::OverlayNG, geom_a, geom_b; target = nothing) =
-    _overlay_ng(alg.manifold, OVERLAY_UNION, geom_a, geom_b; exact = alg.exact, target)
+    _overlay_ng(alg.manifold, OVERLAY_UNION, geom_a, geom_b;
+                exact = alg.exact, point_type = alg.point_type, target)
 
 difference(alg::OverlayNG, geom_a, geom_b; target = nothing) =
-    _overlay_ng(alg.manifold, OVERLAY_DIFFERENCE, geom_a, geom_b; exact = alg.exact, target)
+    _overlay_ng(alg.manifold, OVERLAY_DIFFERENCE, geom_a, geom_b;
+                exact = alg.exact, point_type = alg.point_type, target)
 
 """
     symdifference([alg::OverlayNG], geom_a, geom_b)
@@ -272,7 +367,8 @@ See [`OverlayNG`](@ref) for the result shape, the input contract, and the
 spherical full-sphere limitation.
 """
 symdifference(alg::OverlayNG, geom_a, geom_b; target = nothing) =
-    _overlay_ng(alg.manifold, OVERLAY_SYMDIFFERENCE, geom_a, geom_b; exact = alg.exact, target)
+    _overlay_ng(alg.manifold, OVERLAY_SYMDIFFERENCE, geom_a, geom_b;
+                exact = alg.exact, point_type = alg.point_type, target)
 
 symdifference(m::Manifold, geom_a, geom_b; kwargs...) =
     symdifference(OverlayNG(m), geom_a, geom_b; kwargs...)

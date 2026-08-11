@@ -29,6 +29,13 @@ import LibGEOS as LG
 # (`api.jl`'s plumbing test) and nowhere else.
 const EX = GO.True()
 
+# The output point type `OverlayNG(Spherical())` emits by default: unit-sphere
+# xyz, the chart the spherical engine already works in. Shared vocabulary
+# because "the spherical result coordinate" now appears in several files, and
+# the alternative spelling — `Tuple{Float64,Float64}`, i.e. lon/lat degrees —
+# is the planar one and needs no name.
+const USP = GO.UnitSphericalPoint{Float64}
+
 # ## The canonical pair
 #
 # Two axis-aligned squares overlapping in the unit square (1,1)-(2,2). Every
@@ -52,11 +59,32 @@ const OPCODE = Dict(zip(OP_SYMS, OP_CODES))
 opname(op::Symbol) = String(op)
 opname(op) = String(OP_SYMS[findfirst(==(op), OP_CODES)])
 
+# ## Charts
+#
+# `OverlayNG` emits in its manifold's own chart, so a spherical result carries
+# unit-sphere `xyz` points and a planar one lon/lat (or plain Cartesian) pairs.
+# Every oracle in this directory — GEOS, and the WKB wire into s2geography — is
+# a lon/lat one, so the chart conversion is done once here, at the point where a
+# result leaves the engine's world, and nowhere else.
+#
+# Putting it at the boundary rather than in the assertions is deliberate: it
+# keeps every suite pointed at the *default* emission path, the one that ships,
+# instead of quietly re-running the engine in its lon/lat mode to make the
+# comparison convenient. The conversion costs ~3 ULPs of the unit sphere below
+# 60° latitude — twelve orders of magnitude under the loosest tolerance any
+# oracle here uses, and irrelevant to `equals`, which is a topological test.
+#
+# A 2D geometry is returned untouched, so the planar suites do not notice this
+# exists.
+to_lonlat(g) = GI.is3d(g) ? GO.apply(GI.PointTrait(), g) do p
+                                GO._usp_to_lonlat(p)
+                            end : g
+
 # ## LibGEOS interop
 #
 # `to_lg` is idempotent on LibGEOS geometries, so the GEOS helpers below accept
 # either side of the boundary and callers need not remember which they hold.
-to_lg(g) = g isa LG.AbstractGeometry ? g : GI.convert(LG, g)
+to_lg(g) = g isa LG.AbstractGeometry ? g : GI.convert(LG, to_lonlat(g))
 const lgc = to_lg          # historical spelling, kept because it reads better inline
 wkt(s) = LG.readgeom(s)
 giwkt(s) = GO.tuples(LG.readgeom(s))
@@ -73,11 +101,13 @@ end
 # Our result → LibGEOS. Empty results become one canonical empty geometry:
 # GEOS `equals` is true between any two empties, and the *type* of an empty
 # overlay result is what `xml_suite.jl`'s TestOverlayEmpty run checks.
-function result_to_lg(g)
+result_to_lg(g) = _result_to_lg(to_lonlat(g))
+
+function _result_to_lg(g)
     t = GI.trait(g)
     t isa GI.PointTrait && return LG.Point(Float64(GI.x(g)), Float64(GI.y(g)))
     t isa GI.GeometryCollectionTrait &&
-        return LG.GeometryCollection(LG.Geometry[result_to_lg(s) for s in GI.getgeom(g)])
+        return LG.GeometryCollection(LG.Geometry[_result_to_lg(s) for s in GI.getgeom(g)])
     GI.npoint(g) == 0 && return LG.readgeom("GEOMETRYCOLLECTION EMPTY")
     return to_lg(g)
 end

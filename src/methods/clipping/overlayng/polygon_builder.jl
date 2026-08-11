@@ -56,7 +56,7 @@ end
 
 # Build the result polygons from the graph's result-area edges (port of the
 # `PolygonBuilder` constructor + `getPolygons`).
-function _build_polygons(m::Manifold, g::OverlayGraph{P}, result_area_edges; exact) where {P}
+function _build_polygons(m::Manifold, g::OverlayGraph{P, T}, result_area_edges; exact) where {P, T}
     _assert_graph_extractable(g, "_build_polygons")
     #-- the op pipeline walks `onext`/`sym` directly and has no notion of a removed
     #-- edge, so a hygiene-filtered graph would silently ignore the removal
@@ -65,7 +65,7 @@ function _build_polygons(m::Manifold, g::OverlayGraph{P}, result_area_edges; exa
         "face-walk hygiene pass (`remove_dangles` / `remove_cut_edges`). The op " *
         "pipeline does not honour removal, so its result would silently ignore it. " *
         "Hygiene is a face-enumeration facility — use `_build_faces` on that graph."))
-    ctx = _PolyBuilderCtx(m, g.edges, g.arr, exact, _MaxEdgeRing[], _OverlayEdgeRing{P}[],
+    ctx = _PolyBuilderCtx(m, g.edges, g.arr, exact, _MaxEdgeRing[], _edge_ring_type(T)[],
                           Int32[], Int32[])
     _build_rings!(ctx, result_area_edges)
     return [_ring_to_polygon(ctx, sh) for sh in ctx.shell_list]
@@ -218,6 +218,11 @@ function _place_free_holes!(ctx::_PolyBuilderCtx{<:Spherical})
     return nothing
 end
 
+# The shell-extent key of the `RTree(STR())` prune above, and nothing else: it is
+# built here, consumed by `Extents.intersects` two lines up, and never reaches a
+# result geometry or a caller. Planar-only, hence `NTuple{4}` only — the
+# spherical `_place_free_holes!` tests every shell instead of pruning, so an xyz
+# box never needs an `Extent` spelling.
 @inline _ext_of(bbox::NTuple{4, Float64}) =
     Extents.Extent(X = (bbox[1], bbox[2]), Y = (bbox[3], bbox[4]))
 
@@ -226,9 +231,9 @@ end
 # Emit the polygon of one shell ring and its assigned holes. Ring windings are
 # left as the graph produced them (JTS does the same); `GO.area` on either
 # manifold is orientation-independent, and validity does not depend on winding.
-function _ring_to_polygon(ctx, shell_handle::Integer)
+function _ring_to_polygon(ctx::_PolyBuilderCtx{M, P, E, T}, shell_handle::Integer) where {M, P, E, T}
     sh = ctx.edge_rings[shell_handle]
-    rings = Vector{Vector{Tuple{Float64, Float64}}}()
+    rings = Vector{Vector{T}}()
     push!(rings, sh.ring_pts)
     for h in sh.holes
         push!(rings, ctx.edge_rings[h].ring_pts)
@@ -294,8 +299,8 @@ end
 # structure of the arrangement, dangle doubling included, which
 # `antimeridian_split` structurally depends on (its pole pair IS the doubling at
 # the meridian arc's degree-1 pole endpoint).
-function _build_faces(m::Manifold, g::OverlayGraph{P}; exact,
-        remove_dangles::Bool = false, remove_cut_edges::Bool = false) where {P}
+function _build_faces(m::Manifold, g::OverlayGraph{P, T}; exact,
+        remove_dangles::Bool = false, remove_cut_edges::Bool = false) where {P, T}
     _assert_graph_extractable(g, "_build_faces")
     remove_dangles && _remove_dangles!(g)
     remove_cut_edges && _remove_cut_edges!(g)
@@ -305,7 +310,7 @@ function _build_faces(m::Manifold, g::OverlayGraph{P}; exact,
         oe_set_next_result!(edges, i, _face_successor(edges, i))
     end
     ctx = _PolyBuilderCtx(m, edges, g.arr, exact, _MaxEdgeRing[],
-                          _OverlayEdgeRing{P}[], Int32[], Int32[])
+                          _edge_ring_type(T)[], Int32[], Int32[])
     for i in eachindex(edges)
         (oe_is_removed(edges, i) || edges[i].edge_ring != 0) && continue
         _new_edge_ring!(ctx, i)

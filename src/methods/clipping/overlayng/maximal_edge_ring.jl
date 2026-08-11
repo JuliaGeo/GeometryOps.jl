@@ -38,30 +38,36 @@ end
 # `node_ids` and `ring_pts` are not in bijection: two distinct nodes can realize
 # to the same output coordinate, which `_ring_add!` drops from `ring_pts` (see
 # below). That is exactly why the role is taken from `node_ids`.
-mutable struct _OverlayEdgeRing{P}
+#
+# `T` is the arrangement's output point type and `NB == _bbox_len(T)` the length
+# of the interleaved `(min₁, max₁, min₂, max₂, …)` bounding box over it — 4 for
+# a 2D output, 6 for unit-sphere xyz.
+mutable struct _OverlayEdgeRing{T, NB}
     id::Int32
     start_edge::Int32
-    ring_pts::Vector{Tuple{Float64, Float64}}
+    ring_pts::Vector{T}
     node_ids::Vector{Int32}
     is_hole::Bool
-    bbox::NTuple{4, Float64}   # (xmin, xmax, ymin, ymax) of ring_pts
+    bbox::NTuple{NB, Float64}  # (min, max) per coordinate of ring_pts
     shell::Int32
     holes::Vector{Int32}
     locator::Any               # Union{Nothing, IndexedPointInAreaLocator}, lazy
 end
+
+_edge_ring_type(::Type{T}) where {T} = _OverlayEdgeRing{T, _bbox_len(T)}
 
 # The polygon-builder working context (JTS `PolygonBuilder`'s mutable state). Held
 # together so the ring-linking and placement functions share the graph edge store,
 # the arrangement (for `node_point`), the manifold/exact predicate context, and the
 # growing ring collections. Parameterized on `M`/`P`/`E` so `m`/`exact` stay
 # concrete and the `Planar`/`Spherical` methods dispatch.
-mutable struct _PolyBuilderCtx{M <: Manifold, P, E}
+mutable struct _PolyBuilderCtx{M <: Manifold, P, E, T, NB}
     m::M
     edges::Vector{OverlayEdge{P}}
-    arr::NodedArrangement{P}
+    arr::NodedArrangement{P, T}
     exact::E
     max_rings::Vector{_MaxEdgeRing}
-    edge_rings::Vector{_OverlayEdgeRing{P}}
+    edge_rings::Vector{_OverlayEdgeRing{T, NB}}
     shell_list::Vector{Int32}      # handles into edge_rings
     free_hole_list::Vector{Int32}
     #-- free holes whose OWN shell was dropped as sub-grid, so they have no
@@ -77,12 +83,14 @@ mutable struct _PolyBuilderCtx{M <: Manifold, P, E}
     kernel_ok::Vector{Bool}
 end
 
-_PolyBuilderCtx(m::M, edges::Vector{OverlayEdge{P}}, arr::NodedArrangement{P}, exact::E,
-        max_rings, edge_rings, shell_list, free_hole_list) where {M <: Manifold, P, E} =
-    _PolyBuilderCtx{M, P, E}(m, edges, arr, exact, max_rings, edge_rings, shell_list,
-                             free_hole_list, Int32[], P[], Bool[])
+_PolyBuilderCtx(m::M, edges::Vector{OverlayEdge{P}}, arr::NodedArrangement{P, T}, exact::E,
+        max_rings, edge_rings::Vector{_OverlayEdgeRing{T, NB}}, shell_list,
+        free_hole_list) where {M <: Manifold, P, E, T, NB} =
+    _PolyBuilderCtx{M, P, E, T, NB}(m, edges, arr, exact, max_rings, edge_rings, shell_list,
+                                    free_hole_list, Int32[], P[], Bool[])
 
 @inline _ctx_point_type(::_PolyBuilderCtx{M, P}) where {M, P} = P
+@inline output_point_type(::_PolyBuilderCtx{M, P, E, T}) where {M, P, E, T} = T
 
 # ## Maximal-ring linking at a node (port of `linkResultAreaMaxRingAtNode`)
 #
@@ -219,7 +227,7 @@ This is not cosmetic here. The arrangement's nodes are symbolic and exact, so tw
 legal `LinearRing` vertex sequence. JTS never sees the situation because its
 noder rounds while noding, so the two nodes are already one.
 =#
-@inline function _ring_add!(pts::Vector{Tuple{Float64, Float64}}, p::Tuple{Float64, Float64})
+@inline function _ring_add!(pts::Vector{T}, p::T) where {T}
     (isempty(pts) || pts[end] != p) && push!(pts, p)
     return nothing
 end
@@ -283,15 +291,17 @@ feature". That claim is what snapping engines make, and it is what this port
 refuses — it is why the arrangement is exact and why `_ring_is_ccw_exact` decides
 on node ids rather than on `ring_pts`.
 
-`u` below is instead a property of the OUTPUT FORMAT. `node_point` emits
-`Tuple{Float64,Float64}`, and at coordinate magnitude `m` that format's
-representable positions are `eps(m)` apart. A ring whose exact width is a
-fraction of `eps(m)` has no faithful image in the format: every candidate image
+`u` below is instead a property of the OUTPUT FORMAT — of the `point_type` the
+caller asked for, not of the manifold. At coordinate magnitude `m` a Float64
+axis's representable positions are `eps(m)` apart, and a ring whose exact width
+is a fraction of that has no faithful image in the format: every candidate image
 either merges its two sides (half 1) or pushes them past one another (an invalid
 ring). Dropping it is not deciding that the ring is "too small to be real" — the
 exact arrangement is not consulted about whether it is real, and it IS real. It
 is deciding that the result geometry cannot say so, which is a statement about
-`Vector{Tuple{Float64,Float64}}`, not about the sphere or the plane.
+`Vector{T}` for the `T` in hand, not about the sphere or the plane. Change `T`
+and this threshold moves with it; that is the whole content of the test named
+"the collapse threshold is the output grid, and nothing else".
 
 Consequently `u` is derived from where the ring sits, never from a user tolerance
 or a global constant, and it shrinks to nothing near the coordinate origin —
@@ -358,29 +368,57 @@ const _RING_GRID_MARGIN = 4.0
 
 #=
 The output-grid step at the ring's coordinate magnitude, in the units the exact
-width is measured in.
+width is measured in. There is one method per OUTPUT FORMAT — the manifold picks
+the units the width is measured in, the emitted point type picks the lattice —
+so the three live `(manifold, point_type)` pairs get three answers.
 
-On both manifolds the grid is ANISOTROPIC — the step differs between the two
-axes — and both take the SMALLER of the two steps. That is the conservative
-reading: "is the ring narrower than the finest detail the format can resolve
-anywhere here". It under-fires (a needle aligned with the coarser axis is
-missed) rather than over-fires, and over-firing is the direction that would lose
-real geometry.
+Every one of them takes the SMALLEST step across the format's axes. That is the
+conservative reading: "is the ring narrower than the finest detail the format
+can resolve ANYWHERE here". Two positions `δ` apart along a direction `t` are
+distinguishable as soon as SOME coordinate of theirs differs by an ulp, i.e. as
+soon as `δ·|tᵢ| ≥ eps(|pᵢ|)` for some `i`, so the finest resolvable displacement
+in the best case is `minᵢ eps(|pᵢ|)`, taken over the ring. It under-fires (a
+needle aligned with a coarser axis is missed) rather than over-fires, and
+over-firing is the direction that loses real geometry.
 
-Planar: `node_point` emits the coordinate itself, so the step is `eps` at the
-ring's largest magnitude on each axis, and widths are already in those units.
+The corollary — that the step collapses towards zero wherever a coordinate
+does, and the test then declines to fire — is not a defect but the same
+statement read backwards: a Float64 axis really does resolve arbitrarily fine
+detail near zero, so a ring sitting there really does have a faithful image. It
+is the signature of a format property rather than a tolerance.
 
-Spherical: `node_point` emits (lon, lat) in DEGREES while the exact width is
-measured on the unit sphere in radians. One `eps(lat)` step of latitude is
+Planar → `(x, y)`: `node_point` emits the coordinate itself, so the step is
+`eps` at the ring's largest magnitude on each axis and widths are already in
+those units.
+
+Spherical → `xyz` (the default): the exact width is a CHORD in R³ and so are the
+lattice steps, so there is no conversion at all. Each of the three components of
+a unit vector is a Float64 axis with step `eps(|c|)`, and some component of a
+unit vector is always `≥ 1/√3`, so this format's step is bounded above by
+`eps(1.0) ≈ 2.2e-16` everywhere on the sphere.
+
+Spherical → `(lon, lat)`: emitted in DEGREES while the exact width is measured
+on the unit sphere in radians. One `eps(lat)` step of latitude is
 `eps(lat)·π/180` radians of arc; one `eps(lon)` step of longitude is
 `eps(lon)·cos(φ)·π/180`.
+
+The two are not far apart in the ordinary case and are far apart where the
+lon/lat chart is singular. Measured on a 0.1°-diameter ring placed around the
+sphere (lon/lat step ÷ xyz step): 1.1× at `(0°, 0°)`, 1.5× at `(1°, 49°)`, 0.79×
+at `(45°, 45°)`, 2.2× at the Vancouver watersheds' `(-123°, 49°)` — and then
+71× at `(179°, 45°)` and 2 360× at `(179.9°, 89.5°)`, because `eps` grows with
+the magnitude of the number it is taken of and a longitude near the
+antimeridian is a big number naming a place no different from any other. So the
+xyz threshold is never more than ~1.3× coarser than the lon/lat one anywhere
+measured, and is up to three orders of magnitude finer near the seam and the
+poles. Both fall away towards zero where a coordinate does, for the reason
+above; that is the format telling the truth about itself in both charts.
 
 Reading `ring_pts` here is deliberate and is not a §0 violation: the question
 asked of it is "how far apart are representable Float64s in this neighbourhood",
 which only the emitted coordinates can answer.
 =#
-_ring_grid_step(ctx::_PolyBuilderCtx, pts::Vector{Tuple{Float64, Float64}}) =
-    _ring_grid_step(ctx.m, pts)
+_ring_grid_step(ctx::_PolyBuilderCtx, pts::Vector) = _ring_grid_step(ctx.m, pts)
 
 function _ring_grid_step(::Planar, pts::Vector{Tuple{Float64, Float64}})
     xm = 0.0; ym = 0.0
@@ -388,6 +426,14 @@ function _ring_grid_step(::Planar, pts::Vector{Tuple{Float64, Float64}})
         xm = max(xm, abs(p[1])); ym = max(ym, abs(p[2]))
     end
     return min(eps(xm), eps(ym))
+end
+
+function _ring_grid_step(::Spherical, pts::Vector{<:UnitSphericalPoint})
+    xm = 0.0; ym = 0.0; zm = 0.0
+    @inbounds for p in pts
+        xm = max(xm, abs(p[1])); ym = max(ym, abs(p[2])); zm = max(zm, abs(p[3]))
+    end
+    return min(eps(xm), eps(ym), eps(zm))
 end
 
 function _ring_grid_step(::Spherical, pts::Vector{Tuple{Float64, Float64}})
@@ -545,11 +591,11 @@ end
 _ring_area2_filter(arr, ids::Vector{Int32}) =
     ((acc, bound) = _ring_area2_bounded(arr, ids); (acc, abs(acc) > bound))
 
-function _new_edge_ring!(ctx, start::Integer)
-    P = _ctx_point_type(ctx)
+function _new_edge_ring!(ctx::_PolyBuilderCtx{M, P, E, T, NB},
+        start::Integer) where {M, P, E, T, NB}
     id = Int32(length(ctx.edge_rings) + 1)
-    ring = _OverlayEdgeRing{P}(id, Int32(start), Tuple{Float64, Float64}[], Int32[],
-                               false, (0.0, 0.0, 0.0, 0.0), Int32(0), Int32[], nothing)
+    ring = _OverlayEdgeRing{T, NB}(id, Int32(start), T[], Int32[], false,
+                                   ntuple(_ -> 0.0, NB), Int32(0), Int32[], nothing)
     push!(ctx.edge_rings, ring)
     _compute_ring!(ctx, ring)
     return id
@@ -558,9 +604,9 @@ end
 # Port of `computeRingPts` + `computeRing`: walk the minimal ring via
 # `next_result`, collecting the arrangement node ids it visits and their emitted
 # points; then derive the shell/hole role and the bounding box.
-function _compute_ring!(ctx, ring::_OverlayEdgeRing)
+function _compute_ring!(ctx::_PolyBuilderCtx{M, P, E, T}, ring::_OverlayEdgeRing) where {M, P, E, T}
     edges = ctx.edges
-    pts = Tuple{Float64, Float64}[]
+    pts = T[]
     ids = Int32[]
     origin = he_origin(edges, ring.start_edge)
     push!(ids, Int32(origin))
@@ -872,6 +918,13 @@ function _ring_width_below(ctx::_PolyBuilderCtx{<:Spherical}, ids::Vector{Int32}
     return q1 * q1 + q2 * q2 + q3 * q3 < rhs * rhs
 end
 
+# The ring's axis-aligned bounding box over the emitted coordinates, interleaved
+# as `(min₁, max₁, min₂, max₂, …)`. One method per output format, matching
+# `_ring_grid_step`. It is only ever a FILTER — over-inclusive is safe,
+# under-inclusive is a correctness bug — so on the sphere the honest form is the
+# box in the coordinates actually emitted (an xyz box, which is exactly a
+# corner-cut of the sphere) rather than a lon/lat box the emitted points do not
+# live in.
 function _ring_bbox(pts::Vector{Tuple{Float64, Float64}})
     xmin = xmax = pts[1][1]
     ymin = ymax = pts[1][2]
@@ -880,6 +933,18 @@ function _ring_bbox(pts::Vector{Tuple{Float64, Float64}})
         ymin = min(ymin, p[2]); ymax = max(ymax, p[2])
     end
     return (xmin, xmax, ymin, ymax)
+end
+
+function _ring_bbox(pts::Vector{<:UnitSphericalPoint})
+    xmin = xmax = pts[1][1]
+    ymin = ymax = pts[1][2]
+    zmin = zmax = pts[1][3]
+    for p in pts
+        xmin = min(xmin, p[1]); xmax = max(xmax, p[1])
+        ymin = min(ymin, p[2]); ymax = max(ymax, p[2])
+        zmin = min(zmin, p[3]); zmax = max(zmax, p[3])
+    end
+    return (xmin, xmax, ymin, ymax, zmin, zmax)
 end
 
 # ## Hole containment (ports of `OverlayEdgeRing.locate` / `contains` / …)
@@ -935,8 +1000,12 @@ function _is_point_in_or_out(ctx, shell::_OverlayEdgeRing, hole::_OverlayEdgeRin
     return false
 end
 
-@inline _bbox_contains(outer::NTuple{4, Float64}, inner::NTuple{4, Float64}) =
-    outer[1] <= inner[1] && outer[2] >= inner[2] && outer[3] <= inner[3] && outer[4] >= inner[4]
+@inline function _bbox_contains(outer::NTuple{N, Float64}, inner::NTuple{N, Float64}) where {N}
+    @inbounds for i in 1:2:N
+        (outer[i] <= inner[i] && outer[i + 1] >= inner[i + 1]) || return false
+    end
+    return true
+end
 
 # Port of `findEdgeRingContaining`: the innermost (smallest-envelope) shell in
 # `candidates` that contains `hole`, or `0`.

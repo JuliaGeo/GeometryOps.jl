@@ -178,6 +178,110 @@ end
     end
 end
 
+#=
+## `point_type` — the chart the one rounding lands in
+
+The arrangement is exact and symbolic; `node_point` is the only place a Float64
+coordinate is ever constructed. `point_type` says which chart that construction
+targets, and on the sphere the choice is not neutral, because the engine's own
+chart is unit-sphere xyz: emitting xyz hands a vertex node BACK the coordinate
+it was ingested as, while emitting (lon, lat) sends it out through `atan`/`asin`
+and gets something else.
+
+The tests below are ordered by what they are protecting. The bit-exactness one
+is the motivating defect and the reason the default changed — a clipped grid
+cell whose vertices the clip did not touch used to come back an ULP off, and
+sums over such cells then failed exact-equality identities downstream.
+=#
+@testset "point_type: the spherical default is the engine's own chart" begin
+    #-- default output types, per manifold
+    @test GO.OverlayNG().point_type === Tuple{Float64, Float64}
+    @test GO.OverlayNG(S).point_type === USP
+    #-- and they are exactly `_kernel_point_type`, which is the whole rule
+    @test GO.OverlayNG(S).point_type === GO._kernel_point_type(S)
+    @test GO.OverlayNG(P).point_type === GO._kernel_point_type(P)
+
+    r = GO.intersection(GO.OverlayNG(S), A, B)
+    @test GI.is3d(r)
+    @test all(p -> p isa USP, GI.getpoint(r))
+    #-- planar is untouched: same default, same 2D result
+    rp = GO.intersection(GO.OverlayNG(), A, B)
+    @test !GI.is3d(rp)
+    @test all(p -> p isa Tuple{Float64, Float64}, GI.getpoint(rp))
+end
+
+@testset "point_type: an uncut vertex survives a spherical overlay bit-for-bit" begin
+    #-- a cell strictly inside a bigger one: the intersection IS the small cell,
+    #-- and the overlay cuts none of its vertices. Every emitted coordinate must
+    #-- therefore be the ingested one, bit for bit — not `isapprox` to it.
+    inner = GI.Polygon([[(2.0, 49.0), (3.0, 49.0), (3.0, 50.0), (2.0, 50.0), (2.0, 49.0)]])
+    outer = GI.Polygon([[(0.0, 40.0), (10.0, 40.0), (10.0, 60.0), (0.0, 60.0), (0.0, 40.0)]])
+    r = GO.intersection(GO.OverlayNG(S), inner, outer)
+    ingested = Set(GO._to_kernel_point(S, p) for p in GI.getpoint(inner))
+    @test Set(GI.getpoint(r)) == ingested
+
+    #-- the lon/lat row cannot do this, and that is not a defect in it: `atan`
+    #-- and `asin` of a coordinate that already had an exact image in the output
+    #-- format are a second rounding, and there is nowhere for it to go but away
+    rll = GO.intersection(GO.OverlayNG(S; point_type = Tuple{Float64, Float64}), inner, outer)
+    @test Set(GI.getpoint(rll)) != Set(GI.getpoint(inner))
+    @test all(p -> p isa Tuple{Float64, Float64}, GI.getpoint(rll))
+
+    #-- what that buys downstream, measured on the quantity the defect was
+    #-- reported through. The bar is NOT exact area equality: the result ring
+    #-- starts at a different vertex than the input ring, and a spherical area is
+    #-- an ordered sum, so a few ULPs of reassociation survive even when every
+    #-- coordinate is identical. What the bar can be is the CONTRAST — with the
+    #-- coordinate rounding gone, only that reassociation is left (measured: 15
+    #-- ULPs), while the lon/lat row carries both (79 ULPs, 5.4x).
+    da = abs(GO.area(S, r) - GO.area(S, inner))
+    dll = abs(GO.area(S, rll) - GO.area(S, inner))
+    @test da < dll
+    @test isapprox(GO.area(S, r), GO.area(S, inner); rtol = 1e-14)
+end
+
+@testset "point_type: lon/lat output restores the pre-change spherical behaviour" begin
+    alg = GO.OverlayNG(S; point_type = Tuple{Float64, Float64})
+    for (name, gof, _) in PUBLIC_OPS
+        r = gof(alg, AH, BH)
+        x = gof(GO.OverlayNG(S), AH, BH)
+        @test !GI.is3d(r)
+        @test all(p -> p isa Tuple{Float64, Float64}, GI.getpoint(r))
+        #-- the two rows describe the same region; only the chart differs
+        @test isapprox(GO.area(S, r), GO.area(S, x); rtol = 1e-12)
+    end
+    #-- and the lon/lat row's result type is the PLANAR result type: the return
+    #-- type is a function of `point_type`, not of the manifold
+    @test typeof(GO.intersection(alg, A, B)) ===
+          typeof(GO.intersection(GO.OverlayNG(), A, B))
+end
+
+@testset "point_type: unsupported manifold/point-type pairs are rejected" begin
+    #-- the plane has one chart and no xyz reading of it
+    @test_throws ArgumentError GO.OverlayNG(P; point_type = USP)
+    #-- neither manifold emits anything else at all
+    for pt in (Float64, Tuple{Float32, Float32}, Tuple{Float64, Float64, Float64},
+               GI.Point{false, false, Tuple{Float64, Float64}, Nothing})
+        @test_throws ArgumentError GO.OverlayNG(P; point_type = pt)
+        @test_throws ArgumentError GO.OverlayNG(S; point_type = pt)
+    end
+    #-- the message names the manifold and lists what it does emit
+    msg = try; GO.OverlayNG(P; point_type = USP); catch e; sprint(showerror, e); end
+    @test occursin("Planar", msg) && occursin("Tuple{Float64,Float64}", msg)
+end
+
+@testset "point_type: rebuild re-derives the default and carries a choice" begin
+    Rb = GO.GeometryOpsCore.rebuild
+    #-- a defaulted algorithm re-derives on the new manifold
+    @test Rb(GO.OverlayNG(P), S).point_type === USP
+    @test Rb(GO.OverlayNG(S), P).point_type === Tuple{Float64, Float64}
+    #-- an explicit non-default choice survives a rebuild that can honour it
+    @test Rb(GO.OverlayNG(S; point_type = Tuple{Float64, Float64}), S).point_type ===
+          Tuple{Float64, Float64}
+    #-- and `exact` still rides along
+    @test Rb(GO.OverlayNG(S; exact = GO.False()), P).exact === GO.False()
+end
+
 @testset "error paths" begin
     #-- unsupported manifolds are rejected at construction with a clear message
     @test_throws ArgumentError GO.OverlayNG(GO.AutoManifold())

@@ -284,19 +284,23 @@ end
 # ==========================================================================
 
 """
-    OverlayGraph{P}
+    OverlayGraph{P,T}
 
 The topology graph of an overlay operation (port of JTS `OverlayGraph`). Holds
 the arrangement it was built from, the vector of half-edges (both orientations of
 every merged edge), and one representative outgoing half-edge index per node id
 (`node_edges[nid]`, `0` if the node has no incident edges). `P` is the manifold
-kernel point type, so the graph is type-erased over input geometry types.
+kernel point type, so the graph is type-erased over input geometry types; `T` is
+the arrangement's output point type, carried so the builders reading
+`node_point` off it stay concrete.
 """
-struct OverlayGraph{P}
-    arr        :: NodedArrangement{P}
+struct OverlayGraph{P, T}
+    arr        :: NodedArrangement{P, T}
     edges      :: Vector{OverlayEdge{P}}
     node_edges :: Vector{Int32}
 end
+
+@inline output_point_type(g::OverlayGraph) = output_point_type(g.arr)
 
 """
     OverlayGraph(m, arr::NodedArrangement, sources) -> OverlayGraph
@@ -306,8 +310,8 @@ Coincident noded edges are merged (JTS `Edge.merge` semantics), each merged edge
 becomes a symmetric `OverlayEdge` pair sharing one label, and every node's star
 is ordered CCW about its symbolic apex via the exact kernel comparator.
 """
-function OverlayGraph(m::Manifold, arr::NodedArrangement{P}, sources::Vector{EdgeSourceInfo};
-        exact = True()) where {P}
+function OverlayGraph(m::Manifold, arr::NodedArrangement{P, T}, sources::Vector{EdgeSourceInfo};
+        exact = True()) where {P, T}
     merged = _merge_noded_edges(arr, sources)
     nnodes = num_nodes(arr)
     edges = Vector{OverlayEdge{P}}()
@@ -331,7 +335,7 @@ function OverlayGraph(m::Manifold, arr::NodedArrangement{P}, sources::Vector{Edg
     end
     node_edges = zeros(Int32, nnodes)
     _order_all_stars!(m, edges, arr.nodes.keys, stars, node_edges; exact)
-    return OverlayGraph{P}(arr, edges, node_edges)
+    return OverlayGraph{P, T}(arr, edges, node_edges)
 end
 
 # Convenience: build the sources and the graph directly from an arrangement.

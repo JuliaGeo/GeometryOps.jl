@@ -189,7 +189,11 @@ function _split_polygon!(pieces, poly, λn; pole_spacing)
     arc = _meridian_arc(λn)
     ssa = _overlay_segstrings(_AM_MANIFOLD, poly, true; exact = _AM_EXACT)
     ssb = _overlay_segstrings(_AM_MANIFOLD, arc, false; exact = _AM_EXACT)
-    arr = NodedArrangement(_AM_MANIFOLD, ssa, ssb; exact = _AM_EXACT)
+    #-- lon/lat output, explicitly: this transformation IS a longitude-branch
+    #-- operation (`_wrap_lon`, the seam lips at `λn` / `λn − 360`, the pole row),
+    #-- so it wants the chart the overlay engine otherwise avoids emitting into.
+    arr = NodedArrangement(_AM_MANIFOLD, ssa, ssb; exact = _AM_EXACT,
+                           point_type = Tuple{Float64, Float64})
     g = OverlayGraph(_AM_MANIFOLD, arr; exact = _AM_EXACT)
     input = _OverlayInput(_AM_MANIFOLD, poly, arc, 2, 1, _AM_EXACT, false, false, nothing, nothing)
     _compute_labelling!(g, input)

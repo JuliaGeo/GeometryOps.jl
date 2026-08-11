@@ -23,12 +23,15 @@ every line of it. Three facts from that probe determine the shape:
    `symdifference` on the same input types drops from ~1.1 s to ~2 ms (the
    residual is the thin op wrapper). Precompiling the other three would buy
    ~6 ms and is not worth an instance.
-2. The arrangement, graph and builders are typed on the kernel point type only
-   (`NodedArrangement{P}`, `OverlayGraph`), exactly like RelateNG's engine, so
-   one call per manifold caches the whole engine core for every input geometry
-   type. What remains per input type is the ingest layer, which is why the
-   `mpoly` and `line` shapes below are nearly free (~0.4 MB for the two of them
-   on the plane, against 2.0 MB for the first `poly x poly` call).
+2. The arrangement, graph and builders are typed on the kernel and output point
+   types only (`NodedArrangement{P, T}`, `OverlayGraph{P, T}`), exactly like
+   RelateNG's engine is typed on `P`, so one call per manifold caches the whole
+   engine core for every input geometry type. What remains per input type is the
+   ingest layer, which is why the `mpoly` and `line` shapes below are nearly free
+   (~0.4 MB for the two of them on the plane, against 2.0 MB for the first
+   `poly x poly` call). Only the DEFAULT `point_type` is cached: `Planar` has no
+   other, and the spherical lon/lat row is an opt-in that would cost a second
+   full set of spherical instances to serve a path most callers never take.
 3. Manifolds do *not* share instances, and the point path
    (`_overlay_mixed_points`) never reaches the arrangement, so those are the
    two genuinely separate cost centres — and both pay for themselves; see the

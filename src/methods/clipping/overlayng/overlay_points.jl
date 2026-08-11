@@ -33,20 +33,20 @@
 
 # JTS keys a `HashMap<Coordinate, Point>` on the coordinate and stores the
 # first `Point` seen there. Here `keys` preserves first-occurrence order and
-# `coords` maps the kernel point to the output coordinate.
-struct _PointMap{P}
+# `coords` maps the kernel point `P` to the output coordinate `T`.
+struct _PointMap{P, T}
     keys::Vector{P}
-    coords::Dict{P, Tuple{Float64, Float64}}
+    coords::Dict{P, T}
 end
 
-_PointMap(m::Manifold) = (P = _kernel_point_type(m);
-                          _PointMap{P}(P[], Dict{P, Tuple{Float64, Float64}}()))
+_PointMap(m::Manifold, ::Type{T}) where {T} =
+    (P = _kernel_point_type(m); _PointMap{P, T}(P[], Dict{P, T}()))
 
 Base.haskey(pm::_PointMap, k) = haskey(pm.coords, k)
 Base.length(pm::_PointMap) = length(pm.keys)
 
-function _point_map(m::Manifold, geom)
-    pm = _PointMap(m)
+function _point_map(m::Manifold, ::Type{T}, geom) where {T}
+    pm = _PointMap(m, T)
     _point_map_add_all!(m, pm, GI.trait(geom), geom)
     return pm
 end
@@ -70,24 +70,35 @@ _point_map_add_all!(m, pm, trait, geom) = throw(ArgumentError(
 
 # Only the first occurrence of a coordinate is kept — this is the merging
 # semantics of overlay.
-function _point_map_add!(m::Manifold, pm::_PointMap, p)
+function _point_map_add!(m::Manifold, pm::_PointMap{P, T}, p) where {P, T}
     k = _to_kernel_point(m, p)
     haskey(pm.coords, k) && return nothing
     push!(pm.keys, k)
-    pm.coords[k] = (Float64(GI.x(p)), Float64(GI.y(p)))
+    pm.coords[k] = _input_output_point(T, p, k)
     return nothing
 end
+
+# The output coordinate of an INPUT point — the point paths' counterpart of
+# `_emit_node_coord` on a vertex node, and the same pass-through: when the
+# output type is the manifold's kernel type the kernel point already IS the
+# answer, bit for bit. The lon/lat row takes the input's own coordinates rather
+# than converting the kernel point back, which is the same thing one rounding
+# earlier.
+@inline _input_output_point(::Type{Tuple{Float64, Float64}}, p, k) =
+    (Float64(GI.x(p)), Float64(GI.y(p)))
+@inline _input_output_point(::Type{<:UnitSphericalPoint}, p, k) = k
 
 # ## The overlay (port of `getResult`)
 
 # Point × point, so the result is dimension 0 under every op. A target above that
 # never reaches here — `_overlay_ng` answers it before dispatching — so there is
 # nothing to elide, only the result shape to honour.
-function _overlay_points(m::Manifold, op::_OverlayOpCode, a, b, target = nothing)
-    map_a = _point_map(m, a)
-    map_b = _point_map(m, b)
+function _overlay_points(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
+        target = nothing) where {T}
+    map_a = _point_map(m, T, a)
+    map_b = _point_map(m, T, b)
 
-    result = Tuple{Float64, Float64}[]
+    result = T[]
     if op == OVERLAY_INTERSECTION
         _points_intersection!(result, map_a, map_b)
     elseif op == OVERLAY_UNION

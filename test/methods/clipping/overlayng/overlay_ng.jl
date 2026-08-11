@@ -346,9 +346,16 @@ checked alongside, since the sign choice is a spherical-only construction.
     end
 
     #-- and directly on the defect: no emitted vertex may be a hemisphere away
-    #-- from the crossing's own arcs. Both emitted coordinates sit in [0, 2].
+    #-- from the crossing's own arcs. The whole region lies within 2° of
+    #-- (0°, 0°), so in the default xyz row every emitted unit vector has x ≈ 1
+    #-- and an antipodal one would have x ≈ −1.
     r = GO._overlay_ng(Spherical(), GO.OVERLAY_INTERSECTION, X, Y; exact = EX)
-    @test all(p -> 0 <= GI.x(p) <= 2 && 0 <= GI.y(p) <= 2, GI.getpoint(r))
+    @test all(p -> GI.x(p) > 0.999, GI.getpoint(r))
+    #-- the same statement in the lon/lat row, where it reads as the fixture's
+    #-- own bounding box: both emitted coordinates sit in [0, 2]
+    rll = GO._overlay_ng(Spherical(), GO.OVERLAY_INTERSECTION, X, Y; exact = EX,
+                         point_type = Tuple{Float64, Float64})
+    @test all(p -> 0 <= GI.x(p) <= 2 && 0 <= GI.y(p) <= 2, GI.getpoint(rll))
 
     #-- and at the emitter itself, on the offending crossing: X's
     #-- (1.5, 0.5)->(1, 0.50001904) against Y's (1, 1)->(1, 0.50001904), whose
@@ -360,8 +367,11 @@ checked alongside, since the sign choice is a spherical-only construction.
     a0, a1, b0, b1 = (GO._to_kernel_point(m, p) for p in
                       ((1.5000000000000002, 0.5000000000000001), (0.9999999999999998, 0.5000190382262165),
                        (0.9999999999999998, 1.0), (1.0, 0.5000190382262163)))
-    lon, lat = GO._emit_node_coord(GO.crossing_node(a0, a1, b0, b1))
+    k = GO.crossing_node(a0, a1, b0, b1)
+    lon, lat = GO._emit_node_coord(k, Tuple{Float64, Float64})
     @test 0.99 <= lon <= 1.01 && 0.4 <= lat <= 0.6
+    #-- and the xyz row makes the same choice, from the same direction
+    @test GO._emit_node_coord(k, USP) ≈ GO._to_kernel_point(m, (lon, lat))
 end
 
 @testset "spherical empty-vs-full disambiguation (§3 amendment 6)" begin
@@ -377,10 +387,12 @@ end
     #-- the throw is conjunction-gated on `_covers_everything`, so asserting the
     #-- throw asserts the predicate too; only the throws are checked here
     inp_union = GO._OverlayInput(Spherical(), A, A, 2, 2, EX, false, false, nothing, nothing)
-    @test_throws ArgumentError GO._resolve_empty_result(Spherical(), GO.OVERLAY_UNION, inp_union)
+    @test_throws ArgumentError GO._resolve_empty_result(Spherical(), USP, GO.OVERLAY_UNION,
+                                                       inp_union)
 
     inp_int = GO._OverlayInput(Spherical(), A, Bdisjoint, 2, 2, EX, false, false, nothing, nothing)
-    @test GI.npoint(GO._resolve_empty_result(Spherical(), GO.OVERLAY_INTERSECTION, inp_int)) == 0
+    @test GI.npoint(GO._resolve_empty_result(Spherical(), USP, GO.OVERLAY_INTERSECTION,
+                                            inp_int)) == 0
 end
 
 # ---------------------------------------------------------------------------
@@ -578,7 +590,7 @@ function self_nodes(A, B, op)
     ta = GO._relate_edge_index(P, ssa)
     tb = GO._relate_edge_index(P, ssb)
     function census(ss, off, tree, clip)
-        t = GO.NodeTable{Tuple{Float64, Float64}}()
+        t = GO.NodeTable{Tuple{Float64, Float64}, Tuple{Float64, Float64}}()
         sn = Dict{Tuple{Int32, Int32}, Vector{Int32}}()
         GO._collect_self_crossings!(P, t, sn, ss, Int32(off); exact = EX, clip)
         GO._collect_self_vertex_nodes!(P, t, sn, ss, Int32(off), tree; exact = EX, clip)
@@ -883,10 +895,12 @@ end
                          for i in 1:5000])
 
     #-- the elision is structural, not a timing accident: an areal target builds
-    #-- neither the locator nor the point map, and gets the shared empty list back
-    #-- by identity; a point target skips the `tuples` copy of the non-point input
-    @test GO._mixed_points(Planar(), Pts, A, 2, true, mpoly; exact = EX) === GO._NO_POINTS
-    let (pc, lc) = GO._mixed_components(A, 2, mpt)
+    #-- neither the locator nor the point map and returns an empty point list; a
+    #-- point target skips the output-type copy of the non-point input, and gets
+    #-- the shared empty component list back by identity
+    @test isempty(GO._mixed_points(Planar(), Tuple{Float64, Float64}, Pts, A, 2, true,
+                                   mpoly; exact = EX))
+    let (pc, lc) = GO._mixed_components(Planar(), Tuple{Float64, Float64}, A, 2, mpt)
         @test pc === GO._NO_COMPONENTS && lc === GO._NO_COMPONENTS
     end
 
@@ -924,12 +938,12 @@ end
     #-- here. (The untargeted throw is also asserted at the §4 testset above.)
     inp = GO._OverlayInput(Spherical(), A, A, 2, 2, EX, false, false, nothing, nothing)
     for t in (GI.PolygonTrait(), GI.MultiPolygonTrait())
-        @test_throws ArgumentError GO._resolve_empty_result(Spherical(), GO.OVERLAY_UNION,
-                                                            inp, t)
+        @test_throws ArgumentError GO._resolve_empty_result(Spherical(), USP,
+                                                            GO.OVERLAY_UNION, inp, t)
     end
     for t in (GI.LineStringTrait(), GI.MultiLineStringTrait(),
               GI.PointTrait(), GI.MultiPointTrait())
-        r = GO._resolve_empty_result(Spherical(), GO.OVERLAY_UNION, inp, t)
+        r = GO._resolve_empty_result(Spherical(), USP, GO.OVERLAY_UNION, inp, t)
         @test r isa AbstractVector ? isempty(r) : GI.ngeom(r) == 0
     end
 end
@@ -988,17 +1002,25 @@ regression could hide.
                 Tuple{typeof(P), typeof(P)}]   # the point × point path
 
     for (single, multi, _) in TARGETS, t in (single, multi)
-        inferred = Type[]
-        for m in (Planar(), Spherical()), Ts in argtypes
-            probe = (a, b) -> GO.intersection(GO.OverlayNG(m), a, b; target = t)
-            R = Base.return_types(probe, Ts)[1]
-            @test isconcretetype(R)
-            push!(inferred, R)
+        for m in (Planar(), Spherical())
+            inferred = Type[]
+            for Ts in argtypes
+                probe = (a, b) -> GO.intersection(GO.OverlayNG(m), a, b; target = t)
+                R = Base.return_types(probe, Ts)[1]
+                @test isconcretetype(R)
+                push!(inferred, R)
+            end
+            #-- and it is ONE type across every input shape
+            @test length(unique(inferred)) == 1
+            #-- which is exactly the type the call actually returns
+            @test only(unique(inferred)) ===
+                  typeof(GO.intersection(GO.OverlayNG(m), A, B; target = t))
         end
-        #-- and it is ONE type across every manifold and input shape
-        @test length(unique(inferred)) == 1
-        #-- which is exactly the type the call actually returns
-        @test only(unique(inferred)) === typeof(GO.intersection(GO.OverlayNG(), A, B; target = t))
+        #-- the return type is a function of (target, point_type) and nothing
+        #-- else: ask the sphere for lon/lat and the planar type comes back
+        @test typeof(GO.intersection(GO.OverlayNG(Spherical();
+                        point_type = Tuple{Float64, Float64}), A, B; target = t)) ===
+              typeof(GO.intersection(GO.OverlayNG(), A, B; target = t))
     end
 
     #-- all four public wrappers forward `target` without widening the inference
@@ -1032,7 +1054,7 @@ end
     #-- that the wrapper TYPE infers concretely is asserted by `all(isconcretetype,
     #-- ms)` in the testset above (`isconcretetype(typeof(x))` would be a tautology
     #-- — `typeof` is always concrete — so it is deliberately not written here)
-    @test eltype(GI.getgeom(gc)) === GO._ResultComponent
+    @test eltype(GI.getgeom(gc)) === GO._result_component_type(Tuple{Float64, Float64})
     #-- and the collection really is mixed-dimension, with its parts intact
     traits = [GI.trait(g) for g in GI.getgeom(gc)]
     @test any(t -> t isa GI.PolygonTrait, traits)
@@ -1147,33 +1169,76 @@ test below for where it actually sits.
 end
 
 #=
-The threshold is `_RING_GRID_MARGIN` steps of the output grid and nothing else,
-so it must land in the same place on both manifolds and move only with the
-format's resolution — not with the geometry, the manifold, or the operand size.
+The threshold is `_RING_GRID_MARGIN` steps of the OUTPUT grid and nothing else,
+so it moves with the format's resolution and with nothing else — not with the
+geometry, not with the manifold, not with the operand size. Which makes the
+fixture above a measuring instrument: run the identical pair of polygons through
+all three output formats and the drop boundary has to land in three different
+places, each one predicted by `_ring_grid_step` alone.
 
-At `x0 = 1.0` the grid step is `eps(1.0) = 2^-52` (latitude's `eps(50.0)` is
-coarser, and `_ring_grid_step` takes the finer axis). A `k`-ULP excursion makes a
-needle of maximum width `k` steps and hence MEAN width `k/2` steps, so the
-`< 4` test flips between `k = 6` (mean width 3) and `k = 8` (mean width 4).
-Both manifolds, same k, because both are measuring the same output grid.
+A `k`-ULP excursion of longitude at `x0 = 1.0` makes a needle of maximum width
+`k · eps(1.0)` degrees and hence MEAN width half of that, so the `< 4·u` test
+flips at the `k` where `k/2` needle half-widths reach `4u`:
+
+  planar `(x, y)`      u = eps(1.0) = 2^-52 (latitude's eps(50.0) is coarser and
+                       `_ring_grid_step` takes the finer axis), the needle's own
+                       width is measured in the same units, so `k_flip = 8`.
+  spherical (lon,lat)  u = min(eps(1.0)·cos φ, eps(50.0))·π/180 = 2.5e-18 rad
+                       and one longitude ULP is eps(1.0)·cos φ·π/180 = 2.5e-18
+                       rad of arc — the same number, because the format and the
+                       excursion are both longitude here. `k_flip = 8` again.
+  spherical xyz        u = eps(max|component|) over the ring = eps(y) = 1.7e-18
+                       rad, so one longitude ULP is 1.45 grid steps rather than
+                       one, and `k_flip = 5.5` (measured: 5 drops, 6 keeps).
+
+The third row is the whole point of emitting xyz. `lon = 1°` is a place where
+Float64 longitude is unusually fine — `eps` decays towards zero and the prime
+meridian is a coordinate singularity of the CHART, not of the sphere — so the
+lon/lat grid claims a resolution there that no rotation-invariant reading of the
+sphere has. The xyz grid has no such place: `min` over three components of a
+unit vector is bounded below by nothing at all near a coordinate plane either,
+but its COARSEST value anywhere is `eps(1.0)`, asserted below.
 =#
 @testset "the collapse threshold is the output grid, and nothing else" begin
     @test GO._RING_GRID_MARGIN == 4.0
-    for m in (Planar(), Spherical())
-        @test GI.nring(GO.union(GO.OverlayNG(m), shared_edge_pair(3, 6)...)) == 1
-        @test GI.nring(GO.union(GO.OverlayNG(m), shared_edge_pair(3, 8)...)) == 2
+    for (m, pt, k_drop, k_keep) in ((Planar(), Tuple{Float64, Float64}, 6, 8),
+                                    (Spherical(), Tuple{Float64, Float64}, 6, 8),
+                                    (Spherical(), USP, 4, 6))
+        alg = GO.OverlayNG(m; point_type = pt)
+        @test GI.nring(GO.union(alg, shared_edge_pair(3, k_drop)...)) == 1
+        @test GI.nring(GO.union(alg, shared_edge_pair(3, k_keep)...)) == 2
     end
 
-    #-- the grid step itself: the finer of the two axes, and on the sphere
-    #-- converted from degrees to the radians the exact width is measured in
+    #-- the grid step itself. Planar and lon/lat: the finer of the two axes, the
+    #-- latter converted from degrees to the radians the exact width is measured
+    #-- in. xyz: the finest of the three components, here `y = cos φ sin λ` at
+    #-- the ring's east/north corner, and already in chord units.
     pts = [(1.0, 49.0), (1.0, 50.0), (2.0, 50.0), (1.0, 49.0)]
+    xyz = [GO._to_kernel_point(Spherical(), p) for p in pts]
     @test GO._ring_grid_step(Planar(), pts) == min(eps(2.0), eps(50.0))
     @test GO._ring_grid_step(Spherical(), pts) ≈
           min(eps(2.0) * cosd(49.5), eps(50.0)) * (π / 180)
+    @test GO._ring_grid_step(Spherical(), xyz) == eps(cosd(50.0) * sind(2.0))
+
     #-- it is genuinely LOCAL: the same shape a thousand times further out sits
     #-- on a grid a thousand times coarser, so the test is scale-free
     far = [(1024.0 * p[1], 1024.0 * p[2]) for p in pts]
     @test GO._ring_grid_step(Planar(), far) == 1024 * GO._ring_grid_step(Planar(), pts)
+
+    #-- the xyz step is bounded above by eps(1.0) wherever a ring sits, because
+    #-- some component of a unit vector is always ≥ 1/√3. The lon/lat step has
+    #-- no such bound: `eps` grows with the magnitude of the number it is taken
+    #-- of, and a longitude near the antimeridian is a big number naming a place
+    #-- no different from any other. At (179°, 45°) that is a factor of 71.
+    ring_at(λ, φ) = [(λ + d, φ + d) for d in (0.0, 0.05, 0.1, 0.0)]
+    for (λ, φ) in ((0.0, 0.0), (45.0, 45.0), (179.0, 89.9), (-123.0, 49.0), (0.0, -89.0))
+        ring_xyz = [GO._to_kernel_point(Spherical(), p) for p in ring_at(λ, φ)]
+        @test GO._ring_grid_step(Spherical(), ring_xyz) <= eps(1.0)
+    end
+    seam = ring_at(179.0, 45.0)
+    @test GO._ring_grid_step(Spherical(),
+              [GO._to_kernel_point(Spherical(), p) for p in seam]) <
+          GO._ring_grid_step(Spherical(), seam) / 50
 end
 
 #=
@@ -1243,9 +1308,8 @@ off the exact node directions when the rounded ones cannot carry it.
     GO._mark_result_area_edges!(g, GO.OVERLAY_INTERSECTION)
     GO._unmark_duplicate_edges_from_result_area!(g)
     rae = GO.graph_result_area_edges(g)
-    P = typeof(GO._to_kernel_point(m, (0.0, 0.0)))
     ctx = GO._PolyBuilderCtx(m, g.edges, g.arr, EX, GO._MaxEdgeRing[],
-                             GO._OverlayEdgeRing{P}[], Int32[], Int32[])
+                             GO._edge_ring_type(GO.output_point_type(g))[], Int32[], Int32[])
     for e in rae
         GO._link_result_area_max_ring_at_node!(ctx.edges, e)
     end
@@ -1285,9 +1349,8 @@ every ring of an ordinary overlay.
         GO._unmark_duplicate_edges_from_result_area!(g)
         rae = GO.graph_result_area_edges(g)
         isempty(rae) && continue
-        P = typeof(GO._to_kernel_point(m, (0.0, 0.0)))
         ctx = GO._PolyBuilderCtx(m, g.edges, g.arr, EX, GO._MaxEdgeRing[],
-                                 GO._OverlayEdgeRing{P}[], Int32[], Int32[])
+                                 GO._edge_ring_type(GO.output_point_type(g))[], Int32[], Int32[])
         for e in rae
             GO._link_result_area_max_ring_at_node!(ctx.edges, e)
         end

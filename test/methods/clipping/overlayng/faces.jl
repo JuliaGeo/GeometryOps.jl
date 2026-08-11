@@ -345,7 +345,9 @@ end
     @test length(ctx.edge_rings) == 2
     kept = only(er for er in 1:length(ctx.edge_rings)
                 if GO._face_ring_location(ctx, er, 0) == GO.LOC_INTERIOR)
-    @test !((5.0, 5.0) in ctx.edge_rings[kept].ring_pts)
+    #-- the spherical arrangement emits unit vectors, so the dangle tip is named
+    #-- by its kernel image rather than by its lon/lat pair
+    @test !(GO._to_kernel_point(SPH, (5.0, 5.0)) in ctx.edge_rings[kept].ring_pts)
     @test length(ctx.edge_rings[kept].ring_pts) == 6
     @test isapprox(GO.area(SPH, GI.Polygon([ctx.edge_rings[kept].ring_pts])),
                    GO.area(SPH, poly); rtol = 1e-12)

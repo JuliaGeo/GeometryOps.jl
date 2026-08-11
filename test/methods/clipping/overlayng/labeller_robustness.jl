@@ -105,11 +105,18 @@ end
     @test all(GO._node_kernel_point(arr_s, i) isa GO.UnitSphericalPoint for i in vertex_ids)
     @test all(GO._node_kernel_point(arr_s, i) in ring_pts for i in vertex_ids)
 
-    #-- ...and that is NOT what the emitted coordinate round-trips back to: the
-    #-- emission runs `atan`/`asin` and the locator would run `cos`/`sin` on the
-    #-- way back in, which is exactly the loss F1 removes.
-    round_tripped = [GO._to_kernel_point(SPH, GO.node_point(arr_s, i)) for i in vertex_ids]
-    @test any(round_tripped[j] != GO._node_kernel_point(arr_s, vertex_ids[j])
+    #-- ...and by default that is also what comes OUT: the arrangement emits in
+    #-- the kernel chart, so a vertex node's output coordinate is the ingested
+    #-- unit vector itself and there is nothing left for F1 to remove.
+    @test all(GO.node_point(arr_s, i) === GO._node_kernel_point(arr_s, i)
+              for i in vertex_ids)
+
+    #-- ask for lon/lat output and the loss reappears exactly where F1 always
+    #-- said it was: emission runs `atan`/`asin` and the locator would run
+    #-- `cos`/`sin` on the way back in.
+    arr_ll = GO.NodedArrangement(SPH, A, B; exact = EX, point_type = Tuple{Float64, Float64})
+    round_tripped = [GO._to_kernel_point(SPH, GO.node_point(arr_ll, i)) for i in vertex_ids]
+    @test any(round_tripped[j] != GO._node_kernel_point(arr_ll, vertex_ids[j])
               for j in eachindex(vertex_ids))
 
     #-- a crossing node's kernel point is the exact on-arc crossing direction,

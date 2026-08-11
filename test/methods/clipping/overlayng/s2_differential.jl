@@ -311,7 +311,9 @@ function check_op(op, A, B, wa, wb, scale, key)
     end
 
     ow = try
-        write_wkb(ours)
+        #-- WKB is a lon/lat wire format; `to_lonlat` (common.jl) is the chart
+        #-- boundary, so the engine stays in its default emission mode
+        write_wkb(to_lonlat(ours))
     catch err
         err isa WKBWriteError || rethrow()
         #-- an areal result the WKB codec cannot express is a mixed collection,

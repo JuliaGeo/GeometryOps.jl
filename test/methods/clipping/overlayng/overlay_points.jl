@@ -21,7 +21,7 @@ import GeometryOps: Planar, Spherical, True
 
 const OPS = OP_CODES
 
-ov(m, op, a, b) = GO._overlay_ng(m, op, a, b; exact = EX)
+ov(m, op, a, b; kw...) = GO._overlay_ng(m, op, a, b; exact = EX, kw...)
 
 # Result equals the expected WKT (topologically).
 eqw(r, ewkt) = LG.equals(lgc(r), wkt(ewkt))
@@ -110,7 +110,7 @@ end
     #-- and output order is input order (A then the B points not in A). The
     #-- planar `(1 1)` duplicate cannot show first-vs-last provenance — both
     #-- occurrences have the same coordinate — so the spherical asserts below,
-    #-- where the two occurrences differ in the last bits, are what pin it.
+    #-- where two different lon/lat spellings name one point, are what pin it.
     a = wkt("MULTIPOINT ((1 1), (2 1), (1 1))")
     b = wkt("MULTIPOINT ((2 1), (3 1))")
     r = ov(Planar(), GO.OVERLAY_UNION, a, b)
@@ -122,14 +122,33 @@ end
     #-- signed zeros identify (kernel-point normalization)
     @test npts(ov(Planar(), GO.OVERLAY_INTERSECTION,
                        GI.Point((-0.0, 0.0)), GI.Point((0.0, -0.0)))) == 1
-    #-- FIRST occurrence supplies the coordinate: on the sphere two lon/lat pairs
-    #-- a few ulps apart map to the same kernel point, so the pair that survives
-    #-- says which occurrence the merge kept.
-    p1 = (1.0, 1.0); p2 = (nextfloat(1.0, 2), 1.0)
-    sa = GI.MultiPoint([p1, (2.0, 1.0), p2])
-    @test coords(ov(Spherical(), GO.OVERLAY_UNION, sa, GI.MultiPoint([(2.0, 1.0)])))[1] == p1
-    @test coords(ov(Spherical(), GO.OVERLAY_UNION, GI.MultiPoint([p2, p1]),
-                                  GI.MultiPoint([(2.0, 1.0)])))[1] == p2
+    #=
+    FIRST occurrence supplies the output coordinate. The fixture is the pole,
+    whose longitude is arbitrary: `(0, 90)` and `(45, 90)` are two spellings of
+    ONE kernel point, so the merge really does have to choose, and which
+    spelling survives is the choice made visible.
+
+    It is only visible in the lon/lat row. The default row emits the kernel
+    point itself, so both spellings produce the identical coordinate and the
+    provenance question dissolves — which is asserted below rather than skipped,
+    because "the output does not depend on which duplicate came first" is a
+    stronger property than the rule it replaces, and it is the reason the rule
+    stops being observable.
+    =#
+    ll = Tuple{Float64, Float64}
+    north, north2 = (0.0, 90.0), (45.0, 90.0)
+    ab = (GI.MultiPoint([north, (2.0, 1.0)]), GI.MultiPoint([north2]))
+    ba = (GI.MultiPoint([north2, (2.0, 1.0)]), GI.MultiPoint([north]))
+    r_ab = ov(Spherical(), GO.OVERLAY_UNION, ab...; point_type = ll)
+    r_ba = ov(Spherical(), GO.OVERLAY_UNION, ba...; point_type = ll)
+    #-- fixture premise: the two spellings merged, so one of them was dropped
+    @test npts(r_ab) == 2 && npts(r_ba) == 2
+    @test coords(r_ab)[1] == north
+    @test coords(r_ba)[1] == north2
+    #-- and in the default (xyz) row the two orders agree exactly
+    x_ab = collect(GI.getpoint(ov(Spherical(), GO.OVERLAY_UNION, ab...)))
+    x_ba = collect(GI.getpoint(ov(Spherical(), GO.OVERLAY_UNION, ba...)))
+    @test x_ab[1] === x_ba[1] === GO._to_kernel_point(Spherical(), north)
 end
 
 @testset "mixed-dimension symmetry (point on either side)" begin
@@ -213,8 +232,8 @@ end
     #-- driver by "both inputs empty" below; what only shows here is that
     #-- `GI.isempty` falls back to `false` for GeoInterface's own wrappers — which
     #-- is what the engine emits — and that is why `_ov_isempty` exists
-    for dim in (0, 1, 2)
-        @test GO._ov_isempty(GO._empty_geom(dim))
+    for dim in (0, 1, 2), P in (Tuple{Float64, Float64}, USP)
+        @test GO._ov_isempty(GO._empty_geom(P, dim))
     end
     @test GO._ov_isempty(wkt("POINT EMPTY"))
     @test !GO._ov_isempty(GI.Point((1.0, 2.0)))
@@ -268,13 +287,39 @@ end
 # 4. Spherical
 # ---------------------------------------------------------------------------
 
+#=
+The engine in its lon/lat row. Everything asserted with `eqw` below is a claim
+about WHICH components survive, stated against a WKT written in degrees — and
+GEOS `equals` is an exact predicate, so it answers "not equal" about two
+geometries that differ by one ULP in one vertex.
+
+`OverlayNG(Spherical())` emits unit-sphere xyz by default, and bringing that
+back to degrees for GEOS costs 2–4 ULPs of longitude on these fixtures
+(`(1, 1)` returns as `(0.9999999999999998, 1)`). Comparing through that
+conversion would mean loosening every assertion here from "this point" to "this
+point, roughly" — trading an exact oracle for an approximate one to accommodate
+a conversion the assertion is not even about.
+
+So the survivorship claims run in the row whose output chart is the WKT's:
+there an input vertex no operation cuts passes through bit-for-bit and both
+sides of the comparison are exact. `point_type` is spelled for `Planar` too,
+where it is the only supported type and therefore a no-op, so the mixed
+manifold loops below read the same on both legs.
+
+The default row is pinned elsewhere and not by weaker means: by kernel-point
+identity in "point merge and output order" above, by the bit-exact vertex
+round-trip in `api.jl`, and — on the areal paths, against s2geography — by
+`s2_differential.jl`.
+=#
+llov(m, op, a, b) = ov(m, op, a, b; point_type = Tuple{Float64, Float64})
+
 @testset "spherical point × point" begin
     a = GI.MultiPoint([(1.0, 1.0), (2.0, 1.0)])
     b = GI.Point((2.0, 1.0))
-    @test eqw(ov(Spherical(), GO.OVERLAY_INTERSECTION, a, b), "POINT (2 1)")
-    @test eqw(ov(Spherical(), GO.OVERLAY_UNION, a, b), "MULTIPOINT ((1 1), (2 1))")
-    @test eqw(ov(Spherical(), GO.OVERLAY_DIFFERENCE, a, b), "POINT (1 1)")
-    @test eqw(ov(Spherical(), GO.OVERLAY_SYMDIFFERENCE, a, b), "POINT (1 1)")
+    @test eqw(llov(Spherical(), GO.OVERLAY_INTERSECTION, a, b), "POINT (2 1)")
+    @test eqw(llov(Spherical(), GO.OVERLAY_UNION, a, b), "MULTIPOINT ((1 1), (2 1))")
+    @test eqw(llov(Spherical(), GO.OVERLAY_DIFFERENCE, a, b), "POINT (1 1)")
+    @test eqw(llov(Spherical(), GO.OVERLAY_SYMDIFFERENCE, a, b), "POINT (1 1)")
     @test is_empty_dim(ov(Spherical(), GO.OVERLAY_INTERSECTION,
                           GI.Point((1.0, 1.0)), GI.Point((3.0, 1.0))), 0)
 end
@@ -306,7 +351,7 @@ end
     #-- that short circuit, since (45, 62) is outside the ring's lat/lon box.
     PG = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (90.0, 60.0), (0.0, 60.0), (0.0, 0.0)]])
     inside = GI.Point((45.0, 62.0))
-    @test eqw(ov(Spherical(), GO.OVERLAY_INTERSECTION, PG, inside), "POINT (45 62)")
+    @test eqw(llov(Spherical(), GO.OVERLAY_INTERSECTION, PG, inside), "POINT (45 62)")
     @test is_empty_dim(ov(Planar(), GO.OVERLAY_INTERSECTION, PG, inside), 0)
     #-- and the same point is dropped by the spherical DIFFERENCE
     @test is_empty_dim(ov(Spherical(), GO.OVERLAY_DIFFERENCE, inside, PG), 0)
@@ -315,10 +360,10 @@ end
     outside = GI.Point((45.0, 80.0))
     for m in (Planar(), Spherical())
         @test is_empty_dim(ov(m, GO.OVERLAY_INTERSECTION, PG, outside), 0)
-        @test eqw(ov(m, GO.OVERLAY_DIFFERENCE, outside, PG), "POINT (45 80)")
+        @test eqw(llov(m, GO.OVERLAY_DIFFERENCE, outside, PG), "POINT (45 80)")
     end
     #-- UNION copies the area through and keeps only exterior points
-    r = ov(Spherical(), GO.OVERLAY_UNION, PG, GI.MultiPoint([(45.0, 62.0), (45.0, 80.0)]))
+    r = llov(Spherical(), GO.OVERLAY_UNION, PG, GI.MultiPoint([(45.0, 62.0), (45.0, 80.0)]))
     @test GI.trait(r) isa GI.GeometryCollectionTrait
     @test eqw(r, "GEOMETRYCOLLECTION (POLYGON ((0 0, 90 0, 90 60, 0 60, 0 0)), POINT (45 80))")
 end
@@ -332,7 +377,7 @@ end
     @test is_empty_dim(ov(Spherical(), GO.OVERLAY_INTERSECTION, L, planar_mid), 0)
     #-- an endpoint is on the arc on both manifolds
     for m in (Planar(), Spherical())
-        @test eqw(ov(m, GO.OVERLAY_INTERSECTION, L, GI.Point((0.0, 0.0))), "POINT (0 0)")
+        @test eqw(llov(m, GO.OVERLAY_INTERSECTION, L, GI.Point((0.0, 0.0))), "POINT (0 0)")
     end
     #-- a point on a constant-latitude planar segment is off the great circle
     L2 = GI.LineString([(0.0, 60.0), (90.0, 60.0)])
@@ -344,7 +389,7 @@ end
     PG = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
     EP = wkt("POINT EMPTY")
     @test is_empty_dim(ov(Spherical(), GO.OVERLAY_INTERSECTION, PG, EP), 0)
-    @test eqw(ov(Spherical(), GO.OVERLAY_UNION, PG, EP),
+    @test eqw(llov(Spherical(), GO.OVERLAY_UNION, PG, EP),
               "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))")
     for op in OPS
         @test is_empty_dim(ov(Spherical(), op, EP, EP), 0)

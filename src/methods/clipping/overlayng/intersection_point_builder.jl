@@ -10,9 +10,9 @@
 # Returns the result points as coordinate tuples; the driver wraps them. Nothing
 # here is exported.
 
-function _build_points(g::OverlayGraph)
+function _build_points(g::OverlayGraph{P, T}) where {P, T}
     edges = g.edges
-    points = Tuple{Float64, Float64}[]
+    points = T[]
     for ne in graph_node_edges(g)
         if _is_result_point(edges, ne)
             push!(points, node_point(g.arr, he_origin(edges, ne)))

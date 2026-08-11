@@ -15,6 +15,13 @@ using LinearAlgebra: cross, dot, norm
 
 _crossing_ids(arr) = [Int32(i) for i in 1:GO.num_nodes(arr) if arr.nodes.keys[i].is_crossing]
 
+# Whether an emitted node coordinate is the lon/lat point `ll`. The arrangement
+# emits in the manifold's own chart by default — `(x, y)` on the plane,
+# unit-sphere xyz on the sphere — so the comparison is against `ll`'s kernel
+# image, not against `ll` itself.
+_near_kernel(m, p, ll; atol = 1e-12) =
+    (q = GO._to_kernel_point(m, ll); all(i -> isapprox(p[i], q[i]; atol), eachindex(q)))
+
 # every proper crossing appears as one shared node id on exactly one A-segment and
 # one B-segment interior list (invariant 1); node ids are unique (invariant 2);
 # no NodedEdge is zero-length (invariant 3).
@@ -77,8 +84,7 @@ end
         arr = GO.NodedArrangement(m, A, B; exact = True())
         cids = _crossing_ids(arr)
         @test length(cids) == 1                          # merged into one node
-        p = GO.node_point(arr, cids[1])
-        @test isapprox(p[1], 0.0; atol = 1e-12) && isapprox(p[2], 0.0; atol = 1e-12)
+        @test _near_kernel(m, GO.node_point(arr, cids[1]), (0.0, 0.0))
         # the merged node is incident to both A lines and B (three parent strings)
         na = count(ss -> ss.is_a, arr.segstrings)
         check_invariants(arr, na)
@@ -95,8 +101,7 @@ end
         arr = GO.NodedArrangement(m, A, B; exact = True())
         # the origin is a single node shared by A, B-line-1 and B-line-2's vertex
         origin_ids = [i for i in 1:GO.num_nodes(arr)
-            if isapprox(GO.node_point(arr, i)[1], 0.0; atol = 1e-12) &&
-               isapprox(GO.node_point(arr, i)[2], 0.0; atol = 1e-12)]
+                      if _near_kernel(m, GO.node_point(arr, i), (0.0, 0.0))]
         @test length(origin_ids) == 1
     end
 end
@@ -184,10 +189,19 @@ end
     @test emit_ok                                     # node_point is the rational answer either way
 end
 
+#=
+Both spherical output rows, against the same exact authority. The gated Float64
+direction is what emission uses when the arcs are not near-tangent, and the
+question is how far it lands from `_sph_crossing_dir(True(), k)` — measured in
+degrees on the lon/lat row and as a chord in R³ on the xyz row, because that is
+the unit each row's own consumers measure in.
+=#
 @testset "spherical emission: direction within bound of exact" begin
     Ag = GI.MultiLineString([[(Float64(k) * 0.09 + 0.05, 0.0), (Float64(k) * 0.09 + 0.05 + 0.031, 20.0)] for k in 1:60])
     Bg = GI.MultiLineString([[(0.0, Float64(j) * 0.09 + 0.05), (20.0, Float64(j) * 0.09 + 0.05 + 0.029)] for j in 1:60])
-    arr = GO.NodedArrangement(Spherical(), Ag, Bg; exact = True())
+
+    arr = GO.NodedArrangement(Spherical(), Ag, Bg; exact = True(),
+                              point_type = Tuple{Float64, Float64})
     maxdev = 0.0
     for i in _crossing_ids(arr)
         k = arr.nodes.keys[i]
@@ -197,6 +211,19 @@ end
     end
     @test length(_crossing_ids(arr)) > 1000
     @test maxdev <= 1e-8                              # measured ≤1.4e-14° (S3)
+
+    #-- the default row: unit vectors, so the deviation is a chord and 1e-8 rad
+    #-- is the same bar 1e-8° was, an order of magnitude tighter
+    arr_x = GO.NodedArrangement(Spherical(), Ag, Bg; exact = True())
+    maxchord = 0.0
+    for i in _crossing_ids(arr_x)
+        k = arr_x.nodes.keys[i]
+        emitted = GO.node_point(arr_x, i)
+        @test emitted isa UnitSphericalPoint{Float64}
+        exact = GO._dir_to_usp(GO._sph_crossing_dir(True(), k))
+        maxchord = max(maxchord, sqrt(GO._usp_chord2(emitted, exact)))
+    end
+    @test maxchord <= 1e-8
 end
 
 # ---------------------------------------------------------------------------
@@ -221,11 +248,12 @@ end
 # still reports 0.
 #
 # `m` is the manifold the emitted coordinates are interpreted in, and it is the
-# arrangement's own — a spherical arrangement emits lon/lat that downstream
-# stages read as spherical, so a lon/lat-planar audit of it would be asking a
-# different question than the one the guarantee is about. Emission is lon/lat on
-# both manifolds, so the spherical audit lifts back to the kernel's unit vectors
-# first; that lift is exactly what the graph builder does with the same points.
+# arrangement's own — a spherical arrangement's emitted points are read by
+# downstream stages as spherical, so a lon/lat-planar audit of them would be
+# asking a different question than the one the guarantee is about. Both default
+# arrangements now emit in their manifold's kernel chart, so this lift is the
+# identity on both; it stays spelled out because the audit is also the natural
+# place to run a lon/lat arrangement through, where it is not.
 emitted_pt(::Planar, p) = p
 emitted_pt(::Spherical, p) = UnitSphericalPoint(GI.PointTrait(), p)
 
