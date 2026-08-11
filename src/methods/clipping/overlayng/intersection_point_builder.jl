@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # IntersectionPointBuilder — result points (port of JTS `IntersectionPointBuilder`)
 #
 # Phase 2b of the OverlayNG port (design doc §3). A port of

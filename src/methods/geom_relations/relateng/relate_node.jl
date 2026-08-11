@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # RelateNG node-edge topology
 #
 # Ports of JTS `RelateEdge.java` and `RelateNode.java`, in this order (JTS

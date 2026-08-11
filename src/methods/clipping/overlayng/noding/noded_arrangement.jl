@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # OverlayNG noding substrate — the `NodedArrangement`
 #
 # Phase 1 of the OverlayNG port (design doc `2026-07-16-overlayng-noding-substrate.md`).

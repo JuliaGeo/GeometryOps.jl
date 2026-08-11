@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # RelateNG point location
 #
 # Point-location machinery for RelateNG. This file holds the ports of three

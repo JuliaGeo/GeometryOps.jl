@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Result ring linking — maximal rings, minimal-ring split, edge rings
 #
 # Phase 2b of the OverlayNG port (design doc §3). Ports two JTS files kept

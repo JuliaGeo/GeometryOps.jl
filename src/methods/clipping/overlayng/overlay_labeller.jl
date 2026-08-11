@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # OverlayLabeller — the five-pass edge labelling (port of JTS `OverlayLabeller`)
 #
 # Phase 2b of the OverlayNG port (design doc `2026-07-16-overlayng-noding-substrate.md`,

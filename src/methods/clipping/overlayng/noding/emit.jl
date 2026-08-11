@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Emission (design §2.6) — the only lossy step
 #
 # `node_point(arr, id)` realizes a node's OUTPUT coordinate on demand and caches

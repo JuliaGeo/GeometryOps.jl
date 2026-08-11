@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # LineBuilder — result lines from the overlay graph (port of JTS `LineBuilder`)
 #
 # Phase 2b of the OverlayNG port (design doc §3). A port of

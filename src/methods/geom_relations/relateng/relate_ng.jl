@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Relate
 
 export relate, RelateNG, prepare
@@ -103,6 +105,8 @@ Java counterpart. Idiom changes:
 """
     RelateNG{M <: Manifold, A <: IntersectionAccelerator, E, BR <: BoundaryNodeRule}
 
+This functionality is experimental and may change at any time.
+
 The next-generation DE-9IM topological-relationship algorithm, a port of the
 JTS RelateNG algorithm by Martin Davis. Capabilities:
 
@@ -163,6 +167,8 @@ GeometryOpsCore.manifold(alg::RelateNG) = alg.manifold
 """
     relate([alg::RelateNG], a, b)::DE9IM
 
+This functionality is experimental and may change at any time.
+
 Computes the [`DE9IM`](@ref) matrix for the topological relationship between
 geometries `a` and `b`.
 
@@ -177,6 +183,8 @@ relate(a, b) = relate(RelateNG(), a, b)
 
 """
     relate([alg::RelateNG], a, b, im_pattern::AbstractString)::Bool
+
+This functionality is experimental and may change at any time.
 
 Tests whether the topological relationship between geometries `a` and `b`
 matches the DE-9IM matrix pattern `im_pattern` (9 characters over
@@ -196,6 +204,8 @@ relate(alg::RelateNG, a, im_pattern::AbstractString) =
 
 """
     relate_predicate(alg::RelateNG, predicate::TopologyPredicate, a, b)::Bool
+
+This functionality is experimental and may change at any time.
 
 Tests whether the topological relationship between geometries `a` and `b`
 satisfies the given [`TopologyPredicate`](@ref). This is the core evaluation
@@ -227,15 +237,25 @@ DE-9IM `T*F**FFF*` sense), which can differ from the structural equality
 the two-argument `GO.equals` implements only in exotic cases (both
 treat rotated/reversed rings and repeated points as equal).
 ==========================================================================#
+"This functionality is experimental and may change at any time."
 intersects(alg::RelateNG, g1, g2) = relate_predicate(alg, pred_intersects(), g1, g2)
+"This functionality is experimental and may change at any time."
 disjoint(alg::RelateNG, g1, g2)   = relate_predicate(alg, pred_disjoint(), g1, g2)
+"This functionality is experimental and may change at any time."
 contains(alg::RelateNG, g1, g2)   = relate_predicate(alg, pred_contains(), g1, g2)
+"This functionality is experimental and may change at any time."
 within(alg::RelateNG, g1, g2)     = relate_predicate(alg, pred_within(), g1, g2)
+"This functionality is experimental and may change at any time."
 covers(alg::RelateNG, g1, g2)     = relate_predicate(alg, pred_covers(), g1, g2)
+"This functionality is experimental and may change at any time."
 coveredby(alg::RelateNG, g1, g2)  = relate_predicate(alg, pred_coveredby(), g1, g2)
+"This functionality is experimental and may change at any time."
 crosses(alg::RelateNG, g1, g2)    = relate_predicate(alg, pred_crosses(), g1, g2)
+"This functionality is experimental and may change at any time."
 overlaps(alg::RelateNG, g1, g2)   = relate_predicate(alg, pred_overlaps(), g1, g2)
+"This functionality is experimental and may change at any time."
 touches(alg::RelateNG, g1, g2)    = relate_predicate(alg, pred_touches(), g1, g2)
+"This functionality is experimental and may change at any time."
 equals(alg::RelateNG, g1, g2)     = relate_predicate(alg, pred_equalstopo(), g1, g2)
 
 #==========================================================================
@@ -605,6 +625,8 @@ branches.
 """
     PreparedRelate{ALG, RG, SS, T}
 
+This functionality is experimental and may change at any time.
+
 A prepared RelateNG instance for optimized repeated evaluation of
 topological relationships against a single geometry `a` (the "prepared
 mode" of JTS `RelateNG.prepare`). Holds:
@@ -638,6 +660,8 @@ end
 
 """
     prepare(alg::RelateNG, a; validate = <manifold-dependent>)::PreparedRelate
+
+This functionality is experimental and may change at any time.
 
 `prepare` is the generic entry point for prepared-geometry optimizations in
 GeometryOps; `RelateNG` is currently the only algorithm implementing it.
@@ -860,6 +884,8 @@ end
 """
     relate(p::PreparedRelate, b)::DE9IM
 
+This functionality is experimental and may change at any time.
+
 Computes the DE-9IM matrix for the topological relationship of the prepared
 geometry to `b`. Port of the instance method `RelateNG.evaluate(Geometry)`.
 """
@@ -872,6 +898,8 @@ end
 """
     relate(p::PreparedRelate, b, im_pattern::AbstractString)::Bool
 
+This functionality is experimental and may change at any time.
+
 Tests whether the topological relationship of the prepared geometry to `b`
 matches the DE-9IM pattern. Port of `RelateNG.evaluate(Geometry, String)`.
 """
@@ -880,6 +908,8 @@ relate(p::PreparedRelate, b, im_pattern::AbstractString) =
 
 """
     relate_predicate(p::PreparedRelate, predicate::TopologyPredicate, b)::Bool
+
+This functionality is experimental and may change at any time.
 
 Tests whether the topological relationship of the prepared geometry to `b`
 satisfies the predicate. Port of the instance method

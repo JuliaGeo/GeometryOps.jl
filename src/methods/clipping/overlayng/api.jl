@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # OverlayNG — the exact-arrangement overlay algorithm
 
 export OverlayNG, symdifference
@@ -107,6 +109,8 @@ ladder would be dead weight.
 """
     OverlayNG(; manifold = Planar(), exact = True(), point_type = ...)
     OverlayNG(manifold::Manifold; kwargs...)
+
+This functionality is experimental and may change at any time.
 
 The exact-arrangement overlay algorithm, a port of the JTS OverlayNG engine by
 Martin Davis, extended to the sphere.
@@ -321,14 +325,17 @@ _rebuilt_point_type(alg::OverlayNG, m::Manifold) =
 # driver. `intersection`, `union` and `difference` gain an `OverlayNG` method
 # beside their existing Foster–Hormann ones; `symdifference` is new.
 
+"This functionality is experimental and may change at any time."
 intersection(alg::OverlayNG, geom_a, geom_b; target = nothing) =
     _overlay_ng(alg.manifold, OVERLAY_INTERSECTION, geom_a, geom_b;
                 exact = alg.exact, point_type = alg.point_type, target)
 
+"This functionality is experimental and may change at any time."
 union(alg::OverlayNG, geom_a, geom_b; target = nothing) =
     _overlay_ng(alg.manifold, OVERLAY_UNION, geom_a, geom_b;
                 exact = alg.exact, point_type = alg.point_type, target)
 
+"This functionality is experimental and may change at any time."
 difference(alg::OverlayNG, geom_a, geom_b; target = nothing) =
     _overlay_ng(alg.manifold, OVERLAY_DIFFERENCE, geom_a, geom_b;
                 exact = alg.exact, point_type = alg.point_type, target)
@@ -336,6 +343,8 @@ difference(alg::OverlayNG, geom_a, geom_b; target = nothing) =
 """
     symdifference([alg::OverlayNG], geom_a, geom_b)
     symdifference(manifold::Manifold, geom_a, geom_b)
+
+This functionality is experimental and may change at any time.
 
 The symmetric difference of two geometries: everything that lies in exactly one
 of them, i.e. `union(difference(a, b), difference(b, a))`.

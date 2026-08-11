@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # OverlayLabel — the per-edge topological label (port of JTS `OverlayLabel`)
 #
 # Phase 2a of the OverlayNG port (design doc `2026-07-16-overlayng-noding-substrate.md`,

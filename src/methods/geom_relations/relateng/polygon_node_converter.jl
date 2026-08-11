@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # RelateNG polygon node converter
 #
 # Port of JTS `PolygonNodeConverter.java`. Method order parallels the Java

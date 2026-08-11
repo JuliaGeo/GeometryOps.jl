@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # PolygonBuilder — result polygons from the marked result-area edges
 #
 # Phase 2b of the OverlayNG port (design doc §3). A port of

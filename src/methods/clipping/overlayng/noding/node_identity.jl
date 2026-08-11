@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Stage 3 — node identity (design §2.4)
 #
 # Two tiers, no canonical key. Tier 1 (egal `NodeKey` equality) already ran

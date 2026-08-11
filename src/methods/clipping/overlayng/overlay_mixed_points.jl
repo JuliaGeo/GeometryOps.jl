@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # OverlayMixedPoints — point × (line | area) overlay (port of JTS `OverlayMixedPoints`)
 #
 # Phase 3 of the OverlayNG port (design doc §4). A port of

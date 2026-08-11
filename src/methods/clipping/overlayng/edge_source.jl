@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # EdgeSourceInfo — per-ring/line source topology (port of JTS `EdgeSourceInfo`)
 #
 # Phase 2a of the OverlayNG port (design doc §2.7, §3 amendment 3). Records the

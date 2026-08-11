@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # OverlayNG driver — the internal end-to-end overlay engine
 #
 # Phase 2b of the OverlayNG port (design doc §3, §4). Ties the phase-1 noding

@@ -1,3 +1,5 @@
+# NOTE: This functionality is experimental and may change at any time.
+
 # # Stage 1 — collect (design §2.3)
 #
 # Enumerate candidate segment pairs (A × B) through the reused RelateNG edge
