@@ -237,10 +237,8 @@ DE-9IM `T*F**FFF*` sense), which can differ from the structural equality
 the two-argument `GO.equals` implements only in exotic cases (both
 treat rotated/reversed rings and repeated points as equal).
 
-These rebuild the A side on every call. When one geometry is queried many
-times, [`prepare`](@ref) it and pass the `PreparedRelate` as `g1`: it
-flows through `relate_predicate` below, which reuses the cached structures
-rather than rebuilding them.
+These rebuild the A side on every call; pass a [`prepare`](@ref)d `g1` to
+reuse it instead.
 ==========================================================================#
 "This functionality is experimental and may change at any time."
 intersects(alg::RelateNG, g1, g2) = relate_predicate(alg, pred_intersects(), g1, g2)
@@ -637,11 +635,9 @@ topological relationships against a single geometry `a` (the "prepared
 mode" of JTS `RelateNG.prepare`). Holds:
 
 - `alg`: the [`RelateNG`](@ref) algorithm configuration,
-- `input`: the A geometry exactly as passed to [`prepare`](@ref). Held
-  because `geom_a` below is *manifold-specific* — its cached extents are
-  the interaction bounds of `alg`'s manifold (3D on `Spherical`), so it
-  cannot be re-prepared under a different one; the raw input can. Costs
-  nothing: the wrapper tree already shares the input's linework,
+- `input`: the A geometry as passed to [`prepare`](@ref), which re-prepares
+  from it under a different `alg` (`geom_a` below caches `alg`'s manifold's
+  extents, so it cannot serve another),
 - `geom_a`: the A-side [`RelateGeometry`](@ref), constructed with
   `is_prepared = true` and with its lazy locator/unique-points caches
   forced,
@@ -759,32 +755,15 @@ _prepare_validate_default(::Manifold) = false
 
 This functionality is experimental and may change at any time.
 
-`prepare` is idempotent: under the algorithm `p` was prepared with, `p`
-itself is returned, at no cost. This is what lets a `PreparedRelate` be
-passed as the A geometry to any `RelateNG` entry point — [`relate`](@ref),
-[`relate_predicate`](@ref), and the named predicates `covers(alg, a, b)`
-etc. — without rebuilding the cached structures on every call.
-
-Under any other `alg` the geometry is prepared afresh from `p`'s input, at
-the full cost of [`prepare`](@ref) — every setting of `RelateNG` is baked
-into either the prepared `RelateGeometry` and its locators or the edge
-index built over the segment strings.
-
-!!! warning
-    That rebuild is paid on *every* call: preparing under one algorithm and
-    querying under another — `prep = prepare(RelateNG(Spherical()), a)`
-    followed by `covers(RelateNG(), prep, b)` in a loop — is exactly what
-    `prepare` exists to avoid. Prepare under the algorithm you query with.
-
-`validate` applies only to the rebuild; a reused prepared geometry keeps
-whatever validation state it was built with.
+Returns `p` under the algorithm it was prepared with, so a `PreparedRelate`
+can be passed as the A geometry to any `RelateNG` entry point. Under any
+other `alg` — every setting is baked into the prepared structures — it is
+prepared afresh from `p.input`, at the full cost of [`prepare`](@ref) on
+every call, so prepare under the algorithm you query with. `validate`
+applies only to that rebuild.
 """
 prepare(alg::RelateNG, p::PreparedRelate;
         validate::Bool = _prepare_validate_default(GeometryOpsCore.manifold(alg))) =
-    #-- rebuild from the raw input, never from `p.geom_a.geom`: the latter
-    #-- carries extents cached as *this* manifold's interaction bounds
-    #-- (3D on `Spherical`), which another manifold would silently reuse
-    #-- as its own and prune against
     alg == p.alg ? p : prepare(alg, p.input; validate)
 
 #=
@@ -962,11 +941,8 @@ satisfies the predicate. Port of the instance method
 relate_predicate(p::PreparedRelate, predicate::TopologyPredicate, b) =
     evaluate!(p.alg, p.geom_a, b, predicate, p)
 
-# A `PreparedRelate` stands in for the A geometry at every `RelateNG` entry
-# point: `relate(alg, p, b)`, `relate(alg, p, b, im_pattern)` and the named
-# predicates `covers(alg, p, b)` etc. all forward here, and `prepare` returns
-# `p` itself under the algorithm it was prepared with, so the cached A side is
-# reused instead of rebuilt.
+# The prepared A side at the algorithm entry points: `relate` and the named
+# predicates all forward here, so this is the only method they need.
 relate_predicate(alg::RelateNG, predicate::TopologyPredicate, p::PreparedRelate, b) =
     relate_predicate(prepare(alg, p), predicate, b)
 
