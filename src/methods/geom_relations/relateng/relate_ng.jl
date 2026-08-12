@@ -236,6 +236,12 @@ dispatching to the old engines (design D4).
 DE-9IM `T*F**FFF*` sense), which can differ from the structural equality
 the two-argument `GO.equals` implements only in exotic cases (both
 treat rotated/reversed rings and repeated points as equal).
+
+These rebuild the A side on every call. When one geometry is queried many
+times, [`prepare`](@ref) it: a `PreparedRelate` may be passed as `g1` to
+any of these (it flows through `relate_predicate`, which reuses it rather
+than rebuilding), or the two-argument prepared forms `GO.covers(prep, b)`
+may be used directly. See the prepared-mode section below.
 ==========================================================================#
 "This functionality is experimental and may change at any time."
 intersects(alg::RelateNG, g1, g2) = relate_predicate(alg, pred_intersects(), g1, g2)
@@ -623,7 +629,7 @@ branches.
 ==========================================================================#
 
 """
-    PreparedRelate{ALG, RG, SS, T}
+    PreparedRelate{ALG, G, RG, SS, T}
 
 This functionality is experimental and may change at any time.
 
@@ -632,6 +638,11 @@ topological relationships against a single geometry `a` (the "prepared
 mode" of JTS `RelateNG.prepare`). Holds:
 
 - `alg`: the [`RelateNG`](@ref) algorithm configuration,
+- `input`: the A geometry exactly as passed to [`prepare`](@ref). Held
+  because `geom_a` below is *manifold-specific* — its cached extents are
+  the interaction bounds of `alg`'s manifold (3D on `Spherical`), so it
+  cannot be re-prepared under a different one; the raw input can. Costs
+  nothing: the wrapper tree already shares the input's linework,
 - `geom_a`: the A-side [`RelateGeometry`](@ref), constructed with
   `is_prepared = true` and with its lazy locator/unique-points caches
   forced,
@@ -650,9 +661,10 @@ Construct with [`prepare`](@ref); evaluate with [`relate`](@ref) /
     `RelateGeometry` (edge re-extraction, element-id counter). Use one
     `PreparedRelate` per thread.
 """
-struct PreparedRelate{ALG <: RelateNG, RG <: RelateGeometry,
+struct PreparedRelate{ALG <: RelateNG, G, RG <: RelateGeometry,
         SS <: AbstractVector{<:RelateSegmentString}, T <: Union{Nothing, RTree}}
     alg::ALG
+    input::G
     geom_a::RG
     segs_a::SS
     edge_tree::T
@@ -733,7 +745,7 @@ function prepare(alg::RelateNG, a;
     #-- force the lazy caches that repeated evaluations reuse
     _get_locator(geom_a)
     get_dimension_real(geom_a) == DIM_P && get_unique_points(geom_a)
-    return PreparedRelate(alg, geom_a, segs_a, edge_tree)
+    return PreparedRelate(alg, a, geom_a, segs_a, edge_tree)
 end
 
 # The manifold-dependent `validate` default of `prepare` (see its docstring
@@ -742,6 +754,86 @@ end
 # default.
 _prepare_validate_default(::Spherical) = true
 _prepare_validate_default(::Manifold) = false
+
+"""
+    prepare(alg::RelateNG, p::PreparedRelate; validate = <manifold-dependent>)::PreparedRelate
+
+This functionality is experimental and may change at any time.
+
+`prepare` is idempotent: preparing an already-prepared geometry under an
+algorithm it is already valid for returns it *unchanged*. This is what lets
+a `PreparedRelate` be passed as the A geometry to any `RelateNG` entry
+point — [`relate`](@ref), [`relate_predicate`](@ref), and the named
+predicates `covers(alg, a, b)` etc. — without rebuilding the cached
+structures on every call.
+
+Three cases, in order of cost:
+
+1. `alg` agrees with the algorithm `p` was prepared under: `p` is returned
+   as-is, at no cost.
+2. Only `alg.accelerator` differs: the [`RelateGeometry`](@ref) and the
+   segment strings — the expensive parts — are reused, and only the
+   accelerator-derived edge index is rebuilt (or dropped) to honour the
+   requested strategy. The accelerator cannot change the *answer*, only how
+   the same segment-pair set is enumerated, so this never invalidates the
+   cache.
+3. `manifold`, `boundary_rule` or `exact` differ: these are baked into the
+   prepared `RelateGeometry` and its locators, and they change the answer,
+   so the cache cannot be reused — the geometry is prepared afresh from
+   `p`'s source geometry, at the full cost of [`prepare`](@ref).
+
+!!! warning
+    Case 3 is a full rebuild. Preparing under one manifold and querying
+    under another — `prep = prepare(RelateNG(Spherical()), a)` followed by
+    `covers(RelateNG(), prep, b)` in a loop — silently pays that cost on
+    every call, which is exactly what `prepare` exists to avoid. Prepare
+    under the algorithm you intend to query with.
+
+`validate` applies only to case 3, the rebuild; a reused prepared geometry
+keeps whatever validation state it was built with.
+"""
+function prepare(alg::RelateNG, p::PreparedRelate;
+        validate::Bool = _prepare_validate_default(GeometryOpsCore.manifold(alg)))
+    if _prepared_geometry_settings_agree(alg, p.alg)
+        alg.accelerator == p.alg.accelerator && return p
+        #-- accelerator-only difference: keep the geometry and its segment
+        #-- strings, swap the index the new accelerator asks for
+        return PreparedRelate(alg, p.input, p.geom_a, p.segs_a,
+            _build_prepared_edge_index(GeometryOpsCore.manifold(alg), alg.accelerator, p.segs_a))
+    end
+    #-- rebuild from the raw input, never from `p.geom_a.geom`: the latter
+    #-- carries extents cached as *this* manifold's interaction bounds
+    #-- (3D on `Spherical`), which another manifold would silently reuse
+    #-- as its own and prune against
+    return prepare(alg, p.input; validate)
+end
+
+# The settings baked into a prepared `RelateGeometry` (and its locators),
+# i.e. the ones a prepared instance cannot be reused across. `accelerator`
+# is deliberately absent: it only selects how the segment-pair set is
+# enumerated, never the answer, and `prepare` above swaps the index instead
+# of rebuilding the geometry when it is the only difference.
+_prepared_geometry_settings_agree(alg1::RelateNG, alg2::RelateNG) =
+    _manifolds_agree(alg1.manifold, alg2.manifold) &&
+    alg1.boundary_rule == alg2.boundary_rule &&
+    alg1.exact == alg2.exact
+
+#=
+Manifold agreement. `Manifold`s define no `==` of their own, so `==` falls
+back to `===` (egal), i.e. field-wise *bit* equality. That is exactly right
+for the singleton `Planar()`, and for the common case of two manifolds
+built the same way, but too strict for the parametric manifolds, whose
+numeric fields can differ in type while denoting the same space:
+`Spherical(radius = 1)` and `Spherical(radius = 1.0)` are not `===`. Those
+are compared parameter-by-parameter with numeric `==` instead; anything
+else (including a manifold type this file does not know about) falls back
+to the strict comparison, which errs toward reporting a difference.
+=#
+_manifolds_agree(m1::Manifold, m2::Manifold) = m1 == m2
+_manifolds_agree(m1::Spherical, m2::Spherical) =
+    m1.radius == m2.radius && m1.oriented == m2.oriented
+_manifolds_agree(m1::Geodesic, m2::Geodesic) =
+    m1.semimajor_axis == m2.semimajor_axis && m1.inv_flattening == m2.inv_flattening
 
 #=
 The validation join: enumerate extent-interacting segment pairs within the
@@ -917,6 +1009,150 @@ satisfies the predicate. Port of the instance method
 """
 relate_predicate(p::PreparedRelate, predicate::TopologyPredicate, b) =
     evaluate!(p.alg, p.geom_a, b, predicate, p)
+
+"""
+    relate_predicate(alg::RelateNG, predicate::TopologyPredicate, p::PreparedRelate, b)::Bool
+
+This functionality is experimental and may change at any time.
+
+The A-geometry-is-already-prepared form of the unprepared entry point:
+`p` is passed through [`prepare`](@ref), which returns it unchanged when
+`alg` is the algorithm it was prepared under, so the cached A side is
+reused instead of rebuilt.
+
+This is the single method through which every `RelateNG` entry point
+accepts a `PreparedRelate` as its A geometry — `relate(alg, p, b)`,
+`relate(alg, p, b, im_pattern)` and the named predicates
+`covers(alg, p, b)` etc. all forward here — so all of them reuse the
+prepared structures rather than rebuilding A on every call.
+
+!!! note
+    Predicates are mutable accumulators — pass a freshly constructed one
+    (e.g. `pred_intersects()`) per evaluation.
+"""
+relate_predicate(alg::RelateNG, predicate::TopologyPredicate, p::PreparedRelate, b) =
+    relate_predicate(prepare(alg, p), predicate, b)
+
+#==========================================================================
+## Prepared-mode named predicates
+
+The prepared counterparts of the named-predicate block above. The prepared
+geometry is always the A side, so `covers(p, b)` reads exactly like
+`covers(alg, a, b)` for the `alg` and `a` that `p` was prepared from.
+
+These two-argument forms exist because the two-argument `GO.covers(a, b)`
+etc. dispatch to the *old* engines (design D4); only these methods and the
+`f(alg, p, b)` forms above route a prepared A side into RelateNG.
+==========================================================================#
+
+# The shared tail of the prepared named-predicate docstrings below.
+const _PREPARED_PREDICATE_DOC = """
+This functionality is experimental and may change at any time.
+
+The prepared-mode counterpart of the unprepared `f(alg::RelateNG, a, b)`
+method: it reuses the structures [`prepare`](@ref) cached on the A side
+(the point locators, the unfiltered A segment strings and the segment index
+over them, plus — on `Spherical` — the ring validation). Calling the
+unprepared form in a loop over many `b` rebuilds all of that on *every*
+call, which is exactly the cost [`prepare`](@ref) exists to amortize (a
+spherical prepare build is on the order of 100 ms; a planar one ~600 µs).
+
+`f(alg, p, b)` is equivalent whenever `alg` is the algorithm `p` was
+prepared under; see [`prepare`](@ref) for what happens when it is not.
+"""
+
+"""
+    intersects(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry intersects `b`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+intersects(p::PreparedRelate, b) = relate_predicate(p, pred_intersects(), b)
+
+"""
+    disjoint(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry is disjoint from `b`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+disjoint(p::PreparedRelate, b)   = relate_predicate(p, pred_disjoint(), b)
+
+"""
+    contains(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry contains `b`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+contains(p::PreparedRelate, b)   = relate_predicate(p, pred_contains(), b)
+
+"""
+    within(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry is within `b`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+within(p::PreparedRelate, b)     = relate_predicate(p, pred_within(), b)
+
+"""
+    covers(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry covers `b`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+covers(p::PreparedRelate, b)     = relate_predicate(p, pred_covers(), b)
+
+"""
+    coveredby(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry is covered by `b`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+coveredby(p::PreparedRelate, b)  = relate_predicate(p, pred_coveredby(), b)
+
+"""
+    crosses(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry crosses `b`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+crosses(p::PreparedRelate, b)    = relate_predicate(p, pred_crosses(), b)
+
+"""
+    overlaps(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry overlaps `b`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+overlaps(p::PreparedRelate, b)   = relate_predicate(p, pred_overlaps(), b)
+
+"""
+    touches(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry touches `b`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+touches(p::PreparedRelate, b)    = relate_predicate(p, pred_touches(), b)
+
+"""
+    equals(p::PreparedRelate, b)::Bool
+
+Tests whether the prepared geometry is *topologically* equal to `b` (the
+DE-9IM `T*F**FFF*` sense, `pred_equalstopo`), matching
+`equals(alg::RelateNG, a, b)` rather than the structural two-argument
+`equals`.
+
+$(_PREPARED_PREDICATE_DOC)
+"""
+equals(p::PreparedRelate, b)     = relate_predicate(p, pred_equalstopo(), b)
 
 # Whether to prebuild the A-side segment tree, mirroring the dispatch of
 # `process_edge_intersections!` + `_select_edge_set_accelerator`: an explicit
