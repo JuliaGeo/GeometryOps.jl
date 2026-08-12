@@ -1004,13 +1004,13 @@ end
 end
 
 # =========================================================================
-# Prepared-mode named predicates, and prepared A sides at the algorithm
-# entry points. `prepare` is idempotent, so a `PreparedRelate` stands in for
-# the A geometry anywhere a raw geometry can — `GO.covers(alg, prep, b)`
-# reuses the prepared structures instead of rebuilding A on every call.
+# A prepared A side at the algorithm entry points. `prepare` is idempotent,
+# so a `PreparedRelate` stands in for the A geometry anywhere a raw geometry
+# can — `GO.covers(alg, prep, b)` reuses the prepared structures instead of
+# rebuilding A on every call.
 # =========================================================================
 
-@testset "PreparedNamedPredicates" begin
+@testset "PreparedAGeometry" begin
     a = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)]])
     #-- B geometries hitting the true and false cases of every named predicate
     bs = (
@@ -1031,12 +1031,11 @@ end
     @testset "$(nameof(typeof(m))) manifold" for m in (GO.Planar(), GO.Spherical())
         alg = GO.RelateNG(m)
         prep = GO.prepare(alg, a)
+        #-- every named predicate takes the prepared A side
         for f in preds, b in bs
-            expected = f(alg, a, b)
-            @test f(prep, b) == expected       #-- two-argument prepared form
-            @test f(alg, prep, b) == expected  #-- prepared A side at the alg entry point
+            @test f(alg, prep, b) == f(alg, a, b)
         end
-        #-- the general entry points accept a prepared A side too
+        #-- as do the general entry points
         for b in bs
             @test GO.relate(alg, prep, b) == GO.relate(prep, b) == GO.relate(alg, a, b)
             @test GO.relate(alg, prep, b, "T*T***T**") == GO.relate(alg, a, b, "T*T***T**")
@@ -1048,45 +1047,19 @@ end
     @testset "prepare is idempotent, and re-prepares on a settings change" begin
         palg = GO.RelateNG()
         prep = GO.prepare(palg, a)
-        #-- matching settings: the very same instance comes back, untouched
+        #-- the same algorithm: the very same instance comes back, untouched
         @test GO.prepare(palg, prep) === prep
         @test GO.prepare(GO.RelateNG(GO.Planar()), prep) === prep
-        #-- numerically equal manifold parameters of differing types still match
-        sprep = GO.prepare(GO.RelateNG(GO.Spherical(radius = 1.0)), a)
-        @test GO.prepare(GO.RelateNG(GO.Spherical(radius = 1)), sprep) === sprep
-        #-- settings baked into the prepared geometry force a rebuild
+        #-- any settings change rebuilds
         for alg2 in (GO.RelateNG(GO.Spherical()),
                 GO.RelateNG(; boundary_rule = GO.EndpointBoundary()),
-                GO.RelateNG(; exact = GO.GeometryOpsCore.False()))
+                GO.RelateNG(; exact = GO.GeometryOpsCore.False()),
+                GO.RelateNG(; accelerator = GO.NestedLoop()))
             rebuilt = GO.prepare(alg2, prep)
             @test rebuilt !== prep
             @test rebuilt.geom_a !== prep.geom_a
             @test rebuilt.alg == alg2
         end
-    end
-
-    @testset "an accelerator change swaps only the edge index" begin
-        #-- 64 segments >= threshold, so AutoAccelerator prebuilds a tree
-        n = 64
-        coords = [(5 + 4 * cospi(2k / n), 5 + 4 * sinpi(2k / n)) for k in 0:(n - 1)]
-        push!(coords, coords[1])
-        big = GI.Polygon([coords])
-        auto = GO.RelateNG()
-        nested = GO.RelateNG(; accelerator = GO.NestedLoop())
-        prep = GO.prepare(auto, big)
-        @test prep.edge_tree !== nothing
-
-        swapped = GO.prepare(nested, prep)
-        @test swapped !== prep
-        @test swapped.geom_a === prep.geom_a   #-- the expensive parts are reused
-        @test swapped.segs_a === prep.segs_a
-        @test swapped.edge_tree === nothing    #-- the requested strategy is honoured
-        @test swapped.alg == nested
-        @test GO.prepare(auto, swapped).edge_tree !== nothing  #-- and back again
-
-        b = GI.Polygon([[(4.0, 4.0), (11.0, 4.0), (11.0, 11.0), (4.0, 11.0), (4.0, 4.0)]])
-        @test GO.covers(nested, prep, b) == GO.covers(auto, big, b)
-        @test GO.relate(nested, prep, b) == GO.relate(auto, big, b)
     end
 
     @testset "a prepared A side follows the algorithm actually passed" begin
@@ -1111,8 +1084,8 @@ end
         @test GO.touches(epalg, mls, junction) == true
 
         m2prep = GO.prepare(m2alg, mls)
-        @test GO.touches(m2prep, junction) == false            #-- the prepared rule
-        @test GO.touches(epalg, m2prep, junction) == true      #-- the rule passed in
+        @test GO.touches(m2alg, m2prep, junction) == false   #-- the prepared rule
+        @test GO.touches(epalg, m2prep, junction) == true    #-- the rule passed in
         @test GO.relate(epalg, m2prep, junction) == GO.relate(epalg, mls, junction)
     end
 end
