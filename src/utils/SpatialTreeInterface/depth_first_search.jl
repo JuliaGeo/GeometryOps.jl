@@ -81,7 +81,7 @@ end
 Call `f(i)` for each index `i` in the tree that satisfies `predicate(extent(i))`.
 
 This is generic to anything that implements the SpatialTreeInterface, particularly the methods
-[`isleaf`](@ref), [`getchild`](@ref), and [`child_extents`](@ref).
+[`isleaf`](@ref), [`getchild`](@ref), and [`child_indices_extents`](@ref).
 
 ## Example
 
