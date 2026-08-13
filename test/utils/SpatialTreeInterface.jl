@@ -4,6 +4,7 @@ using GeometryOps.SpatialTreeInterface
 using GeometryOps.SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 using GeometryOps.SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
 using GeometryOps.SpatialTreeInterface: FlatNoTree, spatialtree, node_extent_is_expensive
+using GeometryOps.SpatialTreeInterface: dual_depth_first_search_balanced, node_size
 using GeometryOps.LoopStateMachine: Action
 using GeometryOps.FlexibleRTrees: RTree, STR
 using GeometryOps.NaturalIndexing: NaturalIndex
@@ -428,6 +429,88 @@ end
         @test result isa Action
         @test result.name == :full_return
         @test n[] == 1
+    end
+end
+
+balanced_pairs(args...; kw...) =
+    (out = Tuple{Int,Int}[];
+     dual_depth_first_search_balanced((i, j) -> push!(out, (i, j)), args...; kw...);
+     sort!(out))
+
+@testset "dual_depth_first_search_balanced" begin
+    # Deliberately mismatched trees: a deep fine one against a shallow coarse
+    # one, and different branching factors, which is where lockstep descent and
+    # single-sided descent disagree most about which node pairs to visit.
+    fine = [Extents.Extent(X=(x, x+0.1), Y=(y, y+0.1)) for x in 0:0.05:5, y in 0:0.05:5] |> vec
+    coarse = [Extents.Extent(X=(x, x+1.0), Y=(y, y+1.0)) for x in 0:5, y in 0:5] |> vec
+
+    @testset "agrees with the lockstep descent - $label" for (label, t1, t2) in (
+        ("deep x shallow", NaturalIndex(fine), NaturalIndex(coarse)),
+        ("shallow x deep", NaturalIndex(coarse), NaturalIndex(fine)),
+        ("mismatched fanout", NaturalIndex(fine; nodecapacity=4), NaturalIndex(coarse; nodecapacity=32)),
+        ("matched", NaturalIndex(fine), NaturalIndex(fine)),
+        ("STRtree", STRtree(fine), STRtree(coarse)),
+    )
+        lockstep = collect_pairs(Extents.intersects, t1, t2)
+        @test !isempty(lockstep)
+        # These trees satisfy the interface's "parents cover their children"
+        # invariant, so both descents must reach exactly the same leaf pairs -
+        # at every threshold, including the extremes.
+        for threshold in (1, 2, 4, 16, 1_000_000)
+            @test balanced_pairs(Extents.intersects, t1, t2; threshold) == lockstep
+        end
+    end
+
+    @testset "the 6-arg form agrees with the 4-arg form" begin
+        t1 = NaturalIndex(fine)
+        t2 = NaturalIndex(coarse)
+        four = balanced_pairs(Extents.intersects, t1, t2; threshold = 2)
+        six = (out = Tuple{Int,Int}[];
+               dual_depth_first_search_balanced((i, j) -> push!(out, (i, j)), Extents.intersects,
+                                                t1, node_extent(t1), t2, node_extent(t2);
+                                                threshold = 2);
+               sort!(out))
+        @test four == six
+    end
+
+    @testset "a huge threshold is the lockstep descent" begin
+        t1 = NaturalIndex(fine)
+        t2 = NaturalIndex(coarse)
+        # so large that no pair is ever considered lopsided
+        noop(i, j) = nothing
+        dual_depth_first_search_balanced(noop, Extents.intersects, t1, t2; threshold = Inf)
+        @test balanced_pairs(Extents.intersects, t1, t2; threshold = Inf) ==
+              collect_pairs(Extents.intersects, t1, t2)
+    end
+
+    @testset "threshold is validated" begin
+        t1 = NaturalIndex(fine)
+        t2 = NaturalIndex(coarse)
+        noop(i, j) = nothing
+        @test_throws ArgumentError dual_depth_first_search_balanced(noop, Extents.intersects, t1, t2; threshold = 0.5)
+        @test_throws ArgumentError dual_depth_first_search_balanced(noop, Extents.intersects, t1, t2; threshold = -1)
+    end
+
+    @testset "full_return propagates" begin
+        for (t1, t2) in ((NaturalIndex(fine), NaturalIndex(coarse)),
+                         (NaturalIndex(coarse), NaturalIndex(fine)))
+            n = Ref(0)
+            result = dual_depth_first_search_balanced(Extents.intersects, t1, t2; threshold = 2) do i, j
+                n[] += 1
+                return Action(:full_return, (i, j))
+            end
+            @test result isa Action
+            @test result.name == :full_return
+            @test n[] == 1
+        end
+    end
+
+    @testset "node_size" begin
+        # default measures the area / volume of an Extent
+        @test node_size(nothing, Extents.Extent(X=(0.0, 2.0), Y=(0.0, 3.0))) ≈ 6.0
+        @test node_size(nothing, Extents.Extent(X=(0.0, 2.0), Y=(0.0, 3.0), Z=(0.0, 4.0))) ≈ 24.0
+        # and tells you what to do when the extent is not an Extent
+        @test_throws ArgumentError node_size(nothing, "not an extent")
     end
 end
 
