@@ -1002,3 +1002,90 @@ end
         @test_throws ArgumentError GO.prepare(palg, ring_crossed; validate = true)
     end
 end
+
+# =========================================================================
+# A prepared A side at the algorithm entry points. `prepare` is idempotent,
+# so a `PreparedRelate` stands in for the A geometry anywhere a raw geometry
+# can — `GO.covers(alg, prep, b)` reuses the prepared structures instead of
+# rebuilding A on every call.
+# =========================================================================
+
+@testset "PreparedAGeometry" begin
+    a = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)]])
+    #-- B geometries hitting the true and false cases of every named predicate
+    bs = (
+        GI.Polygon([[(2.0, 2.0), (6.0, 2.0), (6.0, 6.0), (2.0, 6.0), (2.0, 2.0)]]),           # overlaps
+        GI.Polygon([[(1.0, 1.0), (2.0, 1.0), (2.0, 2.0), (1.0, 2.0), (1.0, 1.0)]]),           # within a
+        GI.Polygon([[(-1.0, -1.0), (5.0, -1.0), (5.0, 5.0), (-1.0, 5.0), (-1.0, -1.0)]]),     # contains a
+        GI.Polygon([[(10.0, 10.0), (12.0, 10.0), (12.0, 12.0), (10.0, 12.0), (10.0, 10.0)]]), # disjoint
+        GI.Polygon([[(4.0, 0.0), (8.0, 0.0), (8.0, 4.0), (4.0, 4.0), (4.0, 0.0)]]),           # touches
+        GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)]]),           # equal
+        GI.LineString([(-1.0, 2.0), (5.0, 2.0)]),                                             # crosses
+        GI.LineString([(-2.0, -2.0), (-1.0, -2.0)]),                                          # disjoint line
+        GI.Point((2.0, 2.0)),                                                                 # interior point
+        GI.Point((20.0, 20.0)),                                                               # exterior point
+    )
+    preds = (GO.intersects, GO.disjoint, GO.contains, GO.within, GO.covers,
+        GO.coveredby, GO.crosses, GO.overlaps, GO.touches, GO.equals)
+
+    @testset "$(nameof(typeof(m))) manifold" for m in (GO.Planar(), GO.Spherical())
+        alg = GO.RelateNG(m)
+        prep = GO.prepare(alg, a)
+        #-- every named predicate takes the prepared A side
+        for f in preds, b in bs
+            @test f(alg, prep, b) == f(alg, a, b)
+        end
+        #-- as do the general entry points
+        for b in bs
+            @test GO.relate(alg, prep, b) == GO.relate(prep, b) == GO.relate(alg, a, b)
+            @test GO.relate(alg, prep, b, "T*T***T**") == GO.relate(alg, a, b, "T*T***T**")
+            @test GO.relate_predicate(alg, GO.pred_covers(), prep, b) ==
+                GO.relate_predicate(alg, GO.pred_covers(), a, b)
+        end
+    end
+
+    @testset "prepare is idempotent, and re-prepares on a settings change" begin
+        palg = GO.RelateNG()
+        prep = GO.prepare(palg, a)
+        #-- the same algorithm: the very same instance comes back, untouched
+        @test GO.prepare(palg, prep) === prep
+        @test GO.prepare(GO.RelateNG(GO.Planar()), prep) === prep
+        #-- any settings change rebuilds
+        for alg2 in (GO.RelateNG(GO.Spherical()),
+                GO.RelateNG(; boundary_rule = GO.EndpointBoundary()),
+                GO.RelateNG(; exact = GO.GeometryOpsCore.False()),
+                GO.RelateNG(; accelerator = GO.NestedLoop()))
+            rebuilt = GO.prepare(alg2, prep)
+            @test rebuilt !== prep
+            @test rebuilt.geom_a !== prep.geom_a
+            @test rebuilt.alg == alg2
+        end
+    end
+
+    @testset "a prepared A side follows the algorithm actually passed" begin
+        palg = GO.RelateNG()
+        salg = GO.RelateNG(GO.Spherical())
+        pprep = GO.prepare(palg, a)
+        sprep = GO.prepare(salg, a)
+        for b in bs
+            @test GO.covers(salg, pprep, b) == GO.covers(salg, a, b)
+            @test GO.covers(palg, sprep, b) == GO.covers(palg, a, b)
+            @test GO.relate(salg, pprep, b) == GO.relate(salg, a, b)
+            @test GO.relate(palg, sprep, b) == GO.relate(palg, a, b)
+        end
+
+        #-- the boundary node rules genuinely disagree at a valence-2 node:
+        #-- Mod2 reads it as interior, EndpointBoundary as boundary
+        mls = GI.MultiLineString([[(0.0, 0.0), (1.0, 0.0)], [(1.0, 0.0), (2.0, 0.0)]])
+        junction = GI.Point((1.0, 0.0))
+        m2alg = GO.RelateNG()
+        epalg = GO.RelateNG(; boundary_rule = GO.EndpointBoundary())
+        @test GO.touches(m2alg, mls, junction) == false
+        @test GO.touches(epalg, mls, junction) == true
+
+        m2prep = GO.prepare(m2alg, mls)
+        @test GO.touches(m2alg, m2prep, junction) == false   #-- the prepared rule
+        @test GO.touches(epalg, m2prep, junction) == true    #-- the rule passed in
+        @test GO.relate(epalg, m2prep, junction) == GO.relate(epalg, mls, junction)
+    end
+end

@@ -2,6 +2,21 @@
 # Interface definition for spatial tree types.
 # There is no abstract supertype here since it's impossible to enforce,
 # but we do have a few methods that are common to all spatial tree types.
+#
+# ```@meta
+# CollapsedDocStrings = true
+# ```
+#
+# The methods that make up the interface are:
+#
+# ```@docs
+# isspatialtree
+# isleaf
+# getchild
+# nchild
+# child_indices_extents
+# node_extent
+# ```
 
 """
     isspatialtree(tree)::Bool
