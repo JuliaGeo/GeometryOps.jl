@@ -156,13 +156,6 @@ makedocs(;
         ],
         "Source code" => literate_pages,
     ],
-    # Every Documenter check is an error, so that broken examples, dead cross-references
-    # and duplicated docstrings fail CI instead of silently degrading the built docs.
-    # `:missing_docs` is still only a warning: the docstrings it flags all live in
-    # internal submodules (`UnitSpherical`, `SpatialTreeInterface`, `FlexibleRTrees`,
-    # `NaturalIndexing`, `LoopStateMachine`) which have no API page yet, since the
-    # `@autodocs` blocks in `api.md` only sweep `GeometryOps` and `GeometryOpsCore`.
-    warnonly = [:missing_docs],
 )
 
 DocumenterVitepress.deploydocs(;
