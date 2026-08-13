@@ -59,6 +59,8 @@ barycentric_interpolate
 
 ```@autodocs
 Modules = [GeometryOps]
+# `reproject` is documented under "`apply` and associated functions" above.
+Filter = t -> t !== GeometryOps.reproject
 ```
 
 ## Core types

@@ -112,7 +112,14 @@ function plot_trials(
             ygridwidth = 0.75,
         ) 
         plots = [scatterlines!(ax, x, y; label = label) for (x, y, label) in zip(xs, ys, labels)]
-        setproperty!.(getindex.(getproperty.(plots, :plots), 1), :alpha, 0.1)
+        # De-emphasize the connecting lines while keeping the markers opaque.  `ScatterLines`
+        # shares a single `alpha` with its child `Lines` plot, so fade the line via `color`
+        # and pin the markers back to the cycled colour with `markercolor`.
+        for plot in plots
+            color = Makie.to_color(plot.color[])
+            plot.markercolor = color
+            plot.color = Makie.RGBAf(color.r, color.g, color.b, 0.1)
+        end
         leg = Legend(
             lp, ax; 
             tellwidth = legend_position isa Union{Tuple, Makie.Automatic} && (legend_position isa Makie.Automatic || length(legend_position) != 3) && legend_orientation == :vertical, 

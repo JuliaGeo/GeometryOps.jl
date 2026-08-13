@@ -29,8 +29,8 @@ using CairoMakie
 import GeoInterface as GI, GeometryOps as GO
 
 line = GI.LineString([(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)])
-smoothed = GO.smooth(GO.Spherical(), line) |> x -> GO.transform(GO.UnitSpherical.GeographicFromUnitSpherical(), x)
-smoothed_2 = GO.smooth(GO.Spherical(), line; iterations=2) |> x -> GO.transform(GO.UnitSpherical.GeographicFromUnitSpherical(), x)
+smoothed = GO.smooth(GO.Spherical(), line) |> x -> GO.transform(GO.UnitSpherical.GeographicFromUnitSphere(), x)
+smoothed_2 = GO.smooth(GO.Spherical(), line; iterations=2) |> x -> GO.transform(GO.UnitSpherical.GeographicFromUnitSphere(), x)
 
 f, a, p = lines(line; label = "Original", axis = (; title = "Spherical smoothing"))
 lines!(a, smoothed; label = "1 iteration")

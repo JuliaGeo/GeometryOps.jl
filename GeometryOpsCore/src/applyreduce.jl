@@ -39,7 +39,7 @@ and perform some operation on it.
 [`centroid`](@ref), [`area`](@ref) and [`distance`](@ref) have been implemented using the 
 [`applyreduce`](@ref) framework.
 
-```@docs
+```@docs; canonical=false
 applyreduce
 ```
 
@@ -160,7 +160,7 @@ end
 end
 # Fail if we hit PointTrait
 # _applyreduce(f, op, target::TraitTarget{Target}, trait::PointTrait, geom; kw...) where Target = 
-    # throw(ArgumentError("target $target not found"))
+    # throw(ArgumentError("target \$target not found"))
 # Specific cases to avoid method ambiguity
 for T in (
     GI.PointTrait, GI.LinearRing, GI.LineString, 

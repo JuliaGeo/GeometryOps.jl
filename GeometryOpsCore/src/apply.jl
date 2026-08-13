@@ -364,7 +364,7 @@ end
 # Fail loudly if we hit PointTrait without running `f`
 # (after PointTrait there is no further to dig with `_apply`)
 # @inline _apply(f, ::TraitTarget{Target}, trait::GI.PointTrait, geom; crs=nothing, kw...) where Target =
-    # throw(ArgumentError("target $Target not found, but reached a `PointTrait` leaf"))
+    # throw(ArgumentError("target \$Target not found, but reached a `PointTrait` leaf"))
 # Finally, these short methods are the main purpose of `apply`.
 # The `Trait` is a subtype of the `Target` (or identical to it)
 # So the `Target` is found. We apply `f` to geom and return it to previous

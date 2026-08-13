@@ -14,7 +14,7 @@ Pkg.add(["FlexiJoins", "DataFrames", "CairoMakie", "GeoInterfaceMakie", "GADM", 
 ````
 
 ````@example spatialjoins
-using FlexiJoins, 
+using FlexiJoins
 using DataFrames
 using CairoMakie, GeoInterfaceMakie
 using GADM # GADM gives us country and sublevel geometry

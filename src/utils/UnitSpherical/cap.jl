@@ -29,7 +29,7 @@ The `SphericalCap` type offers multiple constructors to create caps from:
 ## Examples
 
 ```@example sphericalcap
-using GeometryOps
+using GeometryOps.UnitSpherical
 using GeoInterface
 
 # Create a spherical cap from a point and radius
@@ -159,6 +159,15 @@ function _merge(x::SphericalCap, y::SphericalCap)
     end
 end
 
+"""
+    circumcenter_on_unit_sphere(a, b, c)
+
+Return the center of the circle passing through the three `UnitSphericalPoint`s
+`a`, `b` and `c`, as a `UnitSphericalPoint`.
+
+Of the two antipodal circumcenters, this returns the one on the same hemisphere as the
+input points, i.e. the center of the *smaller* of the two circles they bound.
+"""
 function circumcenter_on_unit_sphere(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
     raw = LinearAlgebra.cross(a, b) +
           LinearAlgebra.cross(b, c) +
