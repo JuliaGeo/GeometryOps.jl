@@ -10,13 +10,13 @@ Install the packages used in this tutorial:
 
 ````julia
 using Pkg
-Pkg.add(["FlexiJoins", "DataFrames", "CairoMakie", "GeoInterfaceMakie", "GADM", "GeoInterface", "GeometryOps"])
+Pkg.add(["FlexiJoins", "DataFrames", "CairoMakie", "GADM", "GeoInterface", "GeometryOps"])
 ````
 
 ````@example spatialjoins
 using FlexiJoins
 using DataFrames
-using CairoMakie, GeoInterfaceMakie
+using CairoMakie
 using GADM # GADM gives us country and sublevel geometry
 import GeoInterface as GI
 import GeometryOps as GO
