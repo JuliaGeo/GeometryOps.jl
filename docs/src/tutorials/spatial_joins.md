@@ -61,7 +61,7 @@ First, we generate our data.  We create two triangle polygons which, together, s
 pl = GI.Polygon([GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 0)])])
 pu = GI.Polygon([GI.LinearRing([(0, 0), (0, 1), (1, 1), (0, 0)])])
 poly_df = DataFrame(geometry = [pl, pu], color = [:red, :blue])
-f, a, p = Makie.with_theme(Attributes(; Axis = (; aspect = DataAspect()))) do # hide
+f, a, p = with_theme(Attributes(; Axis = (; aspect = DataAspect()))) do # hide
 f, a, p = poly(poly_df.geometry; color = tuple.(poly_df.color, 0.3))
 end # hide
 ```
