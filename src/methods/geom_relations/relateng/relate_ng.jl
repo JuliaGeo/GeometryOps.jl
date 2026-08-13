@@ -236,6 +236,9 @@ dispatching to the old engines (design D4).
 DE-9IM `T*F**FFF*` sense), which can differ from the structural equality
 the two-argument `GO.equals` implements only in exotic cases (both
 treat rotated/reversed rings and repeated points as equal).
+
+These rebuild the A side on every call; pass a [`prepare`](@ref)d `g1` to
+reuse it instead.
 ==========================================================================#
 "This functionality is experimental and may change at any time."
 intersects(alg::RelateNG, g1, g2) = relate_predicate(alg, pred_intersects(), g1, g2)
@@ -623,7 +626,7 @@ branches.
 ==========================================================================#
 
 """
-    PreparedRelate{ALG, RG, SS, T}
+    PreparedRelate{ALG, G, RG, SS, T}
 
 This functionality is experimental and may change at any time.
 
@@ -632,6 +635,9 @@ topological relationships against a single geometry `a` (the "prepared
 mode" of JTS `RelateNG.prepare`). Holds:
 
 - `alg`: the [`RelateNG`](@ref) algorithm configuration,
+- `input`: the A geometry as passed to [`prepare`](@ref), which re-prepares
+  from it under a different `alg` (`geom_a` below caches `alg`'s manifold's
+  extents, so it cannot serve another),
 - `geom_a`: the A-side [`RelateGeometry`](@ref), constructed with
   `is_prepared = true` and with its lazy locator/unique-points caches
   forced,
@@ -650,9 +656,10 @@ Construct with [`prepare`](@ref); evaluate with [`relate`](@ref) /
     `RelateGeometry` (edge re-extraction, element-id counter). Use one
     `PreparedRelate` per thread.
 """
-struct PreparedRelate{ALG <: RelateNG, RG <: RelateGeometry,
+struct PreparedRelate{ALG <: RelateNG, G, RG <: RelateGeometry,
         SS <: AbstractVector{<:RelateSegmentString}, T <: Union{Nothing, RTree}}
     alg::ALG
+    input::G
     geom_a::RG
     segs_a::SS
     edge_tree::T
@@ -733,7 +740,7 @@ function prepare(alg::RelateNG, a;
     #-- force the lazy caches that repeated evaluations reuse
     _get_locator(geom_a)
     get_dimension_real(geom_a) == DIM_P && get_unique_points(geom_a)
-    return PreparedRelate(alg, geom_a, segs_a, edge_tree)
+    return PreparedRelate(alg, a, geom_a, segs_a, edge_tree)
 end
 
 # The manifold-dependent `validate` default of `prepare` (see its docstring
@@ -742,6 +749,22 @@ end
 # default.
 _prepare_validate_default(::Spherical) = true
 _prepare_validate_default(::Manifold) = false
+
+"""
+    prepare(alg::RelateNG, p::PreparedRelate; validate = <manifold-dependent>)::PreparedRelate
+
+This functionality is experimental and may change at any time.
+
+Returns `p` under the algorithm it was prepared with, so a `PreparedRelate`
+can be passed as the A geometry to any `RelateNG` entry point. Under any
+other `alg` — every setting is baked into the prepared structures — it is
+prepared afresh from `p.input`, at the full cost of [`prepare`](@ref) on
+every call, so prepare under the algorithm you query with. `validate`
+applies only to that rebuild.
+"""
+prepare(alg::RelateNG, p::PreparedRelate;
+        validate::Bool = _prepare_validate_default(GeometryOpsCore.manifold(alg))) =
+    alg == p.alg ? p : prepare(alg, p.input; validate)
 
 #=
 The validation join: enumerate extent-interacting segment pairs within the
@@ -917,6 +940,11 @@ satisfies the predicate. Port of the instance method
 """
 relate_predicate(p::PreparedRelate, predicate::TopologyPredicate, b) =
     evaluate!(p.alg, p.geom_a, b, predicate, p)
+
+# The prepared A side at the algorithm entry points: `relate` and the named
+# predicates all forward here, so this is the only method they need.
+relate_predicate(alg::RelateNG, predicate::TopologyPredicate, p::PreparedRelate, b) =
+    relate_predicate(prepare(alg, p), predicate, b)
 
 # Whether to prebuild the A-side segment tree, mirroring the dispatch of
 # `process_edge_intersections!` + `_select_edge_set_accelerator`: an explicit
