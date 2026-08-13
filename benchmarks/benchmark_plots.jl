@@ -111,14 +111,10 @@ function plot_trials(
             yticks = Makie.LogTicks(Makie.WilkinsonTicks(7; k_min = 4)),
             ygridwidth = 0.75,
         ) 
-        plots = [scatterlines!(ax, x, y; label = label) for (x, y, label) in zip(xs, ys, labels)]
-        # De-emphasize the connecting lines while keeping the markers opaque.  `ScatterLines`
-        # shares a single `alpha` with its child `Lines` plot, so fade the line via `color`
-        # and pin the markers back to the cycled colour with `markercolor`.
-        for plot in plots
-            color = Makie.to_color(plot.color[])
-            plot.markercolor = color
-            plot.color = Makie.RGBAf(color.r, color.g, color.b, 0.1)
+        palette = ax.scene.theme.palette.color[]
+        for (i, (x, y, label)) in enumerate(zip(xs, ys, labels))
+            color = palette[mod1(i, length(palette))]
+            scatterlines!(ax, x, y; label = label, color = (color, 0.1), markercolor = color)
         end
         leg = Legend(
             lp, ax; 
