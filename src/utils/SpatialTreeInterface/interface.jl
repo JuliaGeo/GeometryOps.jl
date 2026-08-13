@@ -84,7 +84,37 @@ Generally, defining `Extents.extent(node)` is sufficient here, and you
 won't need to define this
 
 The reason we don't use that directly is to give users of this interface
-a way to define bounding boxes that are not extents, like spherical caps 
+a way to define bounding boxes that are not extents, like spherical caps
 and other such things.
 """
 node_extent(node) = GI.extent(node)
+
+"""
+    node_extent_is_expensive(node)::Bool
+
+Return true if [`node_extent`](@ref) has to *compute* the node's extent, rather
+than read one that the node already stores.
+
+Most trees store an extent per node - `STRtree`, `NaturalIndex` and the
+`FlexibleRTrees` all do - and for those `node_extent` is a field load, so this
+is `false` (the default) and nothing changes.
+
+Some trees derive the extent on access instead: a DGGS cursor whose extent is a
+spherical cap fitted over cell geometry, or a curvilinear grid that walks the
+perimeter of its index rectangle.  Those should define this to be `true`, which
+lets [`dual_depth_first_search`](@ref) materialize a node's children with their
+extents once rather than re-deriving them once per opposing child.  That trades
+a small vector per visited internal node for a factor-of-fanout reduction in
+`node_extent` calls, which is only worth it when the calls are expensive - hence
+the trait rather than doing it unconditionally.
+
+## Implementation notes
+
+For type stability, if your node type is `MyNode`, define
+`node_extent_is_expensive(::Type{MyNode}) = true`, and
+`node_extent_is_expensive(::MyNode)` will forward to that method automatically.
+The value must be inferrable from the type, since it selects between two
+different iteration strategies at compile time.
+"""
+node_extent_is_expensive(::T) where {T} = node_extent_is_expensive(T)
+node_extent_is_expensive(::Type{<:Any}) = false
