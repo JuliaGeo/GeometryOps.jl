@@ -314,9 +314,14 @@ function _intersection_sutherland_hodgman(
         output = _sh_clip_to_edge_spherical(output, edge_start, edge_end, T)
     end
 
-    # Handle empty result - check if clip polygon is fully inside the original subject
+    # Handle empty result - check if clip polygon is fully inside the original subject.
+    # "Fully inside" needs EVERY clip vertex inside the subject, not just the first:
+    # one vertex lying on the subject's boundary is a graze, and `spherical_orient >= 0`
+    # counts the boundary as inside, so testing `clip_points[1]` alone credits every
+    # subject that merely touches that one vertex with the clip polygon's whole area.
     if isempty(output)
-        if !isempty(clip_points) && _point_in_convex_spherical_polygon(clip_points[1], original_subject)
+        if !isempty(clip_points) &&
+           all(p -> _point_in_convex_spherical_polygon(p, original_subject), clip_points)
             # Subject contains clip - return clip polygon
             result = copy(clip_points)
             push!(result, result[1])

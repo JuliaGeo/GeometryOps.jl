@@ -379,6 +379,39 @@ import GeoInterface as GI
             @test a_oh ≈ a_ho rtol = 1e-6
             @test 0 < a_oh < 0.1 * spherical_area(healpix)   # sliver, not the whole cell
         end
+
+        @testset "Grazing tiles are not handed the whole clip" begin
+            # The empty-output fallback returns the clip polygon when the subject
+            # contains it.  "Contains" needs EVERY clip vertex inside the subject:
+            # `spherical_orient >= 0` counts the boundary as inside, so testing only
+            # `clip_points[1]` credits every subject that merely touches that one
+            # vertex with the clip's whole area.
+            #
+            # Reaching the fallback at all takes a non-convex clip -- with a convex
+            # clip a grazing subject survives every half-space test and leaves a
+            # 1-2 point output, which the degenerate branch already zeroes.  So this
+            # is a graceful-degradation test for out-of-contract input (a cell that
+            # goes non-convex numerically, see #466): the answer may be wrong, but it
+            # must be wrong towards zero, never towards a whole fabricated cell.
+            clip = spherical_polygon([(0.0, 0.0), (20.0, 0.0), (20.0, 20.0), (10.0, 6.0), (0.0, 20.0)])
+
+            # Three convex, pairwise-disjoint tiles of the quadrants meeting at the
+            # clip ring's FIRST vertex (0, 0).  None overlaps the clip's interior.
+            tiles = [
+                spherical_polygon([(-5.0, -5.0), (0.0, -5.0), (0.0, 0.0), (-5.0, 0.0)]),  # SW
+                spherical_polygon([(0.0, -5.0), (5.0, -5.0), (5.0, 0.0), (0.0, 0.0)]),    # SE, shares the clip's south edge
+                spherical_polygon([(-5.0, 0.0), (0.0, 0.0), (0.0, 5.0), (-5.0, 5.0)]),    # NW, shares the clip's west edge
+            ]
+
+            alg = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
+            clip_a = spherical_area(clip)
+            for tile in tiles
+                @test spherical_area(GO.intersection(alg, tile, clip)) < 1e-9 * clip_a
+            end
+            # Summed over the disjoint tiles this is what breaks conservative
+            # regridding: the total was 3x the clip's own area.
+            @test sum(spherical_area(GO.intersection(alg, tile, clip)) for tile in tiles) < 1e-9 * clip_a
+        end
     end
 end
 
