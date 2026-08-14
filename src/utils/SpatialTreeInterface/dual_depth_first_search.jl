@@ -10,7 +10,7 @@ that satisfies `predicate(extent(i1), extent(i2))`.
 
 Here, `f(i1::Int, i2::Int)` may be any function that takes two integers as arguments.
 
-It may optionally return an [`Action`](@ref LoopStateMachine.Action) to alter the control
+It may optionally return an [`Action`](@ref GeometryOps.LoopStateMachine.Action) to alter the control
 flow of the `Action(:full_return, true)`. Return `Action(:full_return, true)` from this
 function and break out of the recursion.
 
