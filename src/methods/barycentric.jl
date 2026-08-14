@@ -230,6 +230,21 @@ function t_value(sᵢ::_VecTypes{N, T1}, sᵢ₊₁::_VecTypes{N, T1}, rᵢ::T2,
 end
 
 
+"""
+    barycentric_coordinates(method, geom, point; normalize = true)
+
+Return the barycentric coordinates of `point` with respect to the vertices of `geom`,
+as a newly allocated `Vector` holding one weight per vertex.
+
+`method` is an [`AbstractBarycentricCoordinateMethod`](@ref), currently always
+[`MeanValue`](@ref).  `geom` may be any GeoInterface-compatible curve (a linear ring or
+linestring) with at least three points, and `point` any GeoInterface-compatible point.
+
+If `normalize` is `true` (the default) the returned weights are scaled to sum to 1.
+
+See also [`barycentric_coordinates!`](@ref), which writes into a preallocated vector, and
+[`barycentric_interpolate`](@ref), which uses these weights to interpolate values.
+"""
 function barycentric_coordinates(alg::AbstractBarycentricCoordinateMethod, geom, in_point; normalize = true)
     barycentric_coordinates(alg, GI.geomtrait(geom), geom, GI.geomtrait(in_point), in_point; normalize)
 end
@@ -240,6 +255,15 @@ function barycentric_coordinates(alg::AbstractBarycentricCoordinateMethod, t1::G
     return λs
 end
 
+"""
+    barycentric_coordinates!(λs, method, geom, point; normalize = true)
+
+Write the barycentric coordinates of `point` with respect to the vertices of `geom` into
+`λs`, and return `λs`.
+
+This is the allocation-free form of [`barycentric_coordinates`](@ref); `λs` must have one
+element per vertex of `geom`.
+"""
 function barycentric_coordinates!(λs::Vector{<: Real}, ::AbstractBarycentricCoordinateMethod, geom, in_point; normalize = true)
     @boundscheck @assert GI.npoint(geom) >= 3
     barycentric_coordinates!(λs, MeanValue(), GI.geomtrait(geom), geom, GI.geomtrait(in_point), in_point; normalize)
@@ -315,6 +339,20 @@ end
 # end
 # ```
 
+"""
+    barycentric_interpolate(method, geom, values, point)
+
+Interpolate `values`, given one per vertex of `geom`, to `point` using barycentric
+coordinates, and return the interpolated value.
+
+`geom` may be a curve (linear ring or linestring) or a polygon; for polygons the values
+are taken around the exterior ring first and then around each hole, in the order
+`GeoInterface.getring` returns them.  `values` may be numbers or, for the mean value
+method, colors.
+
+This is equivalent to weighting `values` by [`barycentric_coordinates`](@ref), but
+accumulates in place and so allocates less.
+"""
 function barycentric_interpolate(alg::AbstractBarycentricCoordinateMethod, geom, values::AbstractVector, point)
     barycentric_interpolate(alg, GI.geomtrait(geom), geom, values, GI.geomtrait(point), point)
 end

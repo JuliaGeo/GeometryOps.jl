@@ -27,6 +27,7 @@ This implementation handles these edge cases by:
 
 ```@example robust-cross
 using GeometryOps.UnitSpherical
+using LinearAlgebra: ⋅
 
 # Regular case - points at right angles
 a = UnitSphericalPoint(1, 0, 0)

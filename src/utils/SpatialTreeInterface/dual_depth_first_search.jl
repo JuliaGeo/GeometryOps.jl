@@ -9,18 +9,12 @@ Finally, calls `f(i1, i2)` for each leaf-level index `i1::Int` in `tree1` and `i
 that satisfies `predicate(extent(i1), extent(i2))`.
 
 Here, `f(i1::Int, i2::Int)` may be any function that takes two integers as arguments.
-It may optionally return an [`Action`](@ref LoopStateMachine.Action) to alter the control
-flow of the `Action(:full_return, true)` to return `Action(:full_return, true)` from this 
-function and break out of the recursion.
+It may optionally return an [`Action`](@ref GeometryOps.LoopStateMachine.Action) to alter the
+control flow of the `Action(:full_return, true)` to return `Action(:full_return, true)` from
+this function and break out of the recursion.
 
 This is generic to anything that implements the SpatialTreeInterface, particularly the methods
 [`isleaf`](@ref), [`getchild`](@ref), and [`child_indices_extents`](@ref).
-
-## Examples
-
-```julia
-using NaturalEarth, 
-```
 """
 function dual_depth_first_search(f::F, predicate::P, node1::N1, node2::N2) where {F, P, N1, N2}
     if isleaf(node1) && isleaf(node2)

@@ -59,10 +59,54 @@ barycentric_interpolate
 
 ```@autodocs
 Modules = [GeometryOps]
+# `reproject` is documented under "`apply` and associated functions" above.
+Filter = t -> t !== GeometryOps.reproject
 ```
 
 ## Core types
 
 ```@autodocs
 Modules = [GeometryOpsCore]
+```
+
+## Submodules
+
+These are internal submodules of GeometryOps.  They are not part of the public API, so
+anything here may change or disappear in a patch release, but they are documented for
+reference (and because GeometryOps' own source code links to them).
+
+### UnitSpherical
+
+```@autodocs
+Modules = [GeometryOps.UnitSpherical]
+```
+
+### RobustCrossProduct
+
+```@autodocs
+Modules = [GeometryOps.UnitSpherical.RobustCrossProduct]
+```
+
+### SpatialTreeInterface
+
+```@autodocs
+Modules = [GeometryOps.SpatialTreeInterface]
+```
+
+### FlexibleRTrees
+
+```@autodocs
+Modules = [GeometryOps.FlexibleRTrees]
+```
+
+### NaturalIndexing
+
+```@autodocs
+Modules = [GeometryOps.NaturalIndexing]
+```
+
+### LoopStateMachine
+
+```@autodocs
+Modules = [GeometryOps.LoopStateMachine]
 ```

@@ -10,13 +10,13 @@ Install the packages used in this tutorial:
 
 ````julia
 using Pkg
-Pkg.add(["FlexiJoins", "DataFrames", "CairoMakie", "GeoInterfaceMakie", "GADM", "GeoInterface", "GeometryOps"])
+Pkg.add(["FlexiJoins", "DataFrames", "CairoMakie", "GADM", "GeoInterface", "GeometryOps"])
 ````
 
 ````@example spatialjoins
-using FlexiJoins, 
+using FlexiJoins
 using DataFrames
-using CairoMakie, GeoInterfaceMakie
+using CairoMakie
 using GADM # GADM gives us country and sublevel geometry
 import GeoInterface as GI
 import GeometryOps as GO
@@ -61,7 +61,7 @@ First, we generate our data.  We create two triangle polygons which, together, s
 pl = GI.Polygon([GI.LinearRing([(0, 0), (1, 0), (1, 1), (0, 0)])])
 pu = GI.Polygon([GI.LinearRing([(0, 0), (0, 1), (1, 1), (0, 0)])])
 poly_df = DataFrame(geometry = [pl, pu], color = [:red, :blue])
-f, a, p = Makie.with_theme(Attributes(; Axis = (; aspect = DataAspect()))) do # hide
+f, a, p = with_theme(Attributes(; Axis = (; aspect = DataAspect()))) do # hide
 f, a, p = poly(poly_df.geometry; color = tuple.(poly_df.color, 0.3))
 end # hide
 ```
