@@ -186,7 +186,8 @@ This is useful for plotting geometries with a limited number of vertices, or for
 ## Arguments
 - `method::Manifold = Planar()`: The method to use for segmentizing the geometry.  At the moment, [`Planar`](@ref) (assumes a flat plane), [`Spherical`](@ref) (assumes geometry on a sphere and interpolates along great circles) and [`Geodesic`](@ref) (assumes geometry on the ellipsoidal Earth and uses Vincenty's formulae) are available.
 - `geom`: The geometry to segmentize.  Must be a `LineString`, `LinearRing`, `Polygon`, `MultiPolygon`, or `GeometryCollection`, or some vector or table of those.
-- `max_distance::Real`: The maximum distance between vertices in the geometry.  **Beware: for `Planar`, this is in the units of the geometry, but for `Geodesic` and `Spherical` it's in units of the radius of the sphere.**  So under the default `Spherical()` radius `max_distance` is in metres, and under `Spherical(; radius = 1)` it is in radians.
+- `max_distance::Real`: The maximum distance between vertices in the geometry.  
+  For `Planar` manifolds, this is in the units of the geometry.  For `Spherical` and `Geodesic`, this is in the units of the manifold (the units of the radius of the sphere/ellipsoid).  By default this is meters.
 
 `Spherical` and `Geodesic` both assume that the input geometry is in lon/lat coordinates, in degrees.
 
