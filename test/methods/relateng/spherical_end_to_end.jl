@@ -10,6 +10,7 @@ using Test
 import GeometryOps as GO
 import GeometryOps: Spherical, RelateNG
 import GeoInterface as GI
+import Extents
 
 alg = RelateNG(; manifold = Spherical())
 
@@ -70,6 +71,58 @@ end
     for B in Bs
         @test GO.relate(prep, B) == GO.relate(loop, A, B)
     end
+end
+
+# #469: prepared mode against a B below the accelerator threshold takes the
+# no-B-tree path (each B segment is a single-tree query into the prepared A
+# tree); at or above the threshold the per-call B tree path is kept. Both
+# must agree with the unprepared engine, including when edge topology has to
+# be computed (a straddling B).
+@testset "prepared small-B path agrees with unprepared" begin
+    A = GI.Polygon([GI.LinearRing(
+        [(40cosd(t), 40sind(t)) for t in range(0, 360; length = 73)])])
+    prep = GO.prepare(alg, A)
+    loop = RelateNG(; manifold = Spherical(), accelerator = GO.NestedLoop())
+    cell(nv, r, lon, lat) = GI.Polygon([GI.LinearRing(
+        [(lon + r * cosd(t), lat + r * sind(t)) for t in range(0, 360; length = nv + 1)])])
+    for B in (
+        cell(6, 1.0, 3.0, 3.0),      # 6 segments: small-B path, deep inside
+        cell(6, 1.0, 40.0, 0.0),     # small-B path, straddling the boundary
+        cell(6, 1.0, 60.0, 0.0),     # small-B path, outside
+        cell(32, 1.0, 3.0, 3.0),     # at the threshold: per-call B tree path
+        cell(32, 2.0, 40.0, 0.0),    # B tree path, straddling
+    )
+        @test GO.relate(prep, B) == GO.relate(loop, A, B)
+    end
+end
+
+# #469: a B carrying kernel-space (X, Y, Z) extents at every level — here the
+# extent-cached wrapper tree a `RelateGeometry` builds — is reused as-is
+# (`_relate_cache_extents` returns it unchanged and `rk_interaction_bounds`
+# reads the stored boxes), skipping the per-call extent recomputation. A
+# stored lon/lat (X, Y) extent is in the wrong space and must be ignored.
+@testset "stored 3D extents on B are reused; lon/lat extents are not" begin
+    A = GI.Polygon([GI.LinearRing(
+        [(40cosd(t), 40sind(t)) for t in range(0, 360; length = 73)])])
+    prep = GO.prepare(alg, A)
+    ring = [(3.0 + cosd(t), 3.0 + sind(t)) for t in range(0, 360; length = 8)]
+    B = GI.Polygon([GI.LinearRing(ring)])
+
+    stamped = GO.RelateGeometry(GO.Spherical(), B; exact = GO.True()).geom
+    @test GI.extent(stamped) isa Extents.Extent{(:X, :Y, :Z)}
+    #-- an all-stamped tree is reused unchanged, extent included
+    rg = GO.RelateGeometry(GO.Spherical(), stamped; exact = GO.True())
+    @test rg.geom === stamped
+    @test GO.get_extent(rg) === GI.extent(stamped)
+    @test GO.relate(prep, stamped) == GO.relate(prep, B)
+
+    #-- a lon/lat extent fails the (X, Y, Z) reusability check: the extent is
+    #-- recomputed in kernel space and results are unaffected
+    llstamped = GI.Polygon([GI.LinearRing(ring)];
+        extent = Extents.Extent(X = (2.0, 4.0), Y = (2.0, 4.0)))
+    rgll = GO.RelateGeometry(GO.Spherical(), llstamped; exact = GO.True())
+    @test GO.get_extent(rgll) isa Extents.Extent{(:X, :Y, :Z)}
+    @test GO.relate(prep, llstamped) == GO.relate(prep, B)
 end
 
 # Ring winding must not change which region a polygon bounds: real-world data

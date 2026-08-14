@@ -1056,8 +1056,15 @@ end
 # regions — a CW hole must not become a complement region. Boxes get a few
 # ulps of padding so a vertex from another conversion path still prunes as
 # interacting.
-rk_interaction_bounds(m::Spherical, geom) =
-    _pad_bounds(_sph_interaction_extent(m, GI.trait(geom), geom))
+# A stored 3D `(X, Y, Z)` extent is returned as-is (the wrapper tree built
+# by `_relate_cache_extents`, or a user's own stamp — trusted to be in
+# kernel space, and for a polygon to be the REGION box, exactly as the
+# planar kernel trusts any stored extent). This is what lets a repeatedly
+# queried B geometry skip the region-extent recomputation per call.
+function rk_interaction_bounds(m::Spherical, geom)
+    _reusable_stored_extent(m, geom) && return geom.extent
+    return _pad_bounds(_sph_interaction_extent(m, GI.trait(geom), geom))
+end
 
 _sph_interaction_extent(m::Spherical, ::GI.AbstractPointTrait, geom) =
     GI.extent(_spherical_kernel_point(geom))
