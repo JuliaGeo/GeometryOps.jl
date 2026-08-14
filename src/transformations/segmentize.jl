@@ -47,13 +47,28 @@ axislegend(a; position = :lt)
 f
 ```
 
-There are two methods available for segmentizing geometries at the moment, 
+There are three methods available for segmentizing geometries at the moment,
 and you can invoke them by passing the relevant [`Manifold`](@ref):
 
 ```@docs; canonical=false
 Planar
+Spherical
 Geodesic
 ```
+
+[`Spherical`](@ref) interpolates along the great circle joining each pair of points, so it
+sits between [`Planar`](@ref) and [`Geodesic`](@ref): it accounts for the curvature of the
+Earth, but treats it as a sphere rather than an ellipsoid.  A spherical segmentization is
+*not* a refinement of the planar one — the great circle joining two points on the same
+parallel bows poleward of that parallel:
+
+```@example segmentize
+parallel = GI.LineString([(-50.0, 52.0), (50.0, 52.0)])
+collect(GI.getpoint(GO.segmentize(GO.Spherical(), parallel; max_distance = 3_500_000)))
+```
+
+The added midpoint sits at 63.3°N, over 11° north of the 52°N parallel that `Planar` would
+have interpolated along.
 
 ## Benchmark
 
@@ -169,9 +184,11 @@ Segmentize a geometry by adding extra vertices to the geometry so that no segmen
 This is useful for plotting geometries with a limited number of vertices, or for ensuring that a geometry is not too "coarse" for a given application.
 
 ## Arguments
-- `method::Manifold = Planar()`: The method to use for segmentizing the geometry.  At the moment, only [`Planar`](@ref) (assumes a flat plane) and [`Geodesic`](@ref) (assumes geometry on the ellipsoidal Earth and uses Vincenty's formulae) are available.
+- `method::Manifold = Planar()`: The method to use for segmentizing the geometry.  At the moment, [`Planar`](@ref) (assumes a flat plane), [`Spherical`](@ref) (assumes geometry on a sphere and interpolates along great circles) and [`Geodesic`](@ref) (assumes geometry on the ellipsoidal Earth and uses Vincenty's formulae) are available.
 - `geom`: The geometry to segmentize.  Must be a `LineString`, `LinearRing`, `Polygon`, `MultiPolygon`, or `GeometryCollection`, or some vector or table of those.
-- `max_distance::Real`: The maximum distance between vertices in the geometry.  **Beware: for `Planar`, this is in the units of the geometry, but for `Geodesic` and `Spherical` it's in units of the radius of the sphere.**
+- `max_distance::Real`: The maximum distance between vertices in the geometry.  **Beware: for `Planar`, this is in the units of the geometry, but for `Geodesic` and `Spherical` it's in units of the radius of the sphere.**  So under the default `Spherical()` radius `max_distance` is in metres, and under `Spherical(; radius = 1)` it is in radians.
+
+`Spherical` and `Geodesic` both assume that the input geometry is in lon/lat coordinates, in degrees.
 
 Returns a geometry of similar type to the input geometry, but resampled.
 """
@@ -181,7 +198,7 @@ end
 
 # allow three-arg method as well, just in case
 segmentize(geom, max_distance::Real; threaded = False()) = segmentize(Planar(), geom, max_distance; threaded)
-segmentize(method::Manifold, geom, max_distance::Real; threaded = False()) = segmentize(Planar(), geom; max_distance, threaded)
+segmentize(method::Manifold, geom, max_distance::Real; threaded = False()) = segmentize(method, geom; max_distance, threaded)
 
 # generic implementation
 function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
@@ -232,6 +249,31 @@ function _fill_linear_kernel!(::Planar, new_coords::Vector, x1, y1, x2, y2; max_
     push!(new_coords, (x2, y2))
     return nothing
 end
+#=
+The spherical kernel walks the great circle joining the two points, instead of the
+straight line between them in lon/lat space.  `slerp` gives us equally spaced points
+along that great circle, so we only have to decide how many of them to place.
+
+`max_distance` is an arc length in units of `method.radius`: the angle subtended at the
+centre of the sphere, `Ω`, times the radius.  So it's metres under the default (mean
+Earth) radius, and radians under `Spherical(; radius = 1)`.
+=#
+function _fill_linear_kernel!(method::Spherical, new_coords::Vector, x1, y1, x2, y2; max_distance)
+    a = UnitSphereFromGeographic()((x1, y1))
+    b = UnitSphereFromGeographic()((x2, y2))
+    distance = spherical_distance(a, b) * method.radius
+    if distance > max_distance
+        n_segments = ceil(Int, distance / max_distance)
+        for i in 1:(n_segments - 1)
+            push!(new_coords, GeographicFromUnitSphere()(slerp(a, b, i / n_segments)))
+        end
+    end
+    # End the line with the original coordinate,
+    # to avoid any multiplication errors.
+    push!(new_coords, (x2, y2))
+    return nothing
+end
+
 #=
 
 !!! note
