@@ -3,7 +3,8 @@ import GeometryOps as GO, GeoInterface as GI
 using GeometryOps.SpatialTreeInterface
 using GeometryOps.SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 using GeometryOps.SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
-using GeometryOps.SpatialTreeInterface: FlatNoTree, spatialtree
+using GeometryOps.SpatialTreeInterface: FlatNoTree, spatialtree, node_extent_is_expensive
+using GeometryOps.LoopStateMachine: Action
 using GeometryOps.FlexibleRTrees: RTree, STR
 using GeometryOps.NaturalIndexing: NaturalIndex
 using Extents
@@ -249,6 +250,185 @@ end
     test_dual_query_functionality(NaturalIndex)
     test_geometry_support(NaturalIndex)
     test_find_point_in_all_countries(NaturalIndex)
+end
+
+# Wraps another tree, derives its extents on access, and counts the derivations -
+# which is what `node_extent_is_expensive` is there to reduce.
+const NE_CALLS = Ref(0)
+
+struct CountedExtentNode{N}
+    node::N
+end
+GO.SpatialTreeInterface.isspatialtree(::Type{<:CountedExtentNode}) = true
+GO.SpatialTreeInterface.node_extent_is_expensive(::Type{<:CountedExtentNode}) = true
+GO.SpatialTreeInterface.isleaf(n::CountedExtentNode) = isleaf(n.node)
+GO.SpatialTreeInterface.nchild(n::CountedExtentNode) = nchild(n.node)
+GO.SpatialTreeInterface.getchild(n::CountedExtentNode) = (CountedExtentNode(c) for c in getchild(n.node))
+GO.SpatialTreeInterface.getchild(n::CountedExtentNode, i) = CountedExtentNode(getchild(n.node, i))
+GO.SpatialTreeInterface.child_indices_extents(n::CountedExtentNode) = child_indices_extents(n.node)
+function GO.SpatialTreeInterface.node_extent(n::CountedExtentNode)
+    NE_CALLS[] += 1
+    return node_extent(n.node)
+end
+
+# Same, but not opted in, so the two can be compared directly.
+struct PlainCountedNode{N}
+    node::N
+end
+GO.SpatialTreeInterface.isspatialtree(::Type{<:PlainCountedNode}) = true
+GO.SpatialTreeInterface.isleaf(n::PlainCountedNode) = isleaf(n.node)
+GO.SpatialTreeInterface.nchild(n::PlainCountedNode) = nchild(n.node)
+GO.SpatialTreeInterface.getchild(n::PlainCountedNode) = (PlainCountedNode(c) for c in getchild(n.node))
+GO.SpatialTreeInterface.getchild(n::PlainCountedNode, i) = PlainCountedNode(getchild(n.node, i))
+GO.SpatialTreeInterface.child_indices_extents(n::PlainCountedNode) = child_indices_extents(n.node)
+function GO.SpatialTreeInterface.node_extent(n::PlainCountedNode)
+    NE_CALLS[] += 1
+    return node_extent(n.node)
+end
+
+const XYExtent = Extents.Extent{(:X,:Y),Tuple{Tuple{Float64,Float64},Tuple{Float64,Float64}}}
+
+# A tree whose nodes have differing numbers of children, held in a tuple, so
+# `getchild` is inferred as `Tuple{Vararg{VaryingFanoutNode}}`.  A lazy
+# `(child, extent)` iterator over that is a `Generator{I} where I`, which boxes;
+# the traversal must not build one.
+struct VaryingFanoutNode
+    children::Tuple{Vararg{VaryingFanoutNode}}
+    items::Vector{Tuple{Int,XYExtent}}
+    extent::XYExtent
+end
+GO.SpatialTreeInterface.isspatialtree(::Type{VaryingFanoutNode}) = true
+GO.SpatialTreeInterface.isleaf(n::VaryingFanoutNode) = isempty(n.children)
+GO.SpatialTreeInterface.nchild(n::VaryingFanoutNode) = length(n.children)
+GO.SpatialTreeInterface.getchild(n::VaryingFanoutNode) = n.children
+GO.SpatialTreeInterface.getchild(n::VaryingFanoutNode, i) = n.children[i]
+GO.SpatialTreeInterface.node_extent(n::VaryingFanoutNode) = n.extent
+GO.SpatialTreeInterface.child_indices_extents(n::VaryingFanoutNode) = n.items
+
+function varying_fanout_tree(items::Vector{Tuple{Int,XYExtent}}, depth = 0)
+    length(items) <= 4 && return VaryingFanoutNode((), items, reduce(Extents.union, last.(items)))
+    step = cld(length(items), 2 + mod(depth, 4))  # fanout cycles 2, 3, 4, 5 by level
+    kids = Tuple(varying_fanout_tree(items[i:min(i+step-1, end)], depth + 1)
+                 for i in 1:step:length(items))
+    return VaryingFanoutNode(kids, Tuple{Int,XYExtent}[],
+                             reduce(Extents.union, [c.extent for c in kids]))
+end
+varying_fanout_tree(extents::Vector{XYExtent}) = varying_fanout_tree(collect(enumerate(extents)))
+
+collect_pairs(args...) = (out = Tuple{Int,Int}[];
+                          dual_depth_first_search((i, j) -> push!(out, (i, j)), args...);
+                          sort!(out))
+
+@testset "dual_depth_first_search extent carrying" begin
+    # deliberately mismatched depths - that is where extents are carried through
+    # a one-sided descent, and where the 4-arg/6-arg forms could diverge
+    fine = [Extents.Extent(X=(x, x+0.1), Y=(y, y+0.1)) for x in 0:0.05:5, y in 0:0.05:5] |> vec
+    coarse = [Extents.Extent(X=(x, x+1.0), Y=(y, y+1.0)) for x in 0:5, y in 0:5] |> vec
+
+    @testset "4-arg and 6-arg forms agree ($(nameof(TreeType)))" for TreeType in
+            (STRtree, NaturalIndex, FlatNoTree, varying_fanout_tree)
+        t1 = TreeType(fine)
+        t2 = TreeType(coarse)
+        four = collect_pairs(Extents.intersects, t1, t2)
+        six = (out = Tuple{Int,Int}[];
+               dual_depth_first_search((i, j) -> push!(out, (i, j)), Extents.intersects,
+                                       t1, node_extent(t1), t2, node_extent(t2));
+               sort!(out))
+        @test four == six
+        @test !isempty(four)
+        # and the pairs really are the intersecting ones
+        @test all(((i, j),) -> Extents.intersects(fine[i], coarse[j]), four)
+    end
+
+    @testset "node_extent_is_expensive changes cost, not results" begin
+        base = NaturalIndex(fine)
+        other = NaturalIndex(coarse)
+
+        NE_CALLS[] = 0
+        plain = collect_pairs(Extents.intersects, PlainCountedNode(base), PlainCountedNode(other))
+        plain_calls = NE_CALLS[]
+
+        NE_CALLS[] = 0
+        opted = collect_pairs(Extents.intersects, CountedExtentNode(base), CountedExtentNode(other))
+        opted_calls = NE_CALLS[]
+
+        # identical answers...
+        @test plain == opted
+        @test plain == collect_pairs(Extents.intersects, base, other)
+        # ...but the opted-in tree derives each extent far fewer times
+        @test opted_calls < plain_calls
+    end
+
+    @testset "default trait allocates nothing ($label)" for (label, t1, t2) in (
+        ("fixed fanout", NaturalIndex(fine), NaturalIndex(coarse)),
+        ("varying fanout", varying_fanout_tree(fine), varying_fanout_tree(coarse)),
+    )
+        @test node_extent_is_expensive(t1) == false
+        noop(i, j) = nothing
+        dual_depth_first_search(noop, Extents.intersects, t1, t2)  # compile
+        @test (@allocated dual_depth_first_search(noop, Extents.intersects, t1, t2)) == 0
+    end
+
+    # `_child_extents` picks the caching strategy; it has to fold to a concrete
+    # type from the node type alone, or the traversal boxes its loop variables.
+    @testset "the caching strategy is a compile-time choice" begin
+        cheap = varying_fanout_tree(fine)
+        costly = CountedExtentNode(NaturalIndex(fine))
+        @test (@inferred GO.SpatialTreeInterface._child_extents(cheap)) === nothing
+        @test (@inferred GO.SpatialTreeInterface._child_extents(NaturalIndex(fine))) === nothing
+        @test (@inferred GO.SpatialTreeInterface._child_extents(costly)) isa Vector{<:Extents.Extent}
+    end
+end
+
+@testset "dual_depth_first_search full_return" begin
+    # Each of the four branches of the recursion has to propagate an
+    # `Action(:full_return, x)` back out through every enclosing level.
+    fine = [Extents.Extent(X=(x, x+0.1), Y=(y, y+0.1)) for x in 0:0.05:5, y in 0:0.05:5] |> vec
+    coarse = [Extents.Extent(X=(x, x+1.0), Y=(y, y+1.0)) for x in 0:5, y in 0:5] |> vec
+    single = [Extents.Extent(X=(0.0, 6.0), Y=(0.0, 6.0))]
+
+    # deep-vs-deep (both-internal branch), deep-vs-shallow and shallow-vs-deep
+    # (the one-leaf branches), and leaf-vs-leaf
+    @testset "$label" for (label, a, b) in (
+        ("both internal", NaturalIndex(fine), NaturalIndex(coarse)),
+        ("leaf vs internal", NaturalIndex(single), NaturalIndex(fine)),
+        ("internal vs leaf", NaturalIndex(fine), NaturalIndex(single)),
+        ("leaf vs leaf", NaturalIndex(single), NaturalIndex(single)),
+    )
+        n = Ref(0)
+        result = dual_depth_first_search(Extents.intersects, a, b) do i, j
+            n[] += 1
+            return Action(:full_return, (i, j))
+        end
+        # returns the Action itself, and stops at the very first pair
+        @test result isa Action
+        @test result.name == :full_return
+        @test n[] == 1
+
+        # the same thing through the 6-arg form
+        m = Ref(0)
+        result6 = dual_depth_first_search(Extents.intersects, a, node_extent(a), b, node_extent(b)) do i, j
+            m[] += 1
+            return Action(:full_return, (i, j))
+        end
+        @test result6 isa Action
+        @test result6.name == :full_return
+        @test m[] == 1
+        @test result6.x == result.x
+    end
+
+    @testset "full_return with an opted-in tree" begin
+        a = CountedExtentNode(NaturalIndex(fine))
+        b = CountedExtentNode(NaturalIndex(coarse))
+        n = Ref(0)
+        result = dual_depth_first_search(Extents.intersects, a, b) do i, j
+            n[] += 1
+            return Action(:full_return, i)
+        end
+        @test result isa Action
+        @test result.name == :full_return
+        @test n[] == 1
+    end
 end
 
 # This testset is not used because Polylabel.jl has some issues.
