@@ -1,6 +1,24 @@
 using Test
 import GeometryOps as GO
 import GeoInterface as GI
+using GeometryOps.UnitSpherical: UnitSphereFromGeographic, UnitSphericalPoint
+
+# Probes for the cache allocation tests.  These have to be top-level functions: measuring
+# `@allocated` directly on testset-local variables boxes them into the keyword `NamedTuple`
+# and charges the algorithm ~112 bytes that it never actually allocates.
+_clip_bytes(alg, a, b, cache) = @allocated GO.intersection(alg, a, b; cache)
+_clip_bytes(alg, a, b) = @allocated GO.intersection(alg, a, b)
+
+# Cost of the result on its own: a closed ring of `n` points wrapped in a polygon.  Measuring
+# it rather than hardcoding a byte count keeps the test honest across Julia/GeoInterface versions.
+_ring_polygon_bytes(::Type{P}, n) where {P} = @allocated GI.Polygon([Vector{P}(undef, n)])
+
+function _spherical_polygon(coords)
+    transform = UnitSphereFromGeographic()
+    points = [transform((lon, lat)) for (lon, lat) in coords]
+    push!(points, points[1])
+    return GI.Polygon([points])
+end
 
 @testset "ConvexConvexSutherlandHodgman" begin
     @testset "Basic intersection" begin
@@ -179,6 +197,114 @@ import GeoInterface as GI
         result3 = GO.intersection(GO.ConvexConvexSutherlandHodgman(), rect5, rect6)
         @test GI.trait(result3) isa GI.PolygonTrait
         @test GO.area(result3) ≈ 0.0 atol=1e-10
+    end
+
+    @testset "Cache" begin
+        alg = GO.ConvexConvexSutherlandHodgman()
+        square1 = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+        square2 = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+        tri1 = GI.Polygon([[(0.0, 0.0), (4.0, 0.0), (2.0, 4.0), (0.0, 0.0)]])
+        tri2 = GI.Polygon([[(0.0, 2.0), (2.0, -2.0), (4.0, 2.0), (0.0, 2.0)]])
+
+        @testset "Same results with and without cache" begin
+            cache = GO.SutherlandHodgmanCache(alg)
+            for (a, b) in [(square1, square2), (tri1, tri2), (square1, tri1)]
+                uncached = GO.intersection(alg, a, b)
+                cached = GO.intersection(alg, a, b; cache)
+                @test collect(GI.getpoint(GI.getexterior(cached))) ==
+                      collect(GI.getpoint(GI.getexterior(uncached)))
+            end
+        end
+
+        @testset "Result does not alias the cache" begin
+            cache = GO.SutherlandHodgmanCache(alg)
+            first_result = GO.intersection(alg, square1, square2; cache)
+            first_points = collect(GI.getpoint(GI.getexterior(first_result)))
+            # Reuse the cache - this must not corrupt the previously returned polygon
+            GO.intersection(alg, tri1, tri2; cache)
+            @test collect(GI.getpoint(GI.getexterior(first_result))) == first_points
+        end
+
+        @testset "Wrong cache point type throws" begin
+            f32_cache = GO.SutherlandHodgmanCache(GO.Planar(), Float32)
+            @test_throws ArgumentError GO.intersection(alg, square1, square2; cache=f32_cache)
+
+            spherical_cache = GO.SutherlandHodgmanCache(GO.Spherical())
+            @test_throws ArgumentError GO.intersection(alg, square1, square2; cache=spherical_cache)
+        end
+
+        @testset "Cached clipping allocates only the returned polygon" begin
+            @testset "Planar" begin
+                cache = GO.SutherlandHodgmanCache(alg)
+                n = GI.npoint(GI.getexterior(GO.intersection(alg, square1, square2; cache)))
+                output = _ring_polygon_bytes(Tuple{Float64,Float64}, n)
+
+                _clip_bytes(alg, square1, square2, cache)  # warm up compilation and buffer growth
+                @test _clip_bytes(alg, square1, square2, cache) == output
+                # Reusing the cache must not grow the buffers again on later calls
+                @test all(==(output), (_clip_bytes(alg, square1, square2, cache) for _ in 1:5))
+                # Guard against passing vacuously: without a cache this must allocate strictly more
+                _clip_bytes(alg, square1, square2)
+                @test _clip_bytes(alg, square1, square2) > output
+            end
+
+            @testset "Spherical" begin
+                salg = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
+                scache = GO.SutherlandHodgmanCache(salg)
+                sq_a = _spherical_polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+                sq_b = _spherical_polygon([(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+                n = GI.npoint(GI.getexterior(GO.intersection(salg, sq_a, sq_b; cache=scache)))
+                output = _ring_polygon_bytes(UnitSphericalPoint{Float64}, n)
+
+                _clip_bytes(salg, sq_a, sq_b, scache)  # warm up compilation and buffer growth
+                cached = _clip_bytes(salg, sq_a, sq_b, scache)
+                # Reusing the cache must not grow the buffers again, whatever the baseline is
+                @test all(==(cached), (_clip_bytes(salg, sq_a, sq_b, scache) for _ in 1:5))
+                # Guard against passing vacuously: without a cache this must allocate strictly more
+                _clip_bytes(salg, sq_a, sq_b)
+                @test _clip_bytes(salg, sq_a, sq_b) > cached
+
+                if VERSION >= v"1.12"
+                    @test cached == output
+                else
+                    # On Julia 1.11 `dot`/`norm`/`cross` over `UnitSphericalPoint` are called
+                    # through function pointers rather than devirtualized, so the clip loop boxes
+                    # every intermediate point (~3.7kB here) whether or not a cache is supplied —
+                    # the uncached path pays it too.  The cache still removes the buffer
+                    # allocations it is responsible for, which the assertions above cover.
+                    @test_broken cached == output
+                end
+            end
+        end
+
+        @testset "Spherical cache" begin
+            using GeometryOps.UnitSpherical: UnitSphereFromGeographic
+
+            function spherical_polygon(coords)
+                transform = UnitSphereFromGeographic()
+                points = [transform((lon, lat)) for (lon, lat) in coords]
+                push!(points, points[1])
+                return GI.Polygon([points])
+            end
+
+            salg = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
+            scache = GO.SutherlandHodgmanCache(salg)
+            sq1 = spherical_polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+            sq2 = spherical_polygon([(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+            large = spherical_polygon([(-5.0, -5.0), (5.0, -5.0), (5.0, 5.0), (-5.0, 5.0)])
+
+            for (a, b) in [(sq1, sq2), (large, sq1), (sq1, large)]
+                uncached = GO.intersection(salg, a, b)
+                cached = GO.intersection(salg, a, b; cache=scache)
+                @test GO.area(GO.Spherical(), cached) ≈ GO.area(GO.Spherical(), uncached)
+            end
+
+            # Aliasing check on the spherical path too
+            first_result = GO.intersection(salg, sq1, sq2; cache=scache)
+            first_points = collect(GI.getpoint(GI.getexterior(first_result)))
+            GO.intersection(salg, large, sq1; cache=scache)
+            @test collect(GI.getpoint(GI.getexterior(first_result))) == first_points
+        end
     end
 
     @testset "Spherical helpers" begin
