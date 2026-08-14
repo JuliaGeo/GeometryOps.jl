@@ -85,7 +85,7 @@ nothing #hide
 Plot `land` for context.
 
 ````@example geospatial_geometry
-poly!(ga, land_features; color=:black)
+poly!(ga, land_features.geometry; color=:black)
 fig
 ````
 
@@ -131,7 +131,7 @@ rs = 1000000;
 ϴs = 0:0.01:2pi;
 xs = rs .* cos.(ϴs).^3 .+ 500000;
 ys = rs .* sin.(ϴs) .^ 3 .+ 5000000;
-DisplayAs.setcontext(y, :compact => true, :displaysize => (10, 40),) # hide
+DisplayAs.setcontext(ys, :compact => true, :displaysize => (10, 40),) # hide
 ````
 
 Now create a `LinearRing` from `Points`

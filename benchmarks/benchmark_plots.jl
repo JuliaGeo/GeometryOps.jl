@@ -111,8 +111,11 @@ function plot_trials(
             yticks = Makie.LogTicks(Makie.WilkinsonTicks(7; k_min = 4)),
             ygridwidth = 0.75,
         ) 
-        plots = [scatterlines!(ax, x, y; label = label) for (x, y, label) in zip(xs, ys, labels)]
-        setproperty!.(getindex.(getproperty.(plots, :plots), 1), :alpha, 0.1)
+        palette = ax.scene.theme.palette.color[]
+        for (i, (x, y, label)) in enumerate(zip(xs, ys, labels))
+            color = palette[mod1(i, length(palette))]
+            scatterlines!(ax, x, y; label = label, color = (color, 0.1), markercolor = color)
+        end
         leg = Legend(
             lp, ax; 
             tellwidth = legend_position isa Union{Tuple, Makie.Automatic} && (legend_position isa Makie.Automatic || length(legend_position) != 3) && legend_orientation == :vertical, 

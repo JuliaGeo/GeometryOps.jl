@@ -9,8 +9,9 @@ Finally, calls `f(i1, i2)` for each leaf-level index `i1::Int` in `tree1` and `i
 that satisfies `predicate(extent(i1), extent(i2))`.
 
 Here, `f(i1::Int, i2::Int)` may be any function that takes two integers as arguments.
+
 It may optionally return an [`Action`](@ref LoopStateMachine.Action) to alter the control
-flow of the `Action(:full_return, true)` to return `Action(:full_return, true)` from this
+flow of the `Action(:full_return, true)`. Return `Action(:full_return, true)` from this
 function and break out of the recursion.
 
 This is generic to anything that implements the SpatialTreeInterface, particularly the methods
@@ -19,12 +20,6 @@ This is generic to anything that implements the SpatialTreeInterface, particular
 Each visited node's extent is computed once and carried into the recursion.
 Trees that derive their extents rather than storing them should also define
 [`node_extent_is_expensive`](@ref).
-
-## Examples
-
-```julia
-using NaturalEarth,
-```
 """
 function dual_depth_first_search(f::F, predicate::P, node1::N1, node2::N2) where {F, P, N1, N2}
     return dual_depth_first_search(f, predicate, node1, node_extent(node1), node2, node_extent(node2))

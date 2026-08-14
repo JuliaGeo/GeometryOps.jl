@@ -9,7 +9,7 @@
 #
 # The methods that make up the interface are:
 #
-# ```@docs
+# ```@docs; canonical=false
 # isspatialtree
 # isleaf
 # getchild
