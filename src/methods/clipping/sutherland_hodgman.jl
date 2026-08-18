@@ -397,9 +397,11 @@ function _intersection_sutherland_hodgman(
         buf_in, buf_out = buf_out, buf_in
     end
 
-    # Handle empty result - check if clip polygon is fully inside the original subject
+    # Handle empty result - check if clip polygon is fully inside the original subject.
+    # "Fully inside" needs EVERY clip vertex inside the subject, not just the first:
     if isempty(buf_in)
-        if !isempty(clip_points) && _point_in_convex_spherical_polygon(clip_points[1], original_subject)
+        if !isempty(clip_points) &&
+           all(p -> _point_in_convex_spherical_polygon(p, original_subject), clip_points)
             # Subject contains clip - return clip polygon (copied, so it doesn't alias the cache)
             result = copy(clip_points)
             push!(result, result[1])
