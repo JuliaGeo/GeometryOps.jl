@@ -6,7 +6,7 @@ import Extents
 import GeoInterface as GI
 import AbstractTrees
 
-# public isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
+# public isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent, node_extent_is_expensive
 export query
 export FlatNoTree
 export spatialtree

@@ -99,7 +99,26 @@ Generally, defining `Extents.extent(node)` is sufficient here, and you
 won't need to define this
 
 The reason we don't use that directly is to give users of this interface
-a way to define bounding boxes that are not extents, like spherical caps 
+a way to define bounding boxes that are not extents, like spherical caps
 and other such things.
 """
 node_extent(node) = GI.extent(node)
+
+"""
+    node_extent_is_expensive(node)::Bool
+
+Return true if [`node_extent`](@ref) computes the node's extent instead of
+reading one the node already stores.  Defaults to false.
+
+When true, [`dual_depth_first_search`](@ref) caches a node's child extents rather
+than re-deriving them once per opposing child, at the cost of a small vector per
+visited node.
+
+## Implementation notes
+
+Define this on the type - `node_extent_is_expensive(::Type{MyNode}) = true` - so
+that it is known at compile time; `node_extent_is_expensive(::MyNode)` forwards
+there automatically.
+"""
+node_extent_is_expensive(::T) where {T} = node_extent_is_expensive(T)
+node_extent_is_expensive(::Type{<:Any}) = false

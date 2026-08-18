@@ -29,6 +29,7 @@ These are the only methods that are required to be implemented.
 
 Optionally, one may define:
 - `node_extent(node)` - get the extent of a node.  This falls back to `GI.extent` but can potentially be overridden if you want to return a different but extent-like object.
+- `node_extent_is_expensive(node)::Bool` - whether `node_extent` computes the extent rather than reading a stored one.  Defaults to `false`; set it on trees that derive extents on access, and `dual_depth_first_search` will cache child extents instead of re-deriving them.
 
 They enable the generic query functions described below:
 
@@ -37,7 +38,7 @@ They enable the generic query functions described below:
 - `do_query(f, predicate, node)` - call `f(i)` for each index `i` in `node` that satisfies `predicate(extent(i))`.
 - `do_dual_query(f, predicate, tree1, tree2)` - call `f(i1, i2)` for each index `i1` in `tree1` and `i2` in `tree2` that satisfies `predicate(extent(i1), extent(i2))`.
 
-These are both completely non-allocating, and will only call `f` for indices that satisfy the predicate.
+These are both completely non-allocating, and will only call `f` for indices that satisfy the predicate.  (Trees that opt into `node_extent_is_expensive` trade one small vector per visited internal node for far fewer `node_extent` calls.)
 You can of course build a standard query interface on top of `do_query` if you want - that's simply:
 ```julia
 a = Int[]
