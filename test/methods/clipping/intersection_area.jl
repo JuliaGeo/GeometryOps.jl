@@ -7,6 +7,7 @@ using GeometryOps.UnitSpherical: UnitSphereFromGeographic, UnitSphericalPoint
 # `@allocated` directly on testset-local variables boxes them into the keyword `NamedTuple`
 # and charges the algorithm bytes that it never actually allocates.
 _area_bytes(alg, a, b, cache) = @allocated GO.intersection_area(alg, a, b; cache)
+_area_bytes(alg, a, b) = @allocated GO.intersection_area(alg, a, b)
 
 function _spherical_polygon(coords)
     transform = UnitSphereFromGeographic()
@@ -122,6 +123,37 @@ edge_neighbour = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2
             GO.intersection_area(unit, sa, sb) * GO.Spherical().radius^2
     end
 
+    @testset "Foster-Hormann" begin
+        alg = GO.FosterHormannClipping(GO.Planar())
+        #-- `intersection`'s own `target = nothing` default is broken (`TraitTarget(nothing)`
+        #-- has no method), so the reference call has to name the areal target
+        ref(x, y) = GO.area(GO.intersection(alg, x, y; target = GI.PolygonTrait()))
+
+        # traced without building a ring: hole-free polygon pairs
+        @test GO.intersection_area(alg, square_a, square_b) ≈ 1.0
+        @test GO.intersection_area(alg, square_a, square_b) ≈ ref(square_a, square_b)
+        @test GO.intersection_area(alg, square_a, edge_neighbour) == 0.0
+        # no crossings at all: containment either way round, and disjoint
+        @test GO.intersection_area(alg, square_a, small) ≈ ref(square_a, small)
+        @test GO.intersection_area(alg, small, square_a) ≈ ref(small, square_a)
+        @test GO.intersection_area(alg, square_a, far) == 0.0
+
+        # delegated to the polygon path, and still right
+        donut = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)],
+                            [(3.0, 3.0), (3.0, 7.0), (7.0, 7.0), (7.0, 3.0), (3.0, 3.0)]])
+        box = GI.Polygon([[(2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0), (2.0, 2.0)]])
+        @test GO.intersection_area(alg, donut, box) ≈ 20.0
+        @test GO.intersection_area(alg, donut, box) ≈ ref(donut, box)
+        mp = GI.MultiPolygon([square_a, far])
+        @test GO.intersection_area(alg, mp, square_b) ≈ ref(mp, square_b)
+
+        @test GO.intersection_area(alg, square_a, square_b, Float32) isa Float32
+
+        # the tracer is shared with `union`/`difference`: they must be untouched by it
+        @test GO.area(GO.union(alg, square_a, square_b; target = GI.PolygonTrait())) ≈ 7.0
+        @test GO.area(GO.difference(alg, square_a, square_b; target = GI.PolygonTrait())) ≈ 3.0
+    end
+
     @testset "Cache" begin
         planar = GO.ConvexConvexSutherlandHodgman()
         spherical = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
@@ -141,8 +173,8 @@ edge_neighbour = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2
         @test _area_bytes(planar, square_a, square_b, planar_cache) == 0
         @test _area_bytes(spherical, sa, sb, spherical_cache) == 0
         # Guard against passing vacuously: without a cache the buffers cost something
-        _area_bytes(planar, square_a, square_b, nothing)
-        @test _area_bytes(planar, square_a, square_b, nothing) > 0
+        _area_bytes(planar, square_a, square_b)
+        @test _area_bytes(planar, square_a, square_b) > 0
 
         @test_throws ArgumentError GO.intersection_area(planar, square_a, square_b; cache = spherical_cache)
     end
