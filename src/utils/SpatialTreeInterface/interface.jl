@@ -114,8 +114,8 @@ When true, [`dual_depth_first_search`](@ref) caches a node's child extents rathe
 than re-deriving them once per opposing child.  The cache is one scratch stack
 per traversal, so opting in does not allocate per visited node.
 
-All nodes of such a tree must return the same extent type, since they share that
-one stack.
+A node's children must all share an extent type, since they share one stack; see
+[`children_extent_type`](@ref) for trees where that type changes with depth.
 
 ## Implementation notes
 
@@ -125,3 +125,24 @@ there automatically.
 """
 node_extent_is_expensive(::T) where {T} = node_extent_is_expensive(T)
 node_extent_is_expensive(::Type{<:Any}) = false
+
+"""
+    children_extent_type(node)::Union{Type, Nothing}
+
+Return the type [`node_extent`](@ref) gives for `node`'s *children*, or `nothing`
+- the default - to say it is the same type as `node`'s own extent.
+
+Only [`dual_depth_first_search`](@ref) on a tree that opts into
+[`node_extent_is_expensive`](@ref) consults this: it caches a node's child
+extents in a typed scratch stack, and needs the element type before it touches
+a child.  Siblings must agree, but a tree whose extent type changes with depth
+can say so here and still be traversed.
+
+## Implementation notes
+
+Define this on the type - `children_extent_type(::Type{MyNode}) = MyChildExtent` -
+so that it is known at compile time; `children_extent_type(::MyNode)` forwards
+there automatically.
+"""
+children_extent_type(::T) where {T} = children_extent_type(T)
+children_extent_type(::Type{<:Any}) = nothing

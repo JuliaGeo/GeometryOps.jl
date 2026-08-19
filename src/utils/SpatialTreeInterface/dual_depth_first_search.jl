@@ -28,9 +28,21 @@ end
 # The descent's scratch stack of derived child extents, or `nothing` to mean "call
 # `node_extent` in the loop".  `node_extent_is_expensive` is a function of `N`
 # alone, so the branch folds and only one arm is compiled.
-@inline _extent_stack(stack, node::N, ::E) where {N, E} = node_extent_is_expensive(N) ? _as_stack(stack, E) : nothing
-@inline _as_stack(stack, ::Type) = stack
-@inline _as_stack(::Nothing, ::Type{E}) where {E} = E[]
+@inline _extent_stack(stack, node::N, ::E) where {N, E} =
+    node_extent_is_expensive(N) ? _as_stack(stack, _child_extent_type(N, E), node) : nothing
+
+# Siblings share a type, so one stack serves a node's children; a level whose
+# children type differs from the stack it inherited starts its own.  Dispatch
+# picks the arm, so the reuse path never calls `nchild` - it can be costly.
+@inline _as_stack(stack::Vector{E}, ::Type{E}, node) where {E} = stack
+@inline _as_stack(stack, ::Type{E}, node) where {E} = sizehint!(Vector{E}(), nchild(node))
+
+# An inherited stack is appended to above whatever the ancestors left on it; a
+# stack this level started for itself begins empty.
+@inline _stack_base(::Nothing, stack) = 0
+@inline _stack_base(stack2, stack) = stack2 === stack ? length(stack2) : 0
+
+@inline _child_extent_type(::Type{N}, ::Type{E}) where {N, E} = something(children_extent_type(N), E)
 
 # Hand an ancestor's stack on through levels that do not need one themselves.
 @inline _carry(::Nothing, stack) = stack
@@ -89,7 +101,7 @@ function dual_depth_first_search(
         # node2's child extents go on the shared stack and come off again on the
         # way out, so the descent allocates no buffer per visited node pair
         stack2 = _extent_stack(stack, node2, extent2)
-        base = stack2 === nothing ? 0 : length(stack2)
+        base = _stack_base(stack2, stack)
         _fill_child_extents!(stack2, node2)
         child_stack = _carry(stack2, stack)
         for child1 in getchild(node1)

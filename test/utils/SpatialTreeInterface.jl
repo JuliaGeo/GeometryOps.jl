@@ -3,7 +3,7 @@ import GeometryOps as GO, GeoInterface as GI
 using GeometryOps.SpatialTreeInterface
 using GeometryOps.SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 using GeometryOps.SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
-using GeometryOps.SpatialTreeInterface: FlatNoTree, spatialtree, node_extent_is_expensive
+using GeometryOps.SpatialTreeInterface: FlatNoTree, spatialtree, node_extent_is_expensive, children_extent_type
 using GeometryOps.LoopStateMachine: Action
 using GeometryOps.FlexibleRTrees: RTree, STR
 using GeometryOps.NaturalIndexing: NaturalIndex
@@ -315,6 +315,36 @@ function varying_fanout_tree(items::Vector{Tuple{Int,XYExtent}}, depth = 0)
 end
 varying_fanout_tree(extents::Vector{XYExtent}) = varying_fanout_tree(collect(enumerate(extents)))
 
+# An extent-like type that is not an `Extents.Extent`, so a tree using both has
+# an extent type that genuinely changes with depth.
+struct BoxExtent
+    X::Tuple{Float64,Float64}
+    Y::Tuple{Float64,Float64}
+end
+_asbox(e) = BoxExtent(e.X, e.Y)
+_boxy_intersects(a, b) = Extents.intersects(
+    Extents.Extent(X = a.X, Y = a.Y), Extents.Extent(X = b.X, Y = b.Y))
+
+# Odd levels report an `Extent`, even levels a `BoxExtent`.  Siblings agree,
+# levels do not - the case one tree-wide stack cannot serve.
+struct AlternatingExtentNode{N}
+    node::N
+    level::Int
+end
+AlternatingExtentNode(node) = AlternatingExtentNode(node, 0)
+GO.SpatialTreeInterface.isspatialtree(::Type{<:AlternatingExtentNode}) = true
+GO.SpatialTreeInterface.node_extent_is_expensive(::Type{<:AlternatingExtentNode}) = true
+GO.SpatialTreeInterface.children_extent_type(::Type{<:AlternatingExtentNode}) = Union{XYExtent,BoxExtent}
+GO.SpatialTreeInterface.isleaf(n::AlternatingExtentNode) = isleaf(n.node)
+GO.SpatialTreeInterface.nchild(n::AlternatingExtentNode) = nchild(n.node)
+GO.SpatialTreeInterface.getchild(n::AlternatingExtentNode) =
+    (AlternatingExtentNode(c, n.level + 1) for c in getchild(n.node))
+GO.SpatialTreeInterface.getchild(n::AlternatingExtentNode, i) =
+    AlternatingExtentNode(getchild(n.node, i), n.level + 1)
+GO.SpatialTreeInterface.child_indices_extents(n::AlternatingExtentNode) = child_indices_extents(n.node)
+GO.SpatialTreeInterface.node_extent(n::AlternatingExtentNode) =
+    iseven(n.level) ? node_extent(n.node) : _asbox(node_extent(n.node))
+
 collect_pairs(args...) = (out = Tuple{Int,Int}[];
                           dual_depth_first_search((i, j) -> push!(out, (i, j)), args...);
                           sort!(out))
@@ -391,6 +421,20 @@ collect_pairs(args...) = (out = Tuple{Int,Int}[];
         noop(i, j) = nothing
         dual_depth_first_search(noop, Extents.intersects, a, b)  # compile
         @test (@allocated dual_depth_first_search(noop, Extents.intersects, a, b)) < 4096
+    end
+
+    # a tree whose extent type changes with depth: siblings agree, levels do not
+    @testset "children_extent_type carries a per-level extent type" begin
+        a = AlternatingExtentNode(NaturalIndex(fine))
+        b = AlternatingExtentNode(NaturalIndex(coarse))
+        @test node_extent_is_expensive(a)
+        @test children_extent_type(a) === Union{XYExtent,BoxExtent}
+        # the answers are the ones the plain tree gives
+        @test collect_pairs(_boxy_intersects, a, b) ==
+              collect_pairs(Extents.intersects, NaturalIndex(fine), NaturalIndex(coarse))
+        # and the stack the traversal picks is the declared child type
+        @test (@inferred GO.SpatialTreeInterface._extent_stack(nothing, a, node_extent(a))) isa
+              Vector{Union{XYExtent,BoxExtent}}
     end
 end
 
