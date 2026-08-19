@@ -114,8 +114,7 @@ _overlay_ng(m::Manifold, op::_OverlayOpCode, a, b;
 function _overlay_ng(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
         target, exact, tree_a, tree_b) where {T}
     tgt = _ov_target(target)
-    input = _overlay_input(m, a, b, exact)
-    dim_a, dim_b = input.dim_a, input.dim_b
+    input, dim_a, dim_b = _overlay_input(m, a, b, exact)
 
     #-- a target above the result dimension can match nothing whatever the inputs
     #-- contain, so it is answered without noding at all
@@ -145,9 +144,19 @@ end
 # derives the dimensions and empty flags the same way — `_empty_result_short_circuit` and
 # `_overlay_envelopes` both read them, and a hand-built one that disagrees is a silent
 # wrong answer rather than an error.
-_overlay_input(m::Manifold, a, b, exact) =
-    _OverlayInput(m, a, b, _overlay_dimension(a), _overlay_dimension(b), exact,
-                  _ov_isempty(a), _ov_isempty(b), nothing, nothing)
+#
+#-- The dimensions come back alongside the input, and callers must branch on THOSE and not
+#-- on `input.dim_a`/`input.dim_b`. `_OverlayInput` is mutable and escapes into the
+#-- labeller, so a field load off it is opaque to inference, whereas `_overlay_dimension`
+#-- folds to a constant in the type domain — and that constant is what prunes the
+#-- untargeted result union down from `Any`. Returning them keeps the two in lockstep
+#-- without anyone having to remember to call `_overlay_dimension` twice.
+@inline function _overlay_input(m::Manifold, a, b, exact)
+    dim_a, dim_b = _overlay_dimension(a), _overlay_dimension(b)
+    input = _OverlayInput(m, a, b, dim_a, dim_b, exact,
+                          _ov_isempty(a), _ov_isempty(b), nothing, nothing)
+    return input, dim_a, dim_b
+end
 
 # Node the inputs, build the graph, label it, and mark its result-area edges: the
 # whole pipeline up to the point where a result is extracted from it. Shared with
@@ -174,8 +183,8 @@ end
 #-- in `_overlay_ng`: an unannotated type argument is not specialized on, and the whole
 #-- pipeline below is a function of it.
 function _overlay_intersection_area(m::Manifold, ::Type{T}, ::Type{P}, a, b, exact) where {T, P}
-    input = _overlay_input(m, a, b, exact)
-    (input.dim_a == 2 && input.dim_b == 2) || return zero(T)
+    input, dim_a, dim_b = _overlay_input(m, a, b, exact)
+    (dim_a == 2 && dim_b == 2) || return zero(T)
 
     ea, eb = _overlay_envelopes(m, OVERLAY_INTERSECTION, input)
     #-- empty inputs are part of what this rejects, so they need no separate test
