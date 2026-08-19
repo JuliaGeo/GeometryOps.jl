@@ -139,6 +139,16 @@ function _overlay_ng(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
         return _overlay_mixed_points(m, T, op, a, b, dim_a, dim_b, tgt; exact)  # hasPoints
     end
 
+    g = _overlay_marked_graph(m, T, op, a, b, input, exact, tree_a, tree_b, ea, eb)
+
+    return _extract_result(m, op, g, input, tgt; exact)
+end
+
+# Node the inputs, build the graph, label it, and mark its result-area edges: the
+# whole pipeline up to the point where a result is extracted from it. Shared with
+# `intersection_area`, which extracts an area instead of a geometry.
+function _overlay_marked_graph(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b, input,
+        exact, tree_a, tree_b, ea, eb) where {T}
     clip_a, clip_b = _overlay_clip_envelopes(op, ea, eb)
     #-- the positional form: a `point_type` keyword would be re-boxed into the
     #-- kwargs `NamedTuple` as a bare `DataType` and `T` would stop propagating
@@ -148,8 +158,7 @@ function _overlay_ng(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
     _compute_labelling!(g, input)
     _mark_result_area_edges!(g, op)
     _unmark_duplicate_edges_from_result_area!(g)
-
-    return _extract_result(m, op, g, input, tgt; exact)
+    return g
 end
 
 # ## Result extraction (port of `extractResult`)
