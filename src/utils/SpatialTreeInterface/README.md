@@ -38,7 +38,7 @@ They enable the generic query functions described below:
 - `do_query(f, predicate, node)` - call `f(i)` for each index `i` in `node` that satisfies `predicate(extent(i))`.
 - `do_dual_query(f, predicate, tree1, tree2)` - call `f(i1, i2)` for each index `i1` in `tree1` and `i2` in `tree2` that satisfies `predicate(extent(i1), extent(i2))`.
 
-These are both completely non-allocating, and will only call `f` for indices that satisfy the predicate.  (Trees that opt into `node_extent_is_expensive` trade one small vector per visited internal node for far fewer `node_extent` calls.)
+These are both completely non-allocating, and will only call `f` for indices that satisfy the predicate.  (Trees that opt into `node_extent_is_expensive` allocate one scratch stack per traversal, and reuse it at every visited node, to get far fewer `node_extent` calls.)
 You can of course build a standard query interface on top of `do_query` if you want - that's simply:
 ```julia
 a = Int[]

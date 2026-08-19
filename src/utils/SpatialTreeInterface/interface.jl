@@ -111,8 +111,11 @@ Return true if [`node_extent`](@ref) computes the node's extent instead of
 reading one the node already stores.  Defaults to false.
 
 When true, [`dual_depth_first_search`](@ref) caches a node's child extents rather
-than re-deriving them once per opposing child, at the cost of a small vector per
-visited node.
+than re-deriving them once per opposing child.  The cache is one scratch stack
+per traversal, so opting in does not allocate per visited node.
+
+All nodes of such a tree must return the same extent type, since they share that
+one stack.
 
 ## Implementation notes
 

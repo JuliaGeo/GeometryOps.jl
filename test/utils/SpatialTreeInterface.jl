@@ -369,14 +369,28 @@ collect_pairs(args...) = (out = Tuple{Int,Int}[];
         @test (@allocated dual_depth_first_search(noop, Extents.intersects, t1, t2)) == 0
     end
 
-    # `_child_extents` picks the caching strategy; it has to fold to a concrete
+    # `_extent_stack` picks the caching strategy; it has to fold to a concrete
     # type from the node type alone, or the traversal boxes its loop variables.
     @testset "the caching strategy is a compile-time choice" begin
         cheap = varying_fanout_tree(fine)
         costly = CountedExtentNode(NaturalIndex(fine))
-        @test (@inferred GO.SpatialTreeInterface._child_extents(cheap)) === nothing
-        @test (@inferred GO.SpatialTreeInterface._child_extents(NaturalIndex(fine))) === nothing
-        @test (@inferred GO.SpatialTreeInterface._child_extents(costly)) isa Vector{<:Extents.Extent}
+        ext = node_extent(NaturalIndex(fine))
+        @test (@inferred GO.SpatialTreeInterface._extent_stack(nothing, cheap, ext)) === nothing
+        @test (@inferred GO.SpatialTreeInterface._extent_stack(nothing, NaturalIndex(fine), ext)) === nothing
+        @test (@inferred GO.SpatialTreeInterface._extent_stack(nothing, costly, ext)) isa Vector{<:Extents.Extent}
+        # an existing stack is reused rather than replaced
+        stack = typeof(ext)[]
+        @test (@inferred GO.SpatialTreeInterface._extent_stack(stack, costly, ext)) === stack
+    end
+
+    # the opted-in path used to allocate a vector per visited node pair; now it
+    # allocates one scratch stack for the whole descent
+    @testset "an opted-in tree allocates a bounded amount" begin
+        a = CountedExtentNode(NaturalIndex(fine))
+        b = CountedExtentNode(NaturalIndex(coarse))
+        noop(i, j) = nothing
+        dual_depth_first_search(noop, Extents.intersects, a, b)  # compile
+        @test (@allocated dual_depth_first_search(noop, Extents.intersects, a, b)) < 4096
     end
 end
 
