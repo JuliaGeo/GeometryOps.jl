@@ -310,7 +310,10 @@ _naive_triangulated_spherical_polygon_area(::SphericalTriangleAreaMethod, ::Type
 # ## Ring area over a plain vector of points
 #
 # `intersection_area` measures the rings a clipping engine produced without wrapping them
-# in a geometry first, so these take a vector of points, closed or not.
+# in a geometry first, so these take a vector of points. `closed` says whether that vector
+# repeats its first point at the end — the caller knows, and it cannot be re-derived here:
+# the two ends of a sliver ring are legitimately close together, and no tolerance can tell
+# that apart from a closing point.
 #
 # They must stay term-for-term equivalent to `_signed_area` and
 # `_naive_triangulated_spherical_ring_area` above: that equality is exactly what makes
@@ -319,7 +322,7 @@ _naive_triangulated_spherical_polygon_area(::SphericalTriangleAreaMethod, ::Type
 
 # Shoelace, wrapping from the last point to the first. A repeated closing point contributes
 # a zero term, so closed and open rings both work.
-function _ring_area(::Planar, pts::AbstractVector, ::Type{T}) where T
+function _ring_area(::Planar, pts::AbstractVector, ::Type{T}; closed::Bool = true) where T
     n = length(pts)
     n < 3 && return zero(T)
     area = zero(T)
@@ -330,12 +333,15 @@ function _ring_area(::Planar, pts::AbstractVector, ::Type{T}) where T
 end
 
 # Signed unit-sphere area, by the same fan triangulation from the first vertex.
-function _ring_area(::Spherical, pts::AbstractVector, ::Type{T}) where T
+function _ring_area(::Spherical, pts::AbstractVector, ::Type{T}; closed::Bool = true) where T
     n = length(pts)
     n < 3 && return zero(T)
     p1 = UnitSphericalPoint(GI.PointTrait(), pts[1])
-    # Skip the closing point if the ring carries one
-    UnitSphericalPoint(GI.PointTrait(), pts[n]) ≈ p1 && (n -= 1)
+    #-- Drop the closing point. Only a ring the caller called closed has one: the `≈` is
+    #-- `isapprox`'s default `rtol` (~1.5e-8), which on an OPEN ring would swallow the last
+    #-- vertex of any sliver whose ends fall within that of each other — halving its area,
+    #-- or zeroing it outright once the remaining fan degenerates.
+    closed && UnitSphericalPoint(GI.PointTrait(), pts[n]) ≈ p1 && (n -= 1)
     n < 3 && return zero(T)
     area = zero(T)
     for i in 2:(n - 1)

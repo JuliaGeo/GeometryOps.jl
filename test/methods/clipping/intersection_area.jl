@@ -154,6 +154,33 @@ edge_neighbour = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2
         @test GO.area(GO.difference(alg, square_a, square_b; target = GI.PolygonTrait())) ≈ 3.0
     end
 
+    @testset "Slivers - the clip buffers are open rings" begin
+        # A sliver's two end vertices are legitimately close together. The spherical ring
+        # area drops a closing point with `isapprox`'s default rtol (~1.5e-8), so on an
+        # OPEN buffer that tolerance eats a real vertex: the 4-vertex sliver becomes a
+        # triangle and loses half its area, or all of it once the fan degenerates.
+        sh = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
+        big = _spherical_polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+        for w in (1e-6, 1e-8, 1e-9, 1e-10, 1e-12)
+            # overlaps `big` in a corner sliver of side `w`, so buffer[end] ≈ buffer[1]
+            corner = _spherical_polygon([(2.0 - w, 2.0 - w), (4.0, 2.0 - w), (4.0, 4.0), (2.0 - w, 4.0)])
+            @test GO.intersection_area(sh, big, corner) ==
+                GO.area(GO.Spherical(), GO.intersection(sh, big, corner))
+            @test GO.intersection_area(sh, big, corner) > 0
+        end
+
+        # and the flag itself: an open ring whose ends are within that tolerance keeps
+        # every vertex, while a closed one still drops its closing point
+        t = UnitSphereFromGeographic()
+        open_ring = [t((0.0, 0.0)), t((1.0, 0.0)), t((1.0, 1.0)), t((1e-9, 1e-9))]
+        fan(pts) = sum(GO._spherical_triangle_area(GO.Eriksson(), pts[1], pts[i], pts[i + 1])
+                       for i in 2:(length(pts) - 1))
+        @test GO._ring_area(GO.Spherical(), open_ring, Float64; closed = false) == fan(open_ring)
+        @test GO._ring_area(GO.Spherical(), open_ring, Float64) != fan(open_ring)  # trimmed
+        closed_ring = push!(copy(open_ring), open_ring[1])
+        @test GO._ring_area(GO.Spherical(), closed_ring, Float64) == fan(open_ring)
+    end
+
     @testset "Cache" begin
         planar = GO.ConvexConvexSutherlandHodgman()
         spherical = GO.ConvexConvexSutherlandHodgman(GO.Spherical())

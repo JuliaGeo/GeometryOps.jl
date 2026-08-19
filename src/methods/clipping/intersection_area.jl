@@ -56,7 +56,8 @@ function intersection_area(
 ) where {T<:AbstractFloat}
     _sh_check_polygon_traits(GI.trait(geom_a), GI.trait(geom_b))
     _sh_check_cache(cache, Tuple{T,T})
-    return abs(_ring_area(Planar(), _sh_clip_planar!(cache, geom_a, geom_b, T), T))
+    #-- the clip buffers are open: they never repeat the first vertex
+    return abs(_ring_area(Planar(), _sh_clip_planar!(cache, geom_a, geom_b, T), T; closed = false))
 end
 
 function intersection_area(
@@ -67,7 +68,7 @@ function intersection_area(
     _sh_check_cache(cache, UnitSphericalPoint{T})
     m = alg.manifold
     pts = _sh_clip_spherical!(cache, geom_a, geom_b, T)
-    return T(abs(_ring_area(m, pts, T)) * _area_scale(m))
+    return T(abs(_ring_area(m, pts, T; closed = false)) * _area_scale(m))
 end
 
 # ## OverlayNG
