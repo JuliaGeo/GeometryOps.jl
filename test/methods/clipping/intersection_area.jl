@@ -60,6 +60,27 @@ edge_neighbour = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2
         @test GO.intersection_area(alg, GI.Point(1.0, 1.0), square_a) == 0.0
     end
 
+    @testset "Sutherland-Hodgman rejects what `intersection` rejects" begin
+        line = GI.LineString([(0.0, 0.0), (2.0, 2.0)])
+        for alg in (GO.ConvexConvexSutherlandHodgman(), GO.ConvexConvexSutherlandHodgman(GO.Spherical()))
+            @test_throws ArgumentError GO.intersection_area(alg, line, square_a)
+            @test_throws ArgumentError GO.intersection_area(alg, square_a, GI.Point(1.0, 1.0))
+        end
+    end
+
+    @testset "Float type" begin
+        for alg in (GO.ConvexConvexSutherlandHodgman(), GO.OverlayNG())
+            @test GO.intersection_area(alg, square_a, square_b, Float32) isa Float32
+        end
+        # the spherical radius must not silently widen the result back to Float64
+        sph = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
+        sa = _spherical_polygon([(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0)])
+        sb = _spherical_polygon([(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0)])
+        f32_cache = GO.SutherlandHodgmanCache(sph, Float32)
+        @test GO.intersection_area(sph, sa, sb, Float32; cache = f32_cache) isa Float32
+        @test GO.intersection_area(GO.OverlayNG(GO.Spherical()), square_a, square_b, Float32) isa Float32
+    end
+
     @testset "Spherical" begin
         sh = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
         ov = GO.OverlayNG(GO.Spherical())
@@ -80,6 +101,19 @@ edge_neighbour = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2
             # both engines measure the same lune, whichever chart they work in
             @test GO.intersection_area(sh, sa, sb) ≈ GO.intersection_area(ov, la, lb) rtol=1e-8
         end
+
+        # the lon/lat output chart reaches the same area as the xyz one it rounds from
+        la = GI.Polygon([[(0.0, 0.0), (2.0, 0.0), (2.0, 2.0), (0.0, 2.0), (0.0, 0.0)]])
+        lb = GI.Polygon([[(1.0, 1.0), (3.0, 1.0), (3.0, 3.0), (1.0, 3.0), (1.0, 1.0)]])
+        lonlat = GO.OverlayNG(GO.Spherical(); point_type = Tuple{Float64,Float64})
+        @test GO.intersection_area(lonlat, la, lb) ≈ GO.intersection_area(ov, la, lb) rtol=1e-9
+
+        # a hole in the spherical result is subtracted, as it is on the plane
+        donut = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)],
+                            [(3.0, 3.0), (3.0, 7.0), (7.0, 7.0), (7.0, 3.0), (3.0, 3.0)]])
+        box = GI.Polygon([[(2.0, 2.0), (8.0, 2.0), (8.0, 8.0), (2.0, 8.0), (2.0, 2.0)]])
+        @test GO.intersection_area(ov, donut, box) ≈
+            GO.area(GO.Spherical(), GO.intersection(ov, donut, box))
 
         # the radius of the manifold scales the result
         sa, sb = _spherical_polygon(coords_a), _spherical_polygon(coords_b)
@@ -106,6 +140,9 @@ edge_neighbour = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2
         _area_bytes(spherical, sa, sb, spherical_cache)
         @test _area_bytes(planar, square_a, square_b, planar_cache) == 0
         @test _area_bytes(spherical, sa, sb, spherical_cache) == 0
+        # Guard against passing vacuously: without a cache the buffers cost something
+        _area_bytes(planar, square_a, square_b, nothing)
+        @test _area_bytes(planar, square_a, square_b, nothing) > 0
 
         @test_throws ArgumentError GO.intersection_area(planar, square_a, square_b; cache = spherical_cache)
     end

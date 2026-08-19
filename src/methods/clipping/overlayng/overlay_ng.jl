@@ -114,11 +114,8 @@ _overlay_ng(m::Manifold, op::_OverlayOpCode, a, b;
 function _overlay_ng(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
         target, exact, tree_a, tree_b) where {T}
     tgt = _ov_target(target)
-    dim_a = _overlay_dimension(a)
-    dim_b = _overlay_dimension(b)
-
-    input = _OverlayInput(m, a, b, dim_a, dim_b, exact, _ov_isempty(a), _ov_isempty(b),
-                          nothing, nothing)
+    input = _overlay_input(m, a, b, exact)
+    dim_a, dim_b = input.dim_a, input.dim_b
 
     #-- a target above the result dimension can match nothing whatever the inputs
     #-- contain, so it is answered without noding at all
@@ -139,16 +136,25 @@ function _overlay_ng(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
         return _overlay_mixed_points(m, T, op, a, b, dim_a, dim_b, tgt; exact)  # hasPoints
     end
 
-    g = _overlay_marked_graph(m, T, op, a, b, input, exact, tree_a, tree_b, ea, eb)
+    g = _overlay_marked_graph(m, T, op, a, b, input, tree_a, tree_b, ea, eb)
 
     return _extract_result(m, op, g, input, tgt; exact)
 end
 
+# The two operands as the engine's own input model. Shared so that every entry point
+# derives the dimensions and empty flags the same way — `_empty_result_short_circuit` and
+# `_overlay_envelopes` both read them, and a hand-built one that disagrees is a silent
+# wrong answer rather than an error.
+_overlay_input(m::Manifold, a, b, exact) =
+    _OverlayInput(m, a, b, _overlay_dimension(a), _overlay_dimension(b), exact,
+                  _ov_isempty(a), _ov_isempty(b), nothing, nothing)
+
 # Node the inputs, build the graph, label it, and mark its result-area edges: the
 # whole pipeline up to the point where a result is extracted from it. Shared with
-# `intersection_area`, which extracts an area instead of a geometry.
+# `_overlay_intersection_area`, which extracts an area instead of a geometry.
 function _overlay_marked_graph(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b, input,
-        exact, tree_a, tree_b, ea, eb) where {T}
+        tree_a, tree_b, ea, eb) where {T}
+    exact = input.exact
     clip_a, clip_b = _overlay_clip_envelopes(op, ea, eb)
     #-- the positional form: a `point_type` keyword would be re-boxed into the
     #-- kwargs `NamedTuple` as a bare `DataType` and `T` would stop propagating
@@ -159,6 +165,25 @@ function _overlay_marked_graph(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
     _mark_result_area_edges!(g, op)
     _unmark_duplicate_edges_from_result_area!(g)
     return g
+end
+
+# The area of the intersection, without building it: the driver's own preamble, then the
+# same marked graph, then a ring-area sum in place of the result assembly. Anything but two
+# areal inputs intersects in dimension < 2, so there is no area to find and no noding to do.
+#-- `P` (the output point type) is a POSITIONAL `::Type{P}` for the same reason it is one
+#-- in `_overlay_ng`: an unannotated type argument is not specialized on, and the whole
+#-- pipeline below is a function of it.
+function _overlay_intersection_area(m::Manifold, ::Type{T}, ::Type{P}, a, b, exact) where {T, P}
+    input = _overlay_input(m, a, b, exact)
+    (input.dim_a == 2 && input.dim_b == 2) || return zero(T)
+
+    ea, eb = _overlay_envelopes(m, OVERLAY_INTERSECTION, input)
+    #-- empty inputs are part of what this rejects, so they need no separate test
+    _empty_result_short_circuit(m, OVERLAY_INTERSECTION, input, ea, eb) && return zero(T)
+
+    g = _overlay_marked_graph(m, P, OVERLAY_INTERSECTION, a, b, input,
+                              nothing, nothing, ea, eb)
+    return _build_polygon_area(m, g, graph_result_area_edges(g), T; exact) * _area_scale(m)
 end
 
 # ## Result extraction (port of `extractResult`)

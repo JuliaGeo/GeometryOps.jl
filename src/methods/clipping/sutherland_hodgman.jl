@@ -433,16 +433,24 @@ function _intersection_sutherland_hodgman(
     return GI.Polygon([result])
 end
 
-# Fallback for unsupported geometry combinations
-function _intersection_sutherland_hodgman(
-    alg::ConvexConvexSutherlandHodgman,
-    ::Type{T},
-    trait_a, geom_a,
-    trait_b, geom_b;
-    kwargs...
-) where {T}
-    throw(ArgumentError(
+# The one supported input combination, in one place: `intersection` reaches it through
+# trait dispatch, `intersection_area` calls it directly, and both fail with this message.
+function _sh_check_polygon_traits(trait_a, trait_b)
+    (trait_a isa GI.PolygonTrait && trait_b isa GI.PolygonTrait) || throw(ArgumentError(
         "ConvexConvexSutherlandHodgman only supports Polygon-Polygon intersection, " *
         "got $(typeof(trait_a)) and $(typeof(trait_b))"
+    ))
+    return nothing
+end
+
+# Fallback for unsupported geometry combinations
+function _intersection_sutherland_hodgman(
+    alg::ConvexConvexSutherlandHodgman, ::Type{T}, trait_a, geom_a, trait_b, geom_b; kwargs...
+) where {T}
+    _sh_check_polygon_traits(trait_a, trait_b)
+    #-- two polygons and still no method: it is the manifold that is unsupported
+    throw(ArgumentError(
+        "ConvexConvexSutherlandHodgman supports the `Planar()` and `Spherical()` " *
+        "manifolds; got $(typeof(manifold(alg)))"
     ))
 end
