@@ -924,16 +924,50 @@ end
 _get_poly_type(::Type{T}) where T =
     GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
 
-#= What the tracer does with the vertices it walks is the only thing that separates
-building the result rings from measuring them, so that is the one thing it takes as a
-parameter. `_RingCollector` is the original behaviour - a point vector per ring, wrapped
-as a polygon. `_RingMeasurer` keeps a running ring area instead, which is what lets
-`intersection_area` trace without materializing a ring at all.
+#=
+    abstract type _RingSink
 
-Each sink owns a per-ring `state`: `_ring_start` opens a ring at its first vertex,
-`_ring_step` takes the next vertex and returns the new state, and `_ring_close!` folds the
-finished ring into the sink. =#
-struct _RingCollector{P}
+What `_trace_polynodes!` does with the vertices it walks. The traversal is the same
+whether the result rings are being built or only measured, so that difference is the one
+thing the tracer takes as a parameter.
+
+## Interface
+
+A sink is fed one ring at a time, in traversal order, and carries whatever per-ring
+working value it likes as `state` — the tracer creates it, threads it through, hands it
+back, and never inspects it. Three methods, all required:
+
+| method | returns | contract |
+|:-------|:--------|:---------|
+| `_ring_start(sink, pt)` | `state` | open a ring whose first vertex is `pt` |
+| `_ring_step(sink, state, pt)` | `state` | extend the ring by `pt` |
+| `_ring_close!(sink, state)` | `nothing` | fold the finished ring into `sink` |
+
+The ring closes on the vertex it opened with: `_ring_step` is called with the first vertex
+again before `_ring_close!`, so a sink that walks edges gets the closing edge for free and
+one that collects points gets a closed ring.
+
+A sink accumulates across rings and is read afterwards, so it is the mutable half of the
+pair; `state` is per-ring and may be immutable. Two implementations ship:
+`_RingCollector` (the result polygons) and `_RingMeasurer` (their total area).
+=#
+abstract type _RingSink end
+
+#-- Interface fallbacks. Without them a sink missing a method fails as a `MethodError` on
+#-- an internal call several frames into the tracer, which says nothing about what is
+#-- actually missing.
+_ring_start(sink::_RingSink, pt) = _ring_sink_incomplete(sink, "_ring_start(sink, pt)")
+_ring_step(sink::_RingSink, state, pt) = _ring_sink_incomplete(sink, "_ring_step(sink, state, pt)")
+_ring_close!(sink::_RingSink, state) = _ring_sink_incomplete(sink, "_ring_close!(sink, state)")
+
+_ring_sink_incomplete(sink, sig) = throw(ArgumentError(
+    "$(typeof(sink)) is a `_RingSink` but does not implement `$sig`. A ring sink must " *
+    "implement `_ring_start`, `_ring_step` and `_ring_close!` — see the interface note " *
+    "above `_RingSink` in clipping_processor.jl."))
+
+# The result polygons: a point vector per ring, wrapped as a polygon. The original — and
+# still the only — behaviour of `_trace_polynodes`.
+struct _RingCollector{P} <: _RingSink
     polys::Vector{P}
 end
 _RingCollector(::Type{T}) where {T} = _RingCollector(Vector{_get_poly_type(T)}(undef, 0))
@@ -942,7 +976,9 @@ _ring_start(::_RingCollector, pt) = [pt]
 _ring_step(::_RingCollector, pts, pt) = (push!(pts, pt); pts)
 _ring_close!(sink::_RingCollector, pts) = (push!(sink.polys, GI.Polygon([pts])); nothing)
 
-mutable struct _RingMeasurer{M <: Manifold, T}
+# The total area of those same rings, accumulated as they are walked. This is what lets
+# `intersection_area` trace without materializing a ring at all.
+mutable struct _RingMeasurer{M <: Manifold, T} <: _RingSink
     manifold::M
     area::T
     nrings::Int   # `isempty(polys)` for the collector: whether the trace found anything
@@ -955,7 +991,8 @@ _ring_start(sink::_RingMeasurer{M, T}, pt) where {M, T} = (pt, pt, zero(T))
 _ring_step(sink::_RingMeasurer, (first_pt, prev, acc), pt) =
     (first_pt, pt, acc + _ring_term(sink.manifold, first_pt, prev, pt))
 function _ring_close!(sink::_RingMeasurer, (first_pt, prev, acc))
-    sink.area += abs(_ring_total(sink.manifold, acc + _ring_term(sink.manifold, first_pt, prev, first_pt)))
+    #-- the tracer already closed the ring on `first_pt`, so `acc` is complete
+    sink.area += abs(_ring_total(sink.manifold, acc))
     sink.nrings += 1
     return nothing
 end
@@ -992,7 +1029,7 @@ A list of GeoInterface polygons is returned from this function.
 Note: `poly_a` and `poly_b` are temporary inputs used for debugging and can be removed
 eventually.
 =#
-function _trace_polynodes!(sink, alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T, M, A}
+function _trace_polynodes!(sink::_RingSink, alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T, M, A}
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
