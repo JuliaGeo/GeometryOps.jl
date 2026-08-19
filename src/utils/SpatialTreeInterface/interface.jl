@@ -140,9 +140,10 @@ can say so here and still be traversed.
 
 ## Implementation notes
 
-Define this on the type - `children_extent_type(::Type{MyNode}) = MyChildExtent` -
-so that it is known at compile time; `children_extent_type(::MyNode)` forwards
-there automatically.
+Define it on the node - `children_extent_type(node::MyNode) = MyChildExtent` - or
+on its type if that reads better, `children_extent_type(::Type{MyNode}) = MyChildExtent`;
+the node method falls back to the type one.  Either way the answer is a constant
+per node type, so it folds away.
 """
-children_extent_type(::T) where {T} = children_extent_type(T)
+children_extent_type(node) = children_extent_type(typeof(node))
 children_extent_type(::Type{<:Any}) = nothing

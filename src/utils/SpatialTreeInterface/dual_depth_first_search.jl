@@ -29,7 +29,7 @@ end
 # `node_extent` in the loop".  `node_extent_is_expensive` is a function of `N`
 # alone, so the branch folds and only one arm is compiled.
 @inline _extent_stack(stack, node::N, ::E) where {N, E} =
-    node_extent_is_expensive(N) ? _as_stack(stack, _child_extent_type(N, E), node) : nothing
+    node_extent_is_expensive(N) ? _as_stack(stack, _child_extent_type(node, E), node) : nothing
 
 # Siblings share a type, so one stack serves a node's children; a level whose
 # children type differs from the stack it inherited starts its own.  Dispatch
@@ -42,7 +42,8 @@ end
 @inline _stack_base(::Nothing, stack) = 0
 @inline _stack_base(stack2, stack) = stack2 === stack ? length(stack2) : 0
 
-@inline _child_extent_type(::Type{N}, ::Type{E}) where {N, E} = something(children_extent_type(N), E)
+# asked of the node, not its type - the answer is constant per type either way
+@inline _child_extent_type(node, ::Type{E}) where {E} = something(children_extent_type(node), E)
 
 # Hand an ancestor's stack on through levels that do not need one themselves.
 @inline _carry(::Nothing, stack) = stack
@@ -119,4 +120,7 @@ function dual_depth_first_search(
         end
         stack2 === nothing || resize!(stack2, base)
     end
+    # never the scratch stack `resize!` hands back - only a propagating `Action`
+    # leaves this function with a value
+    return nothing
 end

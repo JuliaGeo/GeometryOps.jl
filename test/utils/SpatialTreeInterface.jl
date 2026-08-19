@@ -345,6 +345,21 @@ GO.SpatialTreeInterface.child_indices_extents(n::AlternatingExtentNode) = child_
 GO.SpatialTreeInterface.node_extent(n::AlternatingExtentNode) =
     iseven(n.level) ? node_extent(n.node) : _asbox(node_extent(n.node))
 
+# Same idea, but the trait is spelled on the node rather than on its type; both
+# spellings have to work, and both have to stay inferrable.
+struct InstanceTraitNode{N}
+    node::N
+end
+GO.SpatialTreeInterface.isspatialtree(::Type{<:InstanceTraitNode}) = true
+GO.SpatialTreeInterface.node_extent_is_expensive(::Type{<:InstanceTraitNode}) = true
+GO.SpatialTreeInterface.children_extent_type(n::InstanceTraitNode) = XYExtent
+GO.SpatialTreeInterface.isleaf(n::InstanceTraitNode) = isleaf(n.node)
+GO.SpatialTreeInterface.nchild(n::InstanceTraitNode) = nchild(n.node)
+GO.SpatialTreeInterface.getchild(n::InstanceTraitNode) = (InstanceTraitNode(c) for c in getchild(n.node))
+GO.SpatialTreeInterface.getchild(n::InstanceTraitNode, i) = InstanceTraitNode(getchild(n.node, i))
+GO.SpatialTreeInterface.child_indices_extents(n::InstanceTraitNode) = child_indices_extents(n.node)
+GO.SpatialTreeInterface.node_extent(n::InstanceTraitNode) = node_extent(n.node)
+
 collect_pairs(args...) = (out = Tuple{Int,Int}[];
                           dual_depth_first_search((i, j) -> push!(out, (i, j)), args...);
                           sort!(out))
@@ -421,6 +436,29 @@ collect_pairs(args...) = (out = Tuple{Int,Int}[];
         noop(i, j) = nothing
         dual_depth_first_search(noop, Extents.intersects, a, b)  # compile
         @test (@allocated dual_depth_first_search(noop, Extents.intersects, a, b)) < 4096
+    end
+
+    # the traversal asks the node, so a tree may answer on the node or on its type
+    @testset "children_extent_type is asked of the node, in either spelling" begin
+        onnode = InstanceTraitNode(NaturalIndex(fine))
+        ontype = AlternatingExtentNode(NaturalIndex(fine))
+        @test children_extent_type(onnode) === XYExtent                    # defined on the node
+        @test children_extent_type(ontype) === Union{XYExtent,BoxExtent}   # defined on the type
+        @test children_extent_type(NaturalIndex(fine)) === nothing         # says nothing, so the default
+        # both spellings fold, so the stack type is still a compile-time choice
+        @test (@inferred GO.SpatialTreeInterface._extent_stack(nothing, onnode, node_extent(onnode))) isa
+              Vector{XYExtent}
+        @test (@inferred GO.SpatialTreeInterface._extent_stack(nothing, ontype, node_extent(ontype))) isa
+              Vector{Union{XYExtent,BoxExtent}}
+        # ...and the whole traversal stays inferrable through each
+        noop(i, j) = nothing
+        @test (@inferred dual_depth_first_search(noop, Extents.intersects, onnode,
+                                                 InstanceTraitNode(NaturalIndex(coarse)))) === nothing
+        @test (@inferred dual_depth_first_search(noop, _boxy_intersects, ontype,
+                                                 AlternatingExtentNode(NaturalIndex(coarse)))) === nothing
+        # the node-spelled tree answers exactly as the plain one does
+        @test collect_pairs(Extents.intersects, onnode, InstanceTraitNode(NaturalIndex(coarse))) ==
+              collect_pairs(Extents.intersects, NaturalIndex(fine), NaturalIndex(coarse))
     end
 
     # a tree whose extent type changes with depth: siblings agree, levels do not
