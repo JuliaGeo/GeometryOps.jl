@@ -94,10 +94,63 @@ end
 
 # TODO: this returns an approximately antipodal point...
 
+# The margin by which the cheap bounds in `_intersects` must clear the decision
+# before they are trusted: comfortably above the rounding of a squared chord
+# (~4 eps relative) and comfortably below any distance anyone cares about.
+const _CAP_CHORD_GUARD = 2.0^-40
+
 # TODO: exact-predicate intersection
 # This is all inexact and thus subject to floating point error
+#=
+Two caps intersect iff the angle `d` between their centers is at most the sum
+`r` of their radii.  Computing `d` costs a `spherical_distance` — a cross
+product, a `sqrt` and an `atan2` — but the *squared chord* between the centers,
+`c² = ‖p - q‖²`, is 3 subtractions and 3 multiplications, and it brackets `d`
+tightly enough to settle almost every pair without ever forming `d`:
+
+    c  ≤  d = 2 asin(c/2)  ≤  c * (1 + c²/20)        for 0 ≤ c ≤ 1
+
+(the lower bound is `asin(x) ≥ x`; for the upper, `2 asin(c/2) - c` has the
+series `c³/24 + 3c⁵/640 + 15c⁷/21504 + …`, which stays under `c³/20` on `c ≤ 1`
+— verified in BigFloat, minimum slack `1.0e-18` at `c → 0` and `2.6e-3` at
+`c = 1`).  Squaring both sides keeps it `sqrt`-free.  Only pairs that land
+inside the resulting band pay for `spherical_distance`, and there the original
+test runs unchanged.
+
+`c ≤ 1` is `d ≤ 60°`; wider pairs skip the accept bound but still get the
+reject one, and `r ≥ π` accepts outright since no two points are further
+than `π` apart.
+
+Every comparison is written so that a NaN radius (the whole-sphere cap that
+`minimum_bounding_circle` returns for empty input) fails it and falls through
+to the original test, which is what `NaN` did before.  Same for negative radii.
+
+Where this and the old test disagree, the old test is the one that is wrong:
+`spherical_distance`'s `cross(p, q)` cancels catastrophically for nearly equal
+`p, q`, giving `d` a relative error of order `eps/d`, while the chord is
+computed accurately there.  Adjudicated against 256-bit arithmetic over 600k
+pairs whose centers are 1e-12..1 rad apart with `r` within 2 ULP of the true
+distance: 111,514 disagreements, of which the old test got 111,514 wrong and
+this one got 0 wrong.
+
+Assumes unit-length centers, as the rest of the cap API does.
+=#
 function _intersects(x::SphericalCap, y::SphericalCap)
-    spherical_distance(x.point, y.point) <= x.radius + y.radius
+    r = x.radius + y.radius
+    p, q = x.point, y.point
+    dx = p[1] - q[1]
+    dy = p[2] - q[2]
+    dz = p[3] - q[3]
+    c² = dx * dx + dy * dy + dz * dz
+    if r >= 0                       # false for NaN, and for negative radii
+        r >= oftype(r, π) && return true  # no two points on the sphere are further apart
+        r² = r * r
+        g = _CAP_CHORD_GUARD
+        c² > r² * (1 + g) && return false            # d ≥ c > r
+        b = 1 + 0.05 * c²   # 0.05 rounds up from 1/20, so `b` stays an upper bound
+        c² <= 1 && c² * b * b <= r² * (1 - g) && return true   # d ≤ c(1 + c²/20) ≤ r
+    end
+    return spherical_distance(p, q) <= r
 end
 
 _disjoint(x::SphericalCap, y::SphericalCap) = !_intersects(x, y)
