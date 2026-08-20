@@ -13,7 +13,7 @@ include("point.jl")
 
 include("robustcrossproduct/RobustCrossProduct.jl")
 # Re-export from RobustCrossProduct
-using .RobustCrossProduct: robust_cross_product
+using .RobustCrossProduct: robust_cross_product, min_stable_norm
 export robust_cross_product
 
 include("coordinate_transforms.jl")

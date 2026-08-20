@@ -26,10 +26,60 @@ spherical_orient(a, b, c)
 # output
 1
 ```
+
+# Extended help
+
+## Why this does not simply call `robust_cross_product`
+
+`robust_cross_product` returns a *normalized* normal, but a sign test does not
+need one: only the sign of `n ⋅ c` matters, and normalizing scales `n` by a
+positive number.  So the common case is inlined here as the bare stable cross
+product `cross(a - b, a + b)`, skipping both the `normalize` and the unit-length
+`@assert`s (whose job is done by the stability test below, which is the thing
+that actually decides whether the cheap value may be used).
+
+The degeneracy band is preserved exactly in form: `robust_cross_product`'s
+result is unit length, so `abs(n̂ ⋅ c) < tol` — and for the unnormalized `n`,
+`abs(n ⋅ c) / ‖n‖ < tol`, which is tested as `(n ⋅ c)^2 < tol^2 * ‖n‖^2` to
+avoid the `sqrt`.  This is algebraically the same test; at the threshold itself
+the two differ by the rounding of the dot product (a few ULPs of `n ⋅ c`, i.e.
+a few percent of `tol`, since `tol` is only `16 * eps`).  Points that close to
+the boundary are exactly the ones the tolerance declares indeterminate; no
+input can flip between `+1` and `-1`, only between `0` and a sign.
+
+When the cheap cross product is *not* trustworthy — `a` and `b` nearly equal or
+nearly antipodal, i.e. `‖n‖ < min_stable_norm(T)` — this falls back to the full
+`robust_cross_product`, including its extended/exact-precision and symbolic
+perturbation paths.  That fallback is unreachable from the Sutherland-Hodgman
+clipping path (which skips `edge_start == edge_end` edges), but this is a
+general-purpose predicate with other callers, so it stays.
 """
 function spherical_orient(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
-    # The orientation is determined by sign((a × b) · c)
-    # Use robust_cross_product for numerical stability
+    # The orientation is determined by sign((a × b) · c).
+    #
+    # Fast path: the stable cross product `cross(a - b, a + b)` (== 2(a × b),
+    # but far better conditioned for nearly-identical inputs), left
+    # unnormalized.  Written out componentwise so nothing allocates or is
+    # recomputed.
+    d1 = a[1] - b[1]; d2 = a[2] - b[2]; d3 = a[3] - b[3]
+    s1 = a[1] + b[1]; s2 = a[2] + b[2]; s3 = a[3] + b[3]
+    n1 = d2 * s3 - d3 * s2
+    n2 = d3 * s1 - d1 * s3
+    n3 = d1 * s2 - d2 * s1
+    nsqr = n1 * n1 + n2 * n2 + n3 * n3
+    # Same stability criterion `robust_cross_product` applies internally.
+    kmin = min_stable_norm(promote_type(eltype(a), eltype(b)))
+    if nsqr >= kmin * kmin
+        dot_product = n1 * c[1] + n2 * c[2] + n3 * c[3]
+        tol = eps(Float64) * 16  # Same tolerance as S2 geometry
+        # `abs(dot_product) / sqrt(nsqr) < tol`, without the sqrt
+        dot_product * dot_product < (tol * tol) * nsqr && return 0
+        return dot_product > 0 ? 1 : -1
+    end
+
+    # Slow path: `a` and `b` are nearly equal or nearly antipodal, so the
+    # Float64 cross product has lost the direction of the normal.  Recover it
+    # with the exact-arithmetic / symbolic-perturbation machinery.
     n = robust_cross_product(a, b)
     dot_product = n ⋅ c
 
