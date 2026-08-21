@@ -46,7 +46,9 @@ defaults to 0.5 seconds. Results remain in the `results` DataFrame and the
 AlgebraOfGraphics output remains in `figures`; the harness writes no files and
 is not a CI performance gate. LibGEOS's `bytes` and `allocations` only describe
 its Julia result wrapper: GEOS native heap allocations are invisible to
-Chairmarks and should not be compared with OverlayNG's values.
+Chairmarks and should not be compared with OverlayNG's values. Figure sizes are
+derived from the number of row and column facets, so filtered one-panel plots
+stay compact.
 =#
 
 import GeoInterface as GI
@@ -232,10 +234,16 @@ function run_benchmarks(workloads=WORKLOADS)
     return DataFrame(rows)
 end
 
-function make_figures(results)
-    overlay_results = subset(results, :family => ByRow(==("overlay")))
-    predicate_results = subset(results, :family => ByRow(==("predicate")))
+function facet_figure_size(results, row, col)
+    nrows = length(unique(results[!, row]))
+    ncols = length(unique(results[!, col]))
+    return (
+        clamp(260 * ncols + 180, 440, 1200),
+        clamp(210 * nrows + 80, 320, 1000),
+    )
+end
 
+function make_overlay_figure(overlay_results)
     overlay_plot = data(overlay_results) *
         mapping(:parameter => "Workload parameter",
                 :median_seconds => "Median time (s)";
@@ -243,7 +251,13 @@ function make_figures(results)
                 row=:operation => "Operation",
                 color=:engine => "Engine") *
         visual(ScatterLines)
+    size = facet_figure_size(overlay_results, :operation, :workload)
+    return draw(overlay_plot;
+                axis=(; xscale=log10, yscale=log10),
+                figure=(; size, title="Overlay scaling"))
+end
 
+function make_predicate_figure(predicate_results)
     predicate_plot = data(predicate_results) *
         mapping(:parameter => "Workload parameter",
                 :median_seconds => "Median time (s)";
@@ -251,13 +265,18 @@ function make_figures(results)
                 row=:preparation => "Preparation",
                 color=:engine => "Engine") *
         visual(ScatterLines)
+    size = facet_figure_size(predicate_results, :preparation, :workload)
+    return draw(predicate_plot;
+                axis=(; xscale=log10, yscale=log10),
+                figure=(; size, title="Prepared predicate scaling"))
+end
 
-    axis = (; xscale=log10, yscale=log10)
+function make_figures(results)
+    overlay_results = subset(results, :family => ByRow(==("overlay")))
+    predicate_results = subset(results, :family => ByRow(==("predicate")))
     return (;
-        overlay=draw(overlay_plot; axis,
-                     figure=(; size=(1400, 1400), title="Overlay scaling")),
-        predicates=draw(predicate_plot; axis,
-                        figure=(; size=(1400, 700), title="Prepared predicate scaling")),
+        overlay=make_overlay_figure(overlay_results),
+        predicates=make_predicate_figure(predicate_results),
     )
 end
 
