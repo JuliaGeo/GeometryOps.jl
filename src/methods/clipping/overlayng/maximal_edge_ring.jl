@@ -25,7 +25,7 @@
 # `next_result_max`. Identified by `id` (stored in each member's `max_edge_ring`
 # handle) so `_attach_max_edges!` can detect revisits (port of JTS
 # `MaximalEdgeRing`).
-mutable struct _MaxEdgeRing
+struct _MaxEdgeRing
     id::Int32
     start_edge::Int32
 end
@@ -44,32 +44,36 @@ end
 # `T` is the arrangement's output point type and `NB == _bbox_len(T)` the length
 # of the interleaved `(min₁, max₁, min₂, max₂, …)` bounding box over it — 4 for
 # a 2D output, 6 for unit-sphere xyz.
-mutable struct _OverlayEdgeRing{T, NB}
+const _EdgeRingLocRef{M, E} =
+    Base.RefValue{Union{Nothing, IndexedPointInAreaLocator{M, E}}}
+
+struct _OverlayEdgeRing{M <: Manifold, E, T, NB}
     id::Int32
     start_edge::Int32
     ring_pts::Vector{T}
     node_ids::Vector{Int32}
     is_hole::Bool
     bbox::NTuple{NB, Float64}  # (min, max) per coordinate of ring_pts
-    shell::Int32
+    shell::Base.RefValue{Int32}
     holes::Vector{Int32}
-    locator::Any               # Union{Nothing, IndexedPointInAreaLocator}, lazy
+    locator::_EdgeRingLocRef{M, E}
 end
 
-_edge_ring_type(::Type{T}) where {T} = _OverlayEdgeRing{T, _bbox_len(T)}
+_edge_ring_type(::M, ::E, ::Type{T}) where {M <: Manifold, E, T} =
+    _OverlayEdgeRing{M, E, T, _bbox_len(T)}
 
 # The polygon-builder working context (JTS `PolygonBuilder`'s mutable state). Held
 # together so the ring-linking and placement functions share the graph edge store,
 # the arrangement (for `node_point`), the manifold/exact predicate context, and the
 # growing ring collections. Parameterized on `M`/`P`/`E` so `m`/`exact` stay
 # concrete and the `Planar`/`Spherical` methods dispatch.
-mutable struct _PolyBuilderCtx{M <: Manifold, P, E, T, NB}
+struct _PolyBuilderCtx{M <: Manifold, P, E, T, NB}
     m::M
     edges::Vector{OverlayEdge{P}}
     arr::NodedArrangement{P, T}
     exact::E
     max_rings::Vector{_MaxEdgeRing}
-    edge_rings::Vector{_OverlayEdgeRing{T, NB}}
+    edge_rings::Vector{_OverlayEdgeRing{M, E, T, NB}}
     shell_list::Vector{Int32}      # handles into edge_rings
     free_hole_list::Vector{Int32}
     #-- free holes whose OWN shell was dropped as sub-grid, so they have no
@@ -86,7 +90,7 @@ mutable struct _PolyBuilderCtx{M <: Manifold, P, E, T, NB}
 end
 
 _PolyBuilderCtx(m::M, edges::Vector{OverlayEdge{P}}, arr::NodedArrangement{P, T}, exact::E,
-        max_rings, edge_rings::Vector{_OverlayEdgeRing{T, NB}}, shell_list,
+        max_rings, edge_rings::Vector{_OverlayEdgeRing{M, E, T, NB}}, shell_list,
         free_hole_list) where {M <: Manifold, P, E, T, NB} =
     _PolyBuilderCtx{M, P, E, T, NB}(m, edges, arr, exact, max_rings, edge_rings, shell_list,
                                     free_hole_list, Int32[], P[], Bool[])
@@ -596,45 +600,44 @@ _ring_area2_filter(arr, ids::Vector{Int32}) =
 function _new_edge_ring!(ctx::_PolyBuilderCtx{M, P, E, T, NB},
         start::Integer) where {M, P, E, T, NB}
     id = Int32(length(ctx.edge_rings) + 1)
-    ring = _OverlayEdgeRing{T, NB}(id, Int32(start), T[], Int32[], false,
-                                   ntuple(_ -> 0.0, NB), Int32(0), Int32[], nothing)
+    start_edge = Int32(start)
+    ring_pts, node_ids, is_hole, bbox = _compute_ring!(ctx, id, start_edge)
+    ring = _OverlayEdgeRing{M, E, T, NB}(
+        id, start_edge, ring_pts, node_ids, is_hole, bbox,
+        Base.RefValue{Int32}(Int32(0)), Int32[], _EdgeRingLocRef{M, E}(nothing))
     push!(ctx.edge_rings, ring)
-    _compute_ring!(ctx, ring)
     return id
 end
 
 # Port of `computeRingPts` + `computeRing`: walk the minimal ring via
 # `next_result`, collecting the arrangement node ids it visits and their emitted
 # points; then derive the shell/hole role and the bounding box.
-function _compute_ring!(ctx::_PolyBuilderCtx{M, P, E, T}, ring::_OverlayEdgeRing) where {M, P, E, T}
+function _compute_ring!(ctx::_PolyBuilderCtx{M, P, E, T}, id::Int32,
+        start_edge::Int32) where {M, P, E, T}
     edges = ctx.edges
     pts = T[]
     ids = Int32[]
-    origin = he_origin(edges, ring.start_edge)
+    origin = he_origin(edges, start_edge)
     push!(ids, Int32(origin))
     _ring_add!(pts, node_point(ctx.arr, origin))
-    edge = ring.start_edge
+    edge = start_edge
     while true
-        edges[edge].edge_ring == ring.id &&
+        edges[edge].edge_ring == id &&
             throw(_OverlayTopologyError("Edge visited twice during ring-building"))
         dest = he_dest(edges, edge)
-        edges[edge].edge_ring = ring.id
+        edges[edge].edge_ring = id
         ne = oe_next_result(edges, edge)
         ne == 0 && throw(_OverlayTopologyError("Found null edge in ring"))
         edge = ne
         #-- `ids` stays OPEN: the final dest is the start origin, already pushed
-        edge == ring.start_edge && (_ring_add!(pts, node_point(ctx.arr, dest)); break)
+        edge == start_edge && (_ring_add!(pts, node_point(ctx.arr, dest)); break)
         push!(ids, Int32(dest))
         _ring_add!(pts, node_point(ctx.arr, dest))
     end
     #-- the last dest is the start origin, so pts is already closed; be defensive
     pts[end] == pts[1] || push!(pts, pts[1])
 
-    ring.ring_pts = pts
-    ring.node_ids = ids
-    ring.is_hole = _ring_is_ccw_exact(ctx, ids)
-    ring.bbox = _ring_bbox(pts)
-    return nothing
+    return pts, ids, _ring_is_ccw_exact(ctx, ids), _ring_bbox(pts)
 end
 
 #=
@@ -815,8 +818,9 @@ end
 function _node_kernel_point(ctx::_PolyBuilderCtx{<:Spherical, P}, id::Integer) where {P}
     if isempty(ctx.kernel_ok)
         n = num_nodes(ctx.arr)
-        ctx.kernel_cache = Vector{P}(undef, n)
-        ctx.kernel_ok = fill(false, n)
+        resize!(ctx.kernel_cache, n)
+        resize!(ctx.kernel_ok, n)
+        fill!(ctx.kernel_ok, false)
     end
     i = Int(id)
     @inbounds ctx.kernel_ok[i] && return ctx.kernel_cache[i]
@@ -969,11 +973,13 @@ end
 # (design §3 amendment 5: robust ray crossing via `rk_orient`, over the ring's
 # emitted coordinates — never naive even-odd).
 function _ring_locate(ctx, ring::_OverlayEdgeRing, p)
-    if ring.locator === nothing
-        ring.locator = IndexedPointInAreaLocator(ctx.m, GI.Polygon([ring.ring_pts]);
-                                                 exact = ctx.exact)
+    locator = ring.locator[]
+    if locator === nothing
+        locator = IndexedPointInAreaLocator(ctx.m, GI.Polygon([ring.ring_pts]);
+                                            exact = ctx.exact)
+        ring.locator[] = locator
     end
-    return locate(ring.locator, p)
+    return locate(locator, p)
 end
 
 # Whether `shell` contains `hole` (port of `contains` + `isPointInOrOut`). On the

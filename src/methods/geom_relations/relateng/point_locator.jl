@@ -247,7 +247,7 @@ caches a per-element locator in both modes (its kernel-space ring cache is
 what makes queries conversion-free). Repeated point location against one
 geometry is what [`prepare`](@ref) is for.
 """
-mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule, P}
+mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule, P, L, A}
     const m::M
     const exact::E
     const geom::G
@@ -255,11 +255,12 @@ mutable struct RelatePointLocator{M <: Manifold, E, G, BR <: BoundaryNodeRule, P
     const boundary_rule::BR
     # element collections extracted from the (possibly nested-GC) input.
     # Java leaves these null when no element of that kind exists; here they
-    # are simply empty. Heterogeneous GI element types force `Any` element
-    # eltypes. `P` is the manifold's kernel point type (Phase 3).
+    # are simply empty. `L`/`A` preserve concrete element types for homogeneous
+    # inputs and naturally widen for heterogeneous GeometryCollections. `P` is
+    # the manifold's kernel point type (Phase 3).
     const points::Set{P}
-    const lines::Vector{Any}
-    const polygons::Vector{Any}
+    const lines::L
+    const polygons::A
     const line_boundary::LinearBoundary{BR, P}
     const is_empty::Bool
     # per-polygonal-element locators (prepared mode, and every spherical
@@ -278,6 +279,11 @@ function RelatePointLocator(m::Manifold, geom; exact,
     lines = Any[]
     polygons = Any[]
     _extract_elements!(m, points, lines, polygons, geom)
+    # Narrow the overwhelmingly common homogeneous case after the recursive
+    # traversal; `map` computes a common element type from the values and keeps
+    # heterogeneous collections widened as needed.
+    lines = map(identity, lines)
+    polygons = map(identity, polygons)
     # Java caches `isEmpty = geom.isEmpty()` (recursive emptiness); since
     # `extractElements` skips empty elements, the input is recursively empty
     # iff nothing was extracted.
@@ -295,7 +301,7 @@ function RelatePointLocator(m::Manifold, geom; exact,
     #-- P cannot be inferred from the `nothing` adj_edge_locator, so spell out
     #-- every type parameter
     return RelatePointLocator{typeof(m), typeof(exact), typeof(geom),
-            typeof(boundary_rule), P}(
+            typeof(boundary_rule), P, typeof(lines), typeof(polygons)}(
         m, exact, geom, is_prepared, boundary_rule,
         points, lines, polygons, line_boundary, is_empty, poly_locator,
         nothing)
