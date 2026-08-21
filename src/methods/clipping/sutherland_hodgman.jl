@@ -115,16 +115,10 @@ function intersection(
     )
 end
 
-# Polygon-Polygon intersection using Sutherland-Hodgman
-function _intersection_sutherland_hodgman(
-    alg::ConvexConvexSutherlandHodgman{Planar},
-    ::Type{T},
-    ::GI.PolygonTrait, poly_a,
-    ::GI.PolygonTrait, poly_b;
-    cache::Union{Nothing, SutherlandHodgmanCache}=nothing
-) where {T}
-    cache = isnothing(cache) ? SutherlandHodgmanCache(Planar(), T) : _sh_check_cache(cache, Tuple{T,T})
-
+# Clip `poly_a` against every edge of `poly_b`, returning the cache buffer holding the
+# surviving vertices (empty if the two polygons are disjoint). The ring is open - the
+# closing point is not repeated.
+function _sh_clip_planar!(cache::SutherlandHodgmanCache, poly_a, poly_b, ::Type{T}) where {T}
     # Get exterior rings (convex polygons have no holes)
     ring_a = GI.getexterior(poly_a)
     ring_b = GI.getexterior(poly_b)
@@ -148,6 +142,20 @@ function _intersection_sutherland_hodgman(
         _sh_clip_to_edge!(buf_out, buf_in, edge_start, edge_end, T)
         buf_in, buf_out = buf_out, buf_in
     end
+
+    return buf_in
+end
+
+# Polygon-Polygon intersection using Sutherland-Hodgman
+function _intersection_sutherland_hodgman(
+    alg::ConvexConvexSutherlandHodgman{Planar},
+    ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.PolygonTrait, poly_b;
+    cache::Union{Nothing, SutherlandHodgmanCache}=nothing
+) where {T}
+    cache = isnothing(cache) ? SutherlandHodgmanCache(Planar(), T) : _sh_check_cache(cache, Tuple{T,T})
+    buf_in = _sh_clip_planar!(cache, poly_a, poly_b, T)
 
     # Handle empty result (no intersection) - return degenerate polygon with zero area
     if isempty(buf_in)
@@ -337,16 +345,10 @@ function _sh_clip_to_edge_spherical!(
     return output
 end
 
-# Spherical Polygon-Polygon intersection using Sutherland-Hodgman
-function _intersection_sutherland_hodgman(
-    alg::ConvexConvexSutherlandHodgman{Spherical{F}},
-    ::Type{T},
-    ::GI.PolygonTrait, poly_a,
-    ::GI.PolygonTrait, poly_b;
-    cache::Union{Nothing, SutherlandHodgmanCache}=nothing
-) where {F, T}
-    cache = isnothing(cache) ? SutherlandHodgmanCache(alg.manifold, T) : _sh_check_cache(cache, UnitSpherical.UnitSphericalPoint{T})
-
+# Clip `poly_a` against every edge of `poly_b` on the sphere. Returns the cache buffer of
+# surviving vertices - which is the clip polygon itself when the subject contains it
+# entirely, and empty when the two are disjoint. Fewer than 3 points means no area.
+function _sh_clip_spherical!(cache::SutherlandHodgmanCache, poly_a, poly_b, ::Type{T}) where {T}
     ring_a = GI.getexterior(poly_a)
     ring_b = GI.getexterior(poly_b)
 
@@ -397,45 +399,58 @@ function _intersection_sutherland_hodgman(
         buf_in, buf_out = buf_out, buf_in
     end
 
-    # Handle empty result - check if clip polygon is fully inside the original subject.
+    # Empty result - the clip polygon may still be fully inside the original subject.
     # "Fully inside" needs EVERY clip vertex inside the subject, not just the first:
-    if isempty(buf_in)
-        if !isempty(clip_points) &&
-           all(p -> _point_in_convex_spherical_polygon(p, original_subject), clip_points)
-            # Subject contains clip - return clip polygon (copied, so it doesn't alias the cache)
-            result = copy(clip_points)
-            push!(result, result[1])
-            return GI.Polygon([result])
-        end
-        # Truly disjoint - return degenerate polygon with zero area
-        north_pole = UnitSpherical.UnitSphericalPoint{T}(0, 0, 1)
-        return GI.Polygon([[north_pole, north_pole, north_pole]])
+    if isempty(buf_in) && !isempty(clip_points) &&
+       all(p -> _point_in_convex_spherical_polygon(p, original_subject), clip_points)
+        return clip_points
     end
+    return buf_in
+end
 
-    # Handle degenerate result (1-2 points can't form a valid ring)
-    # This happens for adjacent polygons that share only an edge or corner
-    if length(buf_in) < 3
+# Spherical Polygon-Polygon intersection using Sutherland-Hodgman
+function _intersection_sutherland_hodgman(
+    alg::ConvexConvexSutherlandHodgman{Spherical{F}},
+    ::Type{T},
+    ::GI.PolygonTrait, poly_a,
+    ::GI.PolygonTrait, poly_b;
+    cache::Union{Nothing, SutherlandHodgmanCache}=nothing
+) where {F, T}
+    cache = isnothing(cache) ? SutherlandHodgmanCache(alg.manifold, T) : _sh_check_cache(cache, UnitSpherical.UnitSphericalPoint{T})
+    pts = _sh_clip_spherical!(cache, poly_a, poly_b, T)
+
+    # 1-2 points can't form a valid ring (disjoint polygons, or adjacent ones sharing only
+    # an edge or corner) - return a degenerate polygon with zero area
+    if length(pts) < 3
         north_pole = UnitSpherical.UnitSphericalPoint{T}(0, 0, 1)
         return GI.Polygon([[north_pole, north_pole, north_pole]])
     end
 
     # Copy into a fresh closed ring so the result doesn't alias the cache
-    result = Vector{UnitSpherical.UnitSphericalPoint{T}}(undef, length(buf_in) + 1)
-    copyto!(result, buf_in)
-    result[end] = buf_in[1]
+    result = Vector{UnitSpherical.UnitSphericalPoint{T}}(undef, length(pts) + 1)
+    copyto!(result, pts)
+    result[end] = pts[1]
     return GI.Polygon([result])
+end
+
+# The one supported input combination, in one place: `intersection` reaches it through
+# trait dispatch, `intersection_area` calls it directly, and both fail with this message.
+function _sh_check_polygon_traits(trait_a, trait_b)
+    (trait_a isa GI.PolygonTrait && trait_b isa GI.PolygonTrait) || throw(ArgumentError(
+        "ConvexConvexSutherlandHodgman only supports Polygon-Polygon intersection, " *
+        "got $(typeof(trait_a)) and $(typeof(trait_b))"
+    ))
+    return nothing
 end
 
 # Fallback for unsupported geometry combinations
 function _intersection_sutherland_hodgman(
-    alg::ConvexConvexSutherlandHodgman,
-    ::Type{T},
-    trait_a, geom_a,
-    trait_b, geom_b;
-    kwargs...
+    alg::ConvexConvexSutherlandHodgman, ::Type{T}, trait_a, geom_a, trait_b, geom_b; kwargs...
 ) where {T}
+    _sh_check_polygon_traits(trait_a, trait_b)
+    #-- two polygons and still no method: it is the manifold that is unsupported
     throw(ArgumentError(
-        "ConvexConvexSutherlandHodgman only supports Polygon-Polygon intersection, " *
-        "got $(typeof(trait_a)) and $(typeof(trait_b))"
+        "ConvexConvexSutherlandHodgman supports the `Planar()` and `Spherical()` " *
+        "manifolds; got $(typeof(manifold(alg)))"
     ))
 end

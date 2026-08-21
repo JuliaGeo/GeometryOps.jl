@@ -24,20 +24,27 @@
 # ## Input model (port of `InputGeometry`)
 
 # The two overlay operands with their dimensions, lazily-built area locators, and
-# empty flags. `a`/`b` are boxed (`Any`) — only the cold locator-build path reads
-# them; the hot pipeline runs on the type-erased graph.
-mutable struct _OverlayInput{M <: Manifold, E}
+# empty flags.
+#-- Immutable so `dim_a`/`dim_b` const-fold: that fold prunes the untargeted
+#-- `intersection` return type to a concrete Union. Only the locator Refs mutate.
+const _OvLocRef{M, E} = Base.RefValue{Union{Nothing, IndexedPointInAreaLocator{M, E}}}
+struct _OverlayInput{M <: Manifold, A, B, E}
     m::M
-    a::Any
-    b::Any
+    a::A
+    b::B
     dim_a::Int
     dim_b::Int
     exact::E
     empty_a::Bool
     empty_b::Bool
-    loc_a::Any   # Union{Nothing, IndexedPointInAreaLocator}, lazy
-    loc_b::Any
+    loc_a::_OvLocRef{M, E}
+    loc_b::_OvLocRef{M, E}
 end
+
+#-- takes the locators unwrapped, so every call site reads `..., nothing, nothing)`
+_OverlayInput(m::M, a::A, b::B, dim_a, dim_b, exact::E, empty_a, empty_b, loc_a, loc_b) where {M, A, B, E} =
+    _OverlayInput{M, A, B, E}(m, a, b, dim_a, dim_b, exact, empty_a, empty_b,
+                              _OvLocRef{M, E}(loc_a), _OvLocRef{M, E}(loc_b))
 
 @inline _input_dim(input::_OverlayInput, gi::Integer) = gi == 0 ? input.dim_a : input.dim_b
 @inline _input_is_area(input::_OverlayInput, gi::Integer) = _input_dim(input, gi) == 2
@@ -54,14 +61,16 @@ end
 function _input_locate_in_area(input::_OverlayInput, gi::Integer, pt)
     if gi == 0
         input.empty_a && return LOC_EXTERIOR
-        input.loc_a === nothing &&
-            (input.loc_a = IndexedPointInAreaLocator(input.m, input.a; exact = input.exact))
-        return locate(input.loc_a, pt)
+        loc = input.loc_a[]
+        loc === nothing &&
+            (loc = input.loc_a[] = IndexedPointInAreaLocator(input.m, input.a; exact = input.exact))
+        return locate(loc, pt)
     else
         input.empty_b && return LOC_EXTERIOR
-        input.loc_b === nothing &&
-            (input.loc_b = IndexedPointInAreaLocator(input.m, input.b; exact = input.exact))
-        return locate(input.loc_b, pt)
+        loc = input.loc_b[]
+        loc === nothing &&
+            (loc = input.loc_b[] = IndexedPointInAreaLocator(input.m, input.b; exact = input.exact))
+        return locate(loc, pt)
     end
 end
 
@@ -114,11 +123,8 @@ _overlay_ng(m::Manifold, op::_OverlayOpCode, a, b;
 function _overlay_ng(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
         target, exact, tree_a, tree_b) where {T}
     tgt = _ov_target(target)
-    dim_a = _overlay_dimension(a)
-    dim_b = _overlay_dimension(b)
-
-    input = _OverlayInput(m, a, b, dim_a, dim_b, exact, _ov_isempty(a), _ov_isempty(b),
-                          nothing, nothing)
+    input = _overlay_input(m, a, b, exact)
+    dim_a, dim_b = input.dim_a, input.dim_b
 
     #-- a target above the result dimension can match nothing whatever the inputs
     #-- contain, so it is answered without noding at all
@@ -139,6 +145,25 @@ function _overlay_ng(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
         return _overlay_mixed_points(m, T, op, a, b, dim_a, dim_b, tgt; exact)  # hasPoints
     end
 
+    g = _overlay_marked_graph(m, T, op, a, b, input, tree_a, tree_b, ea, eb)
+
+    return _extract_result(m, op, g, input, tgt; exact)
+end
+
+# The two operands as the engine's own input model. Shared so that every entry point
+# derives the dimensions and empty flags the same way — `_empty_result_short_circuit` and
+# `_overlay_envelopes` both read them, and a hand-built one that disagrees is a silent
+# wrong answer rather than an error.
+@inline _overlay_input(m::Manifold, a, b, exact) =
+    _OverlayInput(m, a, b, _overlay_dimension(a), _overlay_dimension(b), exact,
+                  _ov_isempty(a), _ov_isempty(b), nothing, nothing)
+
+# Node the inputs, build the graph, label it, and mark its result-area edges: the
+# whole pipeline up to the point where a result is extracted from it. Shared with
+# `_overlay_intersection_area`, which extracts an area instead of a geometry.
+function _overlay_marked_graph(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b, input,
+        tree_a, tree_b, ea, eb) where {T}
+    exact = input.exact
     clip_a, clip_b = _overlay_clip_envelopes(op, ea, eb)
     #-- the positional form: a `point_type` keyword would be re-boxed into the
     #-- kwargs `NamedTuple` as a bare `DataType` and `T` would stop propagating
@@ -148,8 +173,26 @@ function _overlay_ng(m::Manifold, ::Type{T}, op::_OverlayOpCode, a, b,
     _compute_labelling!(g, input)
     _mark_result_area_edges!(g, op)
     _unmark_duplicate_edges_from_result_area!(g)
+    return g
+end
 
-    return _extract_result(m, op, g, input, tgt; exact)
+# The area of the intersection, without building it: the driver's own preamble, then the
+# same marked graph, then a ring-area sum in place of the result assembly. Anything but two
+# areal inputs intersects in dimension < 2, so there is no area to find and no noding to do.
+#-- `P` (the output point type) is a POSITIONAL `::Type{P}` for the same reason it is one
+#-- in `_overlay_ng`: an unannotated type argument is not specialized on, and the whole
+#-- pipeline below is a function of it.
+function _overlay_intersection_area(m::Manifold, ::Type{T}, ::Type{P}, a, b, exact) where {T, P}
+    input = _overlay_input(m, a, b, exact)
+    (input.dim_a == 2 && input.dim_b == 2) || return zero(T)
+
+    ea, eb = _overlay_envelopes(m, OVERLAY_INTERSECTION, input)
+    #-- empty inputs are part of what this rejects, so they need no separate test
+    _empty_result_short_circuit(m, OVERLAY_INTERSECTION, input, ea, eb) && return zero(T)
+
+    g = _overlay_marked_graph(m, P, OVERLAY_INTERSECTION, a, b, input,
+                              nothing, nothing, ea, eb)
+    return _build_polygon_area(m, g, graph_result_area_edges(g), T; exact) * _area_scale(m)
 end
 
 # ## Result extraction (port of `extractResult`)

@@ -151,6 +151,8 @@ include("methods/clipping/overlayng/overlay_mixed_points.jl")
 # OverlayNG public opt-in API (phase 3): the `OverlayNG{M}` algorithm + ops.
 include("methods/clipping/overlayng/api.jl")
 
+include("methods/clipping/intersection_area.jl")
+
 include("methods/orientation.jl")
 include("methods/polygonize.jl")
 include("methods/minimum_bounding_circle.jl")

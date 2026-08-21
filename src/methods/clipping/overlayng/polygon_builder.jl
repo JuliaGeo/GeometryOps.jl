@@ -56,21 +56,46 @@ function _assert_graph_extractable(g::OverlayGraph, who::AbstractString)
     return nothing
 end
 
-# Build the result polygons from the graph's result-area edges (port of the
-# `PolygonBuilder` constructor + `getPolygons`).
-function _build_polygons(m::Manifold, g::OverlayGraph{P, T}, result_area_edges; exact) where {P, T}
-    _assert_graph_extractable(g, "_build_polygons")
+# Ring the graph's result-area edges into shells and holes (port of the
+# `PolygonBuilder` constructor + `buildRings`), returning the builder context.
+function _build_polygon_ctx(m::Manifold, g::OverlayGraph{P, T}, result_area_edges, who; exact) where {P, T}
+    _assert_graph_extractable(g, who)
     #-- the op pipeline walks `onext`/`sym` directly and has no notion of a removed
     #-- edge, so a hygiene-filtered graph would silently ignore the removal
     _graph_has_removed_edges(g) && throw(_OverlayTopologyError(
-        "_build_polygons: this OverlayGraph has had half-edges removed by the " *
+        "$who: this OverlayGraph has had half-edges removed by the " *
         "face-walk hygiene pass (`remove_dangles` / `remove_cut_edges`). The op " *
         "pipeline does not honour removal, so its result would silently ignore it. " *
         "Hygiene is a face-enumeration facility — use `_build_faces` on that graph."))
     ctx = _PolyBuilderCtx(m, g.edges, g.arr, exact, _MaxEdgeRing[], _edge_ring_type(T)[],
                           Int32[], Int32[])
     _build_rings!(ctx, result_area_edges)
+    return ctx
+end
+
+# Build the result polygons from the graph's result-area edges (port of the
+# `PolygonBuilder` constructor + `getPolygons`).
+function _build_polygons(m::Manifold, g::OverlayGraph, result_area_edges; exact)
+    ctx = _build_polygon_ctx(m, g, result_area_edges, "_build_polygons"; exact)
     return [_ring_to_polygon(ctx, sh) for sh in ctx.shell_list]
+end
+
+# The total area of those same polygons, summed off the rings instead of wrapping them
+# (`intersection_area`). The `_ring_to_polygon` companion: shell minus its holes, which is
+# what `GO.area` computes from the polygon this would have built.
+function _build_polygon_area(m::Manifold, g::OverlayGraph, result_area_edges, ::Type{T};
+        exact) where {T}
+    ctx = _build_polygon_ctx(m, g, result_area_edges, "_build_polygon_area"; exact)
+    total = zero(T)
+    for shell_handle in ctx.shell_list
+        shell = ctx.edge_rings[shell_handle]
+        area = abs(_ring_area(m, shell.ring_pts, T))
+        for hole in shell.holes
+            area -= abs(_ring_area(m, ctx.edge_rings[hole].ring_pts, T))
+        end
+        total += area
+    end
+    return total
 end
 
 # Port of `buildRings`.

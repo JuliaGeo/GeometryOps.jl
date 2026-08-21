@@ -919,6 +919,98 @@ function _index_crossing_intrs!(alg::FosterHormannClipping{M, A}, a_list, b_list
     return
 end
 
+# Get type of polygons that will be made
+# TODO: Increase type options
+_get_poly_type(::Type{T}) where T =
+    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
+
+#=
+    abstract type _RingSink
+
+What `_trace_polynodes!` does with the vertices it walks. The traversal is the same
+whether the result rings are being built or only measured, so that difference is the one
+thing the tracer takes as a parameter.
+
+## Interface
+
+A sink is fed one ring at a time, in traversal order, and carries whatever per-ring
+working value it likes as `state` — the tracer creates it, threads it through, hands it
+back, and never inspects it. Three methods, all required:
+
+| method | returns | contract |
+|:-------|:--------|:---------|
+| `_ring_start(sink, pt)` | `state` | open a ring whose first vertex is `pt` |
+| `_ring_step(sink, state, pt)` | `state` | extend the ring by `pt` |
+| `_ring_close!(sink, state)` | `nothing` | fold the finished ring into `sink` |
+
+The ring closes on the vertex it opened with: `_ring_step` is called with the first vertex
+again before `_ring_close!`, so a sink that walks edges gets the closing edge for free and
+one that collects points gets a closed ring.
+
+A sink accumulates across rings and is read afterwards, so it is the mutable half of the
+pair; `state` is per-ring and may be immutable. Two implementations ship:
+`_RingCollector` (the result polygons) and `_RingMeasurer` (their total area).
+=#
+abstract type _RingSink end
+
+#-- Interface fallbacks. Without them a sink missing a method fails as a `MethodError` on
+#-- an internal call several frames into the tracer, which says nothing about what is
+#-- actually missing.
+_ring_start(sink::_RingSink, pt) = _ring_sink_incomplete(sink, "_ring_start(sink, pt)")
+_ring_step(sink::_RingSink, state, pt) = _ring_sink_incomplete(sink, "_ring_step(sink, state, pt)")
+_ring_close!(sink::_RingSink, state) = _ring_sink_incomplete(sink, "_ring_close!(sink, state)")
+
+_ring_sink_incomplete(sink, sig) = throw(ArgumentError(
+    "$(typeof(sink)) is a `_RingSink` but does not implement `$sig`. A ring sink must " *
+    "implement `_ring_start`, `_ring_step` and `_ring_close!` — see the interface note " *
+    "above `_RingSink` in clipping_processor.jl."))
+
+# The result polygons: a point vector per ring, wrapped as a polygon. The original — and
+# still the only — behaviour of `_trace_polynodes`.
+struct _RingCollector{P} <: _RingSink
+    polys::Vector{P}
+end
+_RingCollector(::Type{T}) where {T} = _RingCollector(Vector{_get_poly_type(T)}(undef, 0))
+
+_ring_start(::_RingCollector, pt) = [pt]
+_ring_step(::_RingCollector, pts, pt) = (push!(pts, pt); pts)
+_ring_close!(sink::_RingCollector, pts) = (push!(sink.polys, GI.Polygon([pts])); nothing)
+
+# The total area of those same rings, accumulated as they are walked. This is what lets
+# `intersection_area` trace without materializing a ring at all.
+mutable struct _RingMeasurer{M <: Manifold, T} <: _RingSink
+    manifold::M
+    area::T
+    nrings::Int   # `isempty(polys)` for the collector: whether the trace found anything
+end
+_RingMeasurer(m::M, ::Type{T}) where {M, T} = _RingMeasurer{M, T}(m, zero(T), 0)
+
+#-- state is (first vertex, previous vertex, running sum): both formulas below are
+#-- two-point recurrences, so the ring never has to exist all at once
+_ring_start(sink::_RingMeasurer{M, T}, pt) where {M, T} = (pt, pt, zero(T))
+_ring_step(sink::_RingMeasurer, (first_pt, prev, acc), pt) =
+    (first_pt, pt, acc + _ring_term(sink.manifold, first_pt, prev, pt))
+function _ring_close!(sink::_RingMeasurer, (first_pt, prev, acc))
+    #-- the tracer already closed the ring on `first_pt`, so `acc` is complete
+    sink.area += abs(_ring_total(sink.manifold, acc))
+    sink.nrings += 1
+    return nothing
+end
+
+#-- the per-vertex terms of `_ring_area`'s two formulas (methods/area.jl), taken one
+#-- vertex at a time. Summed in the same order, they give the same answer. The spherical
+#-- one is untested: `FosterHormannClipping(Spherical())` is an ambiguous constructor call
+#-- today, so no spherical FH algorithm can be built to reach it.
+_ring_term(::Planar, first_pt, prev, pt) = _area_component(prev, pt)
+_ring_term(::Spherical, first_pt, prev, pt) = _spherical_triangle_area(Eriksson(),
+    UnitSphericalPoint(GI.PointTrait(), first_pt), UnitSphericalPoint(GI.PointTrait(), prev),
+    UnitSphericalPoint(GI.PointTrait(), pt))
+_ring_total(::Planar, acc) = acc / 2
+_ring_total(::Spherical, acc) = acc
+
+_trace_polynodes(alg::FosterHormannClipping, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T} =
+    _trace_polynodes!(_RingCollector(T), alg, T, a_list, b_list, a_idx_list, f_step, poly_a, poly_b).polys
+
 #=
     _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step)::Vector{GI.Polygon}
 
@@ -937,11 +1029,10 @@ A list of GeoInterface polygons is returned from this function.
 Note: `poly_a` and `poly_b` are temporary inputs used for debugging and can be removed
 eventually.
 =#
-function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T, M, A}
+function _trace_polynodes!(sink::_RingSink, alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T, M, A}
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
-    return_polys = Vector{_get_poly_type(T)}(undef, 0)
     # Keep track of number of processed intersection points
     visited_pts = 0
     processed_pts = 0
@@ -959,7 +1050,7 @@ function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b
 
         # Set first point in polygon
         curr = curr_list[idx]
-        pt_list = [curr.point]
+        ring = _ring_start(sink, curr.point)
 
         curr_not_start = true
         while curr_not_start
@@ -975,9 +1066,9 @@ function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b
                 idx = (idx > curr_npoints) ? mod(idx, curr_npoints) : idx
                 idx = (idx == 0) ? curr_npoints : idx
 
-                # Get current node and add to pt_list
+                # Get current node and add to the ring
                 curr = curr_list[idx]
-                push!(pt_list, curr.point)
+                ring = _ring_step(sink, ring, curr.point)
                 if (curr.crossing || curr.endpoint != not_endpoint)
                     # Keep track of processed intersection points
                     same_status = curr.ent_exit == prev_status
@@ -996,15 +1087,10 @@ function _trace_polynodes(alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b
             idx = curr.neighbor
             curr = curr_list[idx]
         end
-        push!(return_polys, GI.Polygon([pt_list]))
+        _ring_close!(sink, ring)
     end
-    return return_polys
+    return sink
 end
-
-# Get type of polygons that will be made
-# TODO: Increase type options
-_get_poly_type(::Type{T}) where T =
-    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
 
 #=
     _find_non_cross_orientation(a_list, b_list, a_poly, b_poly; exact)
