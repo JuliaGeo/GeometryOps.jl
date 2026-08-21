@@ -226,9 +226,9 @@ one node, and assembles them into the node's edge topology
 Port of JTS `NodeSections`; the Java class is keyed by the node
 `Coordinate`, here by the symbolic [`NodeKey`](@ref) (design D2).
 """
-mutable struct NodeSections{P}
-    const node::NodeKey{P}
-    const sections::Vector{NodeSection{P}}
+struct NodeSections{P}
+    node::NodeKey{P}
+    sections::Vector{NodeSection{P}}
 end
 
 NodeSections(node::NodeKey{P}) where {P} = NodeSections(node, NodeSection{P}[])

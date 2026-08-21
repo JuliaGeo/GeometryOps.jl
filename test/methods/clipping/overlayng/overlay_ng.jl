@@ -29,6 +29,27 @@ function check_planar(op, A, B)
     return r
 end
 
+@testset "polygon-builder storage types" begin
+    m = Planar()
+    A, B = SQ_A, SQ_B
+    arr = GO.NodedArrangement(m, A, B; exact = EX)
+    g = GO.OverlayGraph(m, arr; exact = EX)
+    input = GO._OverlayInput(m, A, B, 2, 2, EX, false, false, nothing, nothing)
+    GO._compute_labelling!(g, input)
+    GO._mark_result_area_edges!(g, GO.OVERLAY_INTERSECTION)
+    GO._unmark_duplicate_edges_from_result_area!(g)
+    ctx = GO._build_polygon_ctx(m, g, GO.graph_result_area_edges(g), "storage test";
+                                exact = EX)
+    ring = first(ctx.edge_rings)
+
+    @test !ismutabletype(GO._MaxEdgeRing)
+    @test !ismutabletype(typeof(ctx))
+    @test !ismutabletype(typeof(ring))
+    @test all(isconcretetype, fieldtypes(typeof(ctx)))
+    @test all(isconcretetype, fieldtypes(typeof(ring)))
+    @test @inferred(GO._ring_locate(ctx, ring, first(ring.ring_pts))) == GO.LOC_BOUNDARY
+end
+
 check_all_ops(A, B) =
     for op in OPS
         @testset "$(opname(op))" begin check_planar(op, A, B) end
@@ -1309,7 +1330,8 @@ off the exact node directions when the rounded ones cannot carry it.
     GO._unmark_duplicate_edges_from_result_area!(g)
     rae = GO.graph_result_area_edges(g)
     ctx = GO._PolyBuilderCtx(m, g.edges, g.arr, EX, GO._MaxEdgeRing[],
-                             GO._edge_ring_type(GO.output_point_type(g))[], Int32[], Int32[])
+                             GO._edge_ring_type(m, EX, GO.output_point_type(g))[],
+                             Int32[], Int32[])
     for e in rae
         GO._link_result_area_max_ring_at_node!(ctx.edges, e)
     end
@@ -1356,13 +1378,15 @@ every ring of an ordinary overlay.
         rae = GO.graph_result_area_edges(g)
         isempty(rae) && continue
         ctx = GO._PolyBuilderCtx(m, g.edges, g.arr, EX, GO._MaxEdgeRing[],
-                                 GO._edge_ring_type(GO.output_point_type(g))[], Int32[], Int32[])
+                                 GO._edge_ring_type(m, EX, GO.output_point_type(g))[],
+                                 Int32[], Int32[])
         for e in rae
             GO._link_result_area_max_ring_at_node!(ctx.edges, e)
         end
         for mr in GO._build_maximal_rings!(ctx, rae)
             for er in GO._build_minimal_rings!(ctx, ctx.max_rings[mr])
-                ids = ctx.edge_rings[er].node_ids
+                ring = ctx.edge_rings[er]
+                ids = ring.node_ids
                 ks = [GO._node_kernel_point(ctx, i) for i in ids]
                 #-- fixture premise: these rings are nowhere near the threshold
                 @test GO._rounded_ring_is_faithful(ks)
