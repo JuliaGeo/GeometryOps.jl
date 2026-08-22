@@ -94,10 +94,52 @@ end
 
 # TODO: this returns an approximately antipodal point...
 
+# The margin by which the cheap bounds in `_intersects` must clear the decision
+# before they are trusted: comfortably above the rounding of a squared chord
+# (~4 eps relative) and comfortably below any distance anyone cares about.
+const _CAP_CHORD_GUARD = 2.0^-40
+
 # TODO: exact-predicate intersection
 # This is all inexact and thus subject to floating point error
+#=
+Two caps intersect iff the angle `d` between their centers is at most the sum
+`r` of their radii. We can shortcut by computing the *squared chord* between
+the centers, `c² = ‖p - q‖²`, which is 3 subtractions and 3 multiplications. It
+brackets `d` tightly enough to settle almost every pair without ever forming
+`d`:
+
+    c  ≤  d = 2 asin(c/2)  ≤  c * (1 + c²/20)        for 0 ≤ c ≤ 1
+
+(The lower bound is `asin(x) ≥ x`; for the upper, `2 asin(c/2) - c` has the
+series `c³/24 + 3c⁵/640 + 15c⁷/21504 + …`, which stays under `c³/20` on `c ≤ 1`
+with minimum slack `1.0e-18` at `c → 0` and `2.6e-3` at `c = 1`.) Squaring
+both sides keeps it `sqrt`-free.
+
+This acts as an adaptive filter, similar to the predicates. Pairs far from the
+boundary use the cheap bounds; closer pairs use `spherical_distance`.
+
+For `c > 1` only the reject bound applies. A radius sum of at least `π` accepts
+outright. NaN and negative radii fall through to the original comparison.
+
+The chord is also more accurate for nearly equal centers, where
+`spherical_distance` loses precision. Centers are assumed to have unit length.
+=#
 function _intersects(x::SphericalCap, y::SphericalCap)
-    spherical_distance(x.point, y.point) <= x.radius + y.radius
+    r = x.radius + y.radius
+    p, q = x.point, y.point
+    dx = p[1] - q[1]
+    dy = p[2] - q[2]
+    dz = p[3] - q[3]
+    c² = dx * dx + dy * dy + dz * dz
+    if r >= 0                       # false for NaN, and for negative radii
+        r >= oftype(r, π) && return true  # no two points on the sphere are further apart
+        r² = r * r
+        g = _CAP_CHORD_GUARD
+        c² > r² * (1 + g) && return false            # d ≥ c > r
+        b = 1 + 0.05 * c²   # 0.05 rounds up from 1/20, so `b` stays an upper bound
+        c² <= 1 && c² * b * b <= r² * (1 - g) && return true   # d ≤ c(1 + c²/20) ≤ r
+    end
+    return spherical_distance(p, q) <= r
 end
 
 _disjoint(x::SphericalCap, y::SphericalCap) = !_intersects(x, y)

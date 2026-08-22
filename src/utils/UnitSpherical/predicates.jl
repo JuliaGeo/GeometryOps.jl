@@ -26,10 +26,44 @@ spherical_orient(a, b, c)
 # output
 1
 ```
+
+# Extended help
+
+## Why this does not simply call `robust_cross_product`
+
+The common path uses the unnormalized `cross(a - b, a + b)`: orientation needs
+only the sign of its dot product with `c`. The squared degeneracy test avoids
+normalizing the cross product or taking a square root.
+
+For nearly equal or antipodal `a` and `b`, the cross-product direction becomes
+unstable. Those cases fall back to [`robust_cross_product`](@ref).
 """
 function spherical_orient(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
-    # The orientation is determined by sign((a × b) · c)
-    # Use robust_cross_product for numerical stability
+    # The orientation is determined by sign((a × b) · c).
+    #
+    # Fast path: the stable cross product `cross(a - b, a + b)` (== 2(a × b),
+    # but far better conditioned for nearly-identical inputs), left
+    # unnormalized.  Written out componentwise so nothing allocates or is
+    # recomputed.
+    d1 = a[1] - b[1]; d2 = a[2] - b[2]; d3 = a[3] - b[3]
+    s1 = a[1] + b[1]; s2 = a[2] + b[2]; s3 = a[3] + b[3]
+    n1 = d2 * s3 - d3 * s2
+    n2 = d3 * s1 - d1 * s3
+    n3 = d1 * s2 - d2 * s1
+    nsqr = n1 * n1 + n2 * n2 + n3 * n3
+    # Same stability criterion `robust_cross_product` applies internally.
+    kmin = min_stable_norm(promote_type(eltype(a), eltype(b)))
+    if nsqr >= kmin * kmin
+        dot_product = n1 * c[1] + n2 * c[2] + n3 * c[3]
+        tol = eps(Float64) * 16  # Same tolerance as S2 geometry
+        # `abs(dot_product) / sqrt(nsqr) < tol`, without the sqrt
+        dot_product * dot_product < (tol * tol) * nsqr && return 0
+        return dot_product > 0 ? 1 : -1
+    end
+
+    # Slow path: `a` and `b` are nearly equal or nearly antipodal, so the
+    # Float64 cross product has lost the direction of the normal.  Recover it
+    # with the exact-arithmetic / symbolic-perturbation machinery.
     n = robust_cross_product(a, b)
     dot_product = n ⋅ c
 
