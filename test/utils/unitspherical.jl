@@ -630,36 +630,42 @@ end
     end
 
     tiny = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), 1e-12)
-    tiny_ext = Extents.extent(tiny)
+    @test which(Extents.extent, (typeof(tiny),)) == which(Extents.extent, (Any,))
+    @test Extents.extent(tiny) === nothing
+    tiny_ext = convert(Extents.Extent, tiny)
+    @test tiny_ext isa Extents.Extent{(:X, :Y, :Z)}
+    @test convert(Extents.Extent{(:X, :Y, :Z)}, tiny) === tiny_ext
+    @test convert(typeof(tiny_ext), tiny) === tiny_ext
+    @test_throws ArgumentError convert(Extents.Extent{(:X, :Y)}, tiny)
     @test tiny_ext.X[1] <= cos(tiny.radius) <= tiny_ext.X[2]
     @test tiny_ext.Y[1] <= -sin(tiny.radius) < sin(tiny.radius) <= tiny_ext.Y[2]
     @test tiny_ext.Z[1] <= -sin(tiny.radius) < sin(tiny.radius) <= tiny_ext.Z[2]
 
     polar = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), 0.2)
-    polar_ext = Extents.extent(polar)
+    polar_ext = convert(Extents.Extent, polar)
     @test polar_ext.X[1] <= -sin(polar.radius) < sin(polar.radius) <= polar_ext.X[2]
     @test polar_ext.Y[1] <= -sin(polar.radius) < sin(polar.radius) <= polar_ext.Y[2]
     @test polar_ext.Z[1] <= cos(polar.radius) <= polar_ext.Z[2] == 1.0
 
     antimeridian = SphericalCap(UnitSphereFromGeographic()((180.0, 0.0)), 0.3)
-    antimeridian_ext = Extents.extent(antimeridian)
+    antimeridian_ext = convert(Extents.Extent, antimeridian)
     @test antimeridian_ext.X[1] == -1.0
     @test antimeridian_ext.X[1] <= -cos(antimeridian.radius) <= antimeridian_ext.X[2]
     @test antimeridian_ext.Y[1] <= -sin(antimeridian.radius) < sin(antimeridian.radius) <= antimeridian_ext.Y[2]
 
     hemisphere = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), π / 2)
-    hemisphere_ext = Extents.extent(hemisphere)
+    hemisphere_ext = convert(Extents.Extent, hemisphere)
     @test hemisphere_ext.X == (-1.0, 1.0)
     @test hemisphere_ext.Y == (-1.0, 1.0)
     @test hemisphere_ext.Z[1] <= 0.0 <= hemisphere_ext.Z[2] == 1.0
 
     whole = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), nextfloat(Float64(π)))
-    whole_ext = Extents.extent(whole)
+    whole_ext = convert(Extents.Extent, whole)
     @test whole_ext == Extents.Extent(X = (-1.0, 1.0), Y = (-1.0, 1.0), Z = (-1.0, 1.0))
 
     arbitrary = SphericalCap(normalize(UnitSphericalPoint(1.0, -2.0, 3.0)), 0.7)
     for cap in (tiny, polar, antimeridian, hemisphere, arbitrary)
-        ext = Extents.extent(cap)
+        ext = convert(Extents.Extent, cap)
         @test in_extent(cap.point, ext)
         @test all(p -> in_extent(p, ext), boundary_points(cap))
         @test Extents.intersects(cap, ext)
@@ -667,7 +673,7 @@ end
     end
 
     cap32 = SphericalCap(UnitSphericalPoint(0.0f0, 0.0f0, 1.0f0), 0.2f0)
-    ext32 = Extents.extent(cap32)
+    ext32 = convert(Extents.Extent, cap32)
     @test ext32.X isa Tuple{Float32, Float32}
     @test all(p -> in_extent(p, ext32), boundary_points(cap32))
 end
