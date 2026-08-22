@@ -158,11 +158,8 @@ _disjoint(x::SphericalCap, y::SphericalCap) = !_intersects(x, y)
 
 """
     Extents.contains(big::SphericalCap, small::SphericalCap; strict=false)
-    Extents.within(small::SphericalCap, big::SphericalCap; strict=false)
 
-Whether the closed cap `big` contains all of `small`. A cap whose radius is at
-least `π` contains the whole unit sphere. `strict` is accepted for consistency
-with the Extents API and has no effect because both inputs use the same domain.
+Whether the closed cap `big` contains all of `small`.
 """
 function Extents.contains(big::SphericalCap, small::SphericalCap; strict=false)
     big.radius >= oftype(big.radius, π) && return true
@@ -173,6 +170,11 @@ function Extents.contains(big::SphericalCap, small::SphericalCap; strict=false)
     # S2's `S2Cap::Contains(const S2Cap&)` convention.
     return dist + small.radius <= big.radius
 end
+"""
+    Extents.within(small::SphericalCap, big::SphericalCap; strict=false)
+
+Whether the closed cap `small` is within `big`.
+"""
 Extents.within(small::SphericalCap, big::SphericalCap; strict=false) =
     Extents.contains(big, small; strict)
 
@@ -188,10 +190,7 @@ end
 """
     Extents.intersects(x::SphericalCap, y::SphericalCap)
 
-Whether the two closed caps intersect. Tangency counts as intersection. The
-comparison delegates to the cap predicate's guarded squared-chord test, which
-retains precision for nearly coincident centres and falls back to angular
-distance only inside its uncertainty band.
+Whether the two closed caps intersect, including at tangency.
 """
 Extents.intersects(x::SphericalCap, y::SphericalCap) = _intersects(x, y)
 
@@ -260,10 +259,7 @@ end
 """
     Extents.grow(cap::SphericalCap, factor::Real) -> SphericalCap
 
-Grow the cap's angular diameter by `factor` on each side, matching the scalar
-`Extents.grow` convention. Positive growth is rounded outward and capped at
-`π`; zero returns `cap` unchanged. A factor of `0.5` therefore doubles the
-radius. Negative factors shrink it, provided the resulting radius is valid.
+Grow the cap's angular diameter by `factor` on each side.
 """
 function Extents.grow(cap::SphericalCap{T}, factor::Real) where {T <: AbstractFloat}
     δ = convert(T, factor)
@@ -278,11 +274,14 @@ end
 """
     Extents.union(x::SphericalCap, y::SphericalCap; strict=false) -> SphericalCap
 
-Return a cap containing both `x` and `y`. If either input already contains the
-other it is returned unchanged. Otherwise the centre lies between the input
-centres and the radius is rounded outward to preserve coverage. `strict` is
-accepted for consistency with the Extents API and has no effect because both
-inputs use the same domain.
+Return a cap containing both `x` and `y`.
+
+If either input already contains the other it is returned unchanged.
+Otherwise, the centre lies between the input caps' centres, and the radius is
+rounded outward to preserve coverage.
+
+`strict` is accepted for consistency with the Extents API and has no effect
+because both inputs use the same domain.
 """
 function Extents.union(x::SphericalCap, y::SphericalCap; strict=false)
     Extents.contains(x, y; strict) && return x
