@@ -7,10 +7,11 @@ CollapsedDocStrings = true
 
 ```@docs; canonical=false
 SphericalCap
-cap_contains
-merge_caps
-dilate_cap
-cap_xyz_extent
+Extents.contains
+Extents.within
+Extents.extent
+Extents.union
+Extents.grow
 circumcenter_on_unit_sphere
 ```
 
@@ -156,14 +157,14 @@ end
 _disjoint(x::SphericalCap, y::SphericalCap) = !_intersects(x, y)
 
 """
-    cap_contains(big::SphericalCap, small::SphericalCap) -> Bool
-    cap_contains(cap::SphericalCap, point::UnitSphericalPoint) -> Bool
+    Extents.contains(big::SphericalCap, small::SphericalCap; strict=false)
+    Extents.within(small::SphericalCap, big::SphericalCap; strict=false)
 
-Whether the closed cap `big` contains all of `small`, or whether the closed
-`cap` contains `point`. A cap whose radius is at least `π` contains the whole
-unit sphere.
+Whether the closed cap `big` contains all of `small`. A cap whose radius is at
+least `π` contains the whole unit sphere. `strict` is accepted for consistency
+with the Extents API and has no effect because both inputs use the same domain.
 """
-function cap_contains(big::SphericalCap, small::SphericalCap)
+function Extents.contains(big::SphericalCap, small::SphericalCap; strict=false)
     big.radius >= oftype(big.radius, π) && return true
     small.radius >= oftype(small.radius, π) && return false
     dist = spherical_distance(big.point, small.point)
@@ -172,14 +173,15 @@ function cap_contains(big::SphericalCap, small::SphericalCap)
     # S2's `S2Cap::Contains(const S2Cap&)` convention.
     return dist + small.radius <= big.radius
 end
-function cap_contains(cap::SphericalCap, point::UnitSphericalPoint)
+Extents.within(small::SphericalCap, big::SphericalCap; strict=false) =
+    Extents.contains(big, small; strict)
+
+# Point membership stays internal: a point is not an `Extents.Extent`, so the
+# Extents DE-9IM containment generic does not describe this mixed relation.
+function _contains(cap::SphericalCap, point::UnitSphericalPoint)
     cap.radius >= oftype(cap.radius, π) && return true
     spherical_distance(cap.point, point) <= cap.radius
 end
-
-# Private spellings retained for compatibility with existing callers.
-_contains(big::SphericalCap, small::SphericalCap) = cap_contains(big, small)
-_contains(cap::SphericalCap, point::UnitSphericalPoint) = cap_contains(cap, point)
 
 # ## Cap intersection
 
@@ -222,18 +224,16 @@ Extents.intersects(ext::Extents.Extent{(:X, :Y, :Z)}, cap::SphericalCap) =
     Extents.intersects(cap, ext)
 
 """
-    cap_xyz_extent(cap::SphericalCap) -> Extents.Extent{(:X, :Y, :Z)}
+    Extents.extent(cap::SphericalCap) -> Extents.Extent{(:X, :Y, :Z)}
 
 Return an outward-rounded Cartesian bounding box for every unit-sphere point
 in `cap`. The result is intended for Cartesian spatial indexes over
-unit-spherical data; it is deliberately an explicitly named conversion rather
-than `Extents.extent(cap)`, because a `SphericalCap` remains a spherical query
-object rather than ordinary Cartesian geometry.
+unit-spherical data.
 
 Valid caps have radii in `[0, π]`. A radius at least `π`, or a non-finite or
 negative radius, conservatively returns the whole unit-sphere box.
 """
-function cap_xyz_extent(cap::SphericalCap{T}) where {T <: AbstractFloat}
+function Extents.extent(cap::SphericalCap{T}) where {T <: AbstractFloat}
     oneT = one(T)
     whole = (-oneT, oneT)
     r = cap.radius
@@ -258,31 +258,35 @@ function cap_xyz_extent(cap::SphericalCap{T}) where {T <: AbstractFloat}
 end
 
 """
-    dilate_cap(cap::SphericalCap, radius::Real) -> SphericalCap
+    Extents.grow(cap::SphericalCap, factor::Real) -> SphericalCap
 
-Return `cap` enlarged by the nonnegative angular `radius` in radians. Positive
-dilations are rounded outward and capped at `π`; dilating by zero returns
-`cap` unchanged.
+Grow the cap's angular diameter by `factor` on each side, matching the scalar
+`Extents.grow` convention. Positive growth is rounded outward and capped at
+`π`; zero returns `cap` unchanged. A factor of `0.5` therefore doubles the
+radius. Negative factors shrink it, provided the resulting radius is valid.
 """
-function dilate_cap(cap::SphericalCap{T}, radius::Real) where {T <: AbstractFloat}
-    δ = convert(T, radius)
-    δ >= zero(T) || throw(DomainError(radius, "cap dilation must be nonnegative"))
+function Extents.grow(cap::SphericalCap{T}, factor::Real) where {T <: AbstractFloat}
+    δ = convert(T, factor)
     δ == zero(T) && return cap
-    cap.radius >= T(π) && return cap
-    widened = min(T(π), nextfloat(cap.radius + δ))
-    return SphericalCap(cap.point, widened)
+    δ > zero(T) && cap.radius >= T(π) && return cap
+    grown = cap.radius + 2 * cap.radius * δ
+    grown >= zero(T) || throw(DomainError(factor, "cap growth factor produces a negative radius"))
+    radius = grown > cap.radius ? min(T(π), nextfloat(grown)) : grown
+    return SphericalCap(cap.point, radius)
 end
 
 """
-    merge_caps(x::SphericalCap, y::SphericalCap) -> SphericalCap
+    Extents.union(x::SphericalCap, y::SphericalCap; strict=false) -> SphericalCap
 
 Return a cap containing both `x` and `y`. If either input already contains the
 other it is returned unchanged. Otherwise the centre lies between the input
-centres and the radius is rounded outward to preserve coverage.
+centres and the radius is rounded outward to preserve coverage. `strict` is
+accepted for consistency with the Extents API and has no effect because both
+inputs use the same domain.
 """
-function merge_caps(x::SphericalCap, y::SphericalCap)
-    cap_contains(x, y) && return x
-    cap_contains(y, x) && return y
+function Extents.union(x::SphericalCap, y::SphericalCap; strict=false)
+    Extents.contains(x, y; strict) && return x
+    Extents.contains(y, x; strict) && return y
 
     d = spherical_distance(x.point, y.point)
     newradius = (x.radius + y.radius + d) / 2
@@ -296,9 +300,6 @@ function merge_caps(x::SphericalCap, y::SphericalCap)
     radius = min(oftype(covering_radius, π), nextfloat(covering_radius))
     return SphericalCap(newcenter, radius)
 end
-
-# Private spelling retained for compatibility with existing callers.
-_merge(x::SphericalCap, y::SphericalCap) = merge_caps(x, y)
 
 """
     circumcenter_on_unit_sphere(a, b, c)
