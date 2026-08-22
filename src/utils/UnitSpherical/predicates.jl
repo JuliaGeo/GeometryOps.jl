@@ -31,28 +31,12 @@ spherical_orient(a, b, c)
 
 ## Why this does not simply call `robust_cross_product`
 
-`robust_cross_product` returns a *normalized* normal, but a sign test does not
-need one: only the sign of `n ⋅ c` matters, and normalizing scales `n` by a
-positive number.  So the common case is inlined here as the bare stable cross
-product `cross(a - b, a + b)`, skipping both the `normalize` and the unit-length
-`@assert`s (whose job is done by the stability test below, which is the thing
-that actually decides whether the cheap value may be used).
+The common path uses the unnormalized `cross(a - b, a + b)`: orientation needs
+only the sign of its dot product with `c`. The squared degeneracy test avoids
+normalizing the cross product or taking a square root.
 
-The degeneracy band is preserved exactly in form: `robust_cross_product`'s
-result is unit length, so `abs(n̂ ⋅ c) < tol` — and for the unnormalized `n`,
-`abs(n ⋅ c) / ‖n‖ < tol`, which is tested as `(n ⋅ c)^2 < tol^2 * ‖n‖^2` to
-avoid the `sqrt`.  This is algebraically the same test; at the threshold itself
-the two differ by the rounding of the dot product (a few ULPs of `n ⋅ c`, i.e.
-a few percent of `tol`, since `tol` is only `16 * eps`).  Points that close to
-the boundary are exactly the ones the tolerance declares indeterminate; no
-input can flip between `+1` and `-1`, only between `0` and a sign.
-
-When the cheap cross product is *not* trustworthy — `a` and `b` nearly equal or
-nearly antipodal, i.e. `‖n‖ < min_stable_norm(T)` — this falls back to the full
-`robust_cross_product`, including its extended/exact-precision and symbolic
-perturbation paths.  That fallback is unreachable from the Sutherland-Hodgman
-clipping path (which skips `edge_start == edge_end` edges), but this is a
-general-purpose predicate with other callers, so it stays.
+For nearly equal or antipodal `a` and `b`, the cross-product direction becomes
+unstable. Those cases fall back to [`robust_cross_product`](@ref).
 """
 function spherical_orient(a::UnitSphericalPoint, b::UnitSphericalPoint, c::UnitSphericalPoint)
     # The orientation is determined by sign((a × b) · c).
