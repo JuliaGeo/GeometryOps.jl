@@ -24,7 +24,8 @@ include("arc_intersection.jl")
 include("arc_extent.jl")
 
 export UnitSphericalPoint, UnitSphereFromGeographic, GeographicFromUnitSphere,
-       slerp, SphericalCap, spherical_distance, spherical_orient, point_on_spherical_arc,
+       slerp, SphericalCap, cap_contains, merge_caps, dilate_cap, cap_xyz_extent,
+       spherical_distance, spherical_orient, point_on_spherical_arc,
        spherical_ring_contains, spherical_ring_encloses, spherical_exterior_anchor,
        spherical_arc_intersection, ArcIntersectionResult,
        arc_cross, arc_hinge, arc_overlap, arc_disjoint,
