@@ -71,18 +71,11 @@ const EXACT_CROSS_PROD_ERROR = DBL_ERR
 """
     min_stable_norm(::Type{T})
 
-The smallest `norm(cross(a - b, a + b))` for which [`stable_cross_product`](@ref)
-evaluated in precision `T` still meets `ROBUST_CROSS_PROD_ERROR`.  Below it,
-[`robust_cross_product`](@ref) must escalate to higher precision, exact
-arithmetic, or symbolic perturbation.
-
-Callers that want the cheap unnormalized `cross(a - b, a + b)` directly (the
-orientation predicate, say, which only needs the *sign* of a dot product
-against it, and so needs neither the normalization nor a scale-correct norm)
-can use this to decide when the cheap value is trustworthy and when they must
-fall back to `robust_cross_product`.
-
-See the derivation in [`stable_cross_product`](@ref).
+Smallest `norm(cross(a - b, a + b))` that meets
+`ROBUST_CROSS_PROD_ERROR` in precision `T`. Below it,
+[`robust_cross_product`](@ref) must use a higher-precision fallback. Callers
+that only need the sign may use this threshold on the unnormalized cross
+product. See [`stable_cross_product`](@ref) for the derivation.
 """
 min_stable_norm(::Type{T}) where {T} =
     (32 * SQRT3 * DBL_ERR) / (ROBUST_CROSS_PROD_ERROR / (eps(float(T)) / 2) - (1 + 2 * SQRT3))
