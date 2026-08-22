@@ -9,7 +9,6 @@ CollapsedDocStrings = true
 SphericalCap
 Extents.contains
 Extents.within
-Extents.extent
 Extents.union
 Extents.grow
 circumcenter_on_unit_sphere
@@ -216,21 +215,32 @@ Extents.intersects(ext::Extents.Extent{(:X, :Y, :Z)}, cap::SphericalCap) =
     Extents.intersects(cap, ext)
 
 """
-    Extents.extent(cap::SphericalCap) -> Extents.Extent{(:X, :Y, :Z)}
+    convert(::Type{<:Extents.Extent}, cap::SphericalCap) -> Extents.Extent{(:X, :Y, :Z)}
 
-Return an outward-rounded Cartesian bounding box for every unit-sphere point
-in `cap`. The result is intended for Cartesian spatial indexes over
-unit-spherical data.
+Convert `cap` to an outward-rounded Cartesian bounding box containing every
+unit-sphere point in the cap. The result is intended for Cartesian spatial
+indexes over unit-spherical data.
+
+Extent extraction conventionally means that an object *has* a Cartesian
+extent. A `SphericalCap` is instead a spherical query object, so conversion
+makes this boundary crossing explicit.
 
 Valid caps have radii in `[0, π]`. A radius at least `π`, or a non-finite or
 negative radius, conservatively returns the whole unit-sphere box.
+
+The abstract target `Extents.Extent` and compatible concrete targets are
+accepted. Incompatible concrete targets throw an `ArgumentError`.
 """
-function Extents.extent(cap::SphericalCap{T}) where {T <: AbstractFloat}
+function Base.convert(target::Type{<:Extents.Extent}, cap::SphericalCap{T}) where {
+        T <: AbstractFloat}
     oneT = one(T)
     whole = (-oneT, oneT)
     r = cap.radius
     if !(zero(T) <= r < T(π))
-        return Extents.Extent(X = whole, Y = whole, Z = whole)
+        result = Extents.Extent(X = whole, Y = whole, Z = whole)
+        result isa target || throw(ArgumentError(
+            "cannot convert SphericalCap{$T} to incompatible extent type $target"))
+        return result
     end
 
     cr, sr = cos(r), sin(r)
@@ -246,7 +256,10 @@ function Extents.extent(cap::SphericalCap{T}) where {T <: AbstractFloat}
         (max(-oneT, prevfloat(lo - guard)),
          min(oneT, nextfloat(hi + guard)))
     end
-    return Extents.Extent(X = bounds[1], Y = bounds[2], Z = bounds[3])
+    result = Extents.Extent(X = bounds[1], Y = bounds[2], Z = bounds[3])
+    result isa target || throw(ArgumentError(
+        "cannot convert SphericalCap{$T} to incompatible extent type $target"))
+    return result
 end
 
 """
