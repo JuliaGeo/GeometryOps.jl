@@ -197,8 +197,8 @@ edge_neighbour = GI.Polygon([[(2.0, 0.0), (4.0, 0.0), (4.0, 2.0), (2.0, 2.0), (2
         # a reused cache is the whole point: with one, nothing is allocated at all
         _area_bytes(planar, square_a, square_b, planar_cache)
         _area_bytes(spherical, sa, sb, spherical_cache)
-        @test _area_bytes(planar, square_a, square_b, planar_cache) == 0 skip = VERSION < v"1.12"
-        @test _area_bytes(spherical, sa, sb, spherical_cache) == 0 skip = VERSION < v"1.12"
+        @test _area_bytes(planar, square_a, square_b, planar_cache) == 0
+        @test _area_bytes(spherical, sa, sb, spherical_cache) == 0
         # Guard against passing vacuously: without a cache the buffers cost something
         _area_bytes(planar, square_a, square_b)
         @test _area_bytes(planar, square_a, square_b) > 0
