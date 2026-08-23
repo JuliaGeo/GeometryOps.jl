@@ -329,6 +329,132 @@ end
 # TODO: deprecate this
 _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T = _intersection_point(Planar(), T, (a1, a2), (b1, b2); exact)
 
+#=
+The same question between two great-circle arcs.
+
+The method above takes a manifold but decides everything planar: its envelope test is a
+lon/lat box, its four orientations are `Predicates.orient`, and the points it builds are
+segment crossings in the chart. On the sphere all three are wrong for the same reason — an
+edge of a DGG cell is a great-circle arc that bulges off the chart line joining its
+endpoints — so this method replaces the whole decision rather than patching parts of it.
+
+The classification is `_sph_arc_arc_class`, which is the identical `LineOrientation` split
+the planar method produces (`line_cross` / `line_hinge` / `line_over` / `line_out`) and
+additionally names which of the four endpoints lie on the other arc. No lon/lat envelope
+pre-filter is applied: a great-circle arc leaves the box that bounds its endpoints, so such
+a filter rejects real intersections near the poles, and it is unsound across the
+antimeridian in either direction.
+
+## Which coordinate is returned
+
+Only `line_cross` builds a new point. Every other case meets at an endpoint that is already
+a vertex of one of the two rings, and there the *input* tuple is returned unchanged rather
+than a `lon/lat → xyz → lon/lat` round trip of it. That is load-bearing, not tidiness:
+`_build_b_list` matches an intersection to a `b` vertex by `fracs[2] == 0`, and `equals`
+compares `PolyNode` points for bit equality. A round trip moves a vertex by an ulp or two,
+which would leave the match to fail and open a zero-length edge at exactly the shared
+vertices a tiling is made of.
+
+`exact` is accepted for signature parity and unused: the spherical predicates underneath
+are the tolerance-banded `spherical_orient` throughout, for the reasons set out at the top
+of `geom_geom_processors_spherical.jl`.
+=#
+function _intersection_point(m::Spherical, ::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where {T}
+    zero_intr = ((zero(T), zero(T)), (zero(T), zero(T)))
+    no_intr_result = (line_out, zero_intr, zero_intr)
+
+    A0 = _spherical_kernel_point(a1); A1 = _spherical_kernel_point(a2)
+    B0 = _spherical_kernel_point(b1); B1 = _spherical_kernel_point(b2)
+
+    orient, a0_on_b, a1_on_b, b0_on_a, b1_on_a = _sph_arc_arc_class(A0, A1, B0, B1)
+    orient === line_out && return no_intr_result
+
+    if orient === line_cross
+        x = _arc_crossing_point(A0, A1, B0, B1)
+        #= A proper crossing cannot produce parallel normals, but the constructor guards
+        the normalization anyway and so does this. =#
+        x === nothing && return no_intr_result
+        α = _sph_arc_frac(T, A0, A1, x)
+        β = _sph_arc_frac(T, B0, B1, x)
+        return line_cross, (_sph_lonlat(T, x), (α, β)), zero_intr
+    end
+
+    #= Both remaining cases meet at named endpoints. Building the four candidates up front
+    keeps one spelling of "which point, and where does it sit on each arc"; the tuple is
+    homogeneous and stack-allocated, so this costs nothing. =#
+    cands = (
+        (a0_on_b, _tuple_point(a1, T), zero(T), _sph_arc_frac(T, B0, B1, A0)),
+        (a1_on_b, _tuple_point(a2, T), one(T),  _sph_arc_frac(T, B0, B1, A1)),
+        (b0_on_a, _tuple_point(b1, T), _sph_arc_frac(T, A0, A1, B0), zero(T)),
+        (b1_on_a, _tuple_point(b2, T), _sph_arc_frac(T, A0, A1, B1), one(T)),
+    )
+
+    if orient === line_hinge
+        #= One distinct meeting point, possibly named by several incidences (a shared
+        vertex is on both arcs and is reported four times). Any of them is that point. =#
+        @inbounds for k in 1:4
+            on, p, α, β = cands[k]
+            on && return line_hinge, (p, (α, β)), zero_intr
+        end
+        return no_intr_result
+    end
+
+    #= `line_over`: the arcs share a great circle and overlap with positive length. The
+    overlap runs between the two extreme incident endpoints, ordered along `a` — the same
+    ordering convention the planar method's `intr1`/`intr2` follow. =#
+    lo_k, hi_k = 0, 0
+    lo_α, hi_α = T(Inf), T(-Inf)
+    @inbounds for k in 1:4
+        on, _, α, _ = cands[k]
+        on || continue
+        if α < lo_α; lo_α = α; lo_k = k end
+        if α > hi_α; hi_α = α; hi_k = k end
+    end
+    (lo_k == 0 || lo_k == hi_k) && return no_intr_result
+    @inbounds begin
+        _, p_lo, α_lo, β_lo = cands[lo_k]
+        _, p_hi, α_hi, β_hi = cands[hi_k]
+    end
+    return line_over, (p_lo, (α_lo, β_lo)), (p_hi, (α_hi, β_hi))
+end
+
+#= Arc-length fraction of `x` along the arc `p0 → p1`, clamped to `[0, 1]`.
+
+## The endpoints are settled by identity, never by arithmetic
+
+`_build_a_list` claims a shared vertex with exact comparisons — `α == 0`, `β == 0`,
+`0 ≤ β < 1` — so a fraction that is *meant* to be an endpoint has to be exactly `0` or
+exactly `1`, not within a tolerance of it. Recovering that by dividing two separately
+computed angles does not deliver it: for a vertex shared between two rings the two `atan`
+calls take bit-identical inputs, yet inlined into the four-candidate construction they do
+not contract identically, and the quotient lands an ulp below one. `0.9999999999999998`
+passes `β < 1`, so the vertex is claimed a second time and the traversal is handed a
+duplicate intersection — which is what `_trace_polynodes!` reports as a `TracingError`.
+
+Comparing against the endpoints first removes the arithmetic from the case that has to be
+exact. `_spherical_kernel_point` is deterministic and signed-zero normalized, so the same
+lon/lat vertex always converts to the same bits, and shared vertices — the common case in a
+tiling — take this path rather than the quotient.
+
+A zero-length arc is caught by the same test: `x == p0` fires, and `0` is the only answer
+that keeps the caller's endpoint tests meaningful.
+
+## Why `atan`, not `acos`
+
+`atan(‖a × b‖, a ⋅ b)` stays accurate across the whole range, where `acos(a ⋅ b)` loses
+about half its bits for the small angles a cell-scale edge subtends — a HEALPix level-18
+edge is ~4e-6 rad. =#
+@inline function _sph_arc_frac(::Type{T}, p0, p1, x) where {T}
+    x == p0 && return zero(T)
+    x == p1 && return one(T)
+    total = atan(norm(cross(p0, p1)), dot(p0, p1))
+    total == 0 && return zero(T)
+    part = atan(norm(cross(p0, x)), dot(p0, x))
+    return T(clamp(part / total, 0, 1))
+end
+
+@inline _sph_lonlat(::Type{T}, u) where {T} = ((ll = _usp_to_lonlat(u)); (T(ll[1]), T(ll[2])))
+
 #= If lines defined by (a1, a2) and (b1, b2) are collinear, find endpoints of overlapping
 region if they exist. This could result in three possibilities. First, there could be no
 overlapping region, in which case, the default 'no_intr_result' intersection information is
