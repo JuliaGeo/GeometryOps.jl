@@ -56,6 +56,7 @@ true
 ```
 """
 intersects(geom1, geom2) = !disjoint(geom1, geom2)
+intersects(m::Manifold, geom1, geom2) = !disjoint(m, geom1, geom2)
 
 """
     intersects(g1)

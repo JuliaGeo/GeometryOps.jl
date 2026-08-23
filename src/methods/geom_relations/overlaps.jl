@@ -83,6 +83,14 @@ This is equivalent to `x -> overlaps(x, g1)`.
 """
 overlaps(g1) = Base.Fix2(overlaps, g1)
 
+#= `overlaps` still runs on its own planar helpers rather than the shared
+processors (see the `TODO` below), so it has no spherical implementation.
+Answering a `Spherical()` call with the planar result would be silently wrong,
+so it errors instead. =#
+overlaps(::Planar, g1, g2) = overlaps(g1, g2)
+overlaps(::AutoManifold, g1, g2) = overlaps(g1, g2)
+overlaps(m::Manifold, g1, g2) = _throw_no_manifold_predicate(overlaps, m)
+
 """
     _overlaps(::GI.AbstractTrait, geom1, ::GI.AbstractTrait, geom2)::Bool
 
