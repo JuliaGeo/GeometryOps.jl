@@ -281,8 +281,21 @@ function _sph_arc_arc_class(a0, a1, b0, b1)
     (a0_on_b || a1_on_b || b0_on_a || b1_on_a) &&
         return line_hinge, a0_on_b, a1_on_b, b0_on_a, b1_on_a
 
-    # strict straddle in both directions: a transversal crossing
-    if sab0 != 0 && sab0 == -sab1 && sba0 != 0 && sba0 == -sba1
+    #= A transversal crossing. Each great circle separating the other's endpoints is
+    necessary but *not* sufficient, because two great circles meet at an antipodal pair and
+    a straddle in both directions does not say the two arcs reach the *same* one of them.
+
+    Two small arcs on opposite sides of the sphere show it: `(-0.5,-0.5)→(0.5,-0.5)` and
+    `(180.499,0.5)→(179.499,0.5)` are near-antipodal images of one another, so each lies
+    almost on the other's great circle and straddles it, yet one arc contains one meeting
+    point and the other arc contains its antipode. Under the two-way test they cross, and
+    two disjoint cells on opposite sides of the globe report an intersection the size of a
+    whole cell.
+
+    The sign pattern below is S2's `SimpleCrossing`: with `acb = -sab0`, `bda = sab1`,
+    `cbd = -sba1` and `dac = sba0`, it asks that `acb` agree in sign with all three, which
+    pins both arcs to the same meeting point. =#
+    if sab0 != 0 && sab1 == -sab0 && sba0 == -sab0 && sba1 == sab0
         return line_cross, false, false, false, false
     end
     return line_out, false, false, false, false
@@ -309,9 +322,20 @@ its own.
 
 Returns `nothing` if the normals are parallel, which a proper crossing cannot
 produce, but which guards the normalization regardless.
+
+The two normals come from `robust_cross_product`, not from a plain `cross`. For
+two vertices a cell edge apart the plain product is a difference of `O(1)` terms
+whose result is `O(4e-6)` at HEALPix level 18, so it keeps only the bits the
+cancellation leaves, and crossing two such normals compounds it. Measured
+against a `BigFloat` reference on level-18 cells at longitude 120, the plain
+form places the crossing 4.8e-7 of an edge length away (worst 2.8e-6); through
+`robust_cross_product` — the same stable `(a-b) × (a+b)` form `spherical_orient`
+uses, with the exact fallback behind it — that becomes 3e-11 (worst 9e-11), and
+it still allocates nothing. Degree-scale inputs barely notice the difference,
+which is exactly why this has to be measured at cell scale.
 =#
 @inline function _arc_crossing_point(a0, a1, b0, b1)
-    x = cross(cross(a0, a1), cross(b0, b1))
+    x = cross(robust_cross_product(a0, a1), robust_cross_product(b0, b1))
     nx = norm(x)
     nx == 0 && return nothing
     u = x ./ nx
