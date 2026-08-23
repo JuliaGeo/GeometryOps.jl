@@ -1,5 +1,6 @@
 using Test
 using LinearAlgebra
+using Random
 import GeometryOps as GO, GeoInterface as GI
 using GeometryOps.UnitSpherical
 using GeometryOpsCore: Planar, Spherical
@@ -136,6 +137,67 @@ end
     for other in (_ngon(0.0, 0.0, 1.0, 5), _ngon(6.0, 0.0, 2.0, 5), _star(3.0, 1.0, 6.0, 1.0, 6))
         @test GO.intersects(Spherical(), other, star) == oracle(GO.pred_intersects, other, star)
         @test GO.within(Spherical(), other, star) == _within_pattern(other, star)
+    end
+end
+
+#= Irregular rings, in the shape real data comes in: unequal edge lengths and
+turn angles, so a vertex's neighbourhood is not the tidy one a regular n-gon
+gives. `Random` is only used to lay the vertices out, from a fixed seed. =#
+function _irregular(lon0, lat0, r, n; seed)
+    rng = Random.MersenneTwister(seed)
+    c = UnitSphereFromGeographic()((lon0, lat0))
+    ref = abs(c[3]) < 0.9 ? UnitSphericalPoint(0.0, 0.0, 1.0) : UnitSphericalPoint(1.0, 0.0, 0.0)
+    e1 = normalize(cross(c, ref)); e2 = cross(c, e1)
+    pts = Tuple{Float64,Float64}[]
+    for k in 0:(n - 1)
+        θ = 2π * (k + 0.4 * (rand(rng) - 0.5)) / n
+        ρ = deg2rad(r * (0.55 + 0.9 * rand(rng)))
+        v = cos(ρ) .* c .+ sin(ρ) .* (cos(θ) .* e1 .+ sin(θ) .* e2)
+        p = GeographicFromUnitSphere()(UnitSphericalPoint(normalize(v)))
+        push!(pts, (p[1], p[2]))
+    end
+    push!(pts, pts[1])
+    return GI.Polygon([GI.LinearRing(pts)])
+end
+
+@testset "a ring is within itself, and contains itself" begin
+    #= Every edge of a ring tested against its own ring is a shared edge, so
+    this is the densest shared-edge case there is, and the one real tilings
+    hit constantly.
+
+    Regression for two faults in the segment-splitting walk. The walk ordered
+    split points by `dot(A, ·)` from an assumed starting ordinate of exactly
+    `1`, but `dot(A, A)` is a rounded sum of three squares and lands an ulp
+    below it, so the segment's own start vertex sorted as strictly ahead of
+    the start and opened a zero-length piece. That piece was then classified
+    by normalizing `p + p`, which moves the point by an ulp — and an ulp past
+    a shared vertex is off the end of both arcs meeting there, so a ring
+    vertex classified as OUTSIDE the ring it belongs to, and the ring stopped
+    being within itself.
+
+    A regular n-gon mostly hides this (the perturbed point stays inside a
+    neighbouring edge's band); irregular rings do not. =#
+    for n in (5, 8, 12, 20, 38), seed in 1:12
+        ring = _irregular(12.3, 41.7, 4.0, n; seed)
+        @test GO.within(Spherical(), ring, ring)
+        @test GO.contains(Spherical(), ring, ring)
+        @test GO.coveredby(Spherical(), ring, ring)
+        @test !GO.disjoint(Spherical(), ring, ring)
+    end
+    # and at cell scale, where the vertices are 4e-6 rad apart
+    for n in (5, 12, 38), seed in 1:8
+        ring = _irregular(12.3, 41.7, rad2deg(4e-6), n; seed)
+        @test GO.within(Spherical(), ring, ring)
+    end
+end
+
+@testset "a multipolygon contains its own components" begin
+    parts = [_irregular(10.0 + 30.0 * i, 20.0, 3.0, 12; seed = 7 + i) for i in 0:3]
+    mp = GI.MultiPolygon(parts)
+    for part in parts
+        @test GO.contains(Spherical(), mp, part)
+        @test GO.within(Spherical(), part, mp)
+        @test GO.intersects(Spherical(), mp, part)
     end
 end
 

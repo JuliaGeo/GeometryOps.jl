@@ -346,7 +346,13 @@ function _split_segment_interactions(
 
     t_end = dot(A, B)
     p_start = A
-    t_start = one(t_end)
+    #= The walk's position is tracked by its own ordinate, not by an idealized
+    `1`. `dot(A, A)` is a rounded sum of three squares and lands an ulp or so
+    below one, so seeding `t_start` with `one(t_end)` would leave the start
+    point itself strictly ahead of the position: a ring vertex coincident with
+    `A` — every shared edge has one — would then be taken as a split point and
+    open a zero-length piece. =#
+    t_start = dot(A, A)
     while true
         # the split point nearest the current position, if any is left
         best_t = t_end
@@ -384,9 +390,14 @@ function _split_segment_interactions(
             end
         end
         p_end = found ? best_p : B
+        #= A piece with no extent says nothing about which side the segment
+        runs, and cannot be asked: normalizing `p + p` moves the point by an
+        ulp, and an ulp past a shared vertex is off the end of both arcs that
+        meet there, so it would classify as outside the ring it is a vertex
+        of. =#
         mid = p_start + p_end
         nm = norm(mid)
-        if nm > 0
+        if p_end != p_start && nm > 0
             mid_val = _usp_ring_orientation(m, v, anchor, UnitSphericalPoint(mid ./ nm); exact)
             if mid_val == point_in
                 in_curve = true
