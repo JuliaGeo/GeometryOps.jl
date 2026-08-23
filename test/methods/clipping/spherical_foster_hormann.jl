@@ -195,6 +195,35 @@ end
     end
 end
 
+#= Two cells that share a chart edge and overlap only slightly.
+
+A parallel is not a great circle, so the shared horizontal edges of two such cells are arcs
+of *different* great circles and genuinely cross. The banded `spherical_orient` reports 0
+inside an eps*16 window, which at cell scale is wider than the determinant it is judging, so
+the crossing was classified as a hinge, the entry/exit alternation collapsed, and the tracer
+returned the whole subject ring -- up to 100,000x the true overlap area.
+
+This is the configuration a DGG tiling produces constantly, and the random-offset cells in
+the differential corpus never generate it: they share no edge exactly. =#
+@testset "shared edge with a thin overlap" begin
+    sq(lon, lat, w, h) = GI.Polygon([GI.LinearRing(
+        [(lon, lat), (lon + w, lat), (lon + w, lat + h), (lon, lat + h), (lon, lat)])])
+
+    for s in (2.3e-4, 2.3e-3), frac in (0.05, 0.01, 0.002, 1e-3, 1e-4, 1e-5)
+        P = sq(0.0, 12.0, s, s)
+        Q = sq(s * (1 - frac), 12.0, s, s)   # shares both horizontal edges exactly
+        expected = GO.area(Spherical(), P) * frac
+        got = GO.intersection_area(ALG_S, P, Q)
+        @test got ≈ expected rtol = 1e-3
+    end
+
+    #- and the same through the geometry-returning path
+    s, frac = 2.3e-4, 1e-4
+    P = sq(0.0, 12.0, s, s); Q = sq(s * (1 - frac), 12.0, s, s)
+    polys = GO.intersection(ALG_S, P, Q; target = GI.PolygonTrait())
+    @test sum(p -> GO.area(Spherical(), p), polys) ≈ GO.area(Spherical(), P) * frac rtol = 1e-3
+end
+
 @testset "planar path is untouched" begin
     #= Pinned planar results. The spherical work is purely additive; if any of these move,
     a manifold-aware branch has leaked into the planar path. =#
