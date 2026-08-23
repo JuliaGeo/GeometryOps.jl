@@ -76,14 +76,30 @@ end
     for alg in (GO.FosterHormannClipping(Spherical()),
                 GO.FosterHormannClipping(; manifold = Spherical()),
                 GO.FosterHormannClipping(Spherical(), GO.NestedLoop()),
-                GO.FosterHormannClipping(Spherical(), GO.AutoAccelerator()),
-                GO.FosterHormannClipping(Geodesic()))
+                GO.FosterHormannClipping(Spherical(), GO.AutoAccelerator()))
         @test alg isa GO.FosterHormannClipping
         #-- STRtrees index planar rectangles; the sphere always falls back to a nested loop
         @test alg.accelerator isa GO.NestedLoop
     end
     #-- the planar side still honours an explicit accelerator choice
     @test GO.FosterHormannClipping(Planar(), GO.AutoAccelerator()).accelerator isa GO.AutoAccelerator
+end
+
+@testset "Geodesic manifold is rejected at construction" begin
+    #= Foster-Hormann has no geodesic implementation of `_get_side` and the other clipping
+    primitives. `FosterHormannClipping(Geodesic())` used to construct fine and only fail
+    with a bare `MethodError` deep inside the first clip that reached the missing method —
+    far from the cause, and only on inputs that exercised that code path. Every spelling
+    that would build a Geodesic algorithm must fail immediately and clearly instead. =#
+    @test_throws ArgumentError GO.FosterHormannClipping(Geodesic())
+    @test_throws ArgumentError GO.FosterHormannClipping(; manifold = Geodesic())
+    @test_throws ArgumentError GO.FosterHormannClipping(Geodesic(), GO.NestedLoop())
+    @test_throws ArgumentError GO.FosterHormannClipping(Geodesic(), GO.AutoAccelerator())
+    #-- direct parametric construction bypasses none of the outer constructors above
+    @test_throws ArgumentError GO.FosterHormannClipping{Geodesic{Float64}, GO.NestedLoop}(Geodesic(), GO.NestedLoop())
+    #-- Planar and Spherical are unaffected
+    @test GO.FosterHormannClipping(Planar()) isa GO.FosterHormannClipping
+    @test GO.FosterHormannClipping(Spherical()) isa GO.FosterHormannClipping
 end
 
 @testset "crossings land on the great circle, not the chart line" begin
