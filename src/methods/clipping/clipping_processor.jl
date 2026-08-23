@@ -879,12 +879,24 @@ function _get_side(::Spherical, Q, P1, P2, P3; exact)
     p1 = _spherical_kernel_point(P1)
     p2 = _spherical_kernel_point(P2)
     p3 = _spherical_kernel_point(P3)
-    s1 = UnitSpherical.spherical_orient(q, p1, p2)
-    s2 = UnitSpherical.spherical_orient(q, p2, p3)
-    s3 = UnitSpherical.spherical_orient(p1, p2, p3)
+    orient = _spherical_orient_for(booltype(exact))
+    s1 = orient(q, p1, p2)
+    s2 = orient(q, p2, p3)
+    s3 = orient(p1, p2, p3)
 
     return _side_from_orientations(s1, s2, s3)
 end
+
+#= Which spherical orientation predicate `exact` selects, mirroring how the planar
+`_get_side` threads `exact` into `Predicates.orient`.
+
+`exact_spherical_orient` is a true sign function; `spherical_orient` reports `0` inside an
+`eps*16` band, which at cell scale is wider than the determinant it is judging. Since the
+hinge classified here is precisely where a DGG cell's chart edge departs furthest from the
+great circle through its endpoints, a spurious `0` there is a wrong crossing/bouncing
+decision, not a harmless tie. =#
+@inline _spherical_orient_for(::True) = UnitSpherical.exact_spherical_orient
+@inline _spherical_orient_for(::False) = UnitSpherical.spherical_orient
 
 #= Reads the three orientations as a side. `s3` orients the hinge `P1-P2-P3` itself, and
 `s1`/`s2` place `Q` against each of its legs: `Q` is inside the hinge's turn only when it
