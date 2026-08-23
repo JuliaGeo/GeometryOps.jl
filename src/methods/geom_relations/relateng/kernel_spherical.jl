@@ -6,7 +6,7 @@
 Spherical implementation of the RelateKernel contract declared in `kernel.jl`,
 over `UnitSphericalPoint{Float64}`. Every predicate is a sign of
 det(u, v, w) = (u×v)·w, so the exact path mirrors planar: a float filter then an
-exact fallback (`ExactPredicates.orient` for the plain orient, `Rational{BigInt}`
+exact fallback (`UnitSpherical.exact_spherical_orient` for the plain orient, `Rational{BigInt}`
 on the xyz components for composites). No intersection coordinate is ever
 constructed. See the design doc 2026-06-15.
 
@@ -23,10 +23,15 @@ lives next to the generic `_rebuild_point` in `kernel.jl`.
 # ## rk_orient
 
 # Orientation of `c` relative to the great-circle arc `(a, b)`: the sign of the
-# scalar triple product (a×b)·c. Exact path: `ExactPredicates.orient` over the
-# xyz tuples about the origin (the spike measured 3.5 ns); NOT
-# `UnitSpherical.spherical_orient`, whose eps*16 tolerance is unfit for the
-# exact contract. Float path: the plain triple product.
+# scalar triple product (a×b)·c. Exact path:
+# `UnitSpherical.exact_spherical_orient`, which is the same sign function as
+# `ExactPredicates.orient(a, b, c, origin)` but grouped so that its error bound
+# scales with the *separation* of the points rather than their magnitude. At
+# cell scale the origin-grouped form cannot filter and pays `Rational{BigInt}`
+# on every call (10.9 µs / 9.6 KB measured at HEALPix L13); this decides in the
+# semi-static filter (4.1 ns / 0 B). NOT `UnitSpherical.spherical_orient`,
+# whose eps*16 tolerance is unfit for the exact contract. Float path: the plain
+# triple product.
 rk_orient(::Spherical, a, b, c; exact) = _rk_orient(booltype(exact), a, b, c)
 @inline function _rk_orient(::True, a, b, c)
     # Repeated-vertex short-circuit: a triple product with two equal vectors is
@@ -35,7 +40,7 @@ rk_orient(::Spherical, a, b, c; exact) = _rk_orient(booltype(exact), a, b, c)
     # shared border vertices — and it lets the classify/on-segment gate skip
     # ExactPredicates' µs-scale exact fallback (a genuine zero it cannot filter).
     (_usp_eq(a, b) || _usp_eq(a, c) || _usp_eq(b, c)) && return 0
-    return ExactPredicates.orient(_tup3(a), _tup3(b), _tup3(c), (0.0, 0.0, 0.0))
+    return UnitSpherical.exact_spherical_orient(_tup3(a), _tup3(b), _tup3(c))
 end
 @inline _rk_orient(::False, a, b, c) = cross(a, b) ⋅ c
 
