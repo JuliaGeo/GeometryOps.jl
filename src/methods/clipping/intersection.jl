@@ -366,7 +366,11 @@ function _intersection_point(m::Spherical, ::Type{T}, (a1, a2)::Edge, (b1, b2)::
     A0 = _spherical_kernel_point(a1); A1 = _spherical_kernel_point(a2)
     B0 = _spherical_kernel_point(b1); B1 = _spherical_kernel_point(b2)
 
-    orient, a0_on_b, a1_on_b, b0_on_a, b1_on_a = _sph_arc_arc_class(A0, A1, B0, B1)
+    #= Clipping asks for the exact predicate. The banded `spherical_orient` reports 0
+    inside an eps*16 window, which at DGG cell scale is wider than the determinant it is
+    judging: two arcs that genuinely cross are then classified as a hinge, the entry/exit
+    alternation collapses, and the tracer emits the whole subject ring. =#
+    orient, a0_on_b, a1_on_b, b0_on_a, b1_on_a = _sph_arc_arc_class(A0, A1, B0, B1, exact)
     orient === line_out && return no_intr_result
 
     if orient === line_cross
