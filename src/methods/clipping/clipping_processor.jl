@@ -45,15 +45,36 @@ struct AutoAccelerator <: IntersectionAccelerator end
 Applies the Foster-Hormann clipping algorithm.
 
 # Arguments
-- `manifold::M`: The manifold on which the algorithm operates.
+- `manifold::M`: The manifold on which the algorithm operates. `Geodesic` is not supported —
+  the algorithm has no geodesic implementation of its intersection primitives — and the
+  constructor throws `ArgumentError` for it; use [`Spherical`](@ref) instead.
 - `accelerator::A`: The accelerator to use for the algorithm.  Can be `nothing` for automatic choice, or a custom accelerator.
 """
-struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: GeometryOpsCore.Algorithm{M} 
+struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: GeometryOpsCore.Algorithm{M}
     manifold::M
     accelerator::A
     # TODO: add exact flag
     # TODO: should exact flag be in the type domain?
+    #= Foster-Hormann has no geodesic implementation of `_get_side` and the other clipping
+    primitives. Without this check, `FosterHormannClipping(Geodesic())` constructs
+    successfully and then throws a bare `MethodError` deep inside the first clip it
+    attempts — far from the actual cause, and only on inputs that reach that code path.
+    This is the single point every construction path funnels through (see the outer
+    constructor immediately below), including direct parametric construction like
+    `FosterHormannClipping{Geodesic{Float64}, NestedLoop}(...)`, so the check cannot be
+    bypassed. =#
+    function FosterHormannClipping{M, A}(manifold::M, accelerator::A) where {M <: Manifold, A <: IntersectionAccelerator}
+        manifold isa Geodesic && throw(ArgumentError(
+            "FosterHormannClipping does not support the Geodesic manifold ($manifold): Foster-Hormann clipping has no geodesic implementation of its intersection primitives. Use Spherical() instead."
+        ))
+        return new{M, A}(manifold, accelerator)
+    end
 end
+#= Defining the inner constructor above suppresses Julia's automatically-generated
+type-inferring outer constructor (`FosterHormannClipping(manifold::M, accelerator::A)
+where {M, A}`), so it has to be written back explicitly — every other constructor below
+relies on it to actually build the struct. =#
+FosterHormannClipping(manifold::M, accelerator::A) where {M <: Manifold, A <: IntersectionAccelerator} = FosterHormannClipping{M, A}(manifold, accelerator)
 FosterHormannClipping(; manifold::Manifold = Planar(), accelerator = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : accelerator)
 FosterHormannClipping(manifold::Manifold, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : accelerator)
 FosterHormannClipping(accelerator::Union{Nothing, IntersectionAccelerator}) = FosterHormannClipping(Planar(), isnothing(accelerator) ? NestedLoop() : accelerator)
