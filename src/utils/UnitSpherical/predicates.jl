@@ -153,7 +153,12 @@ per call at that scale.
 Using the exact row operation `det[a; b; c] == det[a; b-a; c-a]` and grouping the
 *differences* makes the bound scale as `1 * delta * delta`, shrinking with the data just as
 the determinant does. The filter then decides immediately: measured 4.1 ns and 0 bytes at
-the same cell scale, faster than the plain floating-point triple product and still exact.
+the same cell scale, against 10.9 microseconds for the `orient` formulation above.
+
+It is not free relative to inexact arithmetic. At that same scale a plain floating-point
+triple product is 1.9 ns and [`spherical_orient`](@ref) is 3.4 ns, so exactness costs
+roughly 2x the former and 1.2x the latter. The trade is worth making where a wrong sign
+becomes wrong topology, and not where it does not.
 Truly degenerate input costs ~200 ns (interval stage); only genuinely-tiny-but-nonzero
 determinants reach `Rational{BigInt}`, which is the right place to spend it.
 
