@@ -224,6 +224,64 @@ the differential corpus never generate it: they share no edge exactly. =#
     @test sum(p -> GO.area(Spherical(), p), polys) ≈ GO.area(Spherical(), P) * frac rtol = 1e-3
 end
 
+#= A vertex that passes through the clip untouched must come back exactly as it arrived.
+
+`Spherical` computes in `UnitSphericalPoint`. 3D input therefore never converts at all. 2D
+lon/lat input converts once at ingress, and would come back as
+`GeographicFromUnitSphere(UnitSphereFromGeographic(p))` -- displaced by a few ulps, ~6e-9 m
+-- if egress round-tripped it. It does not: a passthrough vertex is fetched from the input
+ring by its source index, so it is returned as the very value that went in.
+
+The test is not "is it close": it asserts that any output vertex landing near an input
+vertex is *exactly* that vertex, which is what a round trip would break. =#
+@testset "passthrough vertices are bit-exact" begin
+    usp(lon, lat) = GO.UnitSpherical.UnitSphereFromGeographic()((lon, lat))
+
+    #-- nearest input vertex, and whether the match is exact
+    function check(outpts, inpts, dist)
+        near = 0
+        for o in outpts
+            d, best = Inf, nothing
+            for i in inpts
+                dd = dist(o, i)
+                dd < d && (d = dd; best = i)
+            end
+            #-- "near" means far closer than any real crossing could be to a vertex
+            if d < 1e-9
+                near += 1
+                @test o === best || o == best
+            end
+        end
+        return near
+    end
+
+    for lon0 in (0.0, 120.0)
+        pa = [(lon0, 0.0), (lon0 + 10.0, 0.0), (lon0 + 10.0, 10.0), (lon0, 10.0)]
+        pb = [(lon0 + 5.0, 5.0), (lon0 + 15.0, 5.0), (lon0 + 15.0, 15.0), (lon0 + 5.0, 15.0)]
+
+        #-- 2D lon/lat in, lon/lat out
+        A2, B2 = ring(pa), ring(pb)
+        out2 = GO.intersection(ALG_S, A2, B2; target = GI.PolygonTrait())
+        pts2 = collect(GI.getpoint(GI.getexterior(out2[1])))
+        @test eltype(pts2) <: Tuple
+        n2 = check(pts2, vcat(pa, pb), (o, i) -> hypot(o[1] - i[1], o[2] - i[2]))
+        @test n2 ≥ 2   # both shared corners survive the clip
+
+        #-- 3D xyz in, xyz out
+        A3 = GI.Polygon([GI.LinearRing([usp(p...) for p in vcat(pa, [pa[1]])])])
+        B3 = GI.Polygon([GI.LinearRing([usp(p...) for p in vcat(pb, [pb[1]])])])
+        out3 = GO.intersection(ALG_S, A3, B3; target = GI.PolygonTrait())
+        pts3 = collect(GI.getpoint(GI.getexterior(out3[1])))
+        @test eltype(pts3) <: GO.UnitSpherical.UnitSphericalPoint
+        ins3 = [usp(p...) for p in vcat(pa, pb)]
+        n3 = check(pts3, ins3, (o, i) -> norm(o .- i))
+        @test n3 ≥ 2
+
+        #-- and the two representations agree on the answer
+        @test GO.intersection_area(ALG_S, A2, B2) ≈ GO.intersection_area(ALG_S, A3, B3) rtol = 1e-12
+    end
+end
+
 @testset "planar path is untouched" begin
     #= Pinned planar results. The spherical work is purely additive; if any of these move,
     a manifold-aware branch has leaked into the planar path. =#
