@@ -355,12 +355,29 @@ compares `PolyNode` points for bit equality. A round trip moves a vertex by an u
 which would leave the match to fail and open a zero-length edge at exactly the shared
 vertices a tiling is made of.
 
-`exact` is accepted for signature parity and unused: the spherical predicates underneath
-are the tolerance-banded `spherical_orient` throughout, for the reasons set out at the top
-of `geom_geom_processors_spherical.jl`.
+`exact` selects the orientation predicate the arc classification runs on.
+
+Points come back in the representation they arrived in. On `Spherical` the edge iterator
+hands FH `UnitSphericalPoint`s, so the whole path is xyz end to end and an input vertex is
+returned as the very object that came in; the lon/lat method is kept for callers outside
+the clipper and converts the one genuinely computed point on the way out.
 =#
-function _intersection_point(m::Spherical, ::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where {T}
-    zero_intr = ((zero(T), zero(T)), (zero(T), zero(T)))
+const _USPEdge{T} = Tuple{UnitSpherical.UnitSphericalPoint{T}, UnitSpherical.UnitSphericalPoint{T}}
+
+_intersection_point(m::Spherical, ::Type{T}, a::_USPEdge, b::_USPEdge; exact) where {T} =
+    _sph_intersection_point(m, T, a, b; exact)
+_intersection_point(m::Spherical, ::Type{T}, a::Edge, b::Edge; exact) where {T} =
+    _sph_intersection_point(m, T, a, b; exact)
+
+#-- Give a computed crossing back in the representation the edge arrived in.
+_as_ingested(x, ::Tuple, ::Type{T}) where {T} = _sph_lonlat(T, x)
+_as_ingested(x, ::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = x
+
+function _sph_intersection_point(m::Spherical, ::Type{T}, (a1, a2), (b1, b2); exact) where {T}
+    #= The sentinel point is never read: `line_out` carries no point, and `intr2` is only
+    destructured on the `line_over` branch, which fills it. Reusing `a1` keeps the returned
+    tuple concretely typed in whichever representation came in. =#
+    zero_intr = (a1, (zero(T), zero(T)))
     no_intr_result = (line_out, zero_intr, zero_intr)
 
     A0 = _spherical_kernel_point(a1); A1 = _spherical_kernel_point(a2)
@@ -380,7 +397,7 @@ function _intersection_point(m::Spherical, ::Type{T}, (a1, a2)::Edge, (b1, b2)::
         x === nothing && return no_intr_result
         α = _sph_arc_frac(T, A0, A1, x)
         β = _sph_arc_frac(T, B0, B1, x)
-        return line_cross, (_sph_lonlat(T, x), (α, β)), zero_intr
+        return line_cross, (_as_ingested(x, a1, T), (α, β)), zero_intr
     end
 
     #= Both remaining cases meet at named endpoints. Building the four candidates up front

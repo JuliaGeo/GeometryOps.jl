@@ -102,8 +102,8 @@ polygons, or not an endpoint of a chain. =#
 
 #= This is the struct that makes up a_list and b_list. Many values are only used if point is
 an intersection point (ipt). =#
-@kwdef struct PolyNode{T <: AbstractFloat}
-    point::Tuple{T,T}          # (x, y) values of given point
+@kwdef struct PolyNode{T <: AbstractFloat, P}
+    point::P                   # the vertex, in whatever representation the manifold computes in
     inter::Bool = false        # If ipt, true, else 0
     neighbor::Int = 0          # If ipt, index of equivalent point in a_list or b_list, else 0
     idx::Int = 0               # If crossing point, index within sorted a_idx_list
@@ -111,17 +111,27 @@ an intersection point (ipt). =#
     crossing::Bool = false     # If ipt, true if intersection crosses from out/in polygon, else false
     endpoint::EndPointType = not_endpoint # If ipt, denotes if point is the start or end of an overlapping chain
     fracs::Tuple{T,T} = (0., 0.) # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
+    #= 1-based position of this vertex in the ring it was ingested from, or 0 for a computed
+    intersection. `Spherical` converts lon/lat input to xyz once at ingress, so the original
+    coordinates are no longer recoverable from `point` by anything but a lossy round trip;
+    this is what lets egress hand a passthrough vertex back exactly as it arrived. =#
+    srcidx::Int32 = Int32(0)
 end
+
+#= `PolyNode{T}(; point = p)` picks the point type up from `p`, so the many call sites that
+know the float type but not the representation keep their spelling. =#
+(::Type{PolyNode{T}})(; point, kwargs...) where {T <: AbstractFloat} =
+    PolyNode{T, typeof(point)}(; point, kwargs...)
 
 #= Create a new node with all of the same field values as the given PolyNode unless
 alternative values are provided, in which case those should be used. =#
-PolyNode(node::PolyNode{T};
+PolyNode(node::PolyNode{T, P};
     point = node.point, inter = node.inter, neighbor = node.neighbor, idx = node.idx,
     ent_exit = node.ent_exit, crossing = node.crossing, endpoint = node.endpoint,
-    fracs = node.fracs,
-) where T = PolyNode{T}(;
+    fracs = node.fracs, srcidx = node.srcidx,
+) where {T, P} = PolyNode{T, typeof(point)}(;
     point = point, inter = inter, neighbor = neighbor, idx = idx, ent_exit = ent_exit,
-    crossing = crossing, endpoint = endpoint, fracs = fracs)
+    crossing = crossing, endpoint = endpoint, fracs = fracs, srcidx = srcidx)
 
 # Checks equality of two PolyNodes by backing point value, fractional value, and intersection status
 equals(pn1::PolyNode, pn2::PolyNode) = pn1.point == pn2.point && pn1.inter == pn2.inter && pn1.fracs == pn2.fracs
@@ -161,21 +171,37 @@ for (a, b) in cell_pairs
 end
 ```
 """
-struct FosterHormannCache{T}
-    a_list::Vector{PolyNode{T}}
-    b_list::Vector{PolyNode{T}}
+struct FosterHormannCache{T, P}
+    a_list::Vector{PolyNode{T, P}}
+    b_list::Vector{PolyNode{T, P}}
     a_idx_list::Vector{Int}
 end
-FosterHormannCache{T}() where {T} = FosterHormannCache{T}(PolyNode{T}[], PolyNode{T}[], Int[])
-FosterHormannCache(::Type{T} = Float64) where {T <: AbstractFloat} = FosterHormannCache{T}()
-FosterHormannCache(::FosterHormannClipping, ::Type{T} = Float64) where {T <: AbstractFloat} =
-    FosterHormannCache{T}()
+FosterHormannCache{T, P}() where {T, P} =
+    FosterHormannCache{T, P}(PolyNode{T, P}[], PolyNode{T, P}[], Int[])
 
-function _fh_check_cache(cache::FosterHormannCache{C}, ::Type{T}) where {C, T}
-    C === T || throw(ArgumentError(
-        "FosterHormannCache float type mismatch: this clip requires " *
-        "FosterHormannCache{$T}, got FosterHormannCache{$C}. Construct the cache with " *
-        "`FosterHormannCache(alg, T)` to match the algorithm."))
+#= The representation the manifold computes in, mirroring `SutherlandHodgmanCache`: planar
+clipping works in the chart, spherical clipping works on the unit sphere. =#
+_fh_point_type(::Planar, ::Type{T}) where {T} = Tuple{T, T}
+_fh_point_type(::Spherical, ::Type{T}) where {T} = UnitSpherical.UnitSphericalPoint{T}
+FosterHormannCache(m::Manifold, ::Type{T} = Float64) where {T <: AbstractFloat} =
+    FosterHormannCache{T, _fh_point_type(m, T)}()
+FosterHormannCache(alg::FosterHormannClipping, ::Type{T} = Float64) where {T <: AbstractFloat} =
+    FosterHormannCache(alg.manifold, T)
+FosterHormannCache(::Type{T} = Float64) where {T <: AbstractFloat} =
+    FosterHormannCache{T, Tuple{T, T}}()
+
+#= Put an input vertex into the representation the manifold computes in. Both legs are
+already identities where they can be: `_tuple_point` passes a `UnitSphericalPoint` through
+untouched, and `_spherical_kernel_point` is the identity on one, so 3D input reaches the
+node lists without arithmetic and comes back out bit-identical. =#
+_fh_ingest(::Planar, p, ::Type{T}) where {T} = _tuple_point(p, T)
+_fh_ingest(::Spherical, p, ::Type{T}) where {T} = _spherical_kernel_point(_tuple_point(p, T))
+
+function _fh_check_cache(cache::FosterHormannCache{C, Q}, ::Type{T}, ::Type{P}) where {C, Q, T, P}
+    (C === T && Q === P) || throw(ArgumentError(
+        "FosterHormannCache type mismatch: this clip requires " *
+        "FosterHormannCache{$T, $P}, got FosterHormannCache{$C, $Q}. Construct the cache " *
+        "with `FosterHormannCache(alg, T)` to match the algorithm."))
     return cache
 end
 
@@ -195,12 +221,12 @@ This is a bug in the algorithm, and should be reported.
 
 The polygons are contained in the exception object, accessible by try-catch or as `err` in the REPL.
 """
-struct TracingError{T1, T2, T} <: Exception
+struct TracingError{T1, T2, L1 <: AbstractVector{<:PolyNode}, L2 <: AbstractVector{<:PolyNode}} <: Exception
     message::String
     poly_a::T1
     poly_b::T2
-    a_list::Vector{PolyNode{T}}
-    b_list::Vector{PolyNode{T}}
+    a_list::L1
+    b_list::L2
     a_idx_list::Vector{Int}
 end
 
@@ -330,10 +356,10 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     # This is also applicable to any manifold, since the checking is done within
     # the loop.
     # First, loop over "each edge" in poly_a
-    for (i, (a1t, a2t)) in enumerate(eachedge(poly_a, T))
+    for (i, (a1t, a2t)) in enumerate(eachedge(manifold, poly_a, T))
         a1t == a2t && continue
         isnothing(f_on_each_a) || f_on_each_a(a1t, i)
-        for (j, (b1t, b2t)) in enumerate(eachedge(poly_b, T))
+        for (j, (b1t, b2t)) in enumerate(eachedge(manifold, poly_b, T))
             b1t == b2t && continue
             LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # this should be aware of manifold by construction.
         end
@@ -554,7 +580,8 @@ index i of a_idx_list is the location in a_list where the ith intersection point
 function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly_b; exact, cache = nothing) where {T, M, A}
     n_a_edges = _nedge(poly_a)
     # list of points in poly_a
-    a_list = _fh_buffer(cache === nothing ? nothing : cache.a_list, Vector{PolyNode{T}})
+    P = _fh_point_type(alg.manifold, T)
+    a_list = _fh_buffer(cache === nothing ? nothing : cache.a_list, Vector{PolyNode{T, P}})
     #-- A cached buffer already carries the capacity its last call grew it to, and
     #-- `sizehint!` is free to *shrink* to the hint, which would hand back the storage this
     #-- cache exists to keep and realloc it again on the next push.
@@ -566,7 +593,8 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     local prev_counter::Int = 0
 
     function on_each_a(a_pt, i)
-        new_point = PolyNode{T}(;point = a_pt)
+        #-- edge `i` starts at vertex `i`, so this is the slot egress reads back
+        new_point = PolyNode{T}(;point = a_pt, srcidx = Int32(i))
         a_count += 1
         push!(a_list, new_point)
         prev_counter = a_count
@@ -621,9 +649,10 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                 # Add intersection points determined above
                 if add_a1
                     n_b_intrs += a1_β == 0 ? 0 : 1
-                    a_list[prev_counter] = PolyNode{T}(;
-                        point = a_pt1, inter = true, neighbor = j,
-                        fracs = (zero(T), a1_β),
+                    #= This promotes the vertex already sitting at `prev_counter` -- same
+                    point -- so copy it rather than rebuild it, keeping its source slot. =#
+                    a_list[prev_counter] = PolyNode(a_list[prev_counter];
+                        inter = true, neighbor = j, fracs = (zero(T), a1_β),
                     )
                     push!(a_idx_list, prev_counter)
                 end
@@ -675,27 +704,31 @@ function _build_b_list(alg::FosterHormannClipping{M, A}, ::Type{T}, a_idx_list, 
     # Initialize needed values and lists
     n_b_edges = _nedge(poly_b)
     n_intr_pts = length(a_idx_list)
-    b_list = _fh_buffer(cache === nothing ? nothing : cache.b_list, Vector{PolyNode{T}})
+    P = _fh_point_type(alg.manifold, T)
+    b_list = _fh_buffer(cache === nothing ? nothing : cache.b_list, Vector{PolyNode{T, P}})
     cache === nothing && sizehint!(b_list, n_b_edges + n_b_intrs)
     intr_curr = 1
     b_count = 0
     # Loop over points in poly_b and add each point and intersection point
     local b_pt1
     for (i, b_p2) in enumerate(GI.getpoint(poly_b))
-        b_pt2 = _tuple_point(b_p2, T)
+        b_pt2 = _fh_ingest(alg.manifold, b_p2, T)
         if i ≤ 1 || (b_pt1 == b_pt2)  # don't repeat points
             b_pt1 = b_pt2
             continue
         end
         b_count += 1
-        push!(b_list, PolyNode{T}(; point = b_pt1))
+        #-- `b_pt1` is the vertex from the previous step, i.e. slot `i - 1`
+        push!(b_list, PolyNode{T}(; point = b_pt1, srcidx = Int32(i - 1)))
         if intr_curr ≤ n_intr_pts
             curr_idx = a_idx_list[intr_curr]
             curr_node = a_list[curr_idx]
             prev_counter = b_count
             while curr_node.neighbor == i - 1  # Add all intersection points on current edge
                 b_idx = 0
-                new_intr = PolyNode(curr_node; neighbor = curr_idx)
+                #-- `curr_node`'s slot indexes poly_a; in b_list it would resolve
+                #-- against the wrong ring, so this node converts at egress instead
+                new_intr = PolyNode(curr_node; neighbor = curr_idx, srcidx = Int32(0))
                 if curr_node.fracs[2] == 0  # if curr_node is segment start point
                     # intersection point is vertex of b
                     b_idx = prev_counter
@@ -995,9 +1028,18 @@ _clip_midpoint(::Planar, p, q) = (p .+ q) ./ 2
 function _clip_midpoint(::Spherical, p, q)
     u = _spherical_kernel_point(p) + _spherical_kernel_point(q)
     n = norm(u)
-    n == 0 && return (p .+ q) ./ 2
-    return _usp_to_lonlat(UnitSphericalPoint(u ./ n))
+    n == 0 && return _sph_mid_degenerate(p, q)
+    return _sph_mid_as(UnitSphericalPoint(u ./ n), p)
 end
+
+#= The midpoint is fed straight back to a predicate alongside the nodes it came from, so it
+has to speak their representation, not be round-tripped into the chart. =#
+_sph_mid_as(mid, ::UnitSphericalPoint) = mid
+_sph_mid_as(mid, _) = _usp_to_lonlat(mid)
+#-- exactly antipodal: every great circle through the pair is a bisector, so no midpoint is
+#-- more correct than another; take an endpoint and keep the return type stable.
+_sph_mid_degenerate(p::UnitSphericalPoint, q) = p
+_sph_mid_degenerate(p, q) = (p .+ q) ./ 2
 
 # Check if a PolyNode is an intersection point
 _is_not_intr(pt) = !pt.inter
@@ -1100,8 +1142,41 @@ end
 
 # Get type of polygons that will be made
 # TODO: Increase type options
-_get_poly_type(::Type{T}) where T =
-    GI.Polygon{false, false, Vector{GI.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, Nothing}
+_get_poly_type(::Type{T}) where T = _get_poly_type(T, Tuple{T, T})
+#-- the wrapper's `Z` flag has to agree with the point type, or the polygon the collector
+#-- declares and the one `GI.Polygon` infers from 3D points are different types
+_fh_pt_is3d(::Type{<:UnitSpherical.UnitSphericalPoint}) = true
+_fh_pt_is3d(::Type) = false
+_get_poly_type(::Type{T}, ::Type{P}) where {T, P} =
+    GI.Polygon{_fh_pt_is3d(P), false,
+        Vector{GI.LinearRing{_fh_pt_is3d(P), false, Vector{P}, Nothing, Nothing}}, Nothing, Nothing}
+
+#= Egress mirrors ingress.
+
+Planar hands back what it was given. Spherical computes in xyz, so the representation the
+caller gets is the one it supplied: 3D input is returned untouched -- bit-exact, and already
+the representation a DGG caller works in -- while lon/lat input converts back. A vertex that
+passed through the clip unchanged is not converted at all on that path either: `srcidx`
+names its slot in the input ring, so it is returned as the very value that came in, and only
+genuinely computed intersections pay a conversion. =#
+_fh_out_point_type(::Planar, poly, ::Type{T}) where {T} = Tuple{T, T}
+_fh_out_point_type(::Spherical, poly, ::Type{T}) where {T} =
+    GI.is3d(poly) ? UnitSpherical.UnitSphericalPoint{T} : Tuple{T, T}
+
+#-- `nothing` means "the stored representation is already what the caller wants"
+_fh_egress_ring(::Planar, poly) = nothing
+_fh_egress_ring(::Spherical, poly) = GI.is3d(poly) ? nothing : _fh_source_ring(poly)
+
+#-- The node lists are built from a ring, but the tracer is handed whatever the caller had,
+#-- which for the polygon entry points is the polygon. `srcidx` indexes the ring.
+_fh_source_ring(g) = _fh_source_ring(GI.trait(g), g)
+_fh_source_ring(::GI.PolygonTrait, g) = GI.getexterior(g)
+_fh_source_ring(::Any, g) = g
+
+_fh_egress(node, ::Nothing, ::Type{T}) where {T} = node.point
+_fh_egress(node, ring, ::Type{T}) where {T} =
+    node.srcidx == 0 ? _sph_lonlat(T, node.point) :
+                       _tuple_point(GI.getpoint(ring, Int(node.srcidx)), T)
 
 #=
     abstract type _RingSink
@@ -1149,7 +1224,8 @@ _ring_sink_incomplete(sink, sig) = throw(ArgumentError(
 struct _RingCollector{P} <: _RingSink
     polys::Vector{P}
 end
-_RingCollector(::Type{T}) where {T} = _RingCollector(Vector{_get_poly_type(T)}(undef, 0))
+_RingCollector(::Type{T}, ::Type{P} = Tuple{T, T}) where {T, P} =
+    _RingCollector(Vector{_get_poly_type(T, P)}(undef, 0))
 
 _ring_start(::_RingCollector, pt) = [pt]
 _ring_step(::_RingCollector, pts, pt) = (push!(pts, pt); pts)
@@ -1181,14 +1257,18 @@ end
 #-- one is untested: `FosterHormannClipping(Spherical())` is an ambiguous constructor call
 #-- today, so no spherical FH algorithm can be built to reach it.
 _ring_term(::Planar, first_pt, prev, pt) = _area_component(prev, pt)
+#-- `_spherical_kernel_point` is the identity on a `UnitSphericalPoint`, which is what the
+#-- tracer now carries, so this wrap costs nothing on the spherical path and still accepts
+#-- lon/lat from any other caller.
 _ring_term(::Spherical, first_pt, prev, pt) = _spherical_triangle_area(Eriksson(),
-    UnitSphericalPoint(GI.PointTrait(), first_pt), UnitSphericalPoint(GI.PointTrait(), prev),
-    UnitSphericalPoint(GI.PointTrait(), pt))
+    _spherical_kernel_point(first_pt), _spherical_kernel_point(prev),
+    _spherical_kernel_point(pt))
 _ring_total(::Planar, acc) = acc / 2
 _ring_total(::Spherical, acc) = acc
 
 _trace_polynodes(alg::FosterHormannClipping, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T} =
-    _trace_polynodes!(_RingCollector(T), alg, T, a_list, b_list, a_idx_list, f_step, poly_a, poly_b).polys
+    _trace_polynodes!(_RingCollector(T, _fh_out_point_type(alg.manifold, poly_a, T)),
+        alg, T, a_list, b_list, a_idx_list, f_step, poly_a, poly_b).polys
 
 #=
     _trace_polynodes(::Type{T}, a_list, b_list, a_idx_list, f_step)::Vector{GI.Polygon}
@@ -1209,6 +1289,8 @@ Note: `poly_a` and `poly_b` are temporary inputs used for debugging and can be r
 eventually.
 =#
 function _trace_polynodes!(sink::_RingSink, alg::FosterHormannClipping{M, A}, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T, M, A}
+    ring_a = _fh_egress_ring(alg.manifold, poly_a)
+    ring_b = _fh_egress_ring(alg.manifold, poly_b)
     n_a_pts, n_b_pts = length(a_list), length(b_list)
     total_pts = n_a_pts + n_b_pts
     n_cross_pts = length(a_idx_list)
@@ -1229,7 +1311,7 @@ function _trace_polynodes!(sink::_RingSink, alg::FosterHormannClipping{M, A}, ::
 
         # Set first point in polygon
         curr = curr_list[idx]
-        ring = _ring_start(sink, curr.point)
+        ring = _ring_start(sink, _fh_egress(curr, ring_a, T))
 
         curr_not_start = true
         while curr_not_start
@@ -1247,7 +1329,7 @@ function _trace_polynodes!(sink::_RingSink, alg::FosterHormannClipping{M, A}, ::
 
                 # Get current node and add to the ring
                 curr = curr_list[idx]
-                ring = _ring_step(sink, ring, curr.point)
+                ring = _ring_step(sink, ring, _fh_egress(curr, on_a_list ? ring_a : ring_b, T))
                 if (curr.crossing || curr.endpoint != not_endpoint)
                     # Keep track of processed intersection points
                     same_status = curr.ent_exit == prev_status
@@ -1286,9 +1368,9 @@ function _find_non_cross_orientation(m::M, a_list, b_list, a_poly, b_poly; exact
     #= Determine if non-intersection point is in or outside of polygon - if there isn't A
     non-intersection point, then all points are on the polygon edge =#
     a_pt_orient = isnothing(non_intr_a_idx) ? point_on :
-        _point_filled_curve_orientation(a_list[non_intr_a_idx].point, b_poly; exact)
+        _point_filled_curve_orientation(m, a_list[non_intr_a_idx].point, b_poly; exact)
     b_pt_orient = isnothing(non_intr_b_idx) ? point_on :
-        _point_filled_curve_orientation(b_list[non_intr_b_idx].point, a_poly; exact)
+        _point_filled_curve_orientation(m, b_list[non_intr_b_idx].point, a_poly; exact)
     a_in_b = a_pt_orient != point_out && b_pt_orient != point_in
     b_in_a = b_pt_orient != point_out && a_pt_orient != point_in
     return a_in_b, b_in_a
