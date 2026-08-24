@@ -73,14 +73,17 @@ function _union(
     # Check if one polygon totally within other and if so, return the larger polygon
     a_in_b, b_in_a = false, false
     if n_pieces == 0 # no crossing points, determine if either poly is inside the other
+        #= Every branch here returns a piece of the input, so each is rebuilt in the
+        representation `polys` is committed to rather than plain tuples. =#
+        P = _fh_out_point_type(alg.manifold, poly_a, T)
         a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([_linearring(tuples(ext_b))]))
+            push!(polys, GI.Polygon([_fh_as_ring(P, ext_b, T)]))
         elseif b_in_a
-            push!(polys,  GI.Polygon([_linearring(tuples(ext_a))]))
+            push!(polys,  GI.Polygon([_fh_as_ring(P, ext_a, T)]))
         else
-            push!(polys, tuples(poly_a))
-            push!(polys, tuples(poly_b))
+            push!(polys, _fh_as_poly(P, poly_a, T))
+            push!(polys, _fh_as_poly(P, poly_b, T))
             return polys
         end
     elseif n_pieces > 1
@@ -176,8 +179,9 @@ function _add_union_holes_contained_polys!(alg::FosterHormannClipping, polys, in
             if !on_ih && !out_ih
                 #= interior polygon is completely within the ith hole - polygons aren't
                 touching and do not actually form a union =#
-                polys[1] = tuples(interior_poly)
-                push!(polys, tuples(exterior_poly))
+                P = _fh_poly_point_type(eltype(polys))
+                polys[1] = _fh_as_poly(P, interior_poly)
+                push!(polys, _fh_as_poly(P, exterior_poly))
                 return polys
             else
                 #= interior polygon is partially within the ith hole - area of interior
@@ -231,19 +235,20 @@ function _union(
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
         multipoly_b = fix_multipoly(multipoly_b)
     end
-    polys = [tuples(poly_a, T)]
+    P = _fh_out_point_type(alg.manifold, poly_a, T)
+    polys = [_fh_as_poly(P, poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         if intersects(#=TODO: alg.manifold, =#polys[1], poly_b)
             # If polygons intersect and form a new polygon, swap out polygon
             new_polys = union(alg, polys[1], poly_b; target)
             if length(new_polys) > 1 # case where they intersect by just one point
-                push!(polys, tuples(poly_b, T))  # add poly_b to list
+                push!(polys, _fh_as_poly(P, poly_b, T))  # add poly_b to list
             else
                 polys[1] = new_polys[1]
             end
         else
             # If they don't intersect, poly_b is now a part of the union as its own polygon
-            push!(polys, tuples(poly_b, T))
+            push!(polys, _fh_as_poly(P, poly_b, T))
         end
     end
     return polys

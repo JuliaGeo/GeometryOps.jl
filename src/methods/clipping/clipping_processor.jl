@@ -138,9 +138,9 @@ equals(pn1::PolyNode, pn2::PolyNode) = pn1.point == pn2.point && pn1.inter == pn
 Base.:(==)(pn1::PolyNode, pn2::PolyNode) = equals(pn1, pn2)
 
 """
-    FosterHormannCache{T}()
-    FosterHormannCache([T = Float64])
     FosterHormannCache(alg::FosterHormannClipping, [T = Float64])
+    FosterHormannCache(m::Manifold, [T = Float64])
+    FosterHormannCache([T = Float64])
 
 Preallocated buffers for [`FosterHormannClipping`](@ref).
 
@@ -153,7 +153,11 @@ The buffers are the vertex lists of the two rings and the index of intersections
 first. They are scratch: nothing the call returns points into them, so a result stays valid
 after the cache is reused.
 
-`T` must match the float type of the clip. `FosterHormannCache(alg, T)` spells that out.
+The buffers are typed by both the float type and the point representation the manifold
+computes in, and a mismatched cache is rejected rather than silently ignored. Construct it
+from the algorithm — `FosterHormannCache(alg, T)` — and both follow automatically. The
+one-argument `FosterHormannCache(T)` gives the planar representation, so it does not fit a
+`Spherical` clip.
 
 !!! warning "Thread safety"
     A cache must not be shared across concurrent tasks. Create one per task. The default
@@ -1163,6 +1167,42 @@ _fh_out_point_type(::Planar, poly, ::Type{T}) where {T} = Tuple{T, T}
 _fh_out_point_type(::Spherical, poly, ::Type{T}) where {T} =
     GI.is3d(poly) ? UnitSpherical.UnitSphericalPoint{T} : Tuple{T, T}
 
+#= Not every output polygon comes out of the tracer. When there are no crossings at all --
+one polygon wholly inside the other, or the two disjoint -- the answer is a piece of the
+*input*, and the ops rebuild it directly. Those rebuilds have to land in the same
+representation the tracer would have produced, or they do not fit the vector they are pushed
+into.
+
+`_fh_as_point`/`_fh_as_ring`/`_fh_as_poly` do that rebuild, following the same
+egress-mirrors-ingress rule: `Tuple` in, `Tuple` out; `UnitSphericalPoint` in,
+`UnitSphericalPoint` out. Both directions are bit-exact on matching input, since each is the
+identity on points already in the target representation. Mismatched input -- a 3D `b` against
+a 2D `a`, where `a` fixes the output representation -- is converted rather than rejected. =#
+_fh_as_point(::Type{<:Tuple}, p, ::Type{T}) where {T} = _fh_tuple_point(p, T)
+_fh_as_point(::Type{<:UnitSpherical.UnitSphericalPoint}, p, ::Type{T}) where {T} =
+    _spherical_kernel_point(_tuple_point(p, T))
+
+#-- `_tuple_point` is the identity on a `UnitSphericalPoint`, which is right for the node
+#-- lists and wrong here, where a tuple is what was asked for.
+_fh_tuple_point(p::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = _usp_to_lonlat(p)
+_fh_tuple_point(p, ::Type{T}) where {T} = _tuple_point(p, T)
+
+_fh_as_ring(::Type{P}, ring, ::Type{T}) where {P, T} =
+    GI.LinearRing([_fh_as_point(P, p, T) for p in GI.getpoint(ring)])
+_fh_as_poly(::Type{P}, poly, ::Type{T}) where {P, T} =
+    GI.Polygon([_fh_as_ring(P, r, T) for r in GI.getring(poly)])
+
+#-- for the callers that know the point type but do not carry `T`
+_fh_float_type(::Type{<:Tuple{T, T}}) where {T} = T
+_fh_float_type(::Type{<:UnitSpherical.UnitSphericalPoint{T}}) where {T} = T
+_fh_as_ring(::Type{P}, ring) where {P} = _fh_as_ring(P, ring, _fh_float_type(P))
+_fh_as_poly(::Type{P}, poly) where {P} = _fh_as_poly(P, poly, _fh_float_type(P))
+
+#-- Recover the point representation an already-built output vector is committed to, for the
+#-- helpers that are handed `polys` rather than the original geometries.
+_fh_ring_point_type(::Type{<:GI.LinearRing{Z, M, V}}) where {Z, M, V} = eltype(V)
+_fh_poly_point_type(::Type{<:GI.Polygon{Z, M, R}}) where {Z, M, R} = _fh_ring_point_type(eltype(R))
+
 #-- `nothing` means "the stored representation is already what the caller wants"
 _fh_egress_ring(::Planar, poly) = nothing
 _fh_egress_ring(::Spherical, poly) = GI.is3d(poly) ? nothing : _fh_source_ring(poly)
@@ -1392,7 +1432,7 @@ function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, retur
     # Remove set of holes from all polygons
     for i in 1:n_polys
         n_new_per_poly = 0
-        for curr_hole in Iterators.map(tuples, hole_iterator) # loop through all holes
+        for curr_hole in Iterators.map(h -> _fh_as_ring(_fh_poly_point_type(eltype(return_polys)), h, T), hole_iterator) # loop through all holes
             curr_hole = _linearring(curr_hole)
             # loop through all pieces of original polygon (new pieces added to end of list)
             for j in Iterators.flatten((i:i, (n_polys + 1):(n_polys + n_new_per_poly)))

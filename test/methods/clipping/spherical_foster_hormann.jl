@@ -282,6 +282,60 @@ vertex is *exactly* that vertex, which is what a round trip would break. =#
     end
 end
 
+#= No-crossing containment is the *normal* case in conservative regridding -- a fine cell
+inside a coarse one has no crossings at all -- yet it is the one answer the tracer does not
+build. With no crossings there are no nodes to trace, so the ops rebuild the answer from the
+input geometry instead, and that rebuild has to land in the representation the tracer would
+have emitted or it does not fit the vector it is pushed into.
+
+A corpus of randomly offset overlapping cells always crosses, so it can never reach this
+branch. These cases do, on both input representations. =#
+@testset "containment and disjoint, both input representations" begin
+    usp(lon, lat) = GO.UnitSpherical.UnitSphereFromGeographic()((lon, lat))
+    box(c, h) = [(c[1] - h, c[2] - h), (c[1] + h, c[2] - h), (c[1] + h, c[2] + h), (c[1] - h, c[2] + h)]
+    as_usp(pts) = GI.Polygon([GI.LinearRing([usp(p...) for p in vcat(pts, [pts[1]])])])
+
+    small_pts, big_pts, away_pts = box((10.0, 45.0), 0.25), box((10.0, 45.0), 1.0), box((40.0, 45.0), 0.25)
+    areas = Float64[]
+
+    for (build, P) in ((ring, Tuple), (as_usp, GO.UnitSpherical.UnitSphericalPoint))
+        small, big, away = build(small_pts), build(big_pts), build(away_pts)
+        a_small, a_big = GO.area(Spherical(), small), GO.area(Spherical(), big)
+
+        #-- the intersection of a contained pair is exactly the contained polygon, either order
+        @test GO.intersection_area(ALG_S, small, big) == a_small
+        @test GO.intersection_area(ALG_S, big, small) == a_small
+        @test GO.intersection_area(ALG_S, small, away) == 0
+        push!(areas, a_small, GO.intersection_area(ALG_S, small, big))
+
+        #-- emitted in the representation the caller supplied, not silently converted
+        got = GO.intersection(ALG_S, small, big; target = GI.PolygonTrait())
+        @test length(got) == 1
+        pts = collect(GI.getpoint(GI.getexterior(got[1])))
+        @test eltype(pts) <: P
+        #-- rebuilt from the input ring, so bit-exact rather than round-tripped
+        @test Set(pts) == Set(GI.getpoint(GI.getexterior(small)))
+
+        #-- union of a contained pair is the container; of a disjoint pair, two pieces
+        u = GO.union(ALG_S, small, big; target = GI.PolygonTrait())
+        @test length(u) == 1
+        @test GO.area(Spherical(), u[1]) == a_big
+        @test length(GO.union(ALG_S, small, away; target = GI.PolygonTrait())) == 2
+
+        #-- container minus contained leaves a hole; disjoint leaves the subject whole
+        d = GO.difference(ALG_S, big, small; target = GI.PolygonTrait())
+        @test length(d) == 1
+        @test GI.nhole(d[1]) == 1
+        dd = GO.difference(ALG_S, small, away; target = GI.PolygonTrait())
+        @test length(dd) == 1
+        @test GO.area(Spherical(), dd[1]) == a_small
+    end
+
+    #-- and the two representations agree exactly, not just to a tolerance
+    @test areas[1] == areas[3]
+    @test areas[2] == areas[4]
+end
+
 @testset "planar path is untouched" begin
     #= Pinned planar results. The spherical work is purely additive; if any of these move,
     a manifold-aware branch has leaked into the planar path. =#
