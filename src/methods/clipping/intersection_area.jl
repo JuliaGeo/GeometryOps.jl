@@ -63,7 +63,7 @@ end
 function intersection_area(
     alg::ConvexConvexSutherlandHodgman{Spherical{F}}, geom_a, geom_b, ::Type{T}=Float64;
     cache::SutherlandHodgmanCache = SutherlandHodgmanCache(alg.manifold, T),
-    exact = True(),
+    exact = False(),
 ) where {F, T<:AbstractFloat}
     _sh_check_polygon_traits(GI.trait(geom_a), GI.trait(geom_b))
     _sh_check_cache(cache, UnitSphericalPoint{T})
