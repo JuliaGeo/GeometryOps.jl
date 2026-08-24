@@ -970,10 +970,15 @@ _process_prepared_edges!(tc::TopologyComputer, segs_a, ::Nothing, edges_b) =
 
 # Tree path: the prebuilt A tree is dual-traversed against a per-call tree
 # over B's (envelope-filtered) segment extents — cf. the unprepared tree path
-# in `process_edge_intersections!`, which builds both trees per call.
+# in `process_edge_intersections!`, which builds both trees per call. Below
+# the accelerator threshold the per-call B tree costs more than it prunes:
+# each B segment queries the prepared A tree directly instead.
 function _process_prepared_edges!(tc::TopologyComputer, segs_a,
         tree_a::RTree, edges_b;
         m::Manifold = _manifold(tc), exact = _exact(tc))
+    if _total_segment_count(edges_b) < GEOMETRYOPS_NO_OPTIMIZE_EDGEINTERSECT_NUMVERTS
+        return _process_prepared_edges_small_b!(tc, segs_a, tree_a, edges_b; m, exact)
+    end
     tree_b = _relate_edge_index(m, edges_b)
     tree_b === nothing && return nothing
     SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do ia, ib
@@ -983,6 +988,28 @@ function _process_prepared_edges!(tc::TopologyComputer, segs_a,
         #-- the Java noder's isDone() early-exit hook
         is_result_known(tc) && return Action(:full_return, nothing)
         return nothing
+    end
+    return nothing
+end
+
+# Small-B prepared path: no per-call B tree — each B segment's extent is a
+# single-tree query into the prebuilt A tree.
+function _process_prepared_edges_small_b!(tc::TopologyComputer, segs_a,
+        tree_a::RTree, edges_b;
+        m::Manifold = _manifold(tc), exact = _exact(tc))
+    for ssb in edges_b
+        for kb in 1:(length(ssb.pts) - 1)
+            bext = _segment_extent(m, ssb.pts[kb], ssb.pts[kb + 1])
+            SpatialTreeInterface.depth_first_search(
+                    Base.Fix1(Extents.intersects, bext), tree_a) do ia
+                (sa, ka) = tree_a.data[ia]
+                process_intersections!(tc, segs_a[sa], ka, ssb, kb; m, exact)
+                #-- the Java noder's isDone() early-exit hook
+                is_result_known(tc) && return Action(:full_return, nothing)
+                return nothing
+            end
+            is_result_known(tc) && return nothing
+        end
     end
     return nothing
 end

@@ -91,11 +91,51 @@ function _spherical_region_extent(pts::Vector{<:UnitSpherical.UnitSphericalPoint
     end
     n < 3 && return ext
 
+    #=
+    Vertex-cap prefilter for the six axis queries below. If every vertex lies
+    within angle θ < 90° of the normalized vertex mass `c`, the ring's minor
+    arcs also stay inside the (geodesically convex) cap around `c` — for arc
+    points `w = α u + β v` with `α, β ≥ 0` and `α + β ≥ 1` (concavity of sin),
+    `w ⋅ c ≥ min(u ⋅ c, v ⋅ c)` — so the cap's complement is connected and
+    boundary-free, and containment is uniform across it: one query at a
+    probe point outside the cap answers for every axis point outside it. A
+    small ring (the common case) pays one O(n²) containment query instead
+    of six. The `cos θ > 0` requirement also excludes (near-)antipodal
+    edges, whose arc choice the cap bound would not survive. The probe is
+    taken orthogonal to `c` — outside any θ < 90° cap, and far from the
+    near-antipodal configurations (probe vs edge midpoints ≈ `c`) that
+    would push `robust_cross_product` onto its exact fallback.
+    =#
+    mass = pts[1]
+    for i in 2:n
+        mass += pts[i]
+    end
+    nc = norm(mass)
+    cap_ok = nc > 1e-6 * n
+    c = cap_ok ? UnitSpherical.UnitSphericalPoint(mass / nc) : first(pts)
+    costheta = 1.0
+    if cap_ok
+        for i in 1:n
+            costheta = min(costheta, pts[i] ⋅ c)
+        end
+        cap_ok = costheta > 1e-6
+    end
+    far = missing  # containment of the cap's complement, computed on demand
+
     lo = MVector(ext.X[1], ext.Y[1], ext.Z[1])
     hi = MVector(ext.X[2], ext.Y[2], ext.Z[2])
     for i in 1:3, s in (1.0, -1.0)
         q = UnitSpherical.UnitSphericalPoint(ntuple(j -> j == i ? s : 0.0, 3))
-        inside = UnitSpherical.spherical_ring_contains(pts, n, q)
+        inside = if cap_ok && q ⋅ c < costheta - 1e-9
+            if far === missing
+                e = SVector{3, Float64}(ntuple(j -> j == argmin(abs.(c)) ? 1.0 : 0.0, 3))
+                probe = UnitSpherical.UnitSphericalPoint(normalize(cross(SVector{3, Float64}(c), e)))
+                far = UnitSpherical.spherical_ring_contains(pts, n, probe)
+            end
+            far
+        else
+            UnitSpherical.spherical_ring_contains(pts, n, q)
+        end
         # nothing (undecidable) extends too; the box must never under-cover
         if inside === nothing || inside
             s > 0 ? (hi[i] = one(hi[i])) : (lo[i] = -one(lo[i]))

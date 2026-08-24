@@ -164,10 +164,18 @@ function _relate_cache_extents(m::Manifold, trait::GI.AbstractPolygonTrait, poly
         return poly
     end
     rings = [_relate_cache_extents(m, GI.trait(r), r) for r in GI.getring(poly)]
-    ext = _union_stored_extents(m, rings)
+    ext = _polygon_cache_extent(m, poly, rings)
     ext === nothing && return poly
     return GI.geointerface_geomtype(trait)(rings; extent = ext, crs = GI.crs(poly))
 end
+
+# The extent stored on a polygon wrapper must be its interaction bounds, so
+# `rk_interaction_bounds` can read it back. On `Planar` the region box IS
+# the union of the ring boxes just stored on the wrapped rings; on
+# `Spherical` the region box also covers enclosed axis points, so it is
+# computed via the kernel (once, here — every later consult reads it).
+_polygon_cache_extent(m::Manifold, poly, rings) = _union_stored_extents(m, rings)
+_polygon_cache_extent(m::Spherical, poly, rings) = rk_interaction_bounds(m, poly)
 
 #-- collections (covers Multi* types too): recurse, union the child extents
 function _relate_cache_extents(m::Manifold, trait::GI.AbstractGeometryCollectionTrait, geom)
