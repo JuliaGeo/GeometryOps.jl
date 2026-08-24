@@ -119,14 +119,14 @@ Pattern-matching the matrix is the same question without that layer. =#
 _within_pattern(a, b) = GO.relate(GO.RelateNG(Spherical()), a, b, "T*F**F***")
 
 @testset "upstream: spherical `pred_within` contradicts its own matrix" begin
-    #= Pin the defect so this test starts failing when RelateNG is fixed, at
-    which point the workaround above can go. =#
+    #= Fixed upstream by #472. Kept as a regression test: the three answers must
+    agree, and `_within_pattern` above is now redundant with `pred_within`. =#
     inner = _ngon(0.0, 0.0, 1.0, 5)
     outer = _star(0.0, 0.0, 8.0, 2.0, 5)
     alg = GO.RelateNG(Spherical())
     @test GO.relate(alg, inner, outer, "T*F**F***")            # matrix says within
     @test GO.within(Spherical(), inner, outer)                 # this path agrees
-    @test_broken GO.relate_predicate(alg, GO.pred_within(), inner, outer)
+    @test GO.relate_predicate(alg, GO.pred_within(), inner, outer)
 end
 
 @testset "non-convex rings" begin
