@@ -84,11 +84,14 @@ function _intersection(
     a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact)
     polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b)
     if isempty(polys) # no crossing points, determine if either poly is inside the other
+        #= The contained polygon is the answer, rebuilt in whatever representation the
+        tracer would have emitted -- `polys` is already committed to that element type. =#
+        P = _fh_out_point_type(alg.manifold, poly_a, T)
         a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([tuples(ext_a)]))
+            push!(polys, GI.Polygon([_fh_as_ring(P, ext_a, T)]))
         elseif b_in_a
-            push!(polys, GI.Polygon([tuples(ext_b)]))
+            push!(polys, GI.Polygon([_fh_as_ring(P, ext_b, T)]))
         end
     end
     remove_idx = falses(length(polys))
@@ -130,7 +133,7 @@ function _intersection(
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
         multipoly_b = fix_multipoly(multipoly_b)
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, poly_a, T))}()
     for poly_b in GI.getpolygon(multipoly_b)
         append!(polys, intersection(alg, poly_a, poly_b; target))
     end
@@ -163,7 +166,7 @@ function _intersection(
         multipoly_b = fix_multipoly(multipoly_b)
         fix_multipoly = nothing
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, multipoly_a, T))}()
     for poly_a in GI.getpolygon(multipoly_a)
         append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly))
     end
