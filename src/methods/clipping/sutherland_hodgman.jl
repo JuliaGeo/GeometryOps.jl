@@ -22,6 +22,11 @@ Polygons with clockwise winding will produce incorrect results (typically a dege
 polygon). Use `GO.fix(geom; corrections=[GO.ClosedRing(), GO.GeometryCorrection()])` or
 manually reverse the coordinates if your input has the wrong winding order.
 
+Sidedness is decided with `UnitSpherical.exact_spherical_orient`, so a clip edge displaced
+from a subject edge by less than `UnitSpherical.spherical_orient`'s tolerance band is still
+resolved as displaced. Pass `exact = False()` to `intersection` or `intersection_area` to
+fall back to `UnitSpherical.spherical_orient`. The `Planar()` path is unaffected.
+
 # Example
 
 ```julia
