@@ -73,6 +73,8 @@ const EXACT_CROSS_PROD_ERROR = DBL_ERR
 
 Return the smallest stable-cross-product norm that meets
 `ROBUST_CROSS_PROD_ERROR` in precision `T`.
+
+This is S2's `kMinNorm`: [s2edge_crossings.cc#L129-L131](https://github.com/google/s2geometry/blob/dabeea21c0261cb2e449d28f3034df1e12eaf223/src/s2/s2edge_crossings.cc#L129-L131).
 """
 min_stable_norm(::Type{T}) where {T} =
     (32 * SQRT3 * DBL_ERR) / (ROBUST_CROSS_PROD_ERROR / (eps(float(T)) / 2) - (1 + 2 * SQRT3))
