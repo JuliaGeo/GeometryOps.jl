@@ -720,11 +720,10 @@ end
         @test result_area < clip_area * 0.01  # Less than 1% of clip area
     end
 
-    #= The spherical path decides sidedness with `exact_spherical_orient`, not
-    `spherical_orient`.  `spherical_orient` answers `0` for any point within roughly
+    #= `spherical_orient`, the default, answers `0` for any point within roughly
     `32 * eps` radians of the great circle, so a clip edge displaced by less than that is
     indistinguishable from an undisplaced one and the clip returns the *unshifted* area.
-    The exact predicate resolves the displacement.  This is the regime DGG regridding runs
+    `exact = True()` resolves the displacement.  This is the regime DGG regridding runs
     in: cell-scale polygons whose edges very nearly coincide. =#
     @testset "Spherical clipping resolves sub-band displacements" begin
         nrm(v) = v ./ sqrt(sum(abs2, v))
@@ -749,7 +748,7 @@ end
         inexact_area = GO.intersection_area(salg, subject, tiny_square(shifted); exact = GO.False())
         @test inexact_area == aligned
 
-        # ...which is exactly the difference the default must inherit.
-        @test GO.intersection_area(salg, subject, tiny_square(shifted)) == exact_area
+        # The default is the inexact predicate: exactness is opt-in.
+        @test GO.intersection_area(salg, subject, tiny_square(shifted)) == inexact_area
     end
 end
