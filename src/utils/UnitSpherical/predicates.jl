@@ -33,7 +33,8 @@ spherical_orient(a, b, c)
 
 The common path uses the unnormalized `cross(a - b, a + b)`: orientation needs
 only the sign of its dot product with `c`. The squared degeneracy test avoids
-normalizing the cross product or taking a square root.
+normalizing the cross product or taking a square root. Rounding at the boundary
+may change `0` to a sign, but cannot flip `+1` to `-1`.
 
 For nearly equal or antipodal `a` and `b`, the cross-product direction becomes
 unstable. Those cases fall back to [`robust_cross_product`](@ref).
