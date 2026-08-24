@@ -22,10 +22,14 @@ Polygons with clockwise winding will produce incorrect results (typically a dege
 polygon). Use `GO.fix(geom; corrections=[GO.ClosedRing(), GO.GeometryCorrection()])` or
 manually reverse the coordinates if your input has the wrong winding order.
 
-Sidedness is decided with `UnitSpherical.exact_spherical_orient`, so a clip edge displaced
-from a subject edge by less than `UnitSpherical.spherical_orient`'s tolerance band is still
-resolved as displaced. Pass `exact = False()` to `intersection` or `intersection_area` to
-fall back to `UnitSpherical.spherical_orient`. The `Planar()` path is unaffected.
+Sidedness is decided with `UnitSpherical.spherical_orient`, which answers `0` for any point
+within roughly `32 * eps` radians of the great circle it is judged against. Two edges closer
+than that are therefore indistinguishable from coincident ones.
+
+Pass `exact = True()` to `intersection` or `intersection_area` to decide sidedness with
+`UnitSpherical.exact_spherical_orient` instead, which has no tolerance band. That resolves
+displacements this default cannot, and costs roughly 20% throughput on cell-scale polygons.
+The `Planar()` path is unaffected by either.
 
 # Example
 
@@ -238,7 +242,7 @@ end
 function _point_in_convex_spherical_polygon(
     point::UnitSpherical.UnitSphericalPoint,
     polygon_points::Vector{<:UnitSpherical.UnitSphericalPoint},
-    orient::O = UnitSpherical.exact_spherical_orient,
+    orient::O = UnitSpherical.spherical_orient,
 ) where {O}
     n = length(polygon_points)
     for i in 1:n
@@ -308,7 +312,7 @@ function _sh_clip_to_edge_spherical!(
     edge_start::UnitSpherical.UnitSphericalPoint,
     edge_end::UnitSpherical.UnitSphericalPoint,
     ::Type{T},
-    orient::O = UnitSpherical.exact_spherical_orient,
+    orient::O = UnitSpherical.spherical_orient,
 ) where {T, O}
     empty!(output)
     n = length(input)
@@ -357,7 +361,7 @@ end
 # surviving vertices - which is the clip polygon itself when the subject contains it
 # entirely, and empty when the two are disjoint. Fewer than 3 points means no area.
 function _sh_clip_spherical!(cache::SutherlandHodgmanCache, poly_a, poly_b, ::Type{T},
-        orient::O = UnitSpherical.exact_spherical_orient) where {T, O}
+        orient::O = UnitSpherical.spherical_orient) where {T, O}
     ring_a = GI.getexterior(poly_a)
     ring_b = GI.getexterior(poly_b)
 
@@ -424,7 +428,7 @@ function _intersection_sutherland_hodgman(
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
     cache::Union{Nothing, SutherlandHodgmanCache}=nothing,
-    exact = True(),
+    exact = False(),
     kwargs...
 ) where {F, T}
     cache = isnothing(cache) ? SutherlandHodgmanCache(alg.manifold, T) : _sh_check_cache(cache, UnitSpherical.UnitSphericalPoint{T})
