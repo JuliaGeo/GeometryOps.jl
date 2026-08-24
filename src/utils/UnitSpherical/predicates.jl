@@ -147,6 +147,10 @@ exact row operation `det[a; b; c] == det[a; b-a; c-a]`, makes the bound scale as
 shrinking with the data just as the determinant does, so the filter decides in floating point
 and only genuinely-tiny-but-nonzero determinants reach the exact stage.
 
+It is not free relative to inexact arithmetic, though: exactness costs roughly 2x a plain
+floating-point triple product and 1.2x [`spherical_orient`](@ref). The trade is worth making
+where a wrong sign becomes wrong topology, and not where it does not.
+
 Throws on a non-finite coordinate, where `ExactPredicates.orient` returns `-1`; both are
 outside the contract.
 
