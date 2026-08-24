@@ -100,7 +100,7 @@ function intersection_area(
        GI.nhole(geom_a) != 0 || GI.nhole(geom_b) != 0
         return _fh_polygon_path_area(alg, m, geom_a, geom_b, T; kwargs...)
     end
-    cache === nothing || _fh_check_cache(cache, T)
+    cache === nothing || _fh_check_cache(cache, T, _fh_point_type(m, T))
     ext_a, ext_b = GI.getexterior(geom_a), GI.getexterior(geom_b)
     a_list, b_list, a_idx_list =
         _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact = True(), cache)
