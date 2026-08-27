@@ -370,7 +370,10 @@ end
         GO.intersection_area(alg, a, b; cache)
         uncached = @allocated GO.intersection_area(alg, a, b)
         cached = @allocated GO.intersection_area(alg, a, b; cache)
-        @test cached < uncached ÷ 4
+        #= The cache must remove the per-call working set. Julia < 1.12 does not
+        elide those allocations, so only the weaker ordering holds there. =#
+        @test cached < uncached
+        @test cached < uncached ÷ 4 skip = VERSION < v"1.12"
     end
 
     #-- the float type has to match, and says so
