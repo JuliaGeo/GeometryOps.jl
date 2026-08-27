@@ -24,14 +24,12 @@ lives next to the generic `_rebuild_point` in `kernel.jl`.
 
 # Orientation of `c` relative to the great-circle arc `(a, b)`: the sign of the
 # scalar triple product (a×b)·c. Exact path:
-# `UnitSpherical.exact_spherical_orient`, which is the same sign function as
-# `ExactPredicates.orient(a, b, c, origin)` but grouped so that its error bound
-# scales with the *separation* of the points rather than their magnitude. At
-# cell scale the origin-grouped form cannot filter and pays `Rational{BigInt}`
-# on every call (10.9 µs / 9.6 KB measured at HEALPix L13); this decides in the
-# semi-static filter (4.1 ns / 0 B). NOT `UnitSpherical.spherical_orient`,
-# whose eps*16 tolerance is unfit for the exact contract. Float path: the plain
-# triple product.
+# `UnitSpherical.exact_spherical_orient` — the same sign function as
+# `ExactPredicates.orient(a, b, c, origin)`, but grouped so its error bound
+# scales with the points' *separation*, which keeps it in the float filter at
+# cell scale where the origin-grouped form falls through to `Rational{BigInt}`
+# on every call. NOT `UnitSpherical.spherical_orient`, whose eps*16 tolerance is
+# unfit for the exact contract. Float path: the plain triple product.
 rk_orient(::Spherical, a, b, c; exact) = _rk_orient(booltype(exact), a, b, c)
 @inline function _rk_orient(::True, a, b, c)
     # Repeated-vertex short-circuit: a triple product with two equal vectors is

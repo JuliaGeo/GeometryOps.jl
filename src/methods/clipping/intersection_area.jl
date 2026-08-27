@@ -87,10 +87,9 @@ intersection_area(alg::OverlayNG, geom_a, geom_b, ::Type{T}=Float64) where {T<:A
 # those inputs delegate to the polygon path. The answer is the same either way; only the
 # saving is lost.
 
-#-- `cache` is offered on this path only. The polygon fallback below reaches
-#-- `_add_holes_to_polys!`, which clips again from inside the clip it is finishing; handing
-#-- that nested call the same buffers would have it overwrite the lists its caller is still
-#-- reading. The fast path makes no such nested call, and it is the one a regridder runs.
+#-- `cache` is offered on this path only: the polygon fallback below reaches
+#-- `_add_holes_to_polys!`, which clips again from inside the clip it is finishing, and the
+#-- nested call would overwrite the lists its caller is still reading. No nesting here.
 function intersection_area(
     alg::FosterHormannClipping, geom_a, geom_b, ::Type{T}=Float64;
     cache::Union{Nothing, FosterHormannCache} = nothing, kwargs...
