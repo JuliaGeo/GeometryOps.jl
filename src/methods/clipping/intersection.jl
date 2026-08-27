@@ -335,28 +335,21 @@ _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T = 
 #=
 The same question between two great-circle arcs.
 
-The planar method above takes a manifold but decides everything in the chart — a lon/lat
-envelope, `Predicates.orient`, segment crossings — and all three are wrong for the same
-reason: a DGG cell edge is a great-circle arc that bulges off the chart line joining its
-endpoints. So this replaces the whole decision. `_sph_arc_arc_class` makes the identical
-`LineOrientation` split (`line_cross` / `line_hinge` / `line_over` / `line_out`) on the
-predicate `exact` selects, and additionally names which endpoints lie on the other arc. No
-envelope pre-filter: a great-circle arc leaves the lon/lat box bounding its endpoints, so
-one would reject real intersections near the poles, and it is unsound across the
+The planar method above decides everything in the chart — lon/lat envelope,
+`Predicates.orient`, segment crossings — all wrong for the same reason: a DGG cell edge is a
+great-circle arc that bulges off the chart line joining its endpoints. `_sph_arc_arc_class`
+makes the identical `LineOrientation` split on the predicate `exact` selects, and names
+which endpoints lie on the other arc. No envelope pre-filter: an arc leaves the lon/lat box
+bounding its endpoints, so one would reject real intersections near the poles and across the
 antimeridian.
-
-## Which coordinate is returned
 
 Only `line_cross` builds a new point; every other case meets at a vertex of one of the two
 rings, and there the *input* point is returned unchanged rather than round-tripped through
-xyz. That is load-bearing, not tidiness: `_build_b_list` matches an intersection to a `b`
-vertex by `fracs[2] == 0` and `equals` compares `PolyNode` points for bit equality, so an
-ulp of drift fails the match and opens a zero-length edge at exactly the shared vertices a
-tiling is made of.
-
-Points come back in the representation they arrived in. On `Spherical` the edge iterator
-hands FH `UnitSphericalPoint`s, so that path is xyz end to end; the lon/lat method is kept
-for callers outside the clipper and converts the one computed point on the way out.
+xyz. That is load-bearing: `_build_b_list` matches an intersection to a `b` vertex by
+`fracs[2] == 0` and `equals` compares points for bit equality, so an ulp of drift fails the
+match and opens a zero-length edge at exactly the shared vertices a tiling is made of. On
+`Spherical` the edge iterator hands FH `UnitSphericalPoint`s, so that path is xyz end to
+end; the lon/lat method is kept for callers outside the clipper.
 =#
 const _USPEdge{T} = Tuple{UnitSpherical.UnitSphericalPoint{T}, UnitSpherical.UnitSphericalPoint{T}}
 
@@ -434,16 +427,13 @@ end
 
 #= Arc-length fraction of `x` along the arc `p0 → p1`, clamped to `[0, 1]`.
 
-The endpoints are settled by identity, never by arithmetic. `_build_a_list` claims a shared
-vertex with exact comparisons — `α == 0`, `β == 0`, `0 ≤ β < 1` — and dividing two
-separately computed angles does not deliver an exact `1`: the two `atan` calls take
-bit-identical inputs, but inlined into the four-candidate construction they do not contract
-identically, so the quotient lands an ulp low. `0.9999999999999998` passes `β < 1`, the
-vertex is claimed a second time, and the traversal is handed a duplicate intersection —
-which is what `_trace_polynodes!` reports as a `TracingError`. Comparing against the
-endpoints first keeps the arithmetic out of the case that has to be exact;
-`_spherical_kernel_point` is deterministic and signed-zero normalized, so shared vertices —
-the common case in a tiling — always take that path. It also catches a zero-length arc.
+The endpoints are settled by identity, never by arithmetic: `_build_a_list` claims a shared
+vertex with exact comparisons (`α == 0`, `β == 0`, `0 ≤ β < 1`), and a quotient of two
+separately computed angles lands an ulp low even on bit-identical inputs, because the two
+`atan` calls do not contract identically once inlined. `0.9999999999999998` passes `β < 1`,
+so the vertex is claimed twice and the traversal gets a duplicate intersection — a
+`TracingError`. `_spherical_kernel_point` is deterministic and signed-zero normalized, so
+shared vertices always hit the endpoint tests instead. Those also catch a zero-length arc.
 
 `atan(‖a × b‖, a ⋅ b)` rather than `acos(a ⋅ b)`, which loses about half its bits at the
 small angles a cell-scale edge subtends (~4e-6 rad at HEALPix level 18). =#
