@@ -184,3 +184,11 @@ NoAlgorithm() = NoAlgorithm(Planar()) # TODO: add a NoManifold or AutoManifold t
 manifold(a::NoAlgorithm) = a.m
 # Maybe AutoManifold
 # and then we have DD.format like materialization  
+
+
+# To enable broadcasting over bare Algorithms
+# NOTE: the Ref doesn't actually allocate,
+# because it gets elided by the compiler.
+# The Tuple form causes broadcasting to return
+# a tuple, which we don't want.
+Base.broadcastable(alg::Algorithm) = Ref(alg)
