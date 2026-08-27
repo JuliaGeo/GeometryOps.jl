@@ -68,6 +68,17 @@ const HAS_LONG_DOUBLE = precision(Float64) < precision(BigFloat)
 # Error for exact cross product calculations
 const EXACT_CROSS_PROD_ERROR = DBL_ERR
 
+"""
+    min_stable_norm(::Type{T})
+
+Return the smallest stable-cross-product norm that meets
+`ROBUST_CROSS_PROD_ERROR` in precision `T`.
+
+This is S2's `kMinNorm`: [s2edge_crossings.cc#L129-L131](https://github.com/google/s2geometry/blob/dabeea21c0261cb2e449d28f3034df1e12eaf223/src/s2/s2edge_crossings.cc#L129-L131).
+"""
+min_stable_norm(::Type{T}) where {T} =
+    (32 * SQRT3 * DBL_ERR) / (ROBUST_CROSS_PROD_ERROR / (eps(float(T)) / 2) - (1 + 2 * SQRT3))
+
 isDoubleFloatsAvailable(args...) = false
 
 """
@@ -179,8 +190,7 @@ function stable_cross_product(a::AbstractVector{T}, b::AbstractVector{T}) where 
     # precision is needed; in particular, higher precision is only necessary when
     # "a" and "b" are closer than about `18 * DBL_ERR == 9 * DBL_EPSILON`.
     # (80-bit precision can handle inputs as close as `2.5 * LDBL_EPSILON`.)
-    T_ERR = eps(float(T)) / 2 
-    kMinNorm = (32 * sqrt(3) * DBL_ERR) / (ROBUST_CROSS_PROD_ERROR / T_ERR - (1 + 2sqrt(3)))
+    kMinNorm = min_stable_norm(T)
 
     # Finally...we compute the result by regular cross product.
     result = cross(a - b, a + b)
