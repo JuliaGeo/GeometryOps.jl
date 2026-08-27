@@ -134,21 +134,18 @@ quantity as [`spherical_orient`](@ref); the arguments need not be unit vectors.
 
 [`spherical_orient`](@ref) reports `0` whenever the triple product falls inside an `eps*16`
 band, which is wider than a cell-scale determinant. Collapsing genuinely distinct
-orientations to "collinear" can produce topology no consistent arrangement supports; this
-one is a true sign function, so `0` means zero.
+orientations to "collinear" can produce topology no consistent arrangement supports; this one
+is a true sign function, so `0` means zero.
 
 ## Why not `ExactPredicates.orient(a, b, c, (0, 0, 0))`
 
-Same quantity, but grouped as `a`, `b`, `c`, which gives a semi-static error bound
-proportional to the runtime magnitude of each group — for unit vectors, pinned near `5e-15`
-however close together the points are. A cell-scale determinant sits far below that, so the
-filter can never decide and every call falls through to `Rational{BigInt}`.
-
-Grouping the *differences* instead, via the exact row operation
-`det[a; b; c] == det[a; b-a; c-a]`, makes the bound scale as `delta^2`, shrinking with the
-data just as the determinant does. The filter then decides in floating point,
-allocation-free, and only genuinely-tiny-but-nonzero determinants reach `Rational{BigInt}` —
-which is the right place to spend it.
+Same quantity, but grouped as `a`, `b`, `c`, giving a semi-static error bound proportional to
+each group's runtime magnitude — for unit vectors, pinned near `5e-15` however close together
+the points are. A cell-scale determinant sits far below that, so the filter never decides and
+every call falls through to `Rational{BigInt}`. Grouping the *differences* instead, via the
+exact row operation `det[a; b; c] == det[a; b-a; c-a]`, makes the bound scale as `delta^2`,
+shrinking with the data just as the determinant does, so the filter decides in floating point
+and only genuinely-tiny-but-nonzero determinants reach the exact stage.
 
 It is not free relative to inexact arithmetic, though: exactness costs roughly 2x a plain
 floating-point triple product and 1.2x [`spherical_orient`](@ref). The trade is worth making
