@@ -62,14 +62,17 @@ function _difference(
     polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _diff_step, poly_a, poly_b)
     # if no crossing points, determine if either poly is inside of the other
     if isempty(polys)
+        #= Both answers here are rebuilt from the inputs, so they take the representation
+        `polys` is committed to rather than plain tuples. =#
+        P = _fh_out_point_type(alg.manifold, poly_a, T)
         a_in_b, b_in_a = _find_non_cross_orientation(alg.manifold, a_list, b_list, ext_a, ext_b; exact)
         # add case for if they polygons are the same (all intersection points!)
         # add a find_first check to find first non-inter poly!
         if b_in_a && !a_in_b  # b in a and can't be the same polygon
-            poly_a_b_hole = GI.Polygon([tuples(ext_a), tuples(ext_b)])
+            poly_a_b_hole = GI.Polygon([_fh_as_ring(P, ext_a, T), _fh_as_ring(P, ext_b, T)])
             push!(polys, poly_a_b_hole)
         elseif !b_in_a && !a_in_b # polygons don't intersect
-            push!(polys, tuples(poly_a))
+            push!(polys, _fh_as_poly(P, poly_a, T))
             return polys
         end
     end
@@ -119,7 +122,7 @@ function _difference(
     ::GI.MultiPolygonTrait, multipoly_b;
     kwargs...,
 ) where T
-    polys = [tuples(poly_a, T)]
+    polys = [_fh_as_poly(_fh_out_point_type(alg.manifold, poly_a, T), poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         isempty(polys) && break
         polys = mapreduce(p -> difference(alg, p, poly_b; target), append!, polys)
@@ -140,7 +143,7 @@ function _difference(
     if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
         multipoly_a = fix_multipoly(multipoly_a)
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, multipoly_a, T))}()
     sizehint!(polys, GI.npolygon(multipoly_a))
     for poly_a in GI.getpolygon(multipoly_a)
         append!(polys, difference(alg, poly_a, poly_b; target))

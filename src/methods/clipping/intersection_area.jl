@@ -27,7 +27,7 @@ The algorithm is required, and the supported list is closed:
 |:----------|:----------|:------|
 | [`ConvexConvexSutherlandHodgman`](@ref) | `Planar()`, `Spherical()` | takes the same `cache` keyword as `intersection`; with one, the call allocates nothing |
 | [`OverlayNG`](@ref) | `Planar()`, `Spherical()` | `T` sets the accumulator and return type only — the arrangement always runs at the algorithm's `point_type` |
-| [`FosterHormannClipping`](@ref) | as `intersection` | accumulates during the trace for hole-free polygon pairs; other inputs delegate to the polygon path |
+| [`FosterHormannClipping`](@ref) | as `intersection` | accumulates during the trace for hole-free polygon pairs; other inputs delegate to the polygon path. Takes a [`FosterHormannCache`](@ref) as `cache` on the traced path, which removes the per-call allocation of its vertex lists |
 
 ## Example
 
@@ -87,17 +87,22 @@ intersection_area(alg::OverlayNG, geom_a, geom_b, ::Type{T}=Float64) where {T<:A
 # those inputs delegate to the polygon path. The answer is the same either way; only the
 # saving is lost.
 
+#-- `cache` is offered on this path only: the polygon fallback below reaches
+#-- `_add_holes_to_polys!`, which clips again from inside the clip it is finishing, and the
+#-- nested call would overwrite the lists its caller is still reading. No nesting here.
 function intersection_area(
-    alg::FosterHormannClipping, geom_a, geom_b, ::Type{T}=Float64; kwargs...
+    alg::FosterHormannClipping, geom_a, geom_b, ::Type{T}=Float64;
+    cache::Union{Nothing, FosterHormannCache} = nothing, kwargs...
 ) where {T<:AbstractFloat}
     m = alg.manifold
     if !(GI.trait(geom_a) isa GI.PolygonTrait && GI.trait(geom_b) isa GI.PolygonTrait) ||
        GI.nhole(geom_a) != 0 || GI.nhole(geom_b) != 0
         return _fh_polygon_path_area(alg, m, geom_a, geom_b, T; kwargs...)
     end
+    cache === nothing || _fh_check_cache(cache, T, _fh_point_type(m, T))
     ext_a, ext_b = GI.getexterior(geom_a), GI.getexterior(geom_b)
     a_list, b_list, a_idx_list =
-        _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact = True())
+        _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact = True(), cache)
     sink = _trace_polynodes!(_RingMeasurer(m, T), alg, T, a_list, b_list, a_idx_list,
                              _inter_step, geom_a, geom_b)
     #-- no crossings at all: either one polygon contains the other, or they are disjoint.

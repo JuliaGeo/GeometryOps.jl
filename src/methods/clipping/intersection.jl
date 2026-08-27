@@ -84,11 +84,14 @@ function _intersection(
     a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact)
     polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b)
     if isempty(polys) # no crossing points, determine if either poly is inside the other
+        #= The contained polygon is the answer, rebuilt in whatever representation the
+        tracer would have emitted -- `polys` is already committed to that element type. =#
+        P = _fh_out_point_type(alg.manifold, poly_a, T)
         a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([tuples(ext_a)]))
+            push!(polys, GI.Polygon([_fh_as_ring(P, ext_a, T)]))
         elseif b_in_a
-            push!(polys, GI.Polygon([tuples(ext_b)]))
+            push!(polys, GI.Polygon([_fh_as_ring(P, ext_b, T)]))
         end
     end
     remove_idx = falses(length(polys))
@@ -130,7 +133,7 @@ function _intersection(
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
         multipoly_b = fix_multipoly(multipoly_b)
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, poly_a, T))}()
     for poly_b in GI.getpolygon(multipoly_b)
         append!(polys, intersection(alg, poly_a, poly_b; target))
     end
@@ -163,7 +166,7 @@ function _intersection(
         multipoly_b = fix_multipoly(multipoly_b)
         fix_multipoly = nothing
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, multipoly_a, T))}()
     for poly_a in GI.getpolygon(multipoly_a)
         append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly))
     end
@@ -328,6 +331,122 @@ end
 
 # TODO: deprecate this
 _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T = _intersection_point(Planar(), T, (a1, a2), (b1, b2); exact)
+
+#=
+The same question between two great-circle arcs.
+
+The planar method above decides everything in the chart — lon/lat envelope,
+`Predicates.orient`, segment crossings — all wrong for the same reason: a DGG cell edge is a
+great-circle arc that bulges off the chart line joining its endpoints. `_sph_arc_arc_class`
+makes the identical `LineOrientation` split on the predicate `exact` selects, and names
+which endpoints lie on the other arc. No envelope pre-filter: an arc leaves the lon/lat box
+bounding its endpoints, so one would reject real intersections near the poles and across the
+antimeridian.
+
+Only `line_cross` builds a new point; every other case meets at a vertex of one of the two
+rings, and there the *input* point is returned unchanged rather than round-tripped through
+xyz. That is load-bearing: `_build_b_list` matches an intersection to a `b` vertex by
+`fracs[2] == 0` and `equals` compares points for bit equality, so an ulp of drift fails the
+match and opens a zero-length edge at exactly the shared vertices a tiling is made of. On
+`Spherical` the edge iterator hands FH `UnitSphericalPoint`s, so that path is xyz end to
+end; the lon/lat method is kept for callers outside the clipper.
+=#
+const _USPEdge{T} = Tuple{UnitSpherical.UnitSphericalPoint{T}, UnitSpherical.UnitSphericalPoint{T}}
+
+_intersection_point(m::Spherical, ::Type{T}, a::_USPEdge, b::_USPEdge; exact) where {T} =
+    _sph_intersection_point(m, T, a, b; exact)
+_intersection_point(m::Spherical, ::Type{T}, a::Edge, b::Edge; exact) where {T} =
+    _sph_intersection_point(m, T, a, b; exact)
+
+#-- Give a computed crossing back in the representation the edge arrived in.
+_as_ingested(x, ::Tuple, ::Type{T}) where {T} = _sph_lonlat(T, x)
+_as_ingested(x, ::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = x
+
+function _sph_intersection_point(m::Spherical, ::Type{T}, (a1, a2), (b1, b2); exact) where {T}
+    #= The sentinel point is never read: `line_out` carries no point, and `intr2` is only
+    destructured on the `line_over` branch, which fills it. Reusing `a1` keeps the returned
+    tuple concretely typed in whichever representation came in. =#
+    zero_intr = (a1, (zero(T), zero(T)))
+    no_intr_result = (line_out, zero_intr, zero_intr)
+
+    A0 = _spherical_kernel_point(a1); A1 = _spherical_kernel_point(a2)
+    B0 = _spherical_kernel_point(b1); B1 = _spherical_kernel_point(b2)
+
+    #= Clipping asks for the exact predicate: the banded `spherical_orient`'s eps*16 window
+    is wider than a cell-scale determinant, so a genuine crossing reads as a hinge, the
+    entry/exit alternation collapses, and the tracer emits the whole subject ring. =#
+    orient, a0_on_b, a1_on_b, b0_on_a, b1_on_a = _sph_arc_arc_class(A0, A1, B0, B1, exact)
+    orient === line_out && return no_intr_result
+
+    if orient === line_cross
+        x = _arc_crossing_point(A0, A1, B0, B1)
+        #-- a proper crossing cannot produce parallel normals, but guard anyway
+        x === nothing && return no_intr_result
+        α = _sph_arc_frac(T, A0, A1, x)
+        β = _sph_arc_frac(T, B0, B1, x)
+        return line_cross, (_as_ingested(x, a1, T), (α, β)), zero_intr
+    end
+
+    #= Both remaining cases meet at named endpoints. The four candidates are built up front
+    as one homogeneous, stack-allocated tuple, so this costs nothing. =#
+    cands = (
+        (a0_on_b, _tuple_point(a1, T), zero(T), _sph_arc_frac(T, B0, B1, A0)),
+        (a1_on_b, _tuple_point(a2, T), one(T),  _sph_arc_frac(T, B0, B1, A1)),
+        (b0_on_a, _tuple_point(b1, T), _sph_arc_frac(T, A0, A1, B0), zero(T)),
+        (b1_on_a, _tuple_point(b2, T), _sph_arc_frac(T, A0, A1, B1), one(T)),
+    )
+
+    if orient === line_hinge
+        #= One distinct meeting point, possibly named by several incidences (a shared
+        vertex is on both arcs and is reported four times). Any of them is that point. =#
+        @inbounds for k in 1:4
+            on, p, α, β = cands[k]
+            on && return line_hinge, (p, (α, β)), zero_intr
+        end
+        return no_intr_result
+    end
+
+    #= `line_over`: the arcs share a great circle and overlap with positive length. The
+    overlap runs between the two extreme incident endpoints, ordered along `a` — the same
+    ordering convention the planar method's `intr1`/`intr2` follow. =#
+    lo_k, hi_k = 0, 0
+    lo_α, hi_α = T(Inf), T(-Inf)
+    @inbounds for k in 1:4
+        on, _, α, _ = cands[k]
+        on || continue
+        if α < lo_α; lo_α = α; lo_k = k end
+        if α > hi_α; hi_α = α; hi_k = k end
+    end
+    (lo_k == 0 || lo_k == hi_k) && return no_intr_result
+    @inbounds begin
+        _, p_lo, α_lo, β_lo = cands[lo_k]
+        _, p_hi, α_hi, β_hi = cands[hi_k]
+    end
+    return line_over, (p_lo, (α_lo, β_lo)), (p_hi, (α_hi, β_hi))
+end
+
+#= Arc-length fraction of `x` along the arc `p0 → p1`, clamped to `[0, 1]`.
+
+The endpoints are settled by identity, never by arithmetic: `_build_a_list` claims a shared
+vertex with exact comparisons (`α == 0`, `β == 0`, `0 ≤ β < 1`), and a quotient of two
+separately computed angles lands an ulp low even on bit-identical inputs, because the two
+`atan` calls do not contract identically once inlined. `0.9999999999999998` passes `β < 1`,
+so the vertex is claimed twice and the traversal gets a duplicate intersection — a
+`TracingError`. `_spherical_kernel_point` is deterministic and signed-zero normalized, so
+shared vertices always hit the endpoint tests instead. Those also catch a zero-length arc.
+
+`atan(‖a × b‖, a ⋅ b)` rather than `acos(a ⋅ b)`, which loses about half its bits at the
+small angles a cell-scale edge subtends (~4e-6 rad at HEALPix level 18). =#
+@inline function _sph_arc_frac(::Type{T}, p0, p1, x) where {T}
+    x == p0 && return zero(T)
+    x == p1 && return one(T)
+    total = atan(norm(cross(p0, p1)), dot(p0, p1))
+    total == 0 && return zero(T)
+    part = atan(norm(cross(p0, x)), dot(p0, x))
+    return T(clamp(part / total, 0, 1))
+end
+
+@inline _sph_lonlat(::Type{T}, u) where {T} = ((ll = _usp_to_lonlat(u)); (T(ll[1]), T(ll[2])))
 
 #= If lines defined by (a1, a2) and (b1, b2) are collinear, find endpoints of overlapping
 region if they exist. This could result in three possibilities. First, there could be no
