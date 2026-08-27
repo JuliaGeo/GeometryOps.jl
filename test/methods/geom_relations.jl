@@ -203,7 +203,11 @@ relateng_predicate(GO_f, g1, g2) =
 
 # Divergences where old GO disagrees with LibGEOS/RelateNG (which agree with
 # each other): the new behavior is asserted in the loop below; the old engine
-# is not consulted for these pairs. One gap IS known: old `GO.overlaps`
+# is not consulted for these pairs. `crosses` used to belong here for most of
+# the table — its bespoke planar helpers answered `intersects` for line/polygon
+# pairs and mishandled collinear line pairs — and now runs on the shared
+# processors, so it agrees with both engines on every pair. One gap IS known:
+# old `GO.overlaps`
 # wrongly returns `true` for polygons touching along an edge (DE-9IM
 # interior/interior is F, so `overlaps` must be false; RelateNG and LibGEOS
 # agree). It is asserted in test/methods/relateng/relate_ng.jl (PublicAPI
@@ -229,6 +233,7 @@ end
 @testset "Contains" begin test_geom_relation(GO.contains, GO.GEOS(), "contains"; swap_points = true) end
 @testset "Covered By" begin test_geom_relation(GO.coveredby, GO.GEOS(), "coveredby") end
 @testset "Covers" begin test_geom_relation(GO.covers, GO.GEOS(), "covers"; swap_points = true) end
+@testset "Crosses" begin test_geom_relation(GO.crosses, GO.GEOS(), "crosses") end
 @testset "Disjoint" begin test_geom_relation(GO.disjoint, GO.GEOS(), "disjoint")end
 @testset "Intersect" begin test_geom_relation(GO.intersects, GO.GEOS(), "intersects") end
 @testset "Touches" begin test_geom_relation(GO.touches, GO.GEOS(), "touches") end
@@ -430,7 +435,7 @@ end
     end
 end
 
-@testset "Crosses" begin
+@testset "Crosses (targeted cases)" begin
 	line6 = GI.LineString([(1.0, 1.0), (1.0, 2.0), (1.0, 3.0), (1.0, 4.0)])
     line7 = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
     line8 = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
@@ -447,6 +452,61 @@ end
         @test relateng_predicate(GO.crosses, GI.MultiPoint([(1.0, 0.0), (12.0, 12.0)]), $line8) == false
         @test GO.crosses(GI.LineString([(-2.0, 2.0), (-4.0, 2.0)]), $poly7) == false
         @test relateng_predicate(GO.crosses, GI.LineString([(-2.0, 2.0), (-4.0, 2.0)]), $poly7) == false
+    end
+
+    #= Answers the bespoke planar helpers used to get wrong, pinned to the
+    DE-9IM answer the shared processors now give. `line_crosses_poly` was
+    literally `intersects`, so any line meeting a polygon at all counted as a
+    crossing, and `line_crosses_line` asked whether a vertex of one line lay on
+    the other rather than whether the two interiors met in a point. =#
+    l_on_edge  = GI.LineString([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)])
+    poly_edge  = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]])
+    l_inside   = GI.LineString([(0.2, 0.2), (0.8, 0.8)])
+    l_sub      = GI.LineString([(0.0, 0.0), (1.0, 0.0)])
+    l_through  = GI.LineString([(0.5, 1.5), (0.5, -0.5)])
+    l_tangent  = GI.LineString([(0.0, 1.0), (0.5, 0.0), (1.0, 1.0)])
+    l_flat     = GI.LineString([(0.0, 0.0), (2.0, 0.0)])
+    mpt_on_end = GI.MultiPoint([(0.0, 0.0), (5.0, 5.0)])
+    mpt_in_out = GI.MultiPoint([(0.5, 0.0), (5.0, 5.0)])
+
+    @testset_implementations "corrected answers" begin
+        # a line along the polygon boundary meets the polygon but never enters it
+        @test GO.crosses($l_on_edge, $poly_edge) == false     # old answer: true
+        @test relateng_predicate(GO.crosses, $l_on_edge, $poly_edge) == false
+        # a line wholly inside the polygon never reaches its exterior
+        @test GO.crosses($l_inside, $poly_edge) == false      # old answer: true
+        @test relateng_predicate(GO.crosses, $l_inside, $poly_edge) == false
+        # ...but one running from outside to inside does cross
+        @test GO.crosses($l_through, $poly_edge) == true
+        @test relateng_predicate(GO.crosses, $l_through, $poly_edge) == true
+        # a collinear sub-segment shares a one-dimensional interior: not a cross
+        @test GO.crosses($l_sub, $l_flat) == false            # old answer: true
+        @test relateng_predicate(GO.crosses, $l_sub, $l_flat) == false
+        # interiors meeting in one point cross, even without passing through
+        @test GO.crosses($l_tangent, $l_flat) == true         # old answer: false
+        @test relateng_predicate(GO.crosses, $l_tangent, $l_flat) == true
+        # a multipoint on the line's *boundary* is neither in it nor out of it
+        @test GO.crosses($mpt_on_end, $l_flat) == false
+        @test relateng_predicate(GO.crosses, $mpt_on_end, $l_flat) == false
+        @test GO.crosses($mpt_in_out, $l_flat) == true
+        @test relateng_predicate(GO.crosses, $mpt_in_out, $l_flat) == true
+    end
+
+    @testset "manifolds, equal dimensions and unsupported pairs" begin
+        # the bare call is planar, and `AutoManifold` resolves to the same thing
+        @test GO.crosses(l_through, poly_edge) === GO.crosses(GO.Planar(), l_through, poly_edge)
+        @test GO.crosses(l_through, poly_edge) === GO.crosses(GO.AutoManifold(), l_through, poly_edge)
+        # equal dimensions above one never cross, and a single point never does
+        @test GO.crosses(poly_edge, poly_edge) == false
+        @test GO.crosses(GI.Point((0.5, 0.5)), poly_edge) == false
+        @test GO.crosses(poly_edge, GI.Point((0.5, 0.5))) == false
+        #= The exterior of a multi-polygon is not the intersection of its
+        components' exteriors, so `out_require` cannot be asked component by
+        component. The processors refuse rather than answer the weaker
+        question. =#
+        mp = GI.MultiPolygon([[[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]]])
+        @test_throws ArgumentError GO.crosses(l_through, mp)
+        @test_throws ArgumentError GO.crosses(mp, l_through)
     end
 end
 
