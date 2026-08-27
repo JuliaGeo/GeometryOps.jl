@@ -242,6 +242,34 @@ end
 end
 
 # ---------------------------------------------------------------------------
+# the split is an `apply` on the polygonal traits, so it runs on every polygon in
+# whatever nesting `apply` understands, and the structure above is rebuilt.
+@testset "nested inputs" begin
+    box = GI.Polygon([[(170.0, 40.0), (-170.0, 40.0), (-170.0, 50.0), (170.0, 50.0), (170.0, 40.0)]])
+    far = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]])   # never reaches the seam
+
+    # a MultiPolygon is ONE geometry: its parts split into one flat piece list
+    mp = GO.antimeridian_split(GI.MultiPolygon([box, far]))
+    @test GI.trait(mp) isa GI.MultiPolygonTrait
+    @test GI.ngeom(mp) == 3                       # 2 branch pieces + the far part
+    assert_gates(mp; area_ref = GO.area(SPH, box) + GO.area(SPH, far))
+
+    for v in (GO.antimeridian_split([box, far]), GO.antimeridian_split([box, far]; threaded = true))
+        @test v isa AbstractVector && length(v) == 2
+        @test all(g -> GI.trait(g) isa GI.MultiPolygonTrait, v)
+        @test GI.ngeom.(v) == [2, 1]
+    end
+
+    fc = GI.FeatureCollection([GI.Feature(box; properties = (; name = "box")),
+                               GI.Feature(far; properties = (; name = "far"))])
+    out = GO.antimeridian_split(fc)
+    @test GI.trait(out) isa GI.FeatureCollectionTrait
+    @test [GI.properties(f).name for f in GI.getfeature(out)] == ["box", "far"]
+    @test GI.ngeom(GI.geometry(GI.getfeature(out, 1))) == 2
+    @test GI.ngeom(GI.geometry(GI.getfeature(out, 2))) == 1
+end
+
+# ---------------------------------------------------------------------------
 # Ported literal fixtures from the Python `antimeridian` package's test suite
 # (inlined — no network). These overlap the synthetic cases but pin external
 # parity for the two canonical shapes.
