@@ -45,9 +45,8 @@ struct AutoAccelerator <: IntersectionAccelerator end
 Applies the Foster-Hormann clipping algorithm.
 
 # Arguments
-- `manifold::M`: The manifold on which the algorithm operates. `Geodesic` is not supported —
-  the algorithm has no geodesic implementation of its intersection primitives — and the
-  constructor throws `ArgumentError` for it; use [`Spherical`](@ref) instead.
+- `manifold::M`: The manifold on which the algorithm operates. `Geodesic` is not supported
+  (the constructor throws); use [`Spherical`](@ref) instead.
 - `accelerator::A`: The accelerator to use for the algorithm.  Can be `nothing` for automatic choice, or a custom accelerator.
 """
 struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: GeometryOpsCore.Algorithm{M}
@@ -55,14 +54,9 @@ struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: Geo
     accelerator::A
     # TODO: add exact flag
     # TODO: should exact flag be in the type domain?
-    #= Foster-Hormann has no geodesic implementation of `_get_side` and the other clipping
-    primitives. Without this check, `FosterHormannClipping(Geodesic())` constructs
-    successfully and then throws a bare `MethodError` deep inside the first clip it
-    attempts — far from the actual cause, and only on inputs that reach that code path.
-    This is the single point every construction path funnels through (see the outer
-    constructor immediately below), including direct parametric construction like
-    `FosterHormannClipping{Geodesic{Float64}, NestedLoop}(...)`, so the check cannot be
-    bypassed. =#
+    #= There is no geodesic implementation of `_get_side` and the other clipping primitives,
+    so a `Geodesic` algorithm would surface as a bare `MethodError` deep inside the first
+    clip. Rejecting it here catches every construction path, parametric ones included. =#
     function FosterHormannClipping{M, A}(manifold::M, accelerator::A) where {M <: Manifold, A <: IntersectionAccelerator}
         manifold isa Geodesic && throw(ArgumentError(
             "FosterHormannClipping does not support the Geodesic manifold ($manifold): Foster-Hormann clipping has no geodesic implementation of its intersection primitives. Use Spherical() instead."
@@ -70,23 +64,16 @@ struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: Geo
         return new{M, A}(manifold, accelerator)
     end
 end
-#= Defining the inner constructor above suppresses Julia's automatically-generated
-type-inferring outer constructor (`FosterHormannClipping(manifold::M, accelerator::A)
-where {M, A}`), so it has to be written back explicitly — every other constructor below
-relies on it to actually build the struct. =#
+#= The inner constructor above suppresses Julia's automatic outer constructor, which every
+other constructor below builds through, so it has to be written back explicitly. =#
 FosterHormannClipping(manifold::M, accelerator::A) where {M <: Manifold, A <: IntersectionAccelerator} = FosterHormannClipping{M, A}(manifold, accelerator)
 FosterHormannClipping(; manifold::Manifold = Planar(), accelerator = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : accelerator)
 FosterHormannClipping(manifold::Manifold, accelerator::Union{Nothing, IntersectionAccelerator} = nothing) = FosterHormannClipping(manifold, isnothing(accelerator) ? NestedLoop() : accelerator)
 FosterHormannClipping(accelerator::Union{Nothing, IntersectionAccelerator}) = FosterHormannClipping(Planar(), isnothing(accelerator) ? NestedLoop() : accelerator)
-#= Spherical and geodesic manifolds cannot use any of the tree accelerators: an STRtree
-indexes planar rectangles, and neither the antimeridian nor the poles survive that. The
-automatic choice therefore resolves to `NestedLoop` on the sphere.
-
-This method is deliberately narrow in *both* arguments. Writing it as
-`(::Union{Spherical, Geodesic}, ::Union{Nothing, IntersectionAccelerator})` — narrower in
-the manifold but wider in the accelerator than the struct's own outer constructor — makes
-every two-argument spherical call ambiguous, and with it every one-argument one, since
-that forwards through it. =#
+#= Tree accelerators index planar rectangles, which neither the antimeridian nor the poles
+survive, so the automatic choice resolves to `NestedLoop` on the sphere. This method must
+stay narrow in *both* arguments: widening the accelerator to
+`Union{Nothing, IntersectionAccelerator}` makes every spherical construction call ambiguous. =#
 FosterHormannClipping(manifold::Union{Spherical, Geodesic}, ::AutoAccelerator) = FosterHormannClipping(manifold, NestedLoop())
 
 # This enum defines which side of an edge a point is on
@@ -111,10 +98,9 @@ an intersection point (ipt). =#
     crossing::Bool = false     # If ipt, true if intersection crosses from out/in polygon, else false
     endpoint::EndPointType = not_endpoint # If ipt, denotes if point is the start or end of an overlapping chain
     fracs::Tuple{T,T} = (0., 0.) # If ipt, fractions along edges to ipt (a_frac, b_frac), else (0, 0)
-    #= 1-based position of this vertex in the ring it was ingested from, or 0 for a computed
-    intersection. `Spherical` converts lon/lat input to xyz once at ingress, so the original
-    coordinates are no longer recoverable from `point` by anything but a lossy round trip;
-    this is what lets egress hand a passthrough vertex back exactly as it arrived. =#
+    #= 1-based position in the ring this vertex was ingested from, or 0 for a computed
+    intersection. `Spherical` converts to xyz at ingress, so this is what lets egress hand a
+    passthrough vertex back exactly as it arrived instead of round-tripping it. =#
     srcidx::Int32 = Int32(0)
 end
 
@@ -142,22 +128,18 @@ Base.:(==)(pn1::PolyNode, pn2::PolyNode) = equals(pn1, pn2)
     FosterHormannCache(m::Manifold, [T = Float64])
     FosterHormannCache([T = Float64])
 
-Preallocated buffers for [`FosterHormannClipping`](@ref).
+Preallocated buffers for [`FosterHormannClipping`](@ref): the vertex lists of the two rings,
+and the index of intersections within the first.
 
 Pass this as the `cache` keyword argument to [`intersection_area`](@ref) to reuse the
-algorithm's working set instead of allocating it per call — worth it when measuring many
-polygon pairs in a hot loop, which is what conservative regridding between two discrete
-global grids does for every cell pair.
+algorithm's working set instead of allocating it per call, as conservative regridding
+between two global grids does for every cell pair. The buffers are scratch — nothing the
+call returns points into them — so a result stays valid after the cache is reused.
 
-The buffers are the vertex lists of the two rings and the index of intersections within the
-first. They are scratch: nothing the call returns points into them, so a result stays valid
-after the cache is reused.
-
-The buffers are typed by both the float type and the point representation the manifold
-computes in, and a mismatched cache is rejected rather than silently ignored. Construct it
-from the algorithm — `FosterHormannCache(alg, T)` — and both follow automatically. The
-one-argument `FosterHormannCache(T)` gives the planar representation, so it does not fit a
-`Spherical` clip.
+A cache is typed by both the float type and the point representation the manifold computes
+in, and a mismatched one is rejected rather than silently ignored. Construct it from the
+algorithm, `FosterHormannCache(alg, T)`, and both follow; the one-argument
+`FosterHormannCache(T)` is planar, so it does not fit a `Spherical` clip.
 
 !!! warning "Thread safety"
     A cache must not be shared across concurrent tasks. Create one per task. The default
@@ -195,9 +177,8 @@ FosterHormannCache(::Type{T} = Float64) where {T <: AbstractFloat} =
     FosterHormannCache{T, Tuple{T, T}}()
 
 #= Put an input vertex into the representation the manifold computes in. Both legs are
-already identities where they can be: `_tuple_point` passes a `UnitSphericalPoint` through
-untouched, and `_spherical_kernel_point` is the identity on one, so 3D input reaches the
-node lists without arithmetic and comes back out bit-identical. =#
+identities on points already in that representation, so 3D input reaches the node lists
+without arithmetic and comes back out bit-identical. =#
 _fh_ingest(::Planar, p, ::Type{T}) where {T} = _tuple_point(p, T)
 _fh_ingest(::Spherical, p, ::Type{T}) where {T} = _spherical_kernel_point(_tuple_point(p, T))
 
@@ -586,9 +567,8 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     # list of points in poly_a
     P = _fh_point_type(alg.manifold, T)
     a_list = _fh_buffer(cache === nothing ? nothing : cache.a_list, Vector{PolyNode{T, P}})
-    #-- A cached buffer already carries the capacity its last call grew it to, and
-    #-- `sizehint!` is free to *shrink* to the hint, which would hand back the storage this
-    #-- cache exists to keep and realloc it again on the next push.
+    #-- `sizehint!` is free to *shrink* to the hint, handing back the capacity a cached
+    #-- buffer already grew to — exactly the storage the cache exists to keep.
     cache === nothing && sizehint!(a_list, n_a_edges)
     # finds indices of intersection points in a_list
     a_idx_list = _fh_buffer(cache === nothing ? nothing : cache.a_idx_list, Vector{Int})
@@ -920,18 +900,13 @@ function _get_side(::Planar, Q, P1, P2, P3; exact)
     return _side_from_orientations(s1, s2, s3)
 end
 
-#= The same question on the sphere, over the same three orientations.
+#= The same question on the sphere. `spherical_orient(a, b, c)` is `sign((a × b) ⋅ c)`,
+the same handedness `Predicates.orient` gives in the plane, so the three signs combine by
+exactly the planar rule below and only the predicate underneath changes.
 
-`spherical_orient(a, b, c)` is `sign((a × b) ⋅ c)`: positive when `c` lies left of the
-directed great-circle arc `a → b`. That is the same handedness `Predicates.orient` gives
-in the plane, so the three signs combine by exactly the planar rule below and only the
-predicate underneath changes.
-
-`P1-P2-P3` here are always original ring vertices — `_get_sides` walks back to real
-vertices before calling — and this is reached only for a hinge or overlap at `P2`, which
-is where the chart edge of a DGG cell differs most from the great circle through its
-endpoints. Classifying that hinge with the planar determinant is what made the crossing /
-bouncing decision wrong for non-convex spherical cells. =#
+This is reached only for a hinge or overlap at `P2`, which is where a DGG cell's chart edge
+differs most from the great circle through its endpoints; classifying that hinge with the
+planar determinant got the crossing/bouncing decision wrong for non-convex cells. =#
 function _get_side(::Spherical, Q, P1, P2, P3; exact)
     q = _spherical_kernel_point(Q)
     p1 = _spherical_kernel_point(P1)
@@ -945,14 +920,10 @@ function _get_side(::Spherical, Q, P1, P2, P3; exact)
     return _side_from_orientations(s1, s2, s3)
 end
 
-#= Which spherical orientation predicate `exact` selects, mirroring how the planar
-`_get_side` threads `exact` into `Predicates.orient`.
-
-`exact_spherical_orient` is a true sign function; `spherical_orient` reports `0` inside an
-`eps*16` band, which at cell scale is wider than the determinant it is judging. Since the
-hinge classified here is precisely where a DGG cell's chart edge departs furthest from the
-great circle through its endpoints, a spurious `0` there is a wrong crossing/bouncing
-decision, not a harmless tie. =#
+#= Which spherical orientation predicate `exact` selects, mirroring how planar `_get_side`
+threads `exact` into `Predicates.orient`. `exact_spherical_orient` is a true sign function;
+`spherical_orient` reports `0` inside an `eps*16` band that at cell scale is wider than the
+determinant it judges, and a spurious `0` here is a wrong crossing/bouncing decision. =#
 @inline _spherical_orient_for(::True) = UnitSpherical.exact_spherical_orient
 @inline _spherical_orient_for(::False) = UnitSpherical.spherical_orient
 
@@ -991,43 +962,31 @@ function _pt_off_edge_status(alg::FosterHormannClipping{M, A}, ::Type{T}, pt_lis
     return next_idx, start_status
 end
 
-#= Whether `p2` carries no shape and may be dropped from a traced ring — that is, whether it
-already lies on the edge joining its neighbours.
-
-Which edge that is, is the whole question. A run of vertices along a parallel — the 49th
-between Canada and the United States, lat 22 between Egypt and Sudan — is exactly collinear
-in the chart, so the planar test drops every interior vertex of the run. On the sphere those
-vertices are not redundant at all: the edge joining the ends of the run is a great-circle arc
-that bulges poleward of the parallel, by 0.8° over a 28° span at latitude 49. Dropping them
-therefore does not simplify the ring, it moves its boundary, and the sliver between the
-polyline and the arc is lost from the result.
-
-Asking `spherical_orient` instead asks whether `p2` lies on the great circle through `p1` and
-`p3`, which is the edge the spherical clipper actually draws. Vertices along a parallel fail
-that test and are kept; vertices genuinely on a shared great circle still go. The same
-applies to the chart edges of a DGG cell, which are not great circles either. =#
+#= Whether `p2` may be dropped from a traced ring — whether it already lies on the edge
+joining its neighbours. *Which* edge is the whole question. A run of vertices along a
+parallel (the 49th, lat 22 between Egypt and Sudan) is exactly collinear in the chart, so the
+planar test drops the run's interior; but the great-circle arc joining the run's ends bulges
+poleward of the parallel — 0.8° over a 28° span at latitude 49 — so dropping them moves the
+ring's boundary rather than simplifying it. `spherical_orient` asks about the great circle
+the spherical clipper actually draws, so those vertices are kept and genuinely redundant ones
+still go. The chart edges of a DGG cell are not great circles either. =#
 _is_removable_collinear(::Planar, p1, p2, p3) =
     Predicates.orient(p1, p2, p3; exact = False()) == 0
 _is_removable_collinear(::Spherical, p1, p2, p3) =
     UnitSpherical.spherical_orient(_spherical_kernel_point(p1),
         _spherical_kernel_point(p2), _spherical_kernel_point(p3)) == 0
 
-#= A point strictly between two adjacent points of a traced ring, used to ask which side of
-the other polygon the piece of boundary between them runs.
+#= A probe strictly between two adjacent points of a traced ring, used to ask which side of
+the other polygon the boundary between them runs. It is only meaningful if the probe lies
+*on* that boundary. On the sphere the boundary is the great-circle arc and the chart midpoint
+sits off it by the arc's sagitta; where the two polygons share a border — every interior edge
+of a tiling — that displacement is perpendicular to the very edge being classified, so the
+in/out answer is decided by the sagitta and the entry/exit alternation it feeds stops
+alternating.
 
-The question is only meaningful if the probe lies *on* the boundary piece it is standing in
-for. In the plane the chart midpoint does. On the sphere it does not: the boundary is the
-great-circle arc, and the chart midpoint sits off it, pulled toward the chord by the arc's
-sagitta. Where the two polygons share a border — every interior edge of a tiling, and every
-land border in a country dataset — that displacement is perpendicular to the very edge being
-classified, so the in/out answer is decided by the sagitta rather than by the geometry, and
-the entry/exit alternation it feeds stops alternating.
-
-The spherical midpoint is the normalized sum of the two unit vectors, which is the
-great-circle midpoint and needs no angle. `p + q` vanishing means the two are antipodal,
-where no midpoint is defined and either of the two equidistant candidates would be a guess;
-the chart midpoint is returned there so the caller still gets a point, and the antipodal
-edge itself is what `antipodal_edge_split.jl` exists to remove upstream. =#
+The normalized sum of the two unit vectors is the great-circle midpoint. It vanishes only for
+an antipodal pair, where no midpoint is defined; `antipodal_edge_split.jl` removes those
+upstream, so the degenerate branch only has to keep the return type stable. =#
 _clip_midpoint(::Planar, p, q) = (p .+ q) ./ 2
 function _clip_midpoint(::Spherical, p, q)
     u = _spherical_kernel_point(p) + _spherical_kernel_point(q)
@@ -1040,8 +999,8 @@ end
 has to speak their representation, not be round-tripped into the chart. =#
 _sph_mid_as(mid, ::UnitSphericalPoint) = mid
 _sph_mid_as(mid, _) = _usp_to_lonlat(mid)
-#-- exactly antipodal: every great circle through the pair is a bisector, so no midpoint is
-#-- more correct than another; take an endpoint and keep the return type stable.
+#-- exactly antipodal: no candidate midpoint is more correct than another, so pick one and
+#-- keep the return type stable.
 _sph_mid_degenerate(p::UnitSphericalPoint, q) = p
 _sph_mid_degenerate(p, q) = (p .+ q) ./ 2
 
@@ -1155,29 +1114,22 @@ _get_poly_type(::Type{T}, ::Type{P}) where {T, P} =
     GI.Polygon{_fh_pt_is3d(P), false,
         Vector{GI.LinearRing{_fh_pt_is3d(P), false, Vector{P}, Nothing, Nothing}}, Nothing, Nothing}
 
-#= Egress mirrors ingress.
-
-Planar hands back what it was given. Spherical computes in xyz, so the representation the
-caller gets is the one it supplied: 3D input is returned untouched -- bit-exact, and already
-the representation a DGG caller works in -- while lon/lat input converts back. A vertex that
-passed through the clip unchanged is not converted at all on that path either: `srcidx`
-names its slot in the input ring, so it is returned as the very value that came in, and only
-genuinely computed intersections pay a conversion. =#
+#= Egress mirrors ingress: the caller gets back the representation it supplied, so 3D input
+is returned untouched and lon/lat input converts back. A vertex that passed through the clip
+unchanged is not converted at all -- `srcidx` names its slot in the input ring, so it is
+handed back as the very value that came in, and only computed intersections pay a
+conversion. =#
 _fh_out_point_type(::Planar, poly, ::Type{T}) where {T} = Tuple{T, T}
 _fh_out_point_type(::Spherical, poly, ::Type{T}) where {T} =
     GI.is3d(poly) ? UnitSpherical.UnitSphericalPoint{T} : Tuple{T, T}
 
-#= Not every output polygon comes out of the tracer. When there are no crossings at all --
-one polygon wholly inside the other, or the two disjoint -- the answer is a piece of the
-*input*, and the ops rebuild it directly. Those rebuilds have to land in the same
-representation the tracer would have produced, or they do not fit the vector they are pushed
-into.
-
-`_fh_as_point`/`_fh_as_ring`/`_fh_as_poly` do that rebuild, following the same
-egress-mirrors-ingress rule: `Tuple` in, `Tuple` out; `UnitSphericalPoint` in,
-`UnitSphericalPoint` out. Both directions are bit-exact on matching input, since each is the
-identity on points already in the target representation. Mismatched input -- a 3D `b` against
-a 2D `a`, where `a` fixes the output representation -- is converted rather than rejected. =#
+#= When there are no crossings at all the answer is a piece of the *input* rather than
+something the tracer emitted, and the ops rebuild it directly. Those rebuilds have to land in
+the representation the tracer would have produced, or they do not fit the vector they are
+pushed into. `_fh_as_point`/`_fh_as_ring`/`_fh_as_poly` follow the same
+egress-mirrors-ingress rule and are the identity on points already in the target
+representation, so matching input is bit-exact; mismatched input is converted, not
+rejected. =#
 _fh_as_point(::Type{<:Tuple}, p, ::Type{T}) where {T} = _fh_tuple_point(p, T)
 _fh_as_point(::Type{<:UnitSpherical.UnitSphericalPoint}, p, ::Type{T}) where {T} =
     _spherical_kernel_point(_tuple_point(p, T))
@@ -1297,9 +1249,8 @@ end
 #-- one is untested: `FosterHormannClipping(Spherical())` is an ambiguous constructor call
 #-- today, so no spherical FH algorithm can be built to reach it.
 _ring_term(::Planar, first_pt, prev, pt) = _area_component(prev, pt)
-#-- `_spherical_kernel_point` is the identity on a `UnitSphericalPoint`, which is what the
-#-- tracer now carries, so this wrap costs nothing on the spherical path and still accepts
-#-- lon/lat from any other caller.
+#-- `_spherical_kernel_point` is the identity on the `UnitSphericalPoint`s the tracer now
+#-- carries, so this costs nothing there and still accepts lon/lat from other callers.
 _ring_term(::Spherical, first_pt, prev, pt) = _spherical_triangle_area(Eriksson(),
     _spherical_kernel_point(first_pt), _spherical_kernel_point(prev),
     _spherical_kernel_point(pt))

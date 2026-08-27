@@ -88,17 +88,15 @@ end
 
 # ## exact_spherical_orient
 
-#= The 3x3 determinant is expanded by hand rather than calling `ExactPredicates.det`,
-which is an unexported internal.
+#= The determinant is expanded by hand because `ExactPredicates.det` is an unexported
+internal.
 
-`a` enters through TWO formal parameters. `Codegen.accumulator` requires the formula to be
-multihomogeneous — each input gate in at most one group — and the natural spelling
-`u = b - a; group!(a...); group!(u...)` puts the gate `a` both in its own group and inside
-the difference, which trips `AssertionError: af.deg == ag.deg` in the `:-` branch before
-the group override fires. Two distinct gates carrying the same value sidestep that: the
-derived bound is valid pointwise over all 4-tuples, so it holds on the diagonal, and the
-exact stage substitutes the same value into both, leaving the polynomial identically
-det[a; b-a; c-a]. =#
+`a` enters through TWO formal parameters, on purpose. `Codegen.accumulator` requires a
+multihomogeneous formula — each input gate in at most one group — so the natural
+`u = b - a; group!(a...); group!(u...)` puts the gate `a` in its own group *and* inside the
+difference, tripping `AssertionError: af.deg == ag.deg`. Two distinct gates carrying the
+same value sidestep it: the derived bound is valid pointwise over all 4-tuples, so it holds
+on the diagonal, and the exact stage leaves the polynomial identically det[a; b-a; c-a]. =#
 ExactPredicates.Codegen.@genpredicate function _exact_spherical_orient(
         a1 :: 3, a2 :: 3, b :: 3, c :: 3)
     u = b - a2
@@ -125,31 +123,23 @@ quantity as [`spherical_orient`](@ref); the arguments need not be unit vectors.
 
 ## Why this exists alongside `spherical_orient`
 
-[`spherical_orient`](@ref) reports `0` whenever the triple product falls inside an
-`eps*16` band. That band is wider than a cell-scale determinant, so it answers `0` for
-determinants that are genuinely nonzero — and a predicate that collapses distinct
-orientations to "collinear" can produce topology no consistent arrangement supports. This
-one is a true sign function: `0` means zero.
+[`spherical_orient`](@ref) reports `0` whenever the triple product falls inside an `eps*16`
+band, which is wider than a cell-scale determinant. Collapsing genuinely distinct
+orientations to "collinear" can produce topology no consistent arrangement supports; this
+one is a true sign function, so `0` means zero.
 
 ## Why not `ExactPredicates.orient(a, b, c, (0, 0, 0))`
 
-That is the same quantity, but grouped as `a`, `b`, `c`. ExactPredicates derives a
-semi-static error bound of `22 * eps * lambda_1 * lambda_2 * lambda_3`, where `lambda` is
-the runtime max magnitude of each group; for unit vectors that is pinned near `5e-15`
-regardless of how close the points are. Two points a HEALPix level-13 cell edge apart
-(`delta ~ 4e-6` rad) have a determinant far below that, so the filter can never decide and
-every call falls through to `Rational{BigInt}` — measured at 10.9 microseconds and 9.6 KB
-per call at that scale.
+Same quantity, but grouped as `a`, `b`, `c`, which gives a semi-static error bound
+proportional to the runtime magnitude of each group — for unit vectors, pinned near `5e-15`
+however close together the points are. A cell-scale determinant sits far below that, so the
+filter can never decide and every call falls through to `Rational{BigInt}`.
 
-Using the exact row operation `det[a; b; c] == det[a; b-a; c-a]` and grouping the
-*differences* makes the bound scale as `1 * delta * delta`, shrinking with the data just as
-the determinant does. The filter then decides immediately: measured 4.1 ns and 0 bytes at
-the same cell scale, faster than the plain floating-point triple product and still exact.
-Truly degenerate input costs ~200 ns (interval stage); only genuinely-tiny-but-nonzero
-determinants reach `Rational{BigInt}`, which is the right place to spend it.
-
-Verified against a 256-bit reference across arc scales `1.7e-2` down to `1e-8` rad, and
-bit-identical to `ExactPredicates.orient(a, b, c, (0, 0, 0))` over 50,000 triples.
+Grouping the *differences* instead, via the exact row operation
+`det[a; b; c] == det[a; b-a; c-a]`, makes the bound scale as `delta^2`, shrinking with the
+data just as the determinant does. The filter then decides in floating point,
+allocation-free, and only genuinely-tiny-but-nonzero determinants reach `Rational{BigInt}` —
+which is the right place to spend it.
 
 Throws on a non-finite coordinate, where `ExactPredicates.orient` returns `-1`; both are
 outside the contract.
