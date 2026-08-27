@@ -962,31 +962,28 @@ function _pt_off_edge_status(alg::FosterHormannClipping{M, A}, ::Type{T}, pt_lis
     return next_idx, start_status
 end
 
-#= Whether `p2` may be dropped from a traced ring — whether it already lies on the edge
-joining its neighbours. *Which* edge is the whole question. A run of vertices along a
-parallel (the 49th, lat 22 between Egypt and Sudan) is exactly collinear in the chart, so the
-planar test drops the run's interior; but the great-circle arc joining the run's ends bulges
-poleward of the parallel — 0.8° over a 28° span at latitude 49 — so dropping them moves the
-ring's boundary rather than simplifying it. `spherical_orient` asks about the great circle
-the spherical clipper actually draws, so those vertices are kept and genuinely redundant ones
-still go. The chart edges of a DGG cell are not great circles either. =#
+#= Whether `p2` may be dropped — whether it already lies on the edge joining its neighbours.
+*Which* edge is the whole question: a run of vertices along a parallel is exactly collinear
+in the chart, but the great-circle arc joining the run's ends bulges poleward of it (0.8°
+over a 28° span at latitude 49), so dropping the run's interior moves the ring's boundary
+rather than simplifying it. `spherical_orient` asks about the great circle the spherical
+clipper actually draws, so those are kept and genuinely redundant vertices still go. =#
 _is_removable_collinear(::Planar, p1, p2, p3) =
     Predicates.orient(p1, p2, p3; exact = False()) == 0
 _is_removable_collinear(::Spherical, p1, p2, p3) =
     UnitSpherical.spherical_orient(_spherical_kernel_point(p1),
         _spherical_kernel_point(p2), _spherical_kernel_point(p3)) == 0
 
-#= A probe strictly between two adjacent points of a traced ring, used to ask which side of
-the other polygon the boundary between them runs. It is only meaningful if the probe lies
-*on* that boundary. On the sphere the boundary is the great-circle arc and the chart midpoint
-sits off it by the arc's sagitta; where the two polygons share a border — every interior edge
-of a tiling — that displacement is perpendicular to the very edge being classified, so the
-in/out answer is decided by the sagitta and the entry/exit alternation it feeds stops
-alternating.
+#= A probe between two adjacent points of a traced ring, asking which side of the other
+polygon the boundary between them runs. It only means anything if the probe lies *on* that
+boundary, and on the sphere the boundary is the great-circle arc: the chart midpoint sits off
+it by the arc's sagitta, which where the two polygons share a border — every interior edge of
+a tiling — is displaced perpendicular to the very edge being classified, so the sagitta
+decides the in/out answer and the entry/exit alternation it feeds stops alternating.
 
-The normalized sum of the two unit vectors is the great-circle midpoint. It vanishes only for
-an antipodal pair, where no midpoint is defined; `antipodal_edge_split.jl` removes those
-upstream, so the degenerate branch only has to keep the return type stable. =#
+The normalized sum of the two unit vectors is the great-circle midpoint; it vanishes only for
+an antipodal pair, which `antipodal_edge_split.jl` removes upstream, so the degenerate branch
+only has to keep the return type stable. =#
 _clip_midpoint(::Planar, p, q) = (p .+ q) ./ 2
 function _clip_midpoint(::Spherical, p, q)
     u = _spherical_kernel_point(p) + _spherical_kernel_point(q)
