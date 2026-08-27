@@ -254,7 +254,7 @@ end
     for a in (_ngon(3.0, 1.0, 4.0, 5), _star(0.0, 0.0, 8.0, 2.0, 5), GI.Point((1.0, 1.0)),
               GI.LineString([(-10.0, 0.0), (10.0, 0.0)]))
         for f in (GO.intersects, GO.disjoint, GO.within, GO.contains, GO.covers,
-                  GO.coveredby, GO.touches)
+                  GO.coveredby, GO.touches, GO.crosses)
             @test f(a, TARGET) === f(Planar(), a, TARGET)
             @test f(a, TARGET) === f(GO.AutoManifold(), a, TARGET)
         end
@@ -291,12 +291,119 @@ end
     @test (@allocated con(v, length(v), q)) == 0
 end
 
-@testset "`crosses` and `overlaps` refuse a manifold they cannot honour" begin
+@testset "`overlaps` refuses a manifold it cannot honour" begin
     a = _ngon(3.0, 1.0, 4.0, 5)
-    @test_throws ArgumentError GO.crosses(Spherical(), a, TARGET)
     @test_throws ArgumentError GO.overlaps(Spherical(), a, TARGET)
-    # planar still answers, unchanged (on the trait pairs those legacy paths support)
-    line = GI.LineString([(-10.0, 0.0), (10.0, 0.0)])
-    @test GO.crosses(Planar(), line, TARGET) === GO.crosses(line, TARGET)
+    # planar still answers, unchanged (on the trait pairs that legacy path supports)
     @test GO.overlaps(Planar(), a, TARGET) === GO.overlaps(a, TARGET)
+end
+
+#= `crosses` runs on the shared processors now, so `Spherical()` reaches the
+same four geometric leaves every other lightweight predicate does. The oracle
+is RelateNG on the same manifold. =#
+@testset "`crosses` on the sphere" begin
+    tgt = _ngon(12.3, 41.7, 4.0, 5)
+    oracle(a, b) = GO.relate_predicate(GO.RelateNG(Spherical()), GO.pred_crosses(), a, b)
+
+    #= Coordinates are deliberately irregular. RelateNG's exact spherical
+    crossing point divides by zero when two arcs meet on a coordinate plane —
+    a great circle crossing the equator at longitude 0, say — so a tidy
+    fixture cannot be cross-checked against it at all. That defect is upstream
+    of this path and unrelated to `crosses`. =#
+    through   = GI.LineString([(3.7, 39.1), (21.9, 44.3)])
+    inside    = GI.LineString([(11.9, 41.4), (12.8, 42.0)])
+    outside   = GI.LineString([(40.0, 10.0), (50.0, 12.0)])
+    half_in   = GI.LineString([(12.3, 41.7), (31.4, 44.9)])
+    bent      = GI.LineString([(3.7, 39.1), (12.86, 41.86), (21.9, 44.3)])
+    crossing  = GI.LineString([(9.1, 47.2), (17.3, 36.4)])
+    tee       = GI.LineString([(12.4, 47.9), (12.86, 41.86)])
+    abutting  = GI.LineString([(21.9, 44.3), (33.1, 46.8)])
+
+    @testset "line against polygon" begin
+        for (line, expected) in ((through, true), (inside, false), (outside, false), (half_in, true))
+            @test GO.crosses(Spherical(), line, tgt) == expected
+            @test GO.crosses(Spherical(), line, tgt) == oracle(line, tgt)
+            # and the transpose, `T*****T**`
+            @test GO.crosses(Spherical(), tgt, line) == expected
+            @test GO.crosses(Spherical(), tgt, line) == oracle(tgt, line)
+        end
+    end
+
+    @testset "ring against polygon" begin
+        for (ring, expected) in ((GI.getexterior(_ngon(15.1, 42.4, 3.3, 5)), true),
+                                 (GI.getexterior(_ngon(12.3, 41.7, 1.1, 5)), false),
+                                 (GI.getexterior(_ngon(60.1, 12.4, 3.3, 5)), false))
+            @test GO.crosses(Spherical(), ring, tgt) == expected
+            @test GO.crosses(Spherical(), ring, tgt) == oracle(ring, tgt)
+        end
+    end
+
+    @testset "curve against curve" begin
+        # interiors meeting in one point: `0********`
+        @test GO.crosses(Spherical(), through, crossing) == true
+        @test GO.crosses(Spherical(), through, crossing) == oracle(through, crossing)
+        #= A vee whose apex sits on the arc's interior touches without passing
+        through, which is still a zero-dimensional meeting of the interiors.
+        The apex is the normalized midpoint of the arc's endpoints, so it is on
+        the great circle by construction rather than by luck. =#
+        apex = GeographicFromUnitSphere()(UnitSphericalPoint(normalize(
+            UnitSphereFromGeographic()((3.7, 39.1)) .+ UnitSphereFromGeographic()((21.9, 44.3)))))
+        vee = GI.LineString([(8.0, 55.0), (apex[1], apex[2]), (18.0, 55.0)])
+        @test GO.crosses(Spherical(), vee, through) == true
+        @test GO.crosses(Spherical(), vee, through) == oracle(vee, through)
+        #= The tee's own endpoint is what lands on the other curve, so the
+        interiors never meet and `0********` fails. =#
+        @test GO.crosses(Spherical(), tee, bent) == false
+        @test GO.crosses(Spherical(), tee, bent) == oracle(tee, bent)
+        # a shared arc is one-dimensional, so it is not a crossing
+        @test GO.crosses(Spherical(), through, through) == false
+        @test GO.crosses(Spherical(), through, through) == oracle(through, through)
+        # boundary-to-boundary contact leaves the interiors disjoint
+        @test GO.crosses(Spherical(), through, abutting) == false
+        @test GO.crosses(Spherical(), through, abutting) == oracle(through, abutting)
+    end
+
+    @testset "multipoint against curve and polygon" begin
+        in_out  = GI.MultiPoint([(12.3, 41.7), (41.9, 3.2)])
+        both_in = GI.MultiPoint([(12.3, 41.7), (12.9, 41.9)])
+        on_end  = GI.MultiPoint([(3.7, 39.1), (41.9, 3.2)])
+        on_vert = GI.MultiPoint([(12.86, 41.86), (41.9, 3.2)])
+        @test GO.crosses(Spherical(), in_out, tgt) == true
+        @test GO.crosses(Spherical(), in_out, tgt) == oracle(in_out, tgt)
+        @test GO.crosses(Spherical(), both_in, tgt) == false
+        @test GO.crosses(Spherical(), both_in, tgt) == oracle(both_in, tgt)
+        # a point on the curve's boundary is neither interior to it nor exterior
+        @test GO.crosses(Spherical(), on_end, bent) == false
+        @test GO.crosses(Spherical(), on_end, bent) == oracle(on_end, bent)
+        @test GO.crosses(Spherical(), on_vert, bent) == true
+        @test GO.crosses(Spherical(), on_vert, bent) == oracle(on_vert, bent)
+    end
+
+    @testset "equal dimensions, and single points" begin
+        other = _ngon(15.1, 42.4, 3.3, 5)
+        @test GO.crosses(Spherical(), other, tgt) == false
+        @test GO.crosses(Spherical(), other, tgt) == oracle(other, tgt)
+        @test GO.crosses(Spherical(), GI.Point((12.3, 41.7)), tgt) == false
+        @test GO.crosses(Spherical(), GI.Point((12.3, 41.7)), tgt) == oracle(GI.Point((12.3, 41.7)), tgt)
+    end
+
+    @testset "the manifold changes the answer" begin
+        #= A 120-degree arc at latitude 40.2 bulges to about 59.4 degrees at
+        its midpoint longitude, so a small cap sitting on the bulge is crossed
+        on the sphere and missed entirely by the planar segment. =#
+        arc = GI.LineString([(-61.3, 40.2), (58.7, 40.2)])
+        for lat in (59.0, 59.4, 60.0)
+            cap = _ngon(-1.3, lat, 1.2, 5)
+            @test GO.crosses(Spherical(), arc, cap) == true
+            @test GO.crosses(Spherical(), arc, cap) == oracle(arc, cap)
+            @test GO.crosses(Planar(), arc, cap) == false
+        end
+        # below the bulge neither manifold finds a crossing
+        for lat in (57.0, 58.0)
+            cap = _ngon(-1.3, lat, 1.2, 5)
+            @test GO.crosses(Spherical(), arc, cap) == false
+            @test GO.crosses(Spherical(), arc, cap) == oracle(arc, cap)
+            @test GO.crosses(Planar(), arc, cap) == false
+        end
+    end
 end
