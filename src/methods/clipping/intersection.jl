@@ -335,35 +335,28 @@ _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T = 
 #=
 The same question between two great-circle arcs.
 
-The method above takes a manifold but decides everything planar: its envelope test is a
-lon/lat box, its four orientations are `Predicates.orient`, and the points it builds are
-segment crossings in the chart. On the sphere all three are wrong for the same reason — an
-edge of a DGG cell is a great-circle arc that bulges off the chart line joining its
-endpoints — so this method replaces the whole decision rather than patching parts of it.
-
-The classification is `_sph_arc_arc_class`, which is the identical `LineOrientation` split
-the planar method produces (`line_cross` / `line_hinge` / `line_over` / `line_out`) and
-additionally names which of the four endpoints lie on the other arc. No lon/lat envelope
-pre-filter is applied: a great-circle arc leaves the box that bounds its endpoints, so such
-a filter rejects real intersections near the poles, and it is unsound across the
-antimeridian in either direction.
+The planar method above takes a manifold but decides everything in the chart — a lon/lat
+envelope, `Predicates.orient`, segment crossings — and all three are wrong for the same
+reason: a DGG cell edge is a great-circle arc that bulges off the chart line joining its
+endpoints. So this replaces the whole decision. `_sph_arc_arc_class` makes the identical
+`LineOrientation` split (`line_cross` / `line_hinge` / `line_over` / `line_out`) on the
+predicate `exact` selects, and additionally names which endpoints lie on the other arc. No
+envelope pre-filter: a great-circle arc leaves the lon/lat box bounding its endpoints, so
+one would reject real intersections near the poles, and it is unsound across the
+antimeridian.
 
 ## Which coordinate is returned
 
-Only `line_cross` builds a new point. Every other case meets at an endpoint that is already
-a vertex of one of the two rings, and there the *input* tuple is returned unchanged rather
-than a `lon/lat → xyz → lon/lat` round trip of it. That is load-bearing, not tidiness:
-`_build_b_list` matches an intersection to a `b` vertex by `fracs[2] == 0`, and `equals`
-compares `PolyNode` points for bit equality. A round trip moves a vertex by an ulp or two,
-which would leave the match to fail and open a zero-length edge at exactly the shared
-vertices a tiling is made of.
-
-`exact` selects the orientation predicate the arc classification runs on.
+Only `line_cross` builds a new point; every other case meets at a vertex of one of the two
+rings, and there the *input* point is returned unchanged rather than round-tripped through
+xyz. That is load-bearing, not tidiness: `_build_b_list` matches an intersection to a `b`
+vertex by `fracs[2] == 0` and `equals` compares `PolyNode` points for bit equality, so an
+ulp of drift fails the match and opens a zero-length edge at exactly the shared vertices a
+tiling is made of.
 
 Points come back in the representation they arrived in. On `Spherical` the edge iterator
-hands FH `UnitSphericalPoint`s, so the whole path is xyz end to end and an input vertex is
-returned as the very object that came in; the lon/lat method is kept for callers outside
-the clipper and converts the one genuinely computed point on the way out.
+hands FH `UnitSphericalPoint`s, so that path is xyz end to end; the lon/lat method is kept
+for callers outside the clipper and converts the one computed point on the way out.
 =#
 const _USPEdge{T} = Tuple{UnitSpherical.UnitSphericalPoint{T}, UnitSpherical.UnitSphericalPoint{T}}
 
@@ -386,26 +379,23 @@ function _sph_intersection_point(m::Spherical, ::Type{T}, (a1, a2), (b1, b2); ex
     A0 = _spherical_kernel_point(a1); A1 = _spherical_kernel_point(a2)
     B0 = _spherical_kernel_point(b1); B1 = _spherical_kernel_point(b2)
 
-    #= Clipping asks for the exact predicate. The banded `spherical_orient` reports 0
-    inside an eps*16 window, which at DGG cell scale is wider than the determinant it is
-    judging: two arcs that genuinely cross are then classified as a hinge, the entry/exit
-    alternation collapses, and the tracer emits the whole subject ring. =#
+    #= Clipping asks for the exact predicate: the banded `spherical_orient`'s eps*16 window
+    is wider than a cell-scale determinant, so a genuine crossing reads as a hinge, the
+    entry/exit alternation collapses, and the tracer emits the whole subject ring. =#
     orient, a0_on_b, a1_on_b, b0_on_a, b1_on_a = _sph_arc_arc_class(A0, A1, B0, B1, exact)
     orient === line_out && return no_intr_result
 
     if orient === line_cross
         x = _arc_crossing_point(A0, A1, B0, B1)
-        #= A proper crossing cannot produce parallel normals, but the constructor guards
-        the normalization anyway and so does this. =#
+        #-- a proper crossing cannot produce parallel normals, but guard anyway
         x === nothing && return no_intr_result
         α = _sph_arc_frac(T, A0, A1, x)
         β = _sph_arc_frac(T, B0, B1, x)
         return line_cross, (_as_ingested(x, a1, T), (α, β)), zero_intr
     end
 
-    #= Both remaining cases meet at named endpoints. Building the four candidates up front
-    keeps one spelling of "which point, and where does it sit on each arc"; the tuple is
-    homogeneous and stack-allocated, so this costs nothing. =#
+    #= Both remaining cases meet at named endpoints. The four candidates are built up front
+    as one homogeneous, stack-allocated tuple, so this costs nothing. =#
     cands = (
         (a0_on_b, _tuple_point(a1, T), zero(T), _sph_arc_frac(T, B0, B1, A0)),
         (a1_on_b, _tuple_point(a2, T), one(T),  _sph_arc_frac(T, B0, B1, A1)),
@@ -444,30 +434,19 @@ end
 
 #= Arc-length fraction of `x` along the arc `p0 → p1`, clamped to `[0, 1]`.
 
-## The endpoints are settled by identity, never by arithmetic
+The endpoints are settled by identity, never by arithmetic. `_build_a_list` claims a shared
+vertex with exact comparisons — `α == 0`, `β == 0`, `0 ≤ β < 1` — and dividing two
+separately computed angles does not deliver an exact `1`: the two `atan` calls take
+bit-identical inputs, but inlined into the four-candidate construction they do not contract
+identically, so the quotient lands an ulp low. `0.9999999999999998` passes `β < 1`, the
+vertex is claimed a second time, and the traversal is handed a duplicate intersection —
+which is what `_trace_polynodes!` reports as a `TracingError`. Comparing against the
+endpoints first keeps the arithmetic out of the case that has to be exact;
+`_spherical_kernel_point` is deterministic and signed-zero normalized, so shared vertices —
+the common case in a tiling — always take that path. It also catches a zero-length arc.
 
-`_build_a_list` claims a shared vertex with exact comparisons — `α == 0`, `β == 0`,
-`0 ≤ β < 1` — so a fraction that is *meant* to be an endpoint has to be exactly `0` or
-exactly `1`, not within a tolerance of it. Recovering that by dividing two separately
-computed angles does not deliver it: for a vertex shared between two rings the two `atan`
-calls take bit-identical inputs, yet inlined into the four-candidate construction they do
-not contract identically, and the quotient lands an ulp below one. `0.9999999999999998`
-passes `β < 1`, so the vertex is claimed a second time and the traversal is handed a
-duplicate intersection — which is what `_trace_polynodes!` reports as a `TracingError`.
-
-Comparing against the endpoints first removes the arithmetic from the case that has to be
-exact. `_spherical_kernel_point` is deterministic and signed-zero normalized, so the same
-lon/lat vertex always converts to the same bits, and shared vertices — the common case in a
-tiling — take this path rather than the quotient.
-
-A zero-length arc is caught by the same test: `x == p0` fires, and `0` is the only answer
-that keeps the caller's endpoint tests meaningful.
-
-## Why `atan`, not `acos`
-
-`atan(‖a × b‖, a ⋅ b)` stays accurate across the whole range, where `acos(a ⋅ b)` loses
-about half its bits for the small angles a cell-scale edge subtends — a HEALPix level-18
-edge is ~4e-6 rad. =#
+`atan(‖a × b‖, a ⋅ b)` rather than `acos(a ⋅ b)`, which loses about half its bits at the
+small angles a cell-scale edge subtends (~4e-6 rad at HEALPix level 18). =#
 @inline function _sph_arc_frac(::Type{T}, p0, p1, x) where {T}
     x == p0 && return zero(T)
     x == p1 && return one(T)
