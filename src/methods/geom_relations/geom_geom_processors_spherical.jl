@@ -101,11 +101,13 @@ lying on an arc running 175° east.)
 
 The determinant span test `_on_arc_span_authority` is exact in form and correct
 for any arc length; in `Float64` it is allocation-free. The great-circle gate in
-front of it is the banded `spherical_orient`, keeping this in the same tolerance
-regime as everything else in this file.
+front of it is the orientation predicate `exact` selects: the banded
+`spherical_orient` by default, which keeps this in the same tolerance regime as
+the rest of this file, or the exact one where a spurious zero would be acted on
+rather than tolerated.
 =#
-@inline function _sph_on_arc(p, a, b)
-    UnitSpherical.spherical_orient(a, b, p) == 0 || return false
+@inline function _sph_on_arc(p, a, b, exact = False())
+    _spherical_orient_for(booltype(exact))(a, b, p) == 0 || return false
     return _on_arc_span_authority(False(), p, a, b)
 end
 
@@ -233,10 +235,16 @@ Classify two great-circle arcs, returning the `LineOrientation` and which of the
 four endpoints lies on the other arc.
 
 The shape of the test is the reduction `rk_classify_intersection` documents, run
-on the banded predicates instead of the exact ones: four orientations place each
-arc's endpoints against the other's great circle, endpoint incidences come from
-arc membership, and a proper crossing is the strict straddle pattern in both
-directions. No intersection coordinate is constructed.
+on the predicate `exact` selects: four orientations place each arc's endpoints
+against the other's great circle, endpoint incidences come from arc membership,
+and a proper crossing is the strict straddle pattern in both directions. No
+intersection coordinate is constructed.
+
+`exact` defaults to the banded `spherical_orient`, which is the tolerance regime
+the relate predicates want. Clipping passes the exact predicate instead: at DGG
+cell scale the band is wider than the determinant being judged, so two arcs that
+genuinely cross are read as a hinge, the entry/exit flags stop alternating, and
+the tracer walks the whole subject ring instead of the sliver.
 
 Degenerate (zero-length) arcs are settled first. Real rings carry repeated
 vertices — HEALPix rings do near polar corners — and every test below is a sign
@@ -244,29 +252,30 @@ or a dot product, so a zero-length arc produces no division and no NaN; it is
 handled up front only because "the arc's normal" is meaningless for one, not
 because it would misbehave.
 =#
-function _sph_arc_arc_class(a0, a1, b0, b1)
+function _sph_arc_arc_class(a0, a1, b0, b1, exact = False())
+    orient_of = _spherical_orient_for(booltype(exact))
     adeg = a0 == a1
     bdeg = b0 == b1
     if adeg && bdeg
         same = a0 == b0
         return (same ? line_hinge : line_out), same, same, same, same
     elseif adeg
-        on = _sph_on_arc(a0, b0, b1)
+        on = _sph_on_arc(a0, b0, b1, exact)
         return (on ? line_hinge : line_out), on, on, on && b0 == a0, on && b1 == a0
     elseif bdeg
-        on = _sph_on_arc(b0, a0, a1)
+        on = _sph_on_arc(b0, a0, a1, exact)
         return (on ? line_hinge : line_out), on && a0 == b0, on && a1 == b0, on, on
     end
 
-    sab0 = UnitSpherical.spherical_orient(a0, a1, b0)
-    sab1 = UnitSpherical.spherical_orient(a0, a1, b1)
-    sba0 = UnitSpherical.spherical_orient(b0, b1, a0)
-    sba1 = UnitSpherical.spherical_orient(b0, b1, a1)
+    sab0 = orient_of(a0, a1, b0)
+    sab1 = orient_of(a0, a1, b1)
+    sba0 = orient_of(b0, b1, a0)
+    sba1 = orient_of(b0, b1, a1)
 
-    a0_on_b = sba0 == 0 && _sph_on_arc(a0, b0, b1)
-    a1_on_b = sba1 == 0 && _sph_on_arc(a1, b0, b1)
-    b0_on_a = sab0 == 0 && _sph_on_arc(b0, a0, a1)
-    b1_on_a = sab1 == 0 && _sph_on_arc(b1, a0, a1)
+    a0_on_b = sba0 == 0 && _sph_on_arc(a0, b0, b1, exact)
+    a1_on_b = sba1 == 0 && _sph_on_arc(a1, b0, b1, exact)
+    b0_on_a = sab0 == 0 && _sph_on_arc(b0, a0, a1, exact)
+    b1_on_a = sab1 == 0 && _sph_on_arc(b1, a0, a1, exact)
 
     if sab0 == 0 && sab1 == 0 && sba0 == 0 && sba1 == 0
         #= Same great circle. The arcs overlap iff some endpoint of one lies on
@@ -281,8 +290,18 @@ function _sph_arc_arc_class(a0, a1, b0, b1)
     (a0_on_b || a1_on_b || b0_on_a || b1_on_a) &&
         return line_hinge, a0_on_b, a1_on_b, b0_on_a, b1_on_a
 
-    # strict straddle in both directions: a transversal crossing
-    if sab0 != 0 && sab0 == -sab1 && sba0 != 0 && sba0 == -sba1
+    #= A transversal crossing. Each great circle separating the other's endpoints is
+    necessary but *not* sufficient: two great circles meet at an antipodal pair, and a
+    straddle in both directions does not say the two arcs reach the *same* one of them.
+    Near-antipodal arcs show it -- `(-0.5,-0.5)→(0.5,-0.5)` against
+    `(180.499,0.5)→(179.499,0.5)` each straddle the other's great circle while containing
+    opposite meeting points, so two disjoint cells on opposite sides of the globe would
+    report an intersection the size of a whole cell.
+
+    The sign pattern below is S2's `SimpleCrossing`: with `acb = -sab0`, `bda = sab1`,
+    `cbd = -sba1` and `dac = sba0`, it asks that `acb` agree in sign with all three, which
+    pins both arcs to the same meeting point. =#
+    if sab0 != 0 && sab1 == -sab0 && sba0 == -sab0 && sba1 == sab0
         return line_cross, false, false, false, false
     end
     return line_out, false, false, false, false
@@ -309,9 +328,17 @@ its own.
 
 Returns `nothing` if the normals are parallel, which a proper crossing cannot
 produce, but which guards the normalization regardless.
+
+The two normals come from `robust_cross_product`, not from a plain `cross`. For
+two vertices a cell edge apart the plain product is a difference of `O(1)` terms
+whose result is `O(4e-6)`, so it keeps only the bits the cancellation leaves,
+and crossing two such normals compounds that. The stable `(a-b) × (a+b)` form —
+the one `spherical_orient` uses, with the exact fallback behind it — allocates
+nothing and holds the crossing four orders of magnitude closer at cell scale.
+Degree-scale inputs barely show the difference either way.
 =#
 @inline function _arc_crossing_point(a0, a1, b0, b1)
-    x = cross(cross(a0, a1), cross(b0, b1))
+    x = cross(robust_cross_product(a0, a1), robust_cross_product(b0, b1))
     nx = norm(x)
     nx == 0 && return nothing
     u = x ./ nx

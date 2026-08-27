@@ -86,6 +86,63 @@ function spherical_orient(a::AbstractVector, b::AbstractVector, c::AbstractVecto
     )
 end
 
+# ## exact_spherical_orient
+
+#= The determinant is expanded by hand because `ExactPredicates.det` is an unexported
+internal.
+
+`a` enters through TWO formal parameters, on purpose. `Codegen.accumulator` requires a
+multihomogeneous formula — each input gate in at most one group — so the natural
+`u = b - a; group!(a...); group!(u...)` puts the gate `a` in its own group *and* inside the
+difference, tripping `AssertionError: af.deg == ag.deg`. Two distinct gates carrying the
+same value sidestep it: the derived bound is valid pointwise over all 4-tuples, so it holds
+on the diagonal, and the exact stage leaves the polynomial identically det[a; b-a; c-a]. =#
+ExactPredicates.Codegen.@genpredicate function _exact_spherical_orient(
+        a1 :: 3, a2 :: 3, b :: 3, c :: 3)
+    u = b - a2
+    v = c - a2
+    ExactPredicates.Codegen.group!(a1...)
+    ExactPredicates.Codegen.group!(u...)
+    ExactPredicates.Codegen.group!(v...)
+    a1[1] * (u[2]*v[3] - u[3]*v[2]) -
+    a1[2] * (u[1]*v[3] - u[3]*v[1]) +
+    a1[3] * (u[1]*v[2] - u[2]*v[1])
+end
+
+"""
+    exact_spherical_orient(a, b, c) -> Int
+
+Orientation of `c` with respect to the great circle through `a` and `b`, computed
+**exactly**: the sign of `(a x b) . c`, with no tolerance band.
+
+Returns `1` if `c` is left of the directed arc `a -> b`, `-1` if right, and `0` only when
+the three directions are exactly coplanar with the origin. Same handedness and same
+quantity as [`spherical_orient`](@ref); the arguments need not be unit vectors.
+
+# Extended help
+
+## Why this exists alongside `spherical_orient`
+
+[`spherical_orient`](@ref) reports `0` whenever the triple product falls inside an `eps*16`
+band, which is wider than a cell-scale determinant. Collapsing genuinely distinct
+orientations to "collinear" can produce topology no consistent arrangement supports; this one
+is a true sign function, so `0` means zero.
+
+## Why not `ExactPredicates.orient(a, b, c, (0, 0, 0))`
+
+Same quantity, but grouped as `a`, `b`, `c`, giving a semi-static error bound proportional to
+each group's runtime magnitude — for unit vectors, pinned near `5e-15` however close together
+the points are. A cell-scale determinant sits far below that, so the filter never decides and
+every call falls through to `Rational{BigInt}`. Grouping the *differences* instead, via the
+exact row operation `det[a; b; c] == det[a; b-a; c-a]`, makes the bound scale as `delta^2`,
+shrinking with the data just as the determinant does, so the filter decides in floating point
+and only genuinely-tiny-but-nonzero determinants reach the exact stage.
+
+Throws on a non-finite coordinate, where `ExactPredicates.orient` returns `-1`; both are
+outside the contract.
+"""
+@inline exact_spherical_orient(a, b, c) = _exact_spherical_orient(a, a, b, c)
+
 """
     point_on_spherical_arc(p::UnitSphericalPoint, a::UnitSphericalPoint, b::UnitSphericalPoint) -> Bool
 
