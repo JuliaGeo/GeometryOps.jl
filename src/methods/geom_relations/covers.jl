@@ -62,6 +62,7 @@ true
 ```
 """
 covers(g1, g2)::Bool = GeometryOps.coveredby(g2, g1)
+covers(m::Manifold, g1, g2)::Bool = GeometryOps.coveredby(m, g2, g1)
 
 """
     covers(g1)

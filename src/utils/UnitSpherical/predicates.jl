@@ -164,6 +164,14 @@ function spherical_ring_contains(pts, n, q;
         orient = spherical_orient,
         on_arc = point_on_spherical_arc,
         proper_crossing = _hemisphere_proper_crossing)
+    return _ring_contains(pts, n, q, orient, on_arc, proper_crossing)
+end
+
+#= The body of `spherical_ring_contains`, with the injected predicates bound to
+type parameters: Julia declines to specialize on `Function`-typed arguments a
+method only forwards, so calling them straight out of the keyword body dispatches
+dynamically and allocates per edge. =#
+function _ring_contains(pts, n, q, orient::O, on_arc::OA, proper_crossing::PC) where {O, OA, PC}
     for j in 1:n
         on_arc(q, pts[j], pts[mod1(j + 1, n)]) && return true
     end
@@ -269,15 +277,36 @@ function spherical_ring_encloses(pts, n, q;
         on_arc = point_on_spherical_arc,
         on_test_arc = point_on_spherical_arc,
         proper_crossing = _hemisphere_proper_crossing)
+    _on_ring_boundary(pts, n, q, on_arc) && return true
+    anchor === nothing && return nothing
+    return _ring_encloses_parity(pts, n, q, anchor, orient, on_test_arc, proper_crossing)
+end
+
+# Boundary scan, with `on_arc` bound to a type parameter so it specializes.
+function _on_ring_boundary(pts, n, q, on_arc::OA) where {OA}
     for j in 1:n
         on_arc(q, pts[j], pts[mod1(j + 1, n)]) && return true
     end
-    anchor === nothing && return nothing
-    # test arc q → anchor would span (nearly) a half turn
-    dot(q, anchor) < (-1 + 1e-9) * norm(q) && return nothing
+    return false
+end
+
+#= The parity walk, with the anchor positional and the injected predicates
+bound to type parameters.
+
+Two things would otherwise cost an allocation per edge. `anchor` is declared as
+a keyword defaulting to `spherical_exterior_anchor`, so its type in the keyword
+body is `Union{UnitSphericalPoint, Nothing}` and the `=== nothing` guard does not
+narrow it there. And Julia declines to specialize on arguments of `Function` type
+that a method only forwards, so `orient`/`on_test_arc`/`proper_crossing` reach
+`_anchor_crossing_parity` as boxed values and dispatch dynamically. Naming them
+in a `where` clause forces specialization; the walk is then allocation-free. =#
+function _ring_encloses_parity(pts, n, q, z, orient::O, on_test_arc::OT,
+        proper_crossing::PC) where {O, OT, PC}
+    # test arc q → z would span (nearly) a half turn
+    dot(q, z) < (-1 + 1e-9) * norm(q) && return nothing
     crossings = 0
     for k in 1:n
-        c = _anchor_crossing_parity(q, anchor, pts[k], pts[mod1(k + 1, n)];
+        c = _anchor_crossing_parity(q, z, pts[k], pts[mod1(k + 1, n)];
             orient, on_test_arc, proper_crossing)
         c == -1 && return nothing
         crossings += c
@@ -309,7 +338,8 @@ cannot force every query back onto the wedge bootstrap:
 excluded upfront) stays 0, and edges with a vertex at −q stay 0, exactly
 as in `_arc_crossing_parity`.
 =#
-function _anchor_crossing_parity(q, z, a, b; orient, on_test_arc, proper_crossing)
+function _anchor_crossing_parity(q, z, a, b; orient::O, on_test_arc::OT,
+        proper_crossing::PC) where {O, OT, PC}
     (a == -q || b == -q) && return 0
     a == b && return 0
     sa = orient(q, z, a)
@@ -337,7 +367,7 @@ end
 # Crossing parity of the test arc q → m against ring edge a → b: 1 for a
 # transversal crossing, 0 for none, -1 for too close to degenerate to call
 # (with an exact `orient`, only exact incidences return -1).
-function _arc_crossing_parity(q, m, a, b; orient, proper_crossing)
+function _arc_crossing_parity(q, m, a, b; orient::O, proper_crossing::PC) where {O, PC}
     # a vertex at `-q` lies on every great circle through `q`; its edges can
     # reach the test arc only at `q` itself, excluded by the on-boundary check
     (a == -q || b == -q) && return 0

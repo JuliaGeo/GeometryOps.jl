@@ -63,6 +63,7 @@ true
 ```
 """
 contains(g1, g2) = GeometryOps.within(g2, g1)
+contains(m::Manifold, g1, g2) = GeometryOps.within(m, g2, g1)
 
 """
     contains(g1)
