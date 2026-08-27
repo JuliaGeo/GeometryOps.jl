@@ -30,6 +30,12 @@ The `SphericalCap` type offers multiple constructors to create caps from:
 - Geographic coordinates and radius
 - Three points on the unit sphere (circumcircle)
 
+!!! note Interop with Extents
+    You can convert a spherical cap to a 3D extent in the Cartesian space that holds the unit sphere
+    by `convert(Extent, cap)`.  All of the Extents.jl predicates like covers, within, etc are also 
+    extended to work and compare `Extent{(:X, :Y, :Z)}` with spherical caps - assuming everything on
+    the unit sphere.
+
 ## Examples
 
 ```@example sphericalcap
