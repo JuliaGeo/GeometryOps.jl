@@ -205,10 +205,10 @@ amortize the build) it locates by the exact ring scan over the cached
 rings. The `polys` vector is empty on `Planar`, where the corresponding
 roles are played by `index` and the implicit EXTERIOR at the ray's far end.
 """
-struct IndexedPointInAreaLocator{M <: Manifold, E}
+struct IndexedPointInAreaLocator{M <: Manifold, E, I}
     m::M
     exact::E
-    index::Union{Nothing, _PIAIndex, _SphPIAIndex}
+    index::Union{Nothing, I}
     polys::Vector{_SphPolyRings}
     #-- spherical parity anchor: the reference-arc far end (a pole whose
     #-- location the exact scan computed at build) and its location.
@@ -216,6 +216,24 @@ struct IndexedPointInAreaLocator{M <: Manifold, E}
     #-- boundary: no index is built and every query takes the exact scan.
     anchor::UnitSphericalPoint{Float64}
     anchor_loc::Int8
+end
+
+# `M` determines the only index representation that can be stored.  Keep `I`
+# as a derived type parameter so each manifold compiles only its reachable
+# search implementation; the explicit outer constructors also cover an empty
+# locator, where `nothing` cannot infer `I` on its own.
+function IndexedPointInAreaLocator(m::M, exact::E, index::Union{Nothing, _PIAIndex},
+        polys::Vector{_SphPolyRings}, anchor::UnitSphericalPoint{Float64},
+        anchor_loc::Int8) where {M <: Planar, E}
+    return IndexedPointInAreaLocator{M, E, _PIAIndex}(
+        m, exact, index, polys, anchor, anchor_loc)
+end
+
+function IndexedPointInAreaLocator(m::M, exact::E, index::Union{Nothing, _SphPIAIndex},
+        polys::Vector{_SphPolyRings}, anchor::UnitSphericalPoint{Float64},
+        anchor_loc::Int8) where {M <: Spherical, E}
+    return IndexedPointInAreaLocator{M, E, _SphPIAIndex}(
+        m, exact, index, polys, anchor, anchor_loc)
 end
 
 function IndexedPointInAreaLocator(m::Planar, geom; exact)

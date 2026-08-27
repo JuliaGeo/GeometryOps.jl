@@ -463,19 +463,17 @@ _add_component_coordinates!(set, m, ::GI.AbstractTrait, geom) = nothing
 function get_effective_points(rg::RelateGeometry)
     pt_list_all = Any[]
     _extract_point_elements!(pt_list_all, rg.geom)
+    pt_list_all = map(identity, pt_list_all)
 
     get_dimension_real(rg) <= DIM_P && return pt_list_all
 
     #-- only return Points not covered by another element
-    pt_list = Any[]
-    for p in pt_list_all
-        GI.isempty(p) && continue
+    filter!(pt_list_all) do p
+        GI.isempty(p) && return false
         loc_dim = locate_with_dim(rg, _to_kernel_point(rg.m, p))
-        if dimloc_dimension(loc_dim) == DIM_P
-            push!(pt_list, p)
-        end
+        return dimloc_dimension(loc_dim) == DIM_P
     end
-    return pt_list
+    return pt_list_all
 end
 
 # Equivalent of Java PointExtracter.getPoints: every Point element, including
@@ -753,7 +751,6 @@ function _remove_repeated_points(pts::Vector)
     return out
 end
 
-get_geometry(ss::RelateSegmentString) = ss.input_geom
 get_polygonal(ss::RelateSegmentString) = ss.parent_polygonal
 
 # Port of BasicSegmentString.isClosed. Kernel-point `==` (all coordinates;

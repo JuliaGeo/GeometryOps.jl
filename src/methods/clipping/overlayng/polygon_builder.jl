@@ -67,7 +67,8 @@ function _build_polygon_ctx(m::Manifold, g::OverlayGraph{P, T}, result_area_edge
         "face-walk hygiene pass (`remove_dangles` / `remove_cut_edges`). The op " *
         "pipeline does not honour removal, so its result would silently ignore it. " *
         "Hygiene is a face-enumeration facility — use `_build_faces` on that graph."))
-    ctx = _PolyBuilderCtx(m, g.edges, g.arr, exact, _MaxEdgeRing[], _edge_ring_type(T)[],
+    ctx = _PolyBuilderCtx(m, g.edges, g.arr, exact, _MaxEdgeRing[],
+                          _edge_ring_type(m, exact, T)[],
                           Int32[], Int32[])
     _build_rings!(ctx, result_area_edges)
     return ctx
@@ -176,7 +177,7 @@ end
 
 # Port of `OverlayEdgeRing.setShell` (+ `addHole`).
 function _set_shell!(ctx, hole_er::Integer, shell::Integer)
-    ctx.edge_rings[hole_er].shell = Int32(shell)
+    ctx.edge_rings[hole_er].shell[] = Int32(shell)
     shell != 0 && push!(ctx.edge_rings[shell].holes, Int32(hole_er))
     return nothing
 end
@@ -219,7 +220,7 @@ function _place_free_holes!(ctx::_PolyBuilderCtx{<:Planar})
     exts = [_ext_of(ctx.edge_rings[s].bbox) for s in shells]
     index = RTree(STR(), collect(shells); extents = exts)
     for hole_er in ctx.free_hole_list
-        ctx.edge_rings[hole_er].shell == 0 || continue
+        ctx.edge_rings[hole_er].shell[] == 0 || continue
         hole_ext = _ext_of(ctx.edge_rings[hole_er].bbox)
         cand = Int32[]
         SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, hole_ext), index) do i
@@ -237,7 +238,7 @@ end
 function _place_free_holes!(ctx::_PolyBuilderCtx{<:Spherical})
     isempty(ctx.free_hole_list) && return nothing
     for hole_er in ctx.free_hole_list
-        ctx.edge_rings[hole_er].shell == 0 || continue
+        ctx.edge_rings[hole_er].shell[] == 0 || continue
         shell = _find_edge_ring_containing(ctx, ctx.edge_rings[hole_er], ctx.shell_list)
         shell == 0 && (_drop_unplaceable(ctx, hole_er); continue)
         _set_shell!(ctx, hole_er, shell)
@@ -337,7 +338,7 @@ function _build_faces(m::Manifold, g::OverlayGraph{P, T}; exact,
         oe_set_next_result!(edges, i, _face_successor(edges, i))
     end
     ctx = _PolyBuilderCtx(m, edges, g.arr, exact, _MaxEdgeRing[],
-                          _edge_ring_type(T)[], Int32[], Int32[])
+                          _edge_ring_type(m, exact, T)[], Int32[], Int32[])
     for i in eachindex(edges)
         (oe_is_removed(edges, i) || edges[i].edge_ring != 0) && continue
         _new_edge_ring!(ctx, i)
