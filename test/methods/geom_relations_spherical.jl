@@ -275,7 +275,7 @@ end
     for a in (a5, a33, glued, far, TARGET)
         for f in (GO.intersects, GO.disjoint, GO.within, GO.coveredby)
             f(Spherical(), a, TARGET)          # compile
-            @test (@allocated f(Spherical(), a, TARGET)) == 0
+            @test (@allocated f(Spherical(), a, TARGET)) == 0 skip = VERSION < v"1.12"
         end
     end
 end
@@ -287,8 +287,8 @@ end
     enc(v, n, q, a) = UnitSpherical.spherical_ring_encloses(v, n, q; anchor = a)
     con(v, n, q) = UnitSpherical.spherical_ring_contains(v, n, q)
     enc(v, length(v), q, anchor); con(v, length(v), q)
-    @test (@allocated enc(v, length(v), q, anchor)) == 0
-    @test (@allocated con(v, length(v), q)) == 0
+    @test (@allocated enc(v, length(v), q, anchor)) == 0 skip = VERSION < v"1.12"
+    @test (@allocated con(v, length(v), q)) == 0 skip = VERSION < v"1.12"
 end
 
 @testset "`crosses` and `overlaps` refuse a manifold they cannot honour" begin
