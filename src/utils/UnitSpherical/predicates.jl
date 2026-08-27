@@ -109,6 +109,15 @@ ExactPredicates.Codegen.@genpredicate function _exact_spherical_orient(
     a1[3] * (u[1]*v[2] - u[2]*v[1])
 end
 
+#= ExactPredicates refuses anything other than `Float64` ("Invalid precision used for
+input"), but the predicate is meaningful for any float width.  Widening to `Float64` is
+lossless for `Float32`/`Float16`, so the sign returned is still the exact sign of the
+*input* determinant — not merely of a rounded copy of it.  `Float64` input is passed
+straight through, so the common path keeps its 0-byte, filter-only cost. =#
+@inline _ep_widen(p) = (Float64(p[1]), Float64(p[2]), Float64(p[3]))
+@inline _ep_widen(p::UnitSphericalPoint{Float64}) = p
+@inline _ep_widen(p::NTuple{3, Float64}) = p
+
 """
     exact_spherical_orient(a, b, c) -> Int
 
@@ -138,10 +147,23 @@ exact row operation `det[a; b; c] == det[a; b-a; c-a]`, makes the bound scale as
 shrinking with the data just as the determinant does, so the filter decides in floating point
 and only genuinely-tiny-but-nonzero determinants reach the exact stage.
 
+It is not free relative to inexact arithmetic, though: exactness costs roughly 2x a plain
+floating-point triple product and 1.2x [`spherical_orient`](@ref). The trade is worth making
+where a wrong sign becomes wrong topology, and not where it does not.
+
 Throws on a non-finite coordinate, where `ExactPredicates.orient` returns `-1`; both are
 outside the contract.
+
+## Narrower float widths
+
+ExactPredicates itself accepts only `Float64`. Narrower inputs are widened, which is
+lossless, so the answer is the exact sign of the determinant of the *inputs* rather than of
+a rounded copy. `Float64` input is passed through untouched.
 """
-@inline exact_spherical_orient(a, b, c) = _exact_spherical_orient(a, a, b, c)
+@inline function exact_spherical_orient(a, b, c)
+    a64 = _ep_widen(a)
+    return _exact_spherical_orient(a64, a64, _ep_widen(b), _ep_widen(c))
+end
 
 """
     point_on_spherical_arc(p::UnitSphericalPoint, a::UnitSphericalPoint, b::UnitSphericalPoint) -> Bool

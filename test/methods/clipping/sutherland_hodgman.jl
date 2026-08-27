@@ -719,4 +719,36 @@ end
         # The ratio should be ~0, not ~1
         @test result_area < clip_area * 0.01  # Less than 1% of clip area
     end
+
+    #= `spherical_orient`, the default, answers `0` for any point within roughly
+    `32 * eps` radians of the great circle, so a clip edge displaced by less than that is
+    indistinguishable from an undisplaced one and the clip returns the *unshifted* area.
+    `exact = True()` resolves the displacement.  This is the regime DGG regridding runs
+    in: cell-scale polygons whose edges very nearly coincide. =#
+    @testset "Spherical clipping resolves sub-band displacements" begin
+        nrm(v) = v ./ sqrt(sum(abs2, v))
+        usp(v) = UnitSphericalPoint{Float64}(nrm(v)...)
+        # A cell-scale square (half-width ~ a HEALPix level-13 edge), offset in longitude.
+        function tiny_square(offset, half = 4e-6)
+            pts = [usp((1.0, offset - half, -half)), usp((1.0, offset + half, -half)),
+                   usp((1.0, offset + half,  half)), usp((1.0, offset - half,  half))]
+            push!(pts, pts[1])
+            return GI.Polygon([pts])
+        end
+        salg = GO.ConvexConvexSutherlandHodgman(GO.Spherical())
+        subject = tiny_square(0.0)
+        aligned = GO.intersection_area(salg, subject, tiny_square(0.0))
+        shifted = 1e-15   # inside `spherical_orient`'s band, outside the true determinant
+
+        # Exact: the displacement is resolved, so the overlap is strictly smaller.
+        exact_area = GO.intersection_area(salg, subject, tiny_square(shifted); exact = GO.True())
+        @test exact_area < aligned
+
+        # Inexact: the band swallows it and the answer is the unshifted one.
+        inexact_area = GO.intersection_area(salg, subject, tiny_square(shifted); exact = GO.False())
+        @test inexact_area == aligned
+
+        # The default is the inexact predicate: exactness is opt-in.
+        @test GO.intersection_area(salg, subject, tiny_square(shifted)) == inexact_area
+    end
 end
