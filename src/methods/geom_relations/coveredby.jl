@@ -56,7 +56,7 @@ const COVEREDBY_POLYGON_REQUIRES = (in_require = true, on_require = false, out_r
 const COVEREDBY_EXACT = (exact = False(),)
 
 """
-    coveredby(g1, g2)::Bool
+    coveredby([manifold::Manifold], g1, g2)::Bool
 
 Return `true` if the first geometry is completely covered by the second
 geometry. The interior and boundary of the primary geometry (g1) must not
@@ -77,7 +77,9 @@ GO.coveredby(p1, l1)
 true
 ```
 """
-coveredby(g1, g2) = _coveredby(trait(g1), g1, trait(g2), g2)
+coveredby(g1, g2) = coveredby(Planar(), g1, g2)
+coveredby(::AutoManifold, g1, g2) = coveredby(Planar(), g1, g2)
+coveredby(m::Manifold, g1, g2) = _coveredby(m, trait(g1), g1, trait(g2), g2)
 
 """
     coveredby(g1)
@@ -91,42 +93,47 @@ coveredby(g1) = Base.Fix2(coveredby, g1)
 
 # Point is coveredby another point if those points are equal
 _coveredby(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::GI.PointTrait, g2,
 ) = equals(g1, g2)
 
 # Point is coveredby a line/linestring if it is on a line vertex or an edge
 _coveredby(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _point_curve_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_ALLOWS...,
     closed_curve = false,
 )
 
 # Point is coveredby a linearring if it is on a vertex or an edge of ring
 _coveredby(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _point_curve_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_ALLOWS...,
     closed_curve = true,
 )
 
 # Point is coveredby a polygon if it is inside polygon, including edges/vertices
 _coveredby(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_ALLOWS...,
     COVEREDBY_EXACT...,
 )
 
 # Points cannot cover any geometry other than points
 _coveredby(
+    m::Manifold,
     ::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::GI.PointTrait, g2,
 ) = false
@@ -137,10 +144,11 @@ _coveredby(
 #= Linestring is coveredby a line if all interior and boundary points of the
 first line are on the interior/boundary points of the second line. =#
 _coveredby(
+    m::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_CURVE_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
     COVEREDBY_EXACT...,
@@ -151,10 +159,11 @@ _coveredby(
 #= Linestring is coveredby a ring if all interior and boundary points of the
 line are on the edges of the ring. =#
 _coveredby(
+    m::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_CURVE_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
     COVEREDBY_EXACT...,
@@ -165,10 +174,11 @@ _coveredby(
 #= Linestring is coveredby a polygon if all interior and boundary points of the
 line are in the polygon interior or on its edges, including hole edges. =#
 _coveredby(
+    m::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
     COVEREDBY_EXACT...,
@@ -180,10 +190,11 @@ _coveredby(
 #= Linearring is covered by a line if all vertices and edges of the ring are on
 the edges and vertices of the line. =#
 _coveredby(
+    m::Manifold,
     ::GI.LinearRingTrait, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_CURVE_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
     COVEREDBY_EXACT...,
@@ -194,10 +205,11 @@ _coveredby(
 #= Linearring is covered by another linear ring if all vertices and edges of the
 first ring are on the edges/vertices of the second ring. =#
 _coveredby(
+    m::Manifold,
     ::GI.LinearRingTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_CURVE_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
     COVEREDBY_EXACT...,
@@ -208,10 +220,11 @@ _coveredby(
 #= Linearring is coveredby a polygon if all vertices and edges of the ring are
 in the polygon interior or on the polygon edges, including hole edges. =# 
 _coveredby(
+    m::Manifold,
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_ALLOWS...,
     COVEREDBY_CURVE_REQUIRES...,
     COVEREDBY_EXACT...,
@@ -225,10 +238,11 @@ _coveredby(
 first polygon are in the second polygon interior or on polygon edges, including
 hole edges.=#
 _coveredby(
+    m::Manifold,
     ::GI.PolygonTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _polygon_polygon_process(
-    g1, g2;
+    m, g1, g2;
     COVEREDBY_ALLOWS...,
     COVEREDBY_POLYGON_REQUIRES...,
     COVEREDBY_EXACT...,
@@ -236,6 +250,7 @@ _coveredby(
 
 # Polygons cannot covered by any curves
 _coveredby(
+    m::Manifold,
     ::GI.PolygonTrait, g1,
     ::GI.AbstractCurveTrait, g2,
 ) = false
@@ -246,6 +261,7 @@ _coveredby(
 #= Geometry is covered by a multi-geometry or a collection if one of the elements
 of the collection cover the geometry. =#
 function _coveredby(
+    m::Manifold,
     ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
@@ -253,7 +269,7 @@ function _coveredby(
     }, g2,
 )
     for sub_g2 in GI.getgeom(g2)
-        coveredby(g1, sub_g2) && return true
+        coveredby(m, g1, sub_g2) && return true
     end
     return false
 end
@@ -263,6 +279,7 @@ end
 #= Multi-geometry or a geometry collection is covered by a geometry if all
 elements of the collection are covered by the geometry. =#
 function _coveredby(
+    m::Manifold,
     ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
@@ -270,7 +287,7 @@ function _coveredby(
     ::GI.AbstractGeometryTrait, g2,
 )
     for sub_g1 in GI.getgeom(g1)
-        !coveredby(sub_g1, g2) && return false
+        !coveredby(m, sub_g1, g2) && return false
     end
     return true
 end

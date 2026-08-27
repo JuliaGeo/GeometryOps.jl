@@ -98,6 +98,7 @@ include("methods/geom_relations/relateng/relate_predicates.jl")
 include("methods/geom_relations/relateng/kernel.jl")
 include("methods/geom_relations/relateng/kernel_planar.jl")
 include("methods/geom_relations/relateng/kernel_spherical.jl")
+include("methods/geom_relations/geom_geom_processors_spherical.jl")
 # Node sections: after the kernel (uses `NodeKey`), before the point locator
 # (AdjacentEdgeLocator builds NodeSections).
 include("methods/geom_relations/relateng/node_sections.jl")

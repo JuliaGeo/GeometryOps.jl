@@ -54,7 +54,7 @@ const DISJOINT_REQUIRES = (in_require = false, on_require = false, out_require =
 const DISJOINT_EXACT = (exact = False(),)
 
 """
-    disjoint(geom1, geom2)::Bool
+    disjoint([manifold::Manifold], geom1, geom2)::Bool
 
 Return `true` if the first geometry is disjoint from the second geometry.
 
@@ -73,7 +73,9 @@ GO.disjoint(point, line)
 true
 ```
 """
-disjoint(g1, g2) = _disjoint(trait(g1), g1, trait(g2), g2)
+disjoint(g1, g2) = disjoint(Planar(), g1, g2)
+disjoint(::AutoManifold, g1, g2) = disjoint(Planar(), g1, g2)
+disjoint(m::Manifold, g1, g2) = _disjoint(m, trait(g1), g1, trait(g2), g2)
 
 """
     disjoint(g1)
@@ -87,26 +89,29 @@ disjoint(g1) = Base.Fix2(disjoint, g1)
 
 # Point is disjoint from another point if the points are not equal.
 _disjoint(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::GI.PointTrait, g2,
 ) = !equals(g1, g2)
 
 # Point is disjoint from a linestring if it is not on the line's edges/vertices.
 _disjoint(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _point_curve_process(
-    g1, g2;
+    m, g1, g2;
     DISJOINT_ALLOWS...,
     closed_curve = false,
 )
 
 # Point is disjoint from a linearring if it is not on the ring's edges/vertices. 
 _disjoint(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _point_curve_process(
-    g1, g2;
+    m, g1, g2;
     DISJOINT_ALLOWS...,
     closed_curve = true,
 )
@@ -114,10 +119,11 @@ _disjoint(
 #= Point is disjoint from a polygon if it is not on any edges, vertices, or
 within the polygon's interior. =#
 _disjoint(
+    m::Manifold,
     ::GI.PointTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _point_polygon_process(
-    g1, g2;
+    m, g1, g2;
     DISJOINT_ALLOWS...,
     DISJOINT_EXACT...,
 )
@@ -125,9 +131,10 @@ _disjoint(
 #= Geometry is disjoint from a point if the point is not in the interior or on
 the boundary of the geometry. =#
 _disjoint(
+    m::Manifold,
     trait1::Union{GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     trait2::GI.PointTrait, g2,
-) = _disjoint(trait2, g2, trait1, g1)
+) = _disjoint(m, trait2, g2, trait1, g1)
 
 
 # # Lines disjoint geometries
@@ -135,10 +142,11 @@ _disjoint(
 #= Linestring is disjoint from another line if they do not share any interior
 edge/vertex points or boundary points. =#
 _disjoint(
+    m::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g2,
 ) = _line_curve_process(
-    g1, g2;
+    m, g1, g2;
     DISJOINT_CURVE_ALLOWS...,
     DISJOINT_REQUIRES...,
     DISJOINT_EXACT...,
@@ -149,10 +157,11 @@ _disjoint(
 #= Linestring is disjoint from a linearring if they do not share any interior
 edge/vertex points or boundary points. =#
 _disjoint(
+    m::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
-    g1, g2;
+    m, g1, g2;
     DISJOINT_CURVE_ALLOWS...,
     DISJOINT_REQUIRES...,
     DISJOINT_EXACT...,
@@ -163,10 +172,11 @@ _disjoint(
 #= Linestring is disjoint from a polygon if the interior and boundary points of
 the line are not in the polygon's interior or on the polygon's boundary. =# 
 _disjoint(
+    m::Manifold,
     ::Union{GI.LineTrait, GI.LineStringTrait}, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
-    g1, g2;
+    m, g1, g2;
     DISJOINT_ALLOWS...,
     DISJOINT_REQUIRES...,
     DISJOINT_EXACT...,
@@ -176,9 +186,10 @@ _disjoint(
 #= Geometry is disjoint from a linestring if the line's interior and boundary
 points don't intersect with the geometry's interior and boundary points. =#
 _disjoint(
+    m::Manifold,
     trait1::Union{GI.LinearRingTrait, GI.PolygonTrait}, g1,
     trait2::Union{GI.LineTrait, GI.LineStringTrait}, g2,
-) = _disjoint(trait2, g2, trait1, g1)
+) = _disjoint(m, trait2, g2, trait1, g1)
 
 
 # # Rings disjoint geometries
@@ -186,10 +197,11 @@ _disjoint(
 #= Linearrings is disjoint from another linearring if they do not share any
 interior edge/vertex points or boundary points.=#
 _disjoint(
+    m::Manifold,
     ::GI.LinearRingTrait, g1,
     ::GI.LinearRingTrait, g2,
 ) = _line_curve_process(
-    g1, g2;
+    m, g1, g2;
     DISJOINT_CURVE_ALLOWS...,
     DISJOINT_REQUIRES...,
     DISJOINT_EXACT...,
@@ -200,10 +212,11 @@ _disjoint(
 #= Linearring is disjoint from a polygon if the interior and boundary points of
 the ring are not in the polygon's interior or on the polygon's boundary. =# 
 _disjoint(
+    m::Manifold,
     ::GI.LinearRingTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _line_polygon_process(
-    g1, g2;
+    m, g1, g2;
     DISJOINT_ALLOWS...,
     DISJOINT_REQUIRES...,
     DISJOINT_EXACT...,
@@ -215,10 +228,11 @@ _disjoint(
 #= Polygon is disjoint from another polygon if they do not share any edges or
 vertices and if their interiors do not intersect, excluding any holes. =#
 _disjoint(
+    m::Manifold,
     ::GI.PolygonTrait, g1,
     ::GI.PolygonTrait, g2,
 ) = _polygon_polygon_process(
-    g1, g2;
+    m, g1, g2;
     DISJOINT_ALLOWS...,
     DISJOINT_REQUIRES...,
     DISJOINT_EXACT...,
@@ -230,6 +244,7 @@ _disjoint(
 #= Geometry is disjoint from a multi-geometry or a collection if all of the
 elements of the collection are disjoint from the geometry. =#
 function _disjoint(
+    m::Manifold,
     ::Union{GI.PointTrait, GI.AbstractCurveTrait, GI.PolygonTrait}, g1,
     ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
@@ -237,7 +252,7 @@ function _disjoint(
     }, g2,
 )
     for sub_g2 in GI.getgeom(g2)
-        !disjoint(g1, sub_g2) && return false
+        !disjoint(m, g1, sub_g2) && return false
     end
     return true
 end
@@ -247,6 +262,7 @@ end
 #= Multi-geometry or a geometry collection is covered by a geometry if all
 elements of the collection are covered by the geometry. =#
 function _disjoint(
+    m::Manifold,
     ::Union{
         GI.MultiPointTrait, GI.AbstractMultiCurveTrait,
         GI.MultiPolygonTrait, GI.GeometryCollectionTrait,
@@ -254,7 +270,7 @@ function _disjoint(
     ::GI.AbstractGeometryTrait, g2,
 )
     for sub_g1 in GI.getgeom(g1)
-        !disjoint(sub_g1, g2) && return false
+        !disjoint(m, sub_g1, g2) && return false
     end
     return true
 end
