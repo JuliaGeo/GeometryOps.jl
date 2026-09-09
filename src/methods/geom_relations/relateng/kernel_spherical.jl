@@ -1104,6 +1104,24 @@ end
 
 _sph_interaction_extent(m::Spherical, ::GI.AbstractPointTrait, geom) =
     GI.extent(_spherical_kernel_point(geom))
+# A preparation-only pass: validate each represented edge while accumulating
+# its bounds. An optional local point vector lets polygon preparation reuse the
+# shell's ingest conversion without changing persistent coordinate ownership.
+function _sph_validated_curve_extent(geom, points)
+    n = GI.npoint(geom)
+    prev = _spherical_kernel_point(GI.getpoint(geom, 1))
+    points === nothing || push!(points, prev)
+    ext = spherical_arc_extent(prev, prev)
+    for i in 2:n
+        cur = _spherical_kernel_point(GI.getpoint(geom, i))
+        _exactly_antipodal(prev, cur) && _throw_antipodal_edge(prev, cur)
+        points === nothing || push!(points, cur)
+        ext = Extents.union(ext, spherical_arc_extent(prev, cur))
+        prev = cur
+    end
+    return ext
+end
+
 function _sph_interaction_extent(m::Spherical, ::GI.AbstractCurveTrait, geom)
     n = GI.npoint(geom)
     prev = _spherical_kernel_point(GI.getpoint(geom, 1))
