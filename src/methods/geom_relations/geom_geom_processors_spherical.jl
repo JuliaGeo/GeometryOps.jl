@@ -1,10 +1,8 @@
 # # Spherical leaves of the lightweight geometry-relation processors
 
 #=
-The processors in `geom_geom_processors.jl` carry the DE-9IM allow/require
-bookkeeping for `intersects`, `disjoint`, `within`, `contains`, `covers`,
-`coveredby` and `touches`. That bookkeeping is manifold-independent; only four
-geometric leaves are not, and this file supplies their `Spherical` methods:
+Spherical geometry methods for the manifold-independent DE-9IM allow/require processors in
+`geom_geom_processors.jl`:
 
 | leaf | question |
 |:--|:--|
@@ -13,58 +11,29 @@ geometric leaves are not, and this file supplies their `Spherical` methods:
 | `_seg_seg_orientation` | how do two segments meet? |
 | `_split_segment_interactions` | does a hinging segment run inside, outside, or both? |
 
-Everything here is allocation-free per call. Two properties buy that. Vertices
-are converted to `UnitSphericalPoint` lazily through
-[`SphericalRingPoints`](@ref) rather than materialized into a `Vector`, so a
-predicate against an unprepared ring still touches no heap. And the segment
-classifier is symbolic — it names the kind of meeting and which vertices are
-incident, and never constructs an intersection coordinate. Constructing one is
-what makes great-circle segment intersection awkward (two antipodal candidate
-points, one of them wrong); not needing one removes the problem from the
-predicate path entirely. The one place a coordinate *is* needed — splitting a
-hinging segment — builds it only after the crossing is known to be proper, which
-is what makes choosing between the two candidates safe there.
+`SphericalRingPoints` converts vertices lazily. Segment classification uses endpoint
+incidences without constructing intersections; segment splitting constructs only confirmed
+proper crossings.
 
 ## Which tolerance regime, and why not the exact kernel's
 
-Every predicate here is the tolerance-banded `UnitSpherical` one:
-`spherical_orient`, whose `16 * eps` relative band is ~3.5e-15 radians, over a
-span test (`_sph_on_arc`) that is correct for arcs of any length. That is deliberate, and it is not the same choice RelateNG
-makes.
+The default uses `spherical_orient` with a `16 * eps` relative band (about 3.5e-15 radians)
+and a determinant span test for all minor-arc lengths.
 
-RelateNG's `rk_*` kernel is exact-or-nothing: at `exact = True()` it decides
-degeneracies over `Rational{BigInt}`, and at `exact = False()` it degrades to a
-raw Float64 triple product still compared `== 0`. The `False()` setting is
-therefore unusable here — `(a × b) ⋅ b` is not bit-zero, so a point sitting
-*exactly* on a vertex tests as off the arc, and every boundary case is missed.
-And `True()` is unaffordable: it lifts to `Rational{BigInt}` whenever two arcs
-share a great circle, ~11 KB per call, and two cells sharing an edge is the
-common case in a tiling rather than a corner case.
-
-A banded predicate is the right tier for a lightweight yes/no answer: it costs
-nothing, and it decides the shared-vertex and shared-edge cases that a tiling
-actually produces. Callers who need exact spherical topology want RelateNG.
+The band handles rounded shared-vertex and shared-edge contacts without exact arithmetic. Use
+RelateNG for exact spherical topology.
 
 ## Ring semantics
 
-A ring is read as the region it encloses, by even-odd crossing parity against a
-definitionally exterior anchor ([`spherical_ring_encloses`](@ref)). That is the
-spherical counterpart of the planar family's even-odd ray cast, and it is
-winding-independent, so a CW and a CCW spelling of the same ring agree.
+Rings use winding-independent even-odd parity against an exterior anchor; see
+[`spherical_ring_encloses`](@ref).
 =#
 
 """
     SphericalRingPoints(ring)
 
-A ring's vertices as `UnitSphericalPoint`s, converted on indexing rather than
-up front, with any repeated closing vertex excluded from `length`.
-
-Exists so that the spherical predicates can hand a ring to the
-`UnitSpherical` ring primitives — which index into a vector of unit points —
-without allocating that vector. Converting lazily costs one
-`UnitSphereFromGeographic` per access; a ring walked several times in one
-predicate call pays that more than once, which is the trade a prepared target
-would remove.
+Index a ring as `UnitSphericalPoint`s, excluding a repeated closing vertex from `length`.
+Conversion occurs on every access without allocating a vertex vector.
 """
 struct SphericalRingPoints{G} <: AbstractVector{UnitSphericalPoint{Float64}}
     ring::G
@@ -88,23 +57,11 @@ Base.@propagate_inbounds Base.getindex(v::SphericalRingPoints, i::Int) =
     _spherical_kernel_point(GI.getpoint(v.ring, i))
 
 #=
-Whether `p` lies on the closed minor arc `a → b`.
+Test membership on the closed minor arc `a → b`. A cosine span test also accepts points behind
+an endpoint when the arc exceeds a quarter turn.
 
-Not `UnitSpherical.point_on_spherical_arc`, whose span test compares cosines
-(`a⋅p ≥ a⋅b` and `b⋅p ≥ a⋅b`). That criterion is only sufficient for arcs
-shorter than a quarter turn: for a long arc it also admits points on the far
-side of `a`. The test arcs here run from a query point to a definitionally
-exterior anchor and are therefore *close to a half turn* by construction, so the
-failure is not exotic — it silently inverts crossing parity, and with it every
-containment answer. (Measured: a ring vertex 9.9° west of the query counted as
-lying on an arc running 175° east.)
-
-The determinant span test `_on_arc_span_authority` is exact in form and correct
-for any arc length; in `Float64` it is allocation-free. The great-circle gate in
-front of it is the orientation predicate `exact` selects: the banded
-`spherical_orient` by default, which keeps this in the same tolerance regime as
-the rest of this file, or the exact one where a spurious zero would be acted on
-rather than tolerated.
+`_on_arc_span_authority` uses determinants valid for all minor arcs. The great-circle gate
+uses the orientation selected by `exact`, defaulting to banded `spherical_orient`.
 =#
 @inline function _sph_on_arc(p, a, b, exact = False())
     _spherical_orient_for(booltype(exact))(a, b, p) == 0 || return false
@@ -112,19 +69,11 @@ rather than tolerated.
 end
 
 #=
-Move the anchor off `q`'s antipode, if that is where it landed.
+Move an anchor away from `q`'s antipode, where the test arc is undefined. The default anchor
+is antipodal to a query at the vertex-mass center.
 
-The parity walk runs a test arc from `q` to the anchor, which is undefined when
-the two are antipodal — and they are *exactly* antipodal for the most natural
-query there is: a ring's own centre, since the default anchor is the antipode of
-the vertex mass. Without this, locating a cell's centroid inside its own cell
-fails.
-
-The anchor is a free choice of any point in the exterior region, so nudging it a
-milliradian off the antipode is legitimate: a ring whose enclosed region falls
-short of a hemisphere by more than that still has the nudged point outside. Rings
-too close to a hemisphere for that margin are exactly the ones
-`spherical_exterior_anchor` already declines to anchor at all.
+A milliradian displacement remains exterior when the enclosed region is sufficiently smaller
+than a hemisphere. `spherical_exterior_anchor` rejects near-degenerate vertex masses.
 =#
 @inline function _nudge_anchor(z, q)
     z === nothing && return z
@@ -139,15 +88,10 @@ too close to a hemisphere for that margin are exactly the ones
 end
 
 #=
-Locate `q` against the ring `v` (already unit points), returning `in`, `on` or
-`out`.
+Locate `q` against unit-point ring `v`, returning `in`, `on`, or `out`. Test boundary
+membership first, then even-odd interior parity.
 
-Mirrors `rk_point_in_ring`, minus the prepared `SphericalKernelRing`: boundary
-membership is settled first by a per-edge scan, then interior membership by
-even-odd parity with boundary points already excluded.
-
-`anchor` is passed in because a caller testing several points against one ring
-(the hinge walk) can compute it once.
+Accept a precomputed `anchor` for repeated queries against the ring.
 =#
 function _usp_ring_orientation(
     m::Spherical, v, anchor, q;
@@ -187,14 +131,8 @@ function _point_filled_curve_orientation(
 end
 
 #=
-`on` when `point` is one of the segment's endpoints, `in` when it lies strictly
-between them along the great-circle arc, `out` otherwise — matching the planar
-method's split.
-
-A zero-length segment (`start == stop`, which real rings do carry near polar
-corners) cannot contain a point other than that vertex, and reaching
-`_sph_on_arc` with one is safe: it is a sign and determinant test throughout,
-with no division by the segment direction.
+Return `on` for an endpoint, `in` for the arc interior, or `out` otherwise. A zero-length
+segment contains only its endpoint; the determinant tests require no division.
 =#
 function _point_segment_orientation(
     m::Spherical, point, start, stop;
@@ -208,14 +146,8 @@ function _point_segment_orientation(
 end
 
 #=
-Map the symbolic arc classification onto the `(orientation, α, β)` the
-processors read.
-
-`α` and `β` locate the meeting along `(a1, a2)` and `(b1, b2)`, but callers only
-ever ask whether either is `0` or `1` — whether the meeting is at a segment
-endpoint. The endpoint incidences answer exactly that, so interior meetings
-report `0.5`: a value that is neither endpoint, and is never compared for
-anything else.
+Return `(orientation, α, β)` from symbolic arc classification. Endpoint incidences map to 0 or
+1; interior meetings use 0.5 because callers test only endpoint equality.
 =#
 function _seg_seg_orientation(m::Spherical, a1, a2, b1, b2; exact)
     ka1 = _spherical_kernel_point(a1)
@@ -231,26 +163,13 @@ function _seg_seg_orientation(m::Spherical, a1, a2, b1, b2; exact)
 end
 
 #=
-Classify two great-circle arcs, returning the `LineOrientation` and which of the
-four endpoints lies on the other arc.
+Return the `LineOrientation` and four endpoint-incidence flags. Four orientations and arc
+membership determine the result without constructing an intersection.
 
-The shape of the test is the reduction `rk_classify_intersection` documents, run
-on the predicate `exact` selects: four orientations place each arc's endpoints
-against the other's great circle, endpoint incidences come from arc membership,
-and a proper crossing is the strict straddle pattern in both directions. No
-intersection coordinate is constructed.
+The default uses banded `spherical_orient`. Clipping requests exact signs because the band can
+classify cell-scale crossings as hinges.
 
-`exact` defaults to the banded `spherical_orient`, which is the tolerance regime
-the relate predicates want. Clipping passes the exact predicate instead: at DGG
-cell scale the band is wider than the determinant being judged, so two arcs that
-genuinely cross are read as a hinge, the entry/exit flags stop alternating, and
-the tracer walks the whole subject ring instead of the sliver.
-
-Degenerate (zero-length) arcs are settled first. Real rings carry repeated
-vertices — HEALPix rings do near polar corners — and every test below is a sign
-or a dot product, so a zero-length arc produces no division and no NaN; it is
-handled up front only because "the arc's normal" is meaningless for one, not
-because it would misbehave.
+Handle zero-length arcs first because they have no great-circle normal.
 =#
 function _sph_arc_arc_class(a0, a1, b0, b1, exact = False())
     orient_of = _spherical_orient_for(booltype(exact))
@@ -290,25 +209,16 @@ function _sph_arc_arc_class(a0, a1, b0, b1, exact = False())
     (a0_on_b || a1_on_b || b0_on_a || b1_on_a) &&
         return line_hinge, a0_on_b, a1_on_b, b0_on_a, b1_on_a
 
-    #= A transversal crossing. Each great circle separating the other's endpoints is
-    necessary but *not* sufficient: two great circles meet at an antipodal pair, and a
-    straddle in both directions does not say the two arcs reach the *same* one of them.
-    Near-antipodal arcs show it -- `(-0.5,-0.5)→(0.5,-0.5)` against
-    `(180.499,0.5)→(179.499,0.5)` each straddle the other's great circle while containing
-    opposite meeting points, so two disjoint cells on opposite sides of the globe would
-    report an intersection the size of a whole cell.
-
-    The sign pattern below is S2's `SimpleCrossing`: with `acb = -sab0`, `bda = sab1`,
-    `cbd = -sba1` and `dac = sba0`, it asks that `acb` agree in sign with all three, which
-    pins both arcs to the same meeting point. =#
+    #= Both arcs must contain the same member of the antipodal intersection pair.
+    S2's `SimpleCrossing` requires matching signs for `-sab0`, `sab1`, `-sba1`,
+    and `sba0`; straddling each circle alone is insufficient. =#
     if sab0 != 0 && sab1 == -sab0 && sba0 == -sab0 && sba1 == sab0
         return line_cross, false, false, false, false
     end
     return line_out, false, false, false, false
 end
 
-#= Whether every endpoint incidence names one and the same point — a collinear
-abutment rather than an overlap of positive length. =#
+# Test whether all endpoint incidences name one shared point.
 @inline function _sole_shared_point(a0, a1, b0, b1, a0_on_b, a1_on_b, b0_on_a, b1_on_a)
     p = a0_on_b ? a0 : (a1_on_b ? a1 : (b0_on_a ? b0 : b1))
     (!a0_on_b || a0 == p) && (!a1_on_b || a1 == p) &&
@@ -316,26 +226,11 @@ abutment rather than an overlap of positive length. =#
 end
 
 #=
-The unit point where arcs `(a0, a1)` and `(b0, b1)` cross, for a pair already
-already classified as a proper crossing.
+Construct the unit intersection of arcs already classified as a proper crossing. Select the
+antipodal candidate in the same hemisphere as either arc midpoint.
 
-Two great circles meet at an antipodal pair `±x`; the classification guarantees
-the crossing lies strictly inside both minor arcs, so exactly one of `±x` does,
-and it is the one in the same hemisphere as either arc's midpoint direction.
-That check is what makes choosing between the two candidates safe here — it is
-sound *because* the crossing is already known to be proper, and would not be on
-its own.
-
-Returns `nothing` if the normals are parallel, which a proper crossing cannot
-produce, but which guards the normalization regardless.
-
-The two normals come from `robust_cross_product`, not from a plain `cross`. For
-two vertices a cell edge apart the plain product is a difference of `O(1)` terms
-whose result is `O(4e-6)`, so it keeps only the bits the cancellation leaves,
-and crossing two such normals compounds that. The stable `(a-b) × (a+b)` form —
-the one `spherical_orient` uses, with the exact fallback behind it — allocates
-nothing and holds the crossing four orders of magnitude closer at cell scale.
-Degree-scale inputs barely show the difference either way.
+Return `nothing` for parallel normals. Use `robust_cross_product` to limit cancellation for
+nearby endpoints.
 =#
 @inline function _arc_crossing_point(a0, a1, b0, b1)
     x = cross(robust_cross_product(a0, a1), robust_cross_product(b0, b1))
@@ -346,20 +241,11 @@ Degree-scale inputs barely show the difference either way.
 end
 
 #=
-Walk the segment `l_start → l_end` across `curve`, splitting it at every point
-where the two meet, and report whether the pieces run inside and/or outside the
-filled curve.
+Split `l_start → l_end` at contacts with `curve` and classify the pieces as inside or outside.
+Repeated scans select the next split point without a vector or sort.
 
-The planar method materializes every intersection point, sorts them by distance
-from the segment start, and tests each piece's midpoint. This does the same walk
-without the vector or the sort: it repeatedly scans the ring for the split point
-nearest the current position and steps to it.
-
-`dot(A, ·)` decreases monotonically along a minor arc from `A`, so it orders
-split points along the segment without any angle being computed; each step takes
-the largest such value strictly below the current one. Strictly below is what
-terminates the walk — coincident split points are visited once, and the position
-advances every iteration.
+`dot(A, ·)` decreases along the minor arc. Select the largest value strictly below the current
+one so coincident contacts are visited once and the walk advances.
 =#
 function _split_segment_interactions(
     m::Spherical, l_start, l_end, curve, in_curve, out_curve; exact,
@@ -373,12 +259,8 @@ function _split_segment_interactions(
 
     t_end = dot(A, B)
     p_start = A
-    #= The walk's position is tracked by its own ordinate, not by an idealized
-    `1`. `dot(A, A)` is a rounded sum of three squares and lands an ulp or so
-    below one, so seeding `t_start` with `one(t_end)` would leave the start
-    point itself strictly ahead of the position: a ring vertex coincident with
-    `A` — every shared edge has one — would then be taken as a split point and
-    open a zero-length piece. =#
+    #= Start at `dot(A, A)`: rounding can place it below 1. Using 1 would revisit
+    a coincident start vertex and create a zero-length piece. =#
     t_start = dot(A, A)
     while true
         # the split point nearest the current position, if any is left
@@ -417,11 +299,8 @@ function _split_segment_interactions(
             end
         end
         p_end = found ? best_p : B
-        #= A piece with no extent says nothing about which side the segment
-        runs, and cannot be asked: normalizing `p + p` moves the point by an
-        ulp, and an ulp past a shared vertex is off the end of both arcs that
-        meet there, so it would classify as outside the ring it is a vertex
-        of. =#
+        #= Skip zero-length pieces. Normalizing their midpoint can move a shared
+        vertex off both incident arcs and misclassify it as exterior. =#
         mid = p_start + p_end
         nm = norm(mid)
         if p_end != p_start && nm > 0
@@ -440,22 +319,14 @@ function _split_segment_interactions(
 end
 
 #=
-A bounding cap for any geometry: centred on its normalized vertex mass, with the
-radius that reaches its furthest vertex.
+Bound the geometry by a cap centered on its normalized vertex mass and reaching its furthest
+vertex. Caps smaller than a quarter turn contain the minor arcs between their vertices.
 
-Sound as a *containing* bound because a spherical cap of radius under a quarter
-turn is convex, so the minor arc between two vertices inside the cap stays
-inside it. That is what makes this safe where a lon/lat box is not: a
-great-circle arc bulges poleward of both its endpoints and can leave the box
-that contains them, but it cannot leave the cap that contains them.
+Return `nothing` for degenerate vertex mass or a cap reaching a quarter turn. Two passes take
+O(n) time without allocation.
 
-Two O(n) passes, no allocation. Returns `nothing` — no shortcut available —
-when the vertex mass is degenerate or the cap would exceed a quarter turn, since
-the convexity argument is what the soundness rests on.
-
-The radius is built from the chord rather than `acos` of the dot product, which
-loses all its precision for the small caps this is most useful on, and is then
-padded: the shortcut may only ever be *more* reluctant to reject.
+Compute the radius from chord length for small-angle precision, then pad it to keep rejection
+conservative.
 =#
 _spherical_bounding_cap(geom) = _spherical_bounding_cap(GI.trait(geom), geom)
 
@@ -488,19 +359,8 @@ function _spherical_bounding_cap(::GI.AbstractGeometryTrait, geom)
 end
 
 #=
-The planar extent shortcut is unsound on the sphere, so the spherical one
-rejects on bounding caps instead.
-
-Two lon/lat boxes being disjoint does not make the geometries disjoint — a
-great-circle edge can reach outside the latitude range of its own endpoints — so
-inheriting the planar test would answer "disjoint" for geometries that meet.
-Bounding caps carry the same cheap-rejection benefit with a bound that holds on
-the sphere. The disposition of the answer, once the two are known disjoint, is
-the planar method's unchanged.
-
-This matters out of proportion to its size for the workload this path exists
-for: testing many thousands of cells against one target, where nearly every
-candidate is far away and never needed the full walk.
+Reject disjoint spherical bounding caps. Endpoint lon/lat boxes are insufficient because
+great-circle arcs can leave them. Once disjointness is established, use the planar flag rules.
 =#
 @inline function _maybe_skip_disjoint_extents(::Spherical, a, b;
     in_allow, on_allow, out_allow,

@@ -3,27 +3,14 @@
 export UnionIntersectingPolygons
 
 #=
-If the sub-polygons of a multipolygon are intersecting, this makes them invalid according to
-specification. Each sub-polygon of a multipolygon being disjoint (other than by a single
-point) is a requirement for a valid multipolygon. However, different libraries may achieve
-this in different ways. 
-
-For example, taking the union of all sub-polygons of a multipolygon will create a new
-multipolygon where each sub-polygon is disjoint. This can be done with the
-`UnionIntersectingPolygons` correction.
-
-The reason this operates on a multipolygon level is that it is easy for users to mistakenly
-create multipolygon's that overlap, which can then be detrimental to polygon clipping
-performance and even create wrong answers.
+Multipolygon components must have disjoint interiors and may meet only at isolated points.
+`UnionIntersectingPolygons` merges overlaps while preserving the covered area.
 =#
 
 # ## Example
 #=
 
-Multipolygon providers may not check that the polygons making up their multipolygons do not
-intersect, which makes them invalid according to the specification.
-
-For example, the following multipolygon is not valid:
+This multipolygon is invalid because it repeats the same polygon:
 
 ```@example union-multipoly
 import GeoInterface as GI
@@ -31,15 +18,14 @@ polygon = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0
 multipolygon = GI.MultiPolygon([polygon, polygon])
 ```
 
-given that the two sub-polygons are the exact same shape.
+Apply the correction:
 
 ```@example union-multipoly
 import GeometryOps as GO
 GO.fix(multipolygon, corrections = [GO.UnionIntersectingPolygons()])
 ```
 
-You can see that the the multipolygon now only contains one sub-polygon, rather than the two
-identical ones provided.
+The corrected multipolygon contains one component.
 =#
 
 # ## Implementation
@@ -48,14 +34,11 @@ identical ones provided.
     UnionIntersectingPolygons([manifold = Planar()], [T = Float64]) <: GeometryCorrection
     UnionIntersectingPolygons(algorithm::FosterHormannClipping, [T = Float64])
 
-This correction ensures that the polygon's included in a multipolygon aren't intersecting.
-If any polygon's are intersecting, they will be combined through the union operation to
-create a unique set of disjoint (other than potentially connections by a single point)
-polygons covering the same area.
+Merge intersecting components with union, preserving the covered area. Result components are
+disjoint except for possible point contacts.
 
-The correction uses the specified manifold, clipping algorithm, and output numeric type.
-Clipping operations inherit these from the caller for their default correction. An explicitly
-supplied correction retains its own settings.
+Default clipping corrections inherit the caller's manifold, algorithm, and numeric type. An
+explicitly supplied correction retains its own settings.
 
 See also [`GeometryCorrection`](@ref).
 """
@@ -105,10 +88,10 @@ end
 """
     DiffIntersectingPolygons([manifold = Planar()], [T = Float64]) <: GeometryCorrection
     DiffIntersectingPolygons(algorithm::FosterHormannClipping, [T = Float64])
-This correction ensures that the polygons included in a multipolygon aren't intersecting.
-If any polygon's are intersecting, they will be made nonintersecting through the [`difference`](@ref) 
-operation to create a unique set of disjoint (other than potentially connections by a single point)
-polygons covering the same area.
+
+Remove component overlaps with [`difference`](@ref), preserving the covered area. Result
+components are disjoint except for possible point contacts.
+
 See also [`GeometryCorrection`](@ref), [`UnionIntersectingPolygons`](@ref).
 """
 struct DiffIntersectingPolygons{A <: FosterHormannClipping, T <: AbstractFloat} <: GeometryCorrection

@@ -1,16 +1,8 @@
 #=
 # Spherical Foster-Hormann clipping
 
-`FosterHormannClipping(Spherical())` reads polygon edges as great-circle arcs. These tests
-cover what that changes relative to the planar algorithm, and pin the two properties the
-spherical path is easiest to silently lose: that the planar path is untouched, and that the
-answer is still right at the scale of a discrete-global-grid cell rather than only at the
-scale of a country.
-
-The oracle is s2geography (Google S2), through the same FFI the OverlayNG differential suite
-uses. RelateNG is deliberately *not* used as an oracle here: its spherical predicates are
-wrong on exact shared-edge contact, which is the configuration a DGG tiling produces
-constantly.
+Test spherical great-circle clipping at cell and degree scales, plus planar regression cases.
+Use s2geography (Google S2) as the independent oracle through the OverlayNG test FFI.
 =#
 
 using Test
@@ -54,10 +46,8 @@ function s2_area_disagreement(op, a, b)
     return abs(a_ours - s2_area(s2_overlay(op, wa, wb))) / scale
 end
 
-#= An irregular, non-convex cell. Irregular on purpose: a regular n-gon is symmetric enough
-to hide an ordering or ulp bug at a shared vertex. `notch` makes one vertex turn inward, so
-the ring is genuinely non-convex — the case a HEALPix or ISEA4R tiling forces, and the case
-`ConvexConvexSutherlandHodgman` is documented to give undefined results for. =#
+#= An irregular cell with an inward `notch` tests non-convex clipping.
+Asymmetry exposes shared-vertex ordering and rounding errors. =#
 function cell(rng, lon0, lat0, s; dup = false)
     base = [(0.0, 0.0), (1.0, 0.13), (2.0, -0.07), (2.1, 1.0), (1.05, 0.55), (0.0, 1.0)]
     pts = [(lon0 + s * (u + 0.07 * (rand(rng) - 0.5)), lat0 + s * (v + 0.07 * (rand(rng) - 0.5)))
@@ -69,10 +59,7 @@ function cell(rng, lon0, lat0, s; dup = false)
 end
 
 @testset "constructing a spherical algorithm" begin
-    #= Every one of these threw `MethodError: ... is ambiguous` before the constructor was
-    narrowed, which made the whole spherical path unreachable: the `Union{Spherical,
-    Geodesic}` method was narrower in the manifold but wider in the accelerator than the
-    struct's own outer constructor, so neither won. =#
+    # Check unambiguous spherical constructor dispatch.
     for alg in (GO.FosterHormannClipping(Spherical()),
                 GO.FosterHormannClipping(; manifold = Spherical()),
                 GO.FosterHormannClipping(Spherical(), GO.NestedLoop()),
@@ -86,11 +73,7 @@ end
 end
 
 @testset "Geodesic manifold is rejected at construction" begin
-    #= Foster-Hormann has no geodesic implementation of `_get_side` and the other clipping
-    primitives. `FosterHormannClipping(Geodesic())` used to construct fine and only fail
-    with a bare `MethodError` deep inside the first clip that reached the missing method —
-    far from the cause, and only on inputs that exercised that code path. Every spelling
-    that would build a Geodesic algorithm must fail immediately and clearly instead. =#
+    # Every constructor must reject unsupported geodesic clipping.
     @test_throws ArgumentError GO.FosterHormannClipping(Geodesic())
     @test_throws ArgumentError GO.FosterHormannClipping(; manifold = Geodesic())
     @test_throws ArgumentError GO.FosterHormannClipping(Geodesic(), GO.NestedLoop())
@@ -103,12 +86,8 @@ end
 end
 
 @testset "crossings land on the great circle, not the chart line" begin
-    #= Two lon/lat squares. Their boundaries are not great circles, so the spherical
-    crossings are *not* the planar ones: the top edge of A from (0,10) to (10,10) bulges
-    north of the parallel, and meets the meridian lon=5 above latitude 10.
-
-    This is the test that fails if `_intersection_point` silently falls back to the planar
-    method — which it did, despite taking a manifold argument. =#
+    #= The great-circle edge from (0,10) to (10,10) bulges north of latitude 10
+    and intersects longitude 5 above the planar crossing. =#
     A = ring([(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)])
     B = ring([(5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0)])
 
@@ -160,14 +139,8 @@ end
 end
 
 @testset "near-antipodal cells do not cross" begin
-    #= Two great circles always meet, at an antipodal pair. Each circle separating the
-    other's endpoints is therefore not enough to say the two *arcs* meet: each arc can
-    reach a different one of the two meeting points.
-
-    A cell near lon 0 and a cell near lon 180 are near-antipodal images of one another, so
-    each lies almost on the other's great circle and straddles it. Under the two-way
-    straddle test they crossed, and two cells on opposite sides of the globe reported an
-    intersection the area of a whole cell. =#
+    #= Near-antipodal arcs can straddle each other's circles while containing
+    opposite circle intersections. They must remain disjoint. =#
     sq(lon, lat, d) = ring([(lon-d, lat-d), (lon+d, lat-d), (lon+d, lat+d), (lon-d, lat+d)])
     for d in (0.25, 0.5, 1.0, 2.0), off in (178.0, 179.0, 179.9, 179.99, 179.999, 180.0, 180.001, 180.5, 181.0)
         @test GO.intersection_area(ALG_S, sq(0.0, 0.0, d), sq(off, 0.0, d)) == 0.0
@@ -177,10 +150,7 @@ end
 end
 
 @testset "collinear-point removal is manifold aware" begin
-    #= A run of vertices along a parallel is exactly collinear in the chart but not on a
-    great circle. Dropping them as redundant — which the planar rule does — moves the
-    boundary poleward by the arc's sagitta and loses the sliver between. Canada and the
-    United States meet along the 49th parallel, so this was worth ~0.1% of Canada. =#
+    # Vertices on a latitude parallel cannot be removed as great-circle collinear points.
     north = ring([(-123.0, 49.0), (-110.0, 49.0), (-100.0, 49.0), (-95.0, 49.0), (-95.0, 60.0), (-123.0, 60.0)])
     south = ring([(-123.0, 40.0), (-95.0, 40.0), (-95.0, 49.0), (-100.0, 49.0), (-110.0, 49.0), (-123.0, 49.0)])
 
@@ -195,16 +165,8 @@ end
     end
 end
 
-#= Two cells that share a chart edge and overlap only slightly.
-
-A parallel is not a great circle, so the shared horizontal edges of two such cells are arcs
-of *different* great circles and genuinely cross. The banded `spherical_orient` reports 0
-inside an eps*16 window, which at cell scale is wider than the determinant it is judging, so
-the crossing was classified as a hinge, the entry/exit alternation collapsed, and the tracer
-returned the whole subject ring -- up to 100,000x the true overlap area.
-
-This is the configuration a DGG tiling produces constantly, and the random-offset cells in
-the differential corpus never generate it: they share no edge exactly. =#
+#= Shared chart edges can lie on distinct great circles and cross at cell scale.
+Test a narrow overlap whose orientation signs fall inside the `eps*16` band. =#
 @testset "shared edge with a thin overlap" begin
     sq(lon, lat, w, h) = GI.Polygon([GI.LinearRing(
         [(lon, lat), (lon + w, lat), (lon + w, lat + h), (lon, lat + h), (lon, lat)])])
@@ -224,16 +186,8 @@ the differential corpus never generate it: they share no edge exactly. =#
     @test sum(p -> GO.area(Spherical(), p), polys) ≈ GO.area(Spherical(), P) * frac rtol = 1e-3
 end
 
-#= A vertex that passes through the clip untouched must come back exactly as it arrived.
-
-`Spherical` computes in `UnitSphericalPoint`. 3D input therefore never converts at all. 2D
-lon/lat input converts once at ingress, and would come back as
-`GeographicFromUnitSphere(UnitSphereFromGeographic(p))` -- displaced by a few ulps, ~6e-9 m
--- if egress round-tripped it. It does not: a passthrough vertex is fetched from the input
-ring by its source index, so it is returned as the very value that went in.
-
-The test is not "is it close": it asserts that any output vertex landing near an input
-vertex is *exactly* that vertex, which is what a round trip would break. =#
+#= Unchanged vertices must preserve their exact input values. Fetch lon/lat vertices
+by source index to avoid round-trip conversion; 3D vertices need no conversion. =#
 @testset "passthrough vertices are bit-exact" begin
     usp(lon, lat) = GO.UnitSpherical.UnitSphereFromGeographic()((lon, lat))
 
@@ -282,14 +236,8 @@ vertex is *exactly* that vertex, which is what a round trip would break. =#
     end
 end
 
-#= No-crossing containment is the *normal* case in conservative regridding -- a fine cell
-inside a coarse one has no crossings at all -- yet it is the one answer the tracer does not
-build. With no crossings there are no nodes to trace, so the ops rebuild the answer from the
-input geometry instead, and that rebuild has to land in the representation the tracer would
-have emitted or it does not fit the vector it is pushed into.
-
-A corpus of randomly offset overlapping cells always crosses, so it can never reach this
-branch. These cases do, on both input representations. =#
+#= No-crossing containment rebuilds results directly from input geometry.
+Check that both coordinate representations match the tracer's output type. =#
 @testset "containment and disjoint, both input representations" begin
     usp(lon, lat) = GO.UnitSpherical.UnitSphereFromGeographic()((lon, lat))
     box(c, h) = [(c[1] - h, c[2] - h), (c[1] + h, c[2] - h), (c[1] + h, c[2] + h), (c[1] - h, c[2] + h)]
@@ -337,8 +285,7 @@ branch. These cases do, on both input representations. =#
 end
 
 @testset "planar path is untouched" begin
-    #= Pinned planar results. The spherical work is purely additive; if any of these move,
-    a manifold-aware branch has leaked into the planar path. =#
+    # Check fixed planar coordinates and areas.
     A = ring([(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)])
     B = ring([(5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0)])
     pts = collect(GI.getpoint(GI.getring(fh(:intersection, ALG_P, A, B)[1], 1)))
@@ -370,8 +317,7 @@ end
         GO.intersection_area(alg, a, b; cache)
         uncached = @allocated GO.intersection_area(alg, a, b)
         cached = @allocated GO.intersection_area(alg, a, b; cache)
-        #= The cache must remove the per-call working set. Julia < 1.12 does not
-        elide those allocations, so only the weaker ordering holds there. =#
+        # Julia < 1.12 retains extra allocations; require only the weaker reduction there.
         @test cached < uncached
         @test cached < uncached ÷ 4 skip = VERSION < v"1.12"
     end
@@ -383,9 +329,7 @@ end
 
 if S2_OK
     @testset "spherical FH vs s2geography — cell scale" begin
-        #= Cell scale is the point. A HEALPix level-18 edge is ~4e-6 rad; at that size the
-        conditioning of the crossing construction dominates, and a result measured only on
-        degree-scale polygons says nothing about it. =#
+        # HEALPix level-18 edges span about 4e-6 radians, testing small-angle conditioning.
         rng = MersenneTwister(4242)
         worst = Dict(2.3e-4 => 0.0, 2.3e-3 => 0.0, 1.0 => 0.0)
         for s in (2.3e-4, 2.3e-3, 1.0), lat0 in (0.0, 45.0, 84.9, -84.9), dup in (false, true), _ in 1:3
@@ -396,18 +340,14 @@ if S2_OK
                 worst[s] = max(worst[s], s2_area_disagreement(op, P, Q))
             end
         end
-        #= Degree scale runs at machine precision. Cell scale is limited by `PolyNode`
-        storing lon/lat in Float64: a crossing is quantized to ~1e-14 of a degree, which is
-        ~1e-10 of a level-18 cell, and that floor is what these bounds leave room for. =#
+        # Allow cell-scale error from rounded crossings and longitude/latitude conversion.
         @test worst[1.0] < 1e-11
         @test worst[2.3e-3] < 1e-7
         @test worst[2.3e-4] < 1e-7
     end
 
     @testset "spherical FH agrees with ConvexConvexSutherlandHodgman on convex input" begin
-        #= Where both algorithms are valid they must agree; divergence means one is broken.
-        The convex clipper takes unit-sphere xyz, the Foster-Hormann one lon/lat, so the
-        comparison goes through the chart conversion. =#
+        # Compare convex results after converting xyz output to longitude/latitude.
         to_usp(g) = GO.apply(GI.PointTrait(), g) do p
             GO.UnitSpherical.UnitSphereFromGeographic()((GI.x(p), GI.y(p)))
         end

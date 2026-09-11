@@ -2,8 +2,7 @@ using Test
 import GeoInterface as GI
 import GeometryOps as GO
 
-# Wrap longitudes deliberately: planar bounding boxes and predicates give different
-# answers here, so a missing manifold cannot pass these tests by accident.
+# Wrapped longitudes distinguish spherical dispatch from planar bounds and predicates.
 function passthrough_box(x1, y1, x2, y2, ::Type{T} = Float64) where T
     pts = [(x1,y1), (x2,y1), (x2,y2), (x1,y2), (x1,y1)]
     GI.Polygon([[T.((mod(x + 180, 360) - 180, y)) for (x,y) in pts]])
@@ -55,8 +54,7 @@ end
         @test length(united) == 2
         @test passthrough_area(m,united) ≈ GO.area(m,donut)+GO.area(m,island)
         @test passthrough_area(m,GO.difference(m,outer,hole;target=GI.PolygonTrait())) ≈ GO.area(m,donut)
-        # Overlapping holes exercise their union and intersection, and a partial hole
-        # intersection creates a notch in the exterior rather than a closed hole.
+        # Test overlapping holes and holes that cut a notch through the exterior.
         hole2 = conv(passthrough_box(180,-6,192,6))
         donut2 = GI.Polygon([GI.getexterior(outer),GI.getexterior(hole2)])
         for b in (donut2,conv(passthrough_box(182,-15,205,15)))

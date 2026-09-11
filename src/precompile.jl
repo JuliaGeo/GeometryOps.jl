@@ -1,47 +1,14 @@
 # # Precompile workload
 #
 #=
-First-call latency of the RelateNG predicates is dominated by inferring the
-engine (topology computer, edge intersector, tree traversals) plus one thin
-per-geometry-type outer layer (`RelateGeometry` construction, extraction).
-The engine core is typed on kernel-level types only — see the opaque
-geometry references in `TopologyComputer` / `RelateSegmentString` — so one
-workload run caches it for *every* input geometry type; the outer layer is
-exercised here for the native geometry types (`GO.tuples` output wrapped in
-`GI.Wrappers`, which is also what the tests feed). This matters most on
-Julia 1.12, where inference of these instances is several times slower than
-on 1.11.
+Precompile RelateNG's shared kernel engine and native geometry ingestion paths. Predicate
+types specialize the topology computer, so each predicate needs a call.
 
-The OverlayNG block below is the same shape of workload for the overlay engine,
-and is sized by measurement, not by guesswork — `benchmarks/overlayng_ttfx.jl`
-is the probe, and its recorded before/after tables are the justification for
-every line of it. Three facts from that probe determine the shape:
+OverlayNG uses one operation value to compile the shared driver. Each manifold needs separate
+instances; geometry shapes cover ingestion, line building, and mixed-point paths.
 
-1. The op is a *value*, not a type (`_overlay_ng(m, op::_OverlayOpCode, a, b)`),
-   so one call caches the driver for all four operations: with only
-   `intersection` in the workload, first-call `union`/`difference`/
-   `symdifference` on the same input types drops from ~1.1 s to ~2 ms (the
-   residual is the thin op wrapper). Precompiling the other three would buy
-   ~6 ms and is not worth an instance.
-2. The arrangement, graph and builders are typed on the kernel and output point
-   types only (`NodedArrangement{P, T}`, `OverlayGraph{P, T}`), exactly like
-   RelateNG's engine is typed on `P`, so one call per manifold caches the whole
-   engine core for every input geometry type. What remains per input type is the
-   ingest layer, which is why the `mpoly` and `line` shapes below are nearly free
-   (~0.4 MB for the two of them on the plane, against 2.0 MB for the first
-   `poly x poly` call). Only the DEFAULT `point_type` is cached: `Planar` has no
-   other, and the spherical lon/lat row is an opt-in that would cost a second
-   full set of spherical instances to serve a path most callers never take.
-3. Manifolds do *not* share instances, and the point path
-   (`_overlay_mixed_points`) never reaches the arrangement, so those are the
-   two genuinely separate cost centres — and both pay for themselves; see the
-   ledger in `benchmarks/overlayng_ttfx.jl`.
-
-Cost measured on this machine (Apple M4 Pro, Julia 1.12.6): the OverlayNG block
-adds ~4.4 s to the package precompile (14.6 s → 19.0 s) and ~8.9 MB to the
-pkgimage (24.0 → 32.8 MB, which shows up as ~40 ms of extra package load), and
-takes the summed first call over a 32-instance op × shape × manifold matrix from
-45.0 s to 0.44 s.
+Cache only the default output point type. Spherical Foster-Hormann workloads cover lon/lat and
+xyz input, polygon tracing, and area measurement.
 =#
 
 using PrecompileTools: @setup_workload, @compile_workload
@@ -88,10 +55,7 @@ using PrecompileTools: @setup_workload, @compile_workload
         relate(prep, _pc_poly2)
         relate(prep, _pc_pt)
 
-        #-- OverlayNG: one op (the op code is a value — see the note above)
-        #-- over the four input shapes that reach different code, on each
-        #-- manifold. Area x area runs the whole arrangement; line x area adds
-        #-- the line builder; point x area takes the separate mixed-points path.
+        #-- Compile area, line, and mixed-point paths on each manifold.
         for m in (Planar(), Spherical())
             ovl = OverlayNG(m)
             intersection(ovl, _pc_poly1, _pc_poly2)
@@ -103,9 +67,7 @@ using PrecompileTools: @setup_workload, @compile_workload
             intersection(ovl, _pc_poly1, _pc_poly2; target = GI.MultiPolygonTrait())
         end
 
-        #-- Cover common Float64 inputs without multiplying the workload over
-        #-- every operation, numeric type, or geometry wrapper. The area sink
-        #-- and polygon output use different tracing and construction paths.
+        #-- Compile Float64 polygon tracing and area measurement for both input representations.
         fh = FosterHormannClipping(Spherical())
         for (a, b) in (_pc_fh_ll, _pc_fh_xyz)
             cache = FosterHormannCache(fh)

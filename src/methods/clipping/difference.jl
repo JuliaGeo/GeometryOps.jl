@@ -5,17 +5,13 @@ export difference
 """
     difference(geom_a, geom_b, [T::Type]; target::Type, fix_multipoly = UnionIntersectingPolygons())
 
-Return the difference between two geometries as a list of geometries. Return an empty list
-if none are found. The type of the list will be constrained as much as possible given the
-input geometries. Furthermore, the user can provide a `taget` type as a keyword argument and
-a list of target geometries found in the difference will be returned. The user can also
-provide a float type that they would like the points of returned geometries to be. If the
-user is taking a intersection involving one or more multipolygons, and the multipolygon
-might be comprised of polygons that intersect, if `fix_multipoly` is set to an
-`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
-needed multipolygons will be fixed to be valid before performing the intersection to ensure
-a correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
-valid, as it will avoid unneeded computation. 
+Return the difference as a list of geometries, empty when no result exists. The list type is
+constrained by the inputs; `target` selects output geometry types and `T` sets coordinate
+precision.
+
+`fix_multipoly` corrects intersecting multipolygon components before clipping. The default
+union correction inherits the caller’s algorithm, manifold, and numeric type. Set
+`fix_multipoly = nothing` only when the input multipolygons are valid.
 
 ## Example 
 
@@ -101,21 +97,14 @@ end
 when the start point is a entry point and is a bouncing point when the start point is an
 exit point. The end of the chain has the opposite crossing / bouncing status. =#
 _diff_delay_cross_f(x) = (x, !x)
-#= When marking the crossing status of a delayed bouncing, the chain start and end points
-are crossing if the current polygon's adjacent edges are within the non-tracing polygon and
-we are tracing b_list or if the edges are outside and we are on a_list. Otherwise the
-endpoints are marked as crossing. x is a boolean representing if the edges are inside or
-outside of the polygon and y is a variable that is true if we are on a_list and false if we
-are on b_list. =#
+#= Delayed-bounce endpoints cross when `x ⊻ y`: `x` means inside the other polygon,
+and `y` means tracing `a_list`. Otherwise they bounce. =#
 _diff_delay_bounce_f(x, y) = x ⊻ y
-#= When tracing polygons, step forwards if the most recent intersection point was an entry
-point and we are currently tracing b_list or if it was an exit point and we are currently
-tracing a_list, else step backwards, where x is the entry/exit status and y is a variable
-that is true if we are on a_list and false if we are on b_list. =#
+#= Step forward for entry on `b_list` or exit on `a_list`; otherwise step backward.
+`x` is entry status and `y` is true for `a_list`. =#
 _diff_step(x, y) = (x ⊻ y) ? 1 : (-1)
 
-#= Polygon with multipolygon difference - note that all intersection regions between
-`poly_a` and any of the sub-polygons of `multipoly_b` are removed from `poly_a`. =#
+# Subtract every component of `multipoly_b` from `poly_a`.
 function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
@@ -133,10 +122,8 @@ function _difference(
     return polys
 end
 
-#= Multipolygon with polygon difference - note that all intersection regions between
-sub-polygons of `multipoly_a` and `poly_b` will be removed from the corresponding
-sub-polygon. Unless specified with `fix_multipoly = nothing`, `multipolygon_a` will be
-validated using the given (default is `UnionIntersectingPolygons()`) correction. =#
+#= Subtract `poly_b` from every component of `multipoly_a`. Apply `fix_multipoly`
+unless it is `nothing`. =#
 function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
@@ -154,10 +141,8 @@ function _difference(
     return polys
 end
 
-#= Multipolygon with multipolygon difference - note that all intersection regions between
-sub-polygons of `multipoly_a` and sub-polygons of `multipoly_b` will be removed from the
-corresponding sub-polygon of `multipoly_a`. Unless specified with `fix_multipoly = nothing`,
-both multipolygons will be validated using the given correction. =#
+#= Subtract all components of `multipoly_b` from `multipoly_a`. Correct both
+multipolygons unless `fix_multipoly = nothing`. =#
 function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
@@ -171,9 +156,7 @@ function _difference(
     end
     polys = [_fh_as_poly(_fh_out_point_type(alg.manifold, multipoly_a, T), p, T) for p in GI.getpolygon(multipoly_a)]
     for (i, poly_b) in enumerate(GI.getpolygon(multipoly_b))
-        #= Removing intersections of `multipoly_a`` with pieces of `multipoly_b`` - as
-        pieces of `multipolygon_a`` are removed, continue to take difference with new shape
-        `polys` =#
+        # Subtract each component from the remaining pieces in `polys`.
         polys = if i == 1
             difference(alg, multipoly_a, poly_b, T; target, fix_multipoly)
         else

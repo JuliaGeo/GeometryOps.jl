@@ -4,19 +4,13 @@ export union
 """
     union(geom_a, geom_b, [::Type{T}]; target::Type, fix_multipoly = UnionIntersectingPolygons())
 
-Return the union between two geometries as a list of geometries. Return an empty list if
-none are found. The type of the list will be constrained as much as possible given the input
-geometries. Furthermore, the user can provide a `taget` type as a keyword argument and a
-list of target geometries found in the difference will be returned. The user can also
-provide a float type 'T' that they would like the points of returned geometries to be. If
-the user is taking a intersection involving one or more multipolygons, and the multipolygon
-might be comprised of polygons that intersect, if `fix_multipoly` is set to an
-`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
-needed multipolygons will be fixed to be valid before performing the intersection to ensure
-a correct answer. Only set `fix_multipoly` to false if you know that the multipolygons are
-valid, as it will avoid unneeded computation. 
-    
-Calculates the union between two polygons.
+Return the union as a list of geometries, empty when no result exists. The list type is
+constrained by the inputs; `target` selects output geometry types and `T` sets coordinate
+precision.
+
+`fix_multipoly` corrects intersecting multipolygon components before clipping. The default
+union correction inherits the caller’s algorithm, manifold, and numeric type. Set
+`fix_multipoly = nothing` only when the input multipolygons are valid.
 ## Example
 
 ```jldoctest
@@ -111,10 +105,8 @@ when the start point is a entry point and is a bouncing point when the start poi
 exit point. The end of the chain has the opposite crossing / bouncing status. =#
 _union_delay_cross_f(x) = (x, !x)
 
-#= When marking the crossing status of a delayed bouncing, the chain start and end points
-are bouncing if the current polygon's adjacent edges are within the non-tracing polygon. If
-the edges are outside then the chain endpoints are marked as crossing. x is a boolean
-representing if the edges are inside or outside of the polygon. =#
+#= Delayed-bounce endpoints bounce if adjacent edges lie inside the other polygon
+(`x`); otherwise they cross. =#
 _union_delay_bounce_f(x, _) = !x
 
 #= When tracing polygons, step backwards if the most recent intersection point was an entry
@@ -150,11 +142,8 @@ function _add_union_holes!(alg::FosterHormannClipping, polys, a_in_b, b_in_a, po
                 other holes =#
                 push!(polys[1].geom, ih)
             else
-                #= if the hole is at least partially in the overlapping region, take the
-                difference of the hole from the polygon it didn't originate from - note that
-                when current_poly is poly_a this includes poly_a holes so overlapping holes
-                between poly_a and poly_b within the overlap are added, in addition to all
-                holes in non-overlapping regions =#
+                #= Subtract the other polygon from holes that intersect the overlap.
+                Include its holes so shared holes within the overlap are retained. =#
                 h_poly = GI.Polygon(StaticArrays.SVector(ih))
                 new_holes = difference(alg, h_poly, current_poly, T; target = GI.PolygonTrait())
                 append!(polys[1].geom, (GI.getexterior(new_h) for new_h in new_holes))
@@ -228,10 +217,8 @@ function _add_union_holes_contained_polys!(alg::FosterHormannClipping, polys, in
     return
 end
 
-#= Polygon with multipolygon union - note that all sub-polygons of `multipoly_b` will be
-included, unioning these sub-polygons with `poly_a` where they intersect. Unless specified
-with `fix_multipoly = nothing`, `multipolygon_b` will be validated using the given (default
-is `UnionIntersectingPolygons()`) correction. =#
+#= Include all components of `multipoly_b`, merging those that intersect `poly_a`.
+Correct the multipolygon unless `fix_multipoly = nothing`. =#
 function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
@@ -269,10 +256,8 @@ _union(
     kwargs...,
 ) where T = union(alg, multipoly_a, GI.MultiPolygon([poly_b]), T; target, kwargs...)
 
-#= Multipolygon with multipolygon union - note that all of the sub-polygons of `multipoly_a`
-and the sub-polygons of `multipoly_b` are included and combined together where there are
-intersections. Unless specified with `fix_multipoly = nothing`, `multipolygon_b` will be
-validated using the given (default is `UnionIntersectingPolygons()`) correction. =#
+#= Merge intersecting components of both multipolygons. Apply the supplied correction
+unless `fix_multipoly = nothing`. =#
 function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,

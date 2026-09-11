@@ -6,27 +6,23 @@ export intersection_area
 result geometry left unbuilt: each engine stops at the rings it would have wrapped and
 sums their area in place, through the shared `_ring_area` kernels in `methods/area.jl`.
 
-The per-engine work lives with its engine — `_sh_clip_planar!` / `_sh_clip_spherical!` in
-`sutherland_hodgman.jl`, `_overlay_intersection_area` in `overlayng/overlay_ng.jl`,
-`_RingMeasurer` in `clipping_processor.jl` — so this file is only the public surface.
+Implementations use the Sutherland-Hodgman clip functions, `_overlay_intersection_area`,
+or Foster-Hormann's `_RingMeasurer`.
 =#
 
 """
     intersection_area(alg::Algorithm, geom_a, geom_b, [T = Float64]; kwargs...)
 
-Area of the intersection of `geom_a` and `geom_b`, computed without constructing the
-intersection geometry.
+Compute the intersection area without constructing the result geometry. This equals
+`area(manifold(alg), intersection(alg, geom_a, geom_b))`.
 
-Equivalent to `area(manifold(alg), intersection(alg, geom_a, geom_b))`, but the result
-polygon is never built. On `Spherical()` the result is in square units of the manifold
-radius.
-
-The algorithm is required, and the supported list is closed:
+On `Spherical()`, area uses square units of the manifold radius. The algorithm argument is
+required; supported algorithms are:
 
 | algorithm | manifolds | notes |
 |:----------|:----------|:------|
 | [`ConvexConvexSutherlandHodgman`](@ref) | `Planar()`, `Spherical()` | takes the same `cache` keyword as `intersection`; with one, the call allocates nothing |
-| [`OverlayNG`](@ref) | `Planar()`, `Spherical()` | `T` sets the accumulator and return type only — the arrangement always runs at the algorithm's `point_type` |
+| [`OverlayNG`](@ref) | `Planar()`, `Spherical()` | `T` sets the accumulator and return type; the arrangement always runs at the algorithm's `point_type` |
 | [`FosterHormannClipping`](@ref) | as `intersection` | accumulates during the trace for hole-free polygon pairs; other inputs delegate to the polygon path. Takes a [`FosterHormannCache`](@ref) as `cache` on the traced path, which removes the per-call allocation of its vertex lists |
 
 ## Example
@@ -81,11 +77,8 @@ intersection_area(alg::OverlayNG, geom_a, geom_b, ::Type{T}=Float64) where {T<:A
 # The tracer walks the result ring one vertex at a time, so the area can be accumulated as
 # it goes and no ring is ever built (`_RingMeasurer` in clipping_processor.jl).
 #
-# That covers hole-free polygon pairs. Holes and multipolygons are assembled from the
-# traced rings *afterwards* — `_add_holes_to_polys!` cuts holes into result polygons and
-# can split, merge and drop them — and there is no ring-level shortcut through that, so
-# those inputs delegate to the polygon path. The answer is the same either way; only the
-# saving is lost.
+# Holes and multipolygons require polygon assembly, so they use the polygon path. Hole
+# processing can split, merge, or remove traced rings.
 
 #-- `cache` is offered on this path only: the polygon fallback below reaches
 #-- `_add_holes_to_polys!`, which clips again from inside the clip it is finishing, and the

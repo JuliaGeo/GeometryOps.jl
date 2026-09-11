@@ -36,9 +36,8 @@ export UnitSphericalPoint, UnitSphereFromGeographic, GeographicFromUnitSphere,
 """
     to_unit_spherical_points(ring) -> Vector{<:UnitSphericalPoint}
 
-Convert a ring (linear ring or any GeoInterface point iterator) to a vector of
-UnitSphericalPoints, treating geographic input as (longitude, latitude).
-`UnitSphericalPoint`s pass through unchanged.
+Convert a ring's vertices to `UnitSphericalPoint`s. Interpret geographic input as (longitude,
+latitude); existing `UnitSphericalPoint`s pass through unchanged.
 """
 function to_unit_spherical_points(ring)
     return [UnitSphericalPoint(p) for p in GI.getpoint(ring)]

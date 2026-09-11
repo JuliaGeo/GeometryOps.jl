@@ -153,32 +153,24 @@ end
 #=
 # `eachedge`, `to_edgelist`
 
-These functions are used to decompose geometries into lists of edges.
-Currently they only work on linear rings.
+Decompose line strings and linear rings into edges.
 =#
 
 """
     eachedge(geom, [::Type{T}])
     eachedge(m::Manifold, geom, [::Type{T}])
 
-Decompose a geometry into a list of edges.
-Currently only works for LineString and LinearRing.
+Iterate consecutive point pairs `(p1, p2), (p2, p3), …` of a line string or linear ring.
 
-Returns some iterator, which yields tuples of points.  Each tuple is an edge.
-
-It goes `(p1, p2), (p2, p3), (p3, p4), ...` etc.
-
-On `Planar()` (the default) points are 2D coordinate tuples.  On
-`Spherical()` they are `UnitSphericalPoint`s: geographic (longitude,
-latitude) input is converted, `UnitSphericalPoint`s pass through.
+`Planar()` yields 2D tuples. `Spherical()` converts lon/lat to `UnitSphericalPoint`s and
+preserves existing spherical points.
 """
 eachedge(geom) = eachedge(GI.trait(geom), geom, Float64)
 function eachedge(geom, ::Type{T}) where T
     eachedge(GI.trait(geom), geom, T)
 end
 eachedge(::Planar, geom, ::Type{T} = Float64) where T = eachedge(geom, T)
-# Use the same conversion for edge iteration and subsequent clipping-node construction.
-# In particular, never normalize or round-trip already Cartesian input vertices.
+# Match clipping-node conversion; preserve Cartesian vertices without normalization.
 _spherical_edge_point(p, ::Type{T}) where T = GI.is3d(p) ?
     UnitSpherical.UnitSphericalPoint{T}(T(GI.x(p)), T(GI.y(p)), T(GI.z(p))) :
     UnitSpherical.UnitSphericalPoint{T}(_spherical_kernel_point(_tuple_point(p, T)))
@@ -210,11 +202,8 @@ end
     to_edgelist(geom, [::Type{T}])
     to_edgelist(m::Manifold, geom, [::Type{T}])
 
-Convert a geometry into a vector of `GI.Line` objects with attached extents.
-
-On `Spherical()` — or whenever the geometry's points are already
-`UnitSphericalPoint`s — each edge carries the 3D
-[`UnitSpherical.spherical_arc_extent`](@ref) of its great-circle arc.
+Return `GI.Line` edges with extents. Spherical input or existing `UnitSphericalPoint`s use the
+3D [`UnitSpherical.spherical_arc_extent`](@ref) of each great-circle arc.
 """
 to_edgelist(geom, ::Type{T} = Float64) where T =
     [_lineedge(ps, T) for ps in eachedge(geom, T)]
@@ -224,10 +213,8 @@ to_edgelist(m::Manifold, geom, ::Type{T} = Float64) where T =
 """
     to_edgelist(ext::E, geom, [::Type{T}])::(::Vector{GI.Line}, ::Vector{Int})
 
-Filter the edges of `geom` for those that intersect 
-`ext`, and return:
-- a vector of `GI.Line` objects with attached extents, 
-- a vector of indices into the original geometry.
+Return edges intersecting `ext` as `GI.Line` objects with attached extents, plus their indices
+in the original geometry.
 """
 function to_edgelist(ext::E, geom, ::Type{T} = Float64) where {E<:Extents.Extent,T}
     edges_in = eachedge(geom, T)

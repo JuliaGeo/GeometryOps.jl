@@ -4,9 +4,8 @@ import GeoInterface as GI
 import LibGEOS
 using GeometryOpsTestHelpers
 
-# A small version of the Natural Earth Gambia–Senegal failure. All triangle
-# vertices belong to the notched square's boundary, but the closing triangle
-# edge runs outside it. Shared vertices alone cannot establish containment.
+# All triangle vertices lie on the square boundary, but the closing edge leaves it.
+# Shared vertices do not establish containment.
 @testset "Shared-boundary enclave" begin
     notch_points = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (2.0, 2.0)]
     fill_points = [(0.0, 0.0), (2.0, 2.0), (0.0, 4.0)]

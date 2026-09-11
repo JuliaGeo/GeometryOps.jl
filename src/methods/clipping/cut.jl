@@ -5,11 +5,8 @@ export cut
 #=
 ## What is cut?
 
-The cut function cuts a polygon through a line segment. This is inspired by functions such
-as Matlab's [`cutpolygon`](https://www.mathworks.com/matlabcentral/fileexchange/24449-cutpolygon)
-function.
-
-To provide an example, consider the following polygon and line:
+Cut a polygon with a line segment, as in Matlab's
+[`cutpolygon`](https://www.mathworks.com/matlabcentral/fileexchange/24449-cutpolygon).
 ```@example cut
 import GeoInterface as GI, GeometryOps as GO
 using CairoMakie
@@ -27,20 +24,17 @@ f
 
 ## Implementation
 
-This function depends on polygon clipping helper function and is inspired by the
-Greiner-Hormann clipping algorithm used elsewhere in this library. The inspiration came from
-[this](https://stackoverflow.com/questions/3623703/how-can-i-split-a-polygon-by-a-line)
-Stack Overflow discussion. 
+Uses Greiner-Hormann clipping helpers. See the [polygon splitting
+discussion](https://stackoverflow.com/questions/3623703/how-can-i-split-a-polygon-by-a-line).
 =#
 
 """
     cut(geom, line, [T::Type])
 
-Return given geom cut by given line as a list of geometries of the same type as the input
-geom. Return the original geometry as only list element if none are found. Line must cut
-fully through given geometry or the original geometry will be returned.
+Return the pieces of `geom` cut by `line`, preserving the geometry type. If the line does not
+cut fully through, return `[geom]`.
 
-Note: This currently doesn't work for degenerate cases there line crosses through vertices.
+Cuts through vertices are not supported.
 
 ## Example 
 
