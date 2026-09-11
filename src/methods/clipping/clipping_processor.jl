@@ -946,7 +946,7 @@ all points are intersection points, find the first element that either is the en
 or a crossing point that isn't in a chain. Then take the midpoint of this point and the next
 point in the list and perform the in/out check. If none of these points exist, return
 a `next_idx` of `nothing`. =#
-function _pt_off_edge_status(alg::FosterHormannClipping{M, A}, ::Type{T}, pt_list, poly, npts; exact) where {T, M, A}
+function _pt_off_edge_status(m::Manifold, pt_list, poly, npts; exact)
     start_idx, is_non_intr_pt = findfirst(_is_not_intr, pt_list), true
     if isnothing(start_idx)
         start_idx, is_non_intr_pt = findfirst(_next_edge_off, pt_list), false
@@ -956,9 +956,9 @@ function _pt_off_edge_status(alg::FosterHormannClipping{M, A}, ::Type{T}, pt_lis
     start_pt = if is_non_intr_pt
         pt_list[start_idx].point
     else
-        _clip_midpoint(alg.manifold, pt_list[start_idx].point, pt_list[next_idx].point)
+        _clip_midpoint(m, pt_list[start_idx].point, pt_list[next_idx].point)
     end
-    start_status = !_point_filled_curve_orientation(alg.manifold, start_pt, poly; in = true, on = false, out = false, exact)
+    start_status = !_point_filled_curve_orientation(m, start_pt, poly; in = true, on = false, out = false, exact)
     return next_idx, start_status
 end
 
@@ -1027,7 +1027,7 @@ Used for clipping polygons by other polygons.
 function _flag_ent_exit!(alg::FosterHormannClipping{M, A}, ::Type{T}, ::GI.LinearRingTrait, poly, pt_list, delay_cross_f, delay_bounce_f; exact) where {T, M, A}
     npts = length(pt_list)
     # Find starting index if there is one
-    next_idx, status = _pt_off_edge_status(alg, T, pt_list, poly, npts; exact)
+    next_idx, status = _pt_off_edge_status(alg.manifold, pt_list, poly, npts; exact)
     isnothing(next_idx) && return
     start_idx = next_idx - 1 
     # Loop over points and mark entry and exit status
@@ -1351,14 +1351,13 @@ Return two booleans that represent if a is inside b (potentially with shared edg
 and visa versa if b is inside of a.
 =#
 function _find_non_cross_orientation(m::M, a_list, b_list, a_poly, b_poly; exact) where {M <: Manifold}
-    non_intr_a_idx = findfirst(x -> !x.inter, a_list)
-    non_intr_b_idx = findfirst(x -> !x.inter, b_list)
-    #= Determine if non-intersection point is in or outside of polygon - if there isn't A
-    non-intersection point, then all points are on the polygon edge =#
-    a_pt_orient = isnothing(non_intr_a_idx) ? point_on :
-        _point_filled_curve_orientation(m, a_list[non_intr_a_idx].point, b_poly; exact)
-    b_pt_orient = isnothing(non_intr_b_idx) ? point_on :
-        _point_filled_curve_orientation(m, b_list[non_intr_b_idx].point, a_poly; exact)
+    # Shared vertices do not imply shared edges: an enclave can leave the other
+    # boundary between two shared vertices. Probe an edge leaving a shared chain
+    # when there is no non-intersection vertex, as entry/exit classification does.
+    a_idx, a_out = _pt_off_edge_status(m, a_list, b_poly, length(a_list); exact)
+    b_idx, b_out = _pt_off_edge_status(m, b_list, a_poly, length(b_list); exact)
+    a_pt_orient = isnothing(a_idx) ? point_on : a_out ? point_out : point_in
+    b_pt_orient = isnothing(b_idx) ? point_on : b_out ? point_out : point_in
     a_in_b = a_pt_orient != point_out && b_pt_orient != point_in
     b_in_a = b_pt_orient != point_out && a_pt_orient != point_in
     return a_in_b, b_in_a
