@@ -61,6 +61,15 @@ using PrecompileTools: @setup_workload, @compile_workload
     _pc_mpoly_d = GI.MultiPolygon([_pc_poly1, _pc_poly3])
     _pc_ovl_line = GI.LineString([(-1.0, 1.0), (1.5, 1.5), (4.0, 1.0)])
 
+    #-- Spherical Foster–Hormann has separate lon/lat ingestion and Cartesian
+    #-- point paths. Use overlapping polygons so both trace proper crossings.
+    _pc_fh_ll = map((_pc_poly1, _pc_poly2)) do poly
+        GI.Polygon([collect(GI.getpoint(GI.getexterior(poly)))])
+    end
+    _pc_fh_xyz = map(_pc_fh_ll) do poly
+        apply(UnitSpherical.UnitSphericalPoint, GI.PointTrait(), poly)
+    end
+
     @compile_workload begin
         alg = RelateNG()
         #-- every predicate re-specializes the topology computer on its
@@ -92,6 +101,17 @@ using PrecompileTools: @setup_workload, @compile_workload
             #-- a target is a singleton type, so it specializes the driver and
             #-- the extractor afresh; the areal one is the case worth caching
             intersection(ovl, _pc_poly1, _pc_poly2; target = GI.MultiPolygonTrait())
+        end
+
+        #-- Cover common Float64 inputs without multiplying the workload over
+        #-- every operation, numeric type, or geometry wrapper. The area sink
+        #-- and polygon output use different tracing and construction paths.
+        fh = FosterHormannClipping(Spherical())
+        for (a, b) in (_pc_fh_ll, _pc_fh_xyz)
+            cache = FosterHormannCache(fh)
+            intersection_area(fh, a, b; cache)
+            intersection_area(fh, a, b)
+            intersection(fh, a, b; target = GI.PolygonTrait())
         end
     end
 end
