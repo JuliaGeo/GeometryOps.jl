@@ -21,6 +21,20 @@ end
     m = GO.Spherical()
     z = 0.9; s = sqrt(1 - z^2)
 
+    if VERSION >= v"1.12"
+        @testset "Region extent inference with implicit and explicit closure" begin
+            pts = polar_ring(z, 8)
+            closed = vcat(pts, [first(pts)])
+            ext = @inferred GO._spherical_region_extent(pts)
+            @test (@inferred GO._spherical_region_extent(closed)) == ext
+            @test ext.Z[2] == 1.0
+            # The ring reduction feeds both public extents and relation bounds.
+            ring = GI.LinearRing(pts)
+            @test (@inferred GO.extent(m, ring)) == ext
+            @test (@inferred GO.rk_interaction_bounds(m, ring)) isa Extents.Extent{(:X, :Y, :Z)}
+        end
+    end
+
     @testset "CCW polar cap ring encloses the pole" begin
         ext = GO.extent(m, GI.LinearRing(polar_ring(z, 8)))
         @test ext isa Extents.Extent{(:X, :Y, :Z)}
