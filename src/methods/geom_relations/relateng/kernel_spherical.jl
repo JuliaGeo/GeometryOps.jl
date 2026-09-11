@@ -482,6 +482,18 @@ function _sph_crossing_dir(bt, node::NodeKey)
     return _crossing_dir_is_positive(node) ? d : _neg3(d)
 end
 
+# A locator needs a unit-sphere point, not a planar XY intersection or lon/lat.
+# Compute the on-arc direction exactly, then scale before conversion so even
+# very small crossing directions remain representable. Proper crossings have
+# a nonzero direction. This is a rounded representative, not an exact node key.
+function _crossing_locate_point(::Spherical, key::NodeKey)
+    d = _sph_crossing_dir(True(), key)
+    scale = max(abs(d[1]), abs(d[2]), abs(d[3]))
+    x = Float64(d[1] / scale); y = Float64(d[2] / scale); z = Float64(d[3] / scale)
+    s = sqrt(x * x + y * y + z * z)
+    return UnitSphericalPoint(x / s, y / s, z / s)
+end
+
 # Whether `+(na×nb)` is the on-arc candidate, from the first nonzero of the
 # crossing's four exact orients (derivation above). All four are nonzero for a
 # proper crossing, which is the only kind of node `crossing_node` keys; the scan

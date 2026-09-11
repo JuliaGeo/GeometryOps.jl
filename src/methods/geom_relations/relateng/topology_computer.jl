@@ -695,10 +695,9 @@ proper-crossing key (design D2) with no stored coordinate:
   node of a Polygon/MultiPolygon lies on its boundary (the same exact
   shortcut as `locate_with_dim`'s isNode branch).
 - Otherwise (lineal geometries and GCs, where another element may cover
-  the node) a representative coordinate is required. The exact rational
-  crossing point is computed and rounded to Float64 — at least as precise
-  as JTS, whose node coordinate is the floating-point intersection
-  computed by RobustLineIntersector.
+  the node) a representative coordinate in the manifold's kernel space is
+  required. The kernel computes the exact crossing point or direction and
+  rounds it to its floating-point representation for the locator.
 ==========================================================================#
 
 function locate_node(rg::RelateGeometry, key::NodeKey, parent_polygonal)
@@ -707,7 +706,7 @@ function locate_node(rg::RelateGeometry, key::NodeKey, parent_polygonal)
     if GI.trait(rg.geom) isa Union{GI.PolygonTrait, GI.MultiPolygonTrait}
         return LOC_BOUNDARY
     end
-    return locate_node(rg, _crossing_locate_point(key), parent_polygonal)
+    return locate_node(rg, _crossing_locate_point(rg.m, key), parent_polygonal)
 end
 
 function is_node_in_area(rg::RelateGeometry, key::NodeKey, parent_polygonal)
@@ -717,16 +716,5 @@ function is_node_in_area(rg::RelateGeometry, key::NodeKey, parent_polygonal)
     if GI.trait(rg.geom) isa Union{GI.PolygonTrait, GI.MultiPolygonTrait}
         return false
     end
-    return is_node_in_area(rg, _crossing_locate_point(key), parent_polygonal)
-end
-
-# Representative Float64 coordinate of a proper-crossing node,
-# deterministically rounded via 256-bit BigFloat from the exact rational
-# crossing point (BigFloat avoids overflow in the Rational → Float64
-# conversion of huge numerators/denominators; the double rounding through
-# BigFloat's default precision is deterministic, though not strictly
-# correctly rounded).
-function _crossing_locate_point(key::NodeKey)
-    xr, yr = _exact_crossing_point(key)
-    return (Float64(BigFloat(xr)), Float64(BigFloat(yr)))
+    return is_node_in_area(rg, _crossing_locate_point(rg.m, key), parent_polygonal)
 end
