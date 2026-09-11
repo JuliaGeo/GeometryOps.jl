@@ -67,7 +67,7 @@ function _build_polygon_ctx(m::Manifold, g::OverlayGraph{P, T}, result_area_edge
         "face-walk hygiene pass (`remove_dangles` / `remove_cut_edges`). The op " *
         "pipeline does not honour removal, so its result would silently ignore it. " *
         "Hygiene is a face-enumeration facility — use `_build_faces` on that graph."))
-    ctx = _PolyBuilderCtx(m, g.edges, g.arr, exact, _MaxEdgeRing[], _edge_ring_type(T)[],
+    ctx = _PolyBuilderCtx(m, g.edges, g.arr, exact, _MaxEdgeRing[], _edge_ring_type(T, m, exact)[],
                           Int32[], Int32[])
     _build_rings!(ctx, result_area_edges)
     return ctx
@@ -337,7 +337,7 @@ function _build_faces(m::Manifold, g::OverlayGraph{P, T}; exact,
         oe_set_next_result!(edges, i, _face_successor(edges, i))
     end
     ctx = _PolyBuilderCtx(m, edges, g.arr, exact, _MaxEdgeRing[],
-                          _edge_ring_type(T)[], Int32[], Int32[])
+                          _edge_ring_type(T, m, exact)[], Int32[], Int32[])
     for i in eachindex(edges)
         (oe_is_removed(edges, i) || edges[i].edge_ring != 0) && continue
         _new_edge_ring!(ctx, i)

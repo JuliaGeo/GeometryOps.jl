@@ -44,7 +44,7 @@ end
 # `T` is the arrangement's output point type and `NB == _bbox_len(T)` the length
 # of the interleaved `(min₁, max₁, min₂, max₂, …)` bounding box over it — 4 for
 # a 2D output, 6 for unit-sphere xyz.
-mutable struct _OverlayEdgeRing{T, NB}
+mutable struct _OverlayEdgeRing{T, NB, L}
     id::Int32
     start_edge::Int32
     ring_pts::Vector{T}
@@ -53,23 +53,24 @@ mutable struct _OverlayEdgeRing{T, NB}
     bbox::NTuple{NB, Float64}  # (min, max) per coordinate of ring_pts
     shell::Int32
     holes::Vector{Int32}
-    locator::Any               # Union{Nothing, IndexedPointInAreaLocator}, lazy
+    locator::Union{Nothing, L} # lazily-built IndexedPointInAreaLocator{M,E}
 end
 
-_edge_ring_type(::Type{T}) where {T} = _OverlayEdgeRing{T, _bbox_len(T)}
+_edge_ring_type(::Type{T}, m::M, exact::E) where {T, M, E} =
+    _OverlayEdgeRing{T, _bbox_len(T), IndexedPointInAreaLocator{M, E}}
 
 # The polygon-builder working context (JTS `PolygonBuilder`'s mutable state). Held
 # together so the ring-linking and placement functions share the graph edge store,
 # the arrangement (for `node_point`), the manifold/exact predicate context, and the
 # growing ring collections. Parameterized on `M`/`P`/`E` so `m`/`exact` stay
 # concrete and the `Planar`/`Spherical` methods dispatch.
-mutable struct _PolyBuilderCtx{M <: Manifold, P, E, T, NB}
+mutable struct _PolyBuilderCtx{M <: Manifold, P, E, T, NB, L}
     m::M
     edges::Vector{OverlayEdge{P}}
     arr::NodedArrangement{P, T}
     exact::E
     max_rings::Vector{_MaxEdgeRing}
-    edge_rings::Vector{_OverlayEdgeRing{T, NB}}
+    edge_rings::Vector{_OverlayEdgeRing{T, NB, L}}
     shell_list::Vector{Int32}      # handles into edge_rings
     free_hole_list::Vector{Int32}
     #-- free holes whose OWN shell was dropped as sub-grid, so they have no
@@ -86,9 +87,9 @@ mutable struct _PolyBuilderCtx{M <: Manifold, P, E, T, NB}
 end
 
 _PolyBuilderCtx(m::M, edges::Vector{OverlayEdge{P}}, arr::NodedArrangement{P, T}, exact::E,
-        max_rings, edge_rings::Vector{_OverlayEdgeRing{T, NB}}, shell_list,
-        free_hole_list) where {M <: Manifold, P, E, T, NB} =
-    _PolyBuilderCtx{M, P, E, T, NB}(m, edges, arr, exact, max_rings, edge_rings, shell_list,
+        max_rings, edge_rings::Vector{_OverlayEdgeRing{T, NB, L}}, shell_list,
+        free_hole_list) where {M <: Manifold, P, E, T, NB, L} =
+    _PolyBuilderCtx{M, P, E, T, NB, L}(m, edges, arr, exact, max_rings, edge_rings, shell_list,
                                     free_hole_list, Int32[], P[], Bool[])
 
 @inline _ctx_point_type(::_PolyBuilderCtx{M, P}) where {M, P} = P
@@ -593,10 +594,10 @@ end
 _ring_area2_filter(arr, ids::Vector{Int32}) =
     ((acc, bound) = _ring_area2_bounded(arr, ids); (acc, abs(acc) > bound))
 
-function _new_edge_ring!(ctx::_PolyBuilderCtx{M, P, E, T, NB},
-        start::Integer) where {M, P, E, T, NB}
+function _new_edge_ring!(ctx::_PolyBuilderCtx{M, P, E, T, NB, L},
+        start::Integer) where {M, P, E, T, NB, L}
     id = Int32(length(ctx.edge_rings) + 1)
-    ring = _OverlayEdgeRing{T, NB}(id, Int32(start), T[], Int32[], false,
+    ring = _OverlayEdgeRing{T, NB, L}(id, Int32(start), T[], Int32[], false,
                                    ntuple(_ -> 0.0, NB), Int32(0), Int32[], nothing)
     push!(ctx.edge_rings, ring)
     _compute_ring!(ctx, ring)
@@ -969,11 +970,13 @@ end
 # (design §3 amendment 5: robust ray crossing via `rk_orient`, over the ring's
 # emitted coordinates — never naive even-odd).
 function _ring_locate(ctx, ring::_OverlayEdgeRing, p)
-    if ring.locator === nothing
-        ring.locator = IndexedPointInAreaLocator(ctx.m, GI.Polygon([ring.ring_pts]);
-                                                 exact = ctx.exact)
+    locator = ring.locator
+    if locator === nothing
+        locator = IndexedPointInAreaLocator(ctx.m, GI.Polygon([ring.ring_pts]);
+                                            exact = ctx.exact)
+        ring.locator = locator
     end
-    return locate(ring.locator, p)
+    return locate(locator, p)
 end
 
 # Whether `shell` contains `hole` (port of `contains` + `isPointInOrOut`). On the
