@@ -361,7 +361,7 @@ function _anchor_crossing_parity(q, z, a, b; orient::O, on_test_arc::OT,
         return on_test_arc(z, a, b) ? -1 : 0
     end
     (sq > 0) == (sm > 0) && return 0
-    return proper_crossing(q, z, a, b)
+    return _proper_crossing_with_orients(proper_crossing, orient, q, z, a, b, sa, sb, sq, sm)
 end
 
 # Crossing parity of the test arc q → m against ring edge a → b: 1 for a
@@ -384,6 +384,14 @@ function _arc_crossing_parity(q, m, a, b; orient::O, proper_crossing::PC) where 
     sm = orient(a, b, m)
     sm == 0 && return -1
     (sq > 0) == (sm > 0) && return 0
+    return _proper_crossing_with_orients(proper_crossing, orient, q, m, a, b, sa, sb, sq, sm)
+end
+
+# Internal opt-in hook for predicates that can reuse the four signs computed
+# by the parity walk. Generic callbacks retain their four-point protocol;
+# in particular, the default tolerance and its undecidable result are unchanged.
+@inline function _proper_crossing_with_orients(proper_crossing::PC, orient::O,
+        q, m, a, b, sa, sb, sq, sm) where {PC, O}
     return proper_crossing(q, m, a, b)
 end
 

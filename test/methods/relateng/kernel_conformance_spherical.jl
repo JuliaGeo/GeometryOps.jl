@@ -399,3 +399,116 @@ result into a quarter or a half of the sphere.
         @test nproper > 2000
     end
 end
+
+@testset "exact proper crossing reuses orientation signs" begin
+    m = Spherical()
+    US = GO.UnitSpherical
+    orient = GO._RKOrient(m, True())
+    proper_crossing = GO._RKProperCrossing(True())
+    on_test_arc = GO._RKOnTestArc(True())
+
+    # Independent authority: lift the input binary floats exactly, intersect
+    # the great circles, and test both antipodal directions against arc spans.
+    # Keep this composite arithmetic here, outside the optimized implementation.
+    function crossing_oracle(p0, p1, q0, q1; T = Rational{BigInt})
+        a, b, c, d = (ntuple(i -> T(p[i]), 3) for p in (p0, p1, q0, q1))
+        cross3(u, v) = (u[2]*v[3] - u[3]*v[2], u[3]*v[1] - u[1]*v[3], u[1]*v[2] - u[2]*v[1])
+        dot3(u, v) = u[1]*v[1] + u[2]*v[2] + u[3]*v[3]
+        na, nb = cross3(a, b), cross3(c, d)
+        x = cross3(na, nb)
+        nx = map(-, x)
+        in_arc(v, u, w, n) = dot3(cross3(u, v), n) > 0 && dot3(cross3(v, w), n) > 0
+        return (in_arc(x, a, b, na) && in_arc(x, c, d, nb)) ||
+               (in_arc(nx, a, b, na) && in_arc(nx, c, d, nb))
+    end
+    oracle_callback(q, z, a, b) = crossing_oracle(q, z, a, b) ? 1 : 0
+
+    crossing = (_usp(1, 0, 1), _usp(1, 0, -1), _usp(1, 1, 0), _usp(1, -1, 0))
+    opposite = (crossing[1], crossing[2], -crossing[3], -crossing[4])
+    @test crossing_oracle(crossing...)
+    @test !crossing_oracle(opposite...)
+    # Both configurations strictly straddle, but only one uses the same
+    # antipodal intersection in the two minor arcs.
+    for (q, z, a, b) in (crossing, opposite)
+        @test orient(q, z, a) * orient(q, z, b) < 0
+        @test orient(a, b, q) * orient(a, b, z) < 0
+    end
+
+    cases = [crossing, opposite,
+        (_usp(1, 0, 0), _usp(0, 1, 0), _usp(1, 0, 0), _usp(0, 0, 1)), # shared endpoint
+        (_usp(1, 0, 0), _usp(1, 0, 0), _usp(1, 1, 0), _usp(1, -1, 0)), # repeated
+        (_usp(1, 0, 0), _usp(-1, 0, 0), _usp(1, 1, 0), _usp(1, -1, 0)), # antipodal
+        (_usp(1, 0, 0), _usp(0, 1, 0), _usp(1, 1, 0), _usp(-1, 1, 0)), # same circle
+        (_usp(0, 0, 0), _usp(0, 1, 0), _usp(1, 1, 0), _usp(1, -1, 0))]
+    rng = Random.Xoshiro(0x5951a5)
+    dyadic() = _usp((ldexp(Float64(rand(rng, -32:32)), rand(rng, -12:12)) for _ in 1:3)...)
+    for i in 1:400
+        a, b, c, d = dyadic(), dyadic(), dyadic(), dyadic()
+        if iseven(i)
+            # Shared endpoints perturbed by one ulp: force uncertain filtered
+            # signs and exercise exact fallbacks without normalizing the inputs.
+            d = _usp(nextfloat(b[1]), prevfloat(b[2]), b[3])
+        end
+        push!(cases, (a, b, c, d))
+    end
+    # Near-collinear circles and near-antipodal edges at multiple dyadic scales.
+    for e in (-52, -40, -20)
+        δ = ldexp(1.0, e)
+        push!(cases, (_usp(1, 0, δ), _usp(1, 0, -δ), _usp(1, δ, 0), _usp(1, -δ, 0)))
+        push!(cases, (_usp(1, δ, 0), _usp(-1, δ, 0), _usp(0, 1, δ), _usp(0, 1, -δ)))
+    end
+
+    for (q, z, a, b) in cases
+        expected = crossing_oracle(q, z, a, b)
+        for points in ((q, z, a, b), (z, q, a, b), (a, b, q, z),
+                       (2q, z / 4, 8a, b / 2))
+            @test GO._arcs_cross_properly(True(), points...) == expected
+            @test GO._arcs_cross_properly(False(), points...) == crossing_oracle(points...; T = Float64)
+        end
+        @test US._arc_crossing_parity(q, z, a, b; orient, proper_crossing) ==
+              US._arc_crossing_parity(q, z, a, b; orient, proper_crossing = oracle_callback)
+        @test US._anchor_crossing_parity(q, z, a, b; orient, on_test_arc, proper_crossing) ==
+              US._anchor_crossing_parity(q, z, a, b; orient, on_test_arc, proper_crossing = oracle_callback)
+    end
+
+    @testset "raw Bool exactness uses the same ring classification" begin
+        ring = GI.LinearRing([_usp(2, 0, 1), _usp(0, 2, 1), _usp(-2, 0, 1), _usp(0, -2, 1)])
+        for mode in (Spherical(), Spherical(; oriented = true)), (raw, bt) in ((true, True()), (false, False()))
+            for q in (_usp(1, 1, 10), _usp(3, 1, 0), _usp(1, 1, 1))
+                @test GO.rk_point_in_ring(mode, q, ring; exact = raw) ==
+                      GO.rk_point_in_ring(mode, q, ring; exact = bt)
+            end
+        end
+    end
+
+    @testset "injected callback protocol and degeneracy branches" begin
+        calls = Ref(0)
+        callback = function (q, z, a, b)
+            calls[] += 1
+            @test (q, z, a, b) == crossing
+            return -1
+        end
+        @test US._arc_crossing_parity(crossing...; orient, proper_crossing = callback) == -1
+        @test US._anchor_crossing_parity(crossing...; orient, on_test_arc, proper_crossing = callback) == -1
+        @test calls[] == 2
+        # Sign reuse requires the recognized exact orientation provider too.
+        # Deliberately unusable supplied signs expose accidental reuse by the
+        # fallback hook; the original four-point callback must still decide.
+        custom_orient = (a, b, c) -> orient(a, b, c)
+        for other_orient in (custom_orient, GO._RKOrient(m, False()), US.spherical_orient)
+            @test US._proper_crossing_with_orients(proper_crossing, other_orient,
+                crossing..., 0, 0, 0, 0) == 1
+        end
+        approx = GO._RKProperCrossing(False())
+        @test US._proper_crossing_with_orients(approx, orient, crossing..., 0, 0, 0, 0) == approx(crossing...)
+        unit_crossing = map(GO.rk_normalize_usp, crossing)
+        @test US._proper_crossing_with_orients(US._hemisphere_proper_crossing,
+            orient, unit_crossing..., 0, 0, 0, 0) == US._hemisphere_proper_crossing(unit_crossing...)
+        # Repeated ring edge and a collinear edge containing the exterior
+        # anchor are resolved before any proper-crossing callback is invoked.
+        q, z, a, b = crossing
+        @test US._anchor_crossing_parity(q, z, a, a; orient, on_test_arc, proper_crossing = callback) == 0
+        @test US._anchor_crossing_parity(q, z, q, z; orient, on_test_arc, proper_crossing = callback) == -1
+        @test calls[] == 2
+    end
+end
