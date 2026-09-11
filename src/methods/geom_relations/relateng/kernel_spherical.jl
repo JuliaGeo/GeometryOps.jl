@@ -291,8 +291,7 @@ function _rk_classify_intersection(bt::True, m, a0, a1, b0, b1)
     end
     # Proper crossing ⟺ +d or −d strictly interior to both arcs, i.e. the
     # four-orient near-crossing pattern (equal to `_strictly_in_arc3(±d,…)`).
-    proper = (sBA0 > 0 && sBA1 < 0 && sAB0 < 0 && sAB1 > 0) ||
-             (sBA0 < 0 && sBA1 > 0 && sAB0 > 0 && sAB1 < 0)
+    proper = _proper_crossing_from_orients(sAB0, sAB1, sBA0, sBA1)
     return proper ? SegSegClass(SS_PROPER, false, false, false, false) :
                     SegSegClass(SS_DISJOINT, false, false, false, false)
 end
@@ -480,6 +479,18 @@ function _sph_crossing_dir(bt, node::NodeKey)
     B0 = _vec3(bt, node.b0); B1 = _vec3(bt, node.b1)
     d = _cross3(_cross3(A0, A1), _cross3(B0, B1))
     return _crossing_dir_is_positive(node) ? d : _neg3(d)
+end
+
+# A locator needs a unit-sphere point, not a planar XY intersection or lon/lat.
+# Compute the on-arc direction exactly, then scale before conversion so even
+# very small crossing directions remain representable. Proper crossings have
+# a nonzero direction. This is a rounded representative, not an exact node key.
+function _crossing_locate_point(::Spherical, key::NodeKey)
+    d = _sph_crossing_dir(True(), key)
+    scale = max(abs(d[1]), abs(d[2]), abs(d[3]))
+    x = Float64(d[1] / scale); y = Float64(d[2] / scale); z = Float64(d[3] / scale)
+    s = sqrt(x * x + y * y + z * z)
+    return UnitSphericalPoint(x / s, y / s, z / s)
 end
 
 # Whether `+(na×nb)` is the on-arc candidate, from the first nonzero of the
@@ -890,7 +901,24 @@ _ring_interior_on_left(m::Spherical, pts::Vector, is_hole::Bool; exact) =
 # Whether the two minor arcs (p0,p1) and (q0,q1) cross properly (interior to
 # both). The great circles meet at ±d, d = (p0×p1)×(q0×q1); a proper crossing is
 # one of ±d strictly interior to both arcs (the spike's `arcs_cross_properly`).
-function _arcs_cross_properly(bt, p0, p1, q0, q1)
+# The four exact signs encode which of the two antipodal intersections lies
+# inside each minor arc (the BAC–CAB derivation above `_rk_classify_intersection`).
+# Strict straddle alone is insufficient: the arcs can select opposite antipodes.
+@inline _proper_crossing_from_orients(sa, sb, sq, sm) =
+    (sq > 0 && sm < 0 && sa < 0 && sb > 0) ||
+    (sq < 0 && sm > 0 && sa > 0 && sb < 0)
+
+function _arcs_cross_properly(bt::True, p0, p1, q0, q1)
+    sa = _rk_orient(bt, p0, p1, q0)
+    sb = _rk_orient(bt, p0, p1, q1)
+    sq = _rk_orient(bt, q0, q1, p0)
+    sm = _rk_orient(bt, q0, q1, p1)
+    return _proper_crossing_from_orients(sa, sb, sq, sm)
+end
+
+# Preserve the approximate cross/dot formulation: its rounding differs from
+# the four-orient reduction near degeneracies.
+function _arcs_cross_properly(bt::False, p0, p1, q0, q1)
     P0 = _vec3(bt, p0); P1 = _vec3(bt, p1); Q0 = _vec3(bt, q0); Q1 = _vec3(bt, q1)
     na = _cross3(P0, P1); nb = _cross3(Q0, Q1)
     d = _cross3(na, nb)
@@ -1006,6 +1034,14 @@ struct _RKProperCrossing{BT} <: Function
 end
 (f::_RKProperCrossing)(q, mid, a, b) = _arcs_cross_properly(f.bt, q, mid, a, b) ? 1 : 0
 
+# Reuse signs only when BOTH injected predicates use the exact kernel. Custom
+# orientations (or approximate ones) need not have produced these exact signs.
+@inline function UnitSpherical._proper_crossing_with_orients(
+        f::_RKProperCrossing{True}, orient::_RKOrient{M, True},
+        q, mid, a, b, sa, sb, sq, sm) where {M}
+    return _proper_crossing_from_orients(sa, sb, sq, sm) ? 1 : 0
+end
+
 # Exact span test for the anchor walk's vertex-grazing resolution
 # (`_anchor_crossing_parity`): whether `p`, already known to lie on the
 # great circle of `(a, b)`, lies on the closed minor arc.
@@ -1027,7 +1063,7 @@ function rk_point_in_ring(m::Spherical, p, kr::SphericalKernelRing; exact)
         return LOC_BOUNDARY
     end
     kr.n < 3 && return LOC_EXTERIOR
-    orient = _RKOrient(m, exact)
+    orient = _RKOrient(m, booltype(exact))
     on_arc = Returns(false)   # boundary classified exactly above
     proper_crossing = _RKProperCrossing(booltype(exact))
     if !m.oriented
@@ -1068,6 +1104,24 @@ end
 
 _sph_interaction_extent(m::Spherical, ::GI.AbstractPointTrait, geom) =
     GI.extent(_spherical_kernel_point(geom))
+# A preparation-only pass: validate each represented edge while accumulating
+# its bounds. An optional local point vector lets polygon preparation reuse the
+# shell's ingest conversion without changing persistent coordinate ownership.
+function _sph_validated_curve_extent(geom, points)
+    n = GI.npoint(geom)
+    prev = _spherical_kernel_point(GI.getpoint(geom, 1))
+    points === nothing || push!(points, prev)
+    ext = spherical_arc_extent(prev, prev)
+    for i in 2:n
+        cur = _spherical_kernel_point(GI.getpoint(geom, i))
+        _exactly_antipodal(prev, cur) && _throw_antipodal_edge(prev, cur)
+        points === nothing || push!(points, cur)
+        ext = Extents.union(ext, spherical_arc_extent(prev, cur))
+        prev = cur
+    end
+    return ext
+end
+
 function _sph_interaction_extent(m::Spherical, ::GI.AbstractCurveTrait, geom)
     n = GI.npoint(geom)
     prev = _spherical_kernel_point(GI.getpoint(geom, 1))

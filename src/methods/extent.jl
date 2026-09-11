@@ -84,11 +84,18 @@ _extent(m::Spherical, ::GI.AbstractGeometryTrait, geom, ::Type{T}) where T =
     mapreduce(g -> Extents.extent(m, g, T), Extents.union, GI.getgeom(geom))
 
 function _spherical_region_extent(pts::Vector{<:UnitSpherical.UnitSphericalPoint})
-    n = length(pts)
-    n > 1 && pts[end] == pts[1] && (n -= 1)
+    nstored = length(pts)
+    # Assign once: the reduction closure must capture an Int, not a boxed local.
+    n = (nstored > 1 && pts[end] == pts[1]) ? nstored - 1 : nstored
     ext = mapreduce(Extents.union, 1:n) do i
         UnitSpherical.spherical_arc_extent(pts[i], pts[mod1(i + 1, n)])
     end
+    return _spherical_region_extent(pts, n, ext)
+end
+
+# Reuse boundary bounds computed during local preparation; enclosed axes must
+# still be tested, since a boundary box alone cannot bound a spherical region.
+function _spherical_region_extent(pts::Vector{<:UnitSpherical.UnitSphericalPoint}, n::Int, ext)
     n < 3 && return ext
 
     #=

@@ -279,6 +279,47 @@ end
     @test LG.equals(lgc(r), geos_op(GO.OVERLAY_DIFFERENCE, Big, Inner))
 end
 
+@testset "edge-ring locator is concrete, lazy, and reused" begin
+    lonlat = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]
+    for m in (Planar(), Spherical()), exact in (GO.False(), GO.True())
+        pts = m isa Planar ? lonlat : GO._ring_usp(GI.LinearRing(lonlat))
+        L = GO.IndexedPointInAreaLocator{typeof(m), typeof(exact)}
+        R = GO._edge_ring_type(eltype(pts), m, exact)
+        @test isconcretetype(R)
+        @test fieldtype(R, :locator) == Union{Nothing, L}
+        ring = R(1, 1, pts, Int32[], false,
+                 ntuple(_ -> 0.0, GO._bbox_len(eltype(pts))), 0, Int32[], nothing)
+        ctx = (; m, exact)
+        @test ring.locator === nothing
+        # Start on the boundary so the caller must be able to continue probing.
+        @test @inferred(GO._ring_locate(ctx, ring, pts[1])) == GO.LOC_BOUNDARY
+        locator = ring.locator
+        @test locator isa L
+        interior = m isa Planar ? (5.0, 5.0) : GO._spherical_kernel_point((5.0, 5.0))
+        @test @inferred(GO._ring_locate(ctx, ring, interior)) == GO.LOC_INTERIOR
+        @test ring.locator === locator
+    end
+end
+
+@testset "free-hole placement with multiple shells on both manifolds" begin
+    shells = GI.MultiPolygon([
+        [[(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0), (0.0, 0.0)]],
+        [[(20.0, 0.0), (28.0, 0.0), (28.0, 8.0), (20.0, 8.0), (20.0, 0.0)]],
+    ])
+    holes = GI.MultiPolygon([
+        [[(2.0, 2.0), (4.0, 2.0), (4.0, 4.0), (2.0, 4.0), (2.0, 2.0)]],
+        [[(22.0, 2.0), (24.0, 2.0), (24.0, 4.0), (22.0, 4.0), (22.0, 2.0)]],
+    ])
+    for m in (Planar(), Spherical()), exact in (GO.False(), GO.True())
+        result = GO._overlay_ng(m, GO.OVERLAY_DIFFERENCE, shells, holes; exact)
+        @test GI.trait(result) isa GI.MultiPolygonTrait
+        @test GI.ngeom(result) == 2
+        @test all(i -> GI.nring(GI.getgeom(result, i)) == 2, 1:2)
+        expected = GO.area(m, shells) - GO.area(m, holes)
+        @test isapprox(GO.area(m, result), expected; rtol = 1e-10, atol = 1e-12)
+    end
+end
+
 @testset "union of a multi-island geometry (France-class nesting)" begin
     #-- 20 disjoint island squares, unioned with a copy shifted onto their
     #-- diagonal neighbours. The result is ONE connected shell with 24 free
@@ -1309,7 +1350,7 @@ off the exact node directions when the rounded ones cannot carry it.
     GO._unmark_duplicate_edges_from_result_area!(g)
     rae = GO.graph_result_area_edges(g)
     ctx = GO._PolyBuilderCtx(m, g.edges, g.arr, EX, GO._MaxEdgeRing[],
-                             GO._edge_ring_type(GO.output_point_type(g))[], Int32[], Int32[])
+                             GO._edge_ring_type(GO.output_point_type(g), m, EX)[], Int32[], Int32[])
     for e in rae
         GO._link_result_area_max_ring_at_node!(ctx.edges, e)
     end
@@ -1356,7 +1397,7 @@ every ring of an ordinary overlay.
         rae = GO.graph_result_area_edges(g)
         isempty(rae) && continue
         ctx = GO._PolyBuilderCtx(m, g.edges, g.arr, EX, GO._MaxEdgeRing[],
-                                 GO._edge_ring_type(GO.output_point_type(g))[], Int32[], Int32[])
+                                 GO._edge_ring_type(GO.output_point_type(g), m, EX)[], Int32[], Int32[])
         for e in rae
             GO._link_result_area_max_ring_at_node!(ctx.edges, e)
         end
