@@ -67,11 +67,14 @@ cut(alg::FosterHormannClipping{M, A}, geom, line, ::Type{T} = Float64) where {T 
 are any holes. =#
 function _cut(alg::FosterHormannClipping{M, A}, ::Type{T}, ::GI.PolygonTrait, poly, ::GI.LineTrait, line; exact) where {T, M, A}
     ext_poly = GI.getexterior(poly)
-    poly_list, intr_list = _build_a_list(alg, T, ext_poly, line; exact)
+    poly_list, intr_list, _ = _build_a_list(alg, T, ext_poly, line; exact)
     n_intr_pts = length(intr_list)
     # If an impossible number of intersection points, return original polygon
-    if n_intr_pts < 2 || isodd(n_intr_pts)
-        return [tuples(poly)]
+    if n_intr_pts < 2 || isodd(n_intr_pts) || any(
+        p -> _point_filled_curve_orientation(alg.manifold, p, ext_poly; exact) != point_out,
+        GI.getpoint(line),
+    )
+        return [_fh_as_poly(_fh_out_point_type(alg.manifold, poly, T), poly, T)]
     end
     # Cut polygon by line
     cut_coords = _cut(alg, T, ext_poly, line, poly_list, intr_list, n_intr_pts; exact)
@@ -102,16 +105,22 @@ Note: degenerate cases where intersection points are vertices do not work right 
 function _cut(alg::FosterHormannClipping{M, A}, ::Type{T}, geom, line, geom_list, intr_list, n_intr_pts; exact) where {T, M, A}
     # Sort and categorize the intersection points
     sort!(intr_list, by = x -> geom_list[x].fracs[2])
-    _flag_ent_exit!(alg, GI.LineTrait(), line, geom_list; exact)
-    # Add first point to output list
-    return_coords = [[geom_list[1].point]]
-    cross_backs = [(T(Inf),T(Inf))]
+    # With both line endpoints outside, consecutive crossings delimit inside segments.
+    # Pair them in line order, independently of the polygon's starting vertex/winding.
+    for (i, idx) in enumerate(intr_list)
+        geom_list[idx] = PolyNode(geom_list[idx]; ent_exit = isodd(i))
+    end
+    source = _fh_egress_ring(alg.manifold, geom)
+    P = _fh_out_point_type(alg.manifold, geom, T)
+    # Add first point to output list; cross-back matching stays in kernel coordinates.
+    return_coords = [P[_fh_egress(geom_list[1], source, T)]]
+    cross_backs = Union{Nothing, typeof(geom_list[1].point)}[nothing]
     poly_idx = 1
     n_polys = 1
     # Walk around original polygon to find split polygons
     for (pt_idx, curr) in enumerate(geom_list)
         if pt_idx > 1
-            push!(return_coords[poly_idx], curr.point)
+            push!(return_coords[poly_idx], _fh_egress(curr, source, T))
         end
         if curr.inter
             # Find cross back point for current polygon
@@ -123,12 +132,12 @@ function _cut(alg::FosterHormannClipping{M, A}, ::Type{T}, geom, line, geom_list
             # Check if current point is a cross back point
             next_poly_idx = findfirst(x -> equals(x, curr.point), cross_backs)
             if isnothing(next_poly_idx)
-                push!(return_coords, [curr.point])
+                push!(return_coords, P[_fh_egress(curr, source, T)])
                 push!(cross_backs, curr.point)
                 n_polys += 1
                 poly_idx = n_polys
             else
-                push!(return_coords[next_poly_idx], curr.point)
+                push!(return_coords[next_poly_idx], _fh_egress(curr, source, T))
                 poly_idx = next_poly_idx
             end
         end

@@ -1,3 +1,8 @@
+# Preserve spherical Cartesian points in shared relation processors. Converting them
+# to (x,y) tuples silently reinterprets the coordinates as longitude and latitude.
+_processor_point(::Planar, p) = _tuple_point(p)
+_processor_point(::Spherical, p) = _spherical_kernel_point(p)
+
 # # Line-curve interaction
 
 #= Code is based off of DE-9IM Standards (https://en.wikipedia.org/wiki/DE-9IM)
@@ -141,14 +146,14 @@ function _inner_line_curve_process(
     closed_line |= first_last_equal_line
     closed_curve |= first_last_equal_curve
     # Loop over each line segment
-    l_start = _tuple_point(GI.getpoint(line, closed_line ? nl : 1))
+    l_start = _processor_point(m, GI.getpoint(line, closed_line ? nl : 1))
     i = closed_line ? 1 : 2
     while i ≤ nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        c_start = _tuple_point(GI.getpoint(curve, closed_curve ? nc : 1))
+        l_end = _processor_point(m, GI.getpoint(line, i))
+        c_start = _processor_point(m, GI.getpoint(curve, closed_curve ? nc : 1))
         # Loop over each curve segment
         for j in (closed_curve ? 1 : 2):nc
-            c_end = _tuple_point(GI.getpoint(curve, j))
+            c_end = _processor_point(m, GI.getpoint(curve, j))
             # Check if line and curve segments meet
             seg_val, α, β = _seg_seg_orientation(m, l_start, l_end, c_start, c_end; exact)
             # If segments are co-linear
@@ -179,7 +184,7 @@ function _inner_line_curve_process(
                         # If needed, determine if hinge actually crosses
                         if (!cross_allow || !over_allow) && α != 0 && β != 0
                             # Find next pieces of hinge to see if line and curve cross
-                            l, c = _find_hinge_next_segments(
+                            l, c = _find_hinge_next_segments(m,
                                 α, β, l_start, l_end, c_start, c_end,
                                 i, line, j, curve,
                             )
@@ -226,15 +231,15 @@ function _find_new_seg(m::Manifold, i, ls, le, cs, ce)
 end
 
 #= Find next set of segments needed to determine if given hinge segments cross or not.=#
-function _find_hinge_next_segments(α, β, ls, le, cs, ce, i, line, j, curve) 
+function _find_hinge_next_segments(m::Manifold, α, β, ls, le, cs, ce, i, line, j, curve)
     next_seg = if β == 1
         if α == 1  # hinge at endpoints, so next segment of both is needed
-            ((le, _tuple_point(GI.getpoint(line, i + 1))), (ce, _tuple_point(GI.getpoint(curve, j + 1))))
+            ((le, _processor_point(m, GI.getpoint(line, i + 1))), (ce, _processor_point(m, GI.getpoint(curve, j + 1))))
         else  # hinge at curve endpoint and line interior point, curve next segment needed 
-            ((ls, le), (ce, _tuple_point(GI.getpoint(curve, j + 1))))
+            ((ls, le), (ce, _processor_point(m, GI.getpoint(curve, j + 1))))
         end
     else  # hinge at curve interior point and line endpoint, line next segment needed
-        ((le, _tuple_point(GI.getpoint(line, i + 1))), (cs, ce))
+        ((le, _processor_point(m, GI.getpoint(line, i + 1))), (cs, ce))
     end
     return next_seg
 end
@@ -564,7 +569,7 @@ function _line_filled_curve_interactions(
     closed_line |= first_last_equal_line
 
     # See if first point is in an acceptable orientation
-    l_start = _tuple_point(GI.getpoint(line, closed_line ? nl : 1))
+    l_start = _processor_point(m, GI.getpoint(line, closed_line ? nl : 1))
     point_val = _point_filled_curve_orientation(m, l_start, curve; exact)
     if point_val == point_in
         in_curve = true
@@ -576,13 +581,13 @@ function _line_filled_curve_interactions(
 
     # Check for any intersections between line and curve
     for i in (closed_line ? 1 : 2):nl
-        l_end = _tuple_point(GI.getpoint(line, i))
-        c_start = _tuple_point(GI.getpoint(curve, nc))
+        l_end = _processor_point(m, GI.getpoint(line, i))
+        c_start = _processor_point(m, GI.getpoint(curve, nc))
         # If already interacted with all regions of curve, can stop
         in_curve && on_curve && out_curve && break
         # Check next segment of line against curve
         for j in 1:nc
-            c_end = _tuple_point(GI.getpoint(curve, j))
+            c_end = _processor_point(m, GI.getpoint(curve, j))
             # Check if two line and curve segments meet
             seg_val, _, _ = _seg_seg_orientation(m, l_start, l_end, c_start, c_end; exact)
             if seg_val != line_out
@@ -696,10 +701,8 @@ end
     return skip, returnval
 end
 
-#= Planar-defaulting forwarders, matching the one `_point_filled_curve_orientation`
-already carries. The clipping engines call these without a manifold, at call
-sites the codebase has marked `#=TODO: alg.manifold=#` for threading later; until
-that happens they keep their existing planar behaviour. =#
+#= Planar-defaulting forwarders for callers that do not specify a manifold,
+matching the one `_point_filled_curve_orientation` already carries. =#
 _line_filled_curve_interactions(line, curve; exact, closed_line = false) =
     _line_filled_curve_interactions(Planar(), line, curve; exact, closed_line)
 _line_polygon_interactions(line, polygon; exact, closed_line = false) =

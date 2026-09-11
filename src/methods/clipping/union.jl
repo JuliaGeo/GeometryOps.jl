@@ -46,12 +46,12 @@ end
 function union(
     geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
 ) where {T<:AbstractFloat}
-    return union(FosterHormannClipping(Planar()), geom_a, geom_b; target, kwargs...)
+    return union(FosterHormannClipping(Planar()), geom_a, geom_b, T; target, kwargs...)
 end
 
 # if manifold but no algorithm - assume FosterHormannClipping with provided manifold.
 function union(m::Manifold, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...) where {T<:AbstractFloat}
-    return union(FosterHormannClipping(m), geom_a, geom_b; target, kwargs...)
+    return union(FosterHormannClipping(m), geom_a, geom_b, T; target, kwargs...)
 end
 
 #= This 'union' implementation returns the union of two polygons. The algorithm to determine
@@ -90,7 +90,7 @@ function _union(
         #= extra polygons are holes (n_pieces == 1 is the desired state) and since
         holes are formed by regions exterior to both poly_a and poly_b, they can't interact
         with pre-existing holes =#
-        sort!(polys, by = area, rev = true)  # sort by area so first element is the exterior
+        sort!(polys, by = p -> area(alg.manifold, p, T), rev = true)  # sort by area so first element is the exterior
         # the first element is the exterior, the rest are holes
         @views append!(polys[1].geom, (GI.getexterior(p) for p in polys[2:end]))
         keepat!(polys, 1)
@@ -125,6 +125,8 @@ _union_step(x, _) = x ? (-1) : 1
 the holes reveals that the polygons aren't actually intersecting, return the original
 polygons. =#
 function _add_union_holes!(alg::FosterHormannClipping, polys, a_in_b, b_in_a, poly_a, poly_b; exact)
+    P = _fh_poly_point_type(eltype(polys))
+    T = _fh_float_type(P)
     if a_in_b
         _add_union_holes_contained_polys!(alg, polys, poly_a, poly_b; exact)
     elseif b_in_a
@@ -140,8 +142,8 @@ function _add_union_holes!(alg::FosterHormannClipping, polys, a_in_b, b_in_a, po
         current_poly = n_a_holes > 0 ? ext_poly_b : poly_a
         # Loop over all holes in both original polygons
         for (i, ih) in enumerate(Iterators.flatten((GI.gethole(poly_a), GI.gethole(poly_b))))
-            ih = _linearring(ih)
-            in_ext, _, _ = _line_polygon_interactions(#=TODO: alg.manifold=# ih, curr_exterior_poly; exact, closed_line = true)
+            ih = _fh_as_ring(P, ih, T)
+            in_ext, _, _ = _line_polygon_interactions(alg.manifold, ih, curr_exterior_poly; exact, closed_line = true)
             if !in_ext
                 #= if the hole isn't in the overlapping region between the two polygons, add
                 the hole to the resulting polygon as we know it can't interact with any
@@ -154,7 +156,7 @@ function _add_union_holes!(alg::FosterHormannClipping, polys, a_in_b, b_in_a, po
                 between poly_a and poly_b within the overlap are added, in addition to all
                 holes in non-overlapping regions =#
                 h_poly = GI.Polygon(StaticArrays.SVector(ih))
-                new_holes = difference(alg, h_poly, current_poly; target = GI.PolygonTrait())
+                new_holes = difference(alg, h_poly, current_poly, T; target = GI.PolygonTrait())
                 append!(polys[1].geom, (GI.getexterior(new_h) for new_h in new_holes))
             end
             if i == n_a_holes
@@ -170,11 +172,15 @@ end
 inside of the other. If adding the the holes reveal that the polygons aren't actually
 intersecting, return the original polygons.=#
 function _add_union_holes_contained_polys!(alg::FosterHormannClipping, polys, interior_poly, exterior_poly; exact)
+    P = _fh_poly_point_type(eltype(polys))
+    T = _fh_float_type(P)
     union_poly = polys[1]
+    interior_poly = _fh_as_poly(P, interior_poly, T)
+    exterior_poly = _fh_as_poly(P, exterior_poly, T)
     ext_int_ring = GI.getexterior(interior_poly)
     for (i, ih) in enumerate(GI.gethole(exterior_poly))
         poly_ih = GI.Polygon(StaticArrays.SVector(ih))
-        in_ih, on_ih, out_ih = _line_polygon_interactions(#=TODO: alg.manifold=# ext_int_ring, poly_ih; exact, closed_line = true)
+        in_ih, on_ih, out_ih = _line_polygon_interactions(alg.manifold, ext_int_ring, poly_ih; exact, closed_line = true)
         if in_ih  # at least part of interior polygon exterior is within the ith hole
             if !on_ih && !out_ih
                 #= interior polygon is completely within the ith hole - polygons aren't
@@ -186,7 +192,7 @@ function _add_union_holes_contained_polys!(alg::FosterHormannClipping, polys, in
             else
                 #= interior polygon is partially within the ith hole - area of interior
                 polygon reduces the size of the hole =#
-                new_holes = difference(alg, poly_ih, interior_poly; target = GI.PolygonTrait())
+                new_holes = difference(alg, poly_ih, interior_poly, T; target = GI.PolygonTrait())
                 append!(union_poly.geom, (GI.getexterior(new_h) for new_h in new_holes))
             end
         else  # none of interior polygon exterior is within the ith hole
@@ -200,14 +206,14 @@ function _add_union_holes_contained_polys!(alg::FosterHormannClipping, polys, in
                 #= interior polygon's exterior is outside of the ith hole - the interior
                 polygon could either be disjoint from the hole, or contain the hole =#
                 ext_int_poly = GI.Polygon(StaticArrays.SVector(ext_int_ring))
-                in_int, _, _ = _line_polygon_interactions(#=TODO: alg.manifold=# ih, ext_int_poly; exact, closed_line = true)
+                in_int, _, _ = _line_polygon_interactions(alg.manifold, ih, ext_int_poly; exact, closed_line = true)
                 if in_int
                     #= interior polygon contains the hole - overlapping holes between the
                     interior and exterior polygons will be added =#
                     for jh in GI.gethole(interior_poly)
                         poly_jh = GI.Polygon(StaticArrays.SVector(jh))
-                        if intersects(poly_ih, poly_jh)
-                            new_holes = intersection(#=TODO: alg, =#poly_ih, poly_jh; target = GI.PolygonTrait())
+                        if intersects(alg.manifold, poly_ih, poly_jh)
+                            new_holes = intersection(alg, poly_ih, poly_jh, T; target = GI.PolygonTrait())
                             append!(union_poly.geom, (GI.getexterior(new_h) for new_h in new_holes))
                         end
                     end
@@ -230,7 +236,7 @@ function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
         multipoly_b = fix_multipoly(multipoly_b)
@@ -238,9 +244,9 @@ function _union(
     P = _fh_out_point_type(alg.manifold, poly_a, T)
     polys = [_fh_as_poly(P, poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
-        if intersects(#=TODO: alg.manifold, =#polys[1], poly_b)
+        if intersects(alg.manifold, polys[1], poly_b)
             # If polygons intersect and form a new polygon, swap out polygon
-            new_polys = union(alg, polys[1], poly_b; target)
+            new_polys = union(alg, polys[1], poly_b, T; target)
             if length(new_polys) > 1 # case where they intersect by just one point
                 push!(polys, _fh_as_poly(P, poly_b, T))  # add poly_b to list
             else
@@ -254,14 +260,14 @@ function _union(
     return polys
 end
 
-#= Multipolygon with polygon union is equivalent to taking the union of the polygon with the
-multipolygon and thus simply switches the order of operations and calls the above method. =#
+#= Preserve operand order so mixed representations do not round-trip passthrough vertices.
+The multipolygon implementation accumulates its original components in their own chart. =#
 _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
     kwargs...,
-) where T = union(alg, poly_b, multipoly_a; target, kwargs...)
+) where T = union(alg, multipoly_a, GI.MultiPolygon([poly_b]), T; target, kwargs...)
 
 #= Multipolygon with multipolygon union - note that all of the sub-polygons of `multipoly_a`
 and the sub-polygons of `multipoly_b` are included and combined together where there are
@@ -271,17 +277,18 @@ function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent repeated regions in the output
+        multipoly_a = fix_multipoly(multipoly_a)
         multipoly_b = fix_multipoly(multipoly_b)
         fix_multipoly = nothing
     end
     multipolys = multipoly_b
-    local polys
+    polys = [_fh_as_poly(_fh_out_point_type(alg.manifold, multipoly_a, T), p, T) for p in GI.getpolygon(multipoly_b)]
     for poly_a in GI.getpolygon(multipoly_a)
-        polys = union(alg, poly_a, multipolys; target, fix_multipoly)
-        multipolys = GI.MultiPolygon(polys)
+        polys = union(alg, poly_a, multipolys, T; target, fix_multipoly)
+        multipolys = _fh_multipolygon(polys)
     end
     return polys
 end
@@ -291,20 +298,20 @@ function _union(
     ::GI.PolygonTrait, poly_b;
     kwargs...,
 ) where T
-    return UnionIntersectingPolygons(#=TODO: alg.manifold=#)(GI.MultiPolygon([poly_a, poly_b]))
+    return _fh_multipolygon(union(alg, poly_a, poly_b, T; target = GI.PolygonTrait(), kwargs...))
 end
 function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(),
+    fix_multipoly = UnionIntersectingPolygons(alg, T),
     kwargs...,
 ) where T 
-    res = union(alg, multipoly_b, poly_a; target = GI.PolygonTrait(), kwargs...)
+    res = union(alg, poly_a, multipoly_b, T; target = GI.PolygonTrait(), fix_multipoly, kwargs...)
     if !isnothing(fix_multipoly)
-        return fix_multipoly(GI.MultiPolygon(res))
+        return fix_multipoly(_fh_multipolygon(res))
     else
-        return GI.MultiPolygon(res)
+        return _fh_multipolygon(res)
     end
 end
 # this is the opposite of the above
@@ -312,18 +319,19 @@ function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
-    fix_multipoly = UnionIntersectingPolygons(),
+    fix_multipoly = UnionIntersectingPolygons(alg, T),
     kwargs...,
 ) where T 
-    union(alg, poly_b, multipoly_a; target, fix_multipoly, kwargs...)
+    return _fh_multipolygon(union(alg, multipoly_a, poly_b, T;
+        target = GI.PolygonTrait(), fix_multipoly, kwargs...))
 end
 function _union(
     alg::FosterHormannClipping, target::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     trait_a::GI.MultiPolygonTrait, multipoly_a,
     trait_b::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
-    return GI.MultiPolygon(_union(alg, TraitTarget{GI.PolygonTrait}(), T, trait_a, multipoly_a, trait_b, multipoly_b; fix_multipoly, kwargs...))
+    return _fh_multipolygon(_union(alg, TraitTarget{GI.PolygonTrait}(), T, trait_a, multipoly_a, trait_b, multipoly_b; fix_multipoly, kwargs...))
 end
 # Many type and target combos aren't implemented
 function _union(

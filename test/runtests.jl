@@ -47,6 +47,8 @@ end
 @safetestset "Intersection Point" begin include("methods/clipping/intersection_points.jl") end
 @safetestset "Polygon Clipping" begin include("methods/clipping/polygon_clipping.jl") end
 @safetestset "Sutherland-Hodgman" begin include("methods/clipping/sutherland_hodgman.jl") end
+@safetestset "Clipping manifold passthrough" begin include("methods/clipping/manifold_passthrough.jl") end
+@safetestset "Shared-boundary enclave" begin include("methods/clipping/shared_boundary_enclave.jl") end
 @safetestset "Spherical Foster-Hormann" begin include("methods/clipping/spherical_foster_hormann.jl") end
 @safetestset "OverlayNG noding" begin include("methods/clipping/overlayng/noding.jl") end
 @safetestset "OverlayNG graph" begin include("methods/clipping/overlayng/overlay_graph.jl") end

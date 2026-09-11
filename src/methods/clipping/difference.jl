@@ -120,12 +120,15 @@ function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
+    # Although redundant subtraction is set-theoretically harmless, revisiting a
+    # spherical boundary after rounding its crossings can create duplicate trace nodes.
+    isnothing(fix_multipoly) || (multipoly_b = fix_multipoly(multipoly_b))
     polys = [_fh_as_poly(_fh_out_point_type(alg.manifold, poly_a, T), poly_a, T)]
     for poly_b in GI.getpolygon(multipoly_b)
         isempty(polys) && break
-        polys = mapreduce(p -> difference(alg, p, poly_b; target), append!, polys)
+        polys = mapreduce(p -> difference(alg, p, poly_b, T; target), append!, polys)
     end
     return polys
 end
@@ -138,7 +141,7 @@ function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
         multipoly_a = fix_multipoly(multipoly_a)
@@ -146,7 +149,7 @@ function _difference(
     polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, multipoly_a, T))}()
     sizehint!(polys, GI.npolygon(multipoly_a))
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, difference(alg, poly_a, poly_b; target))
+        append!(polys, difference(alg, poly_a, poly_b, T; target))
     end
     return polys
 end
@@ -154,27 +157,27 @@ end
 #= Multipolygon with multipolygon difference - note that all intersection regions between
 sub-polygons of `multipoly_a` and sub-polygons of `multipoly_b` will be removed from the
 corresponding sub-polygon of `multipoly_a`. Unless specified with `fix_multipoly = nothing`,
-`multipolygon_a` will be validated using the given (default is `UnionIntersectingPolygons()`)
-correction. =#
+both multipolygons will be validated using the given correction. =#
 function _difference(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_a to prevent returning an invalid multipolygon
         multipoly_a = fix_multipoly(multipoly_a)
+        multipoly_b = fix_multipoly(multipoly_b)
         fix_multipoly = nothing
     end
-    local polys
+    polys = [_fh_as_poly(_fh_out_point_type(alg.manifold, multipoly_a, T), p, T) for p in GI.getpolygon(multipoly_a)]
     for (i, poly_b) in enumerate(GI.getpolygon(multipoly_b))
         #= Removing intersections of `multipoly_a`` with pieces of `multipoly_b`` - as
         pieces of `multipolygon_a`` are removed, continue to take difference with new shape
         `polys` =#
         polys = if i == 1
-            difference(alg, multipoly_a, poly_b; target, fix_multipoly)
+            difference(alg, multipoly_a, poly_b, T; target, fix_multipoly)
         else
-            difference(alg, GI.MultiPolygon(polys), poly_b; target, fix_multipoly)
+            difference(alg, _fh_multipolygon(polys), poly_b, T; target, fix_multipoly)
         end
         #= One multipoly_a has been completely covered (and thus removed) there is no need to
         continue taking the difference =#
@@ -186,13 +189,13 @@ function _difference(
     alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     trait_a::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_a,
     trait_b::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...
 ) where T
-    polys = _difference(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; kwargs...)
+    polys = _difference(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; fix_multipoly, kwargs...)
     if isnothing(fix_multipoly)
-        return GI.MultiPolygon(polys)
+        return _fh_multipolygon(polys)
     else
-        return fix_multipoly(GI.MultiPolygon(polys))
+        return fix_multipoly(_fh_multipolygon(polys))
     end
 end
 # Many type and target combos aren't implemented

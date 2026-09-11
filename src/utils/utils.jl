@@ -177,9 +177,20 @@ function eachedge(geom, ::Type{T}) where T
     eachedge(GI.trait(geom), geom, T)
 end
 eachedge(::Planar, geom, ::Type{T} = Float64) where T = eachedge(geom, T)
-function eachedge(::Spherical, geom, ::Type{T} = Float64) where T
-    return (map(UnitSpherical.UnitSphericalPoint, ps) for ps in eachedge(geom, T))
+# Use the same conversion for edge iteration and subsequent clipping-node construction.
+# In particular, never normalize or round-trip already Cartesian input vertices.
+_spherical_edge_point(p, ::Type{T}) where T = GI.is3d(p) ?
+    UnitSpherical.UnitSphericalPoint{T}(T(GI.x(p)), T(GI.y(p)), T(GI.z(p))) :
+    UnitSpherical.UnitSphericalPoint{T}(_spherical_kernel_point(_tuple_point(p, T)))
+function eachedge(m::Spherical, geom, ::Type{T} = Float64) where T
+    return _spherical_eachedge(GI.trait(geom), geom, T)
 end
+_spherical_eachedge(::GI.AbstractCurveTrait, geom, ::Type{T}) where T =
+    ((_spherical_edge_point(GI.getpoint(geom,i),T), _spherical_edge_point(GI.getpoint(geom,i+1),T)) for i in 1:GI.npoint(geom)-1)
+_spherical_eachedge(::GI.AbstractGeometryTrait, geom, ::Type{T}) where T =
+    Iterators.flatten((_spherical_eachedge(GI.trait(r),r,T) for r in flatten(GI.AbstractCurveTrait,geom)))
+_spherical_eachedge(trait::Union{GI.PointTrait,GI.MultiPointTrait}, geom, ::Type{T}) where T =
+    eachedge(trait, geom, T)
 # implementation for LineString and LinearRing
 function eachedge(trait::GI.AbstractCurveTrait, geom, ::Type{T}) where T
     return (_tuple_point.((GI.getpoint(geom, i), GI.getpoint(geom, i+1)), T) for i in 1:GI.npoint(geom)-1)
