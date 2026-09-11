@@ -65,7 +65,7 @@ boundary point that interacts with either the other geometry's interior or
 boundary.
 
 ## Examples
-```jldoctest setup=:(using GeometryOps, GeometryBasics)
+```jldoctest; setup=:(using GeometryOps, GeometryBasics)
 import GeometryOps as GO, GeoInterface as GI
 
 l1 = GI.Line([(0.0, 0.0), (1.0, 0.0)])

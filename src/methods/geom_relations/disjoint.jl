@@ -62,7 +62,7 @@ Return `true` if the first geometry is disjoint from the second geometry. The
 interiors and boundaries of both geometries must not intersect.
 
 ## Examples
-```jldoctest setup=:(using GeometryOps, GeoInterface)
+```jldoctest; setup=:(using GeometryOps, GeoInterface)
 import GeometryOps as GO, GeoInterface as GI
 
 line = GI.LineString([(1, 1), (1, 2), (1, 3), (1, 4)])
