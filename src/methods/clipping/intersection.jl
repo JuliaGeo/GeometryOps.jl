@@ -52,11 +52,11 @@ end
 function intersection(
     geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
 ) where {T<:AbstractFloat}
-    return intersection(FosterHormannClipping(Planar()), geom_a, geom_b; target, kwargs...)
+    return intersection(FosterHormannClipping(Planar()), geom_a, geom_b, T; target, kwargs...)
 end
 # if manifold but no algorithm - assume FosterHormannClipping with provided manifold.
 function intersection(m::Manifold, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...) where {T<:AbstractFloat}
-    return intersection(FosterHormannClipping(m), geom_a, geom_b; target, kwargs...)
+    return intersection(FosterHormannClipping(m), geom_a, geom_b, T; target, kwargs...)
 end
 
 # Curve-Curve Intersections with target Point
@@ -128,27 +128,33 @@ function _intersection(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
         multipoly_b = fix_multipoly(multipoly_b)
     end
     polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, poly_a, T))}()
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(alg, poly_a, poly_b; target))
+        append!(polys, intersection(alg, poly_a, poly_b, T; target))
     end
     return polys
 end
 
-#= Multipolygon with polygon intersection is equivalent to taking the intersection of the
-polygon with the multipolygon and thus simply switches the order of operations and calls the
-above method. =#
-_intersection(
+#= Preserve operand order so mixed representations do not round-trip passthrough vertices. =#
+function _intersection(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
-    kwargs...,
-) where T = intersection(alg, poly_b, multipoly_a; target , kwargs...)
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
+) where T
+    isnothing(fix_multipoly) || (multipoly_a = fix_multipoly(multipoly_a))
+    P = _fh_out_point_type(alg.manifold, multipoly_a, T)
+    polys = _get_poly_type(T, P)[]
+    for poly_a in GI.getpolygon(multipoly_a)
+        append!(polys, intersection(alg, poly_a, poly_b, T; target))
+    end
+    return polys
+end
 
 #= Multipolygon with multipolygon intersection - note that all intersection regions between
 any sub-polygons of `multipoly_a` and any of the sub-polygons of `multipoly_b` are counted
@@ -159,7 +165,7 @@ function _intersection(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix both multipolygons to prevent duplicated regions
         multipoly_a = fix_multipoly(multipoly_a)
@@ -168,7 +174,7 @@ function _intersection(
     end
     polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, multipoly_a, T))}()
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly))
+        append!(polys, intersection(alg, poly_a, multipoly_b, T; target, fix_multipoly))
     end
     return polys
 end
@@ -177,13 +183,13 @@ function _intersection(
     alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     trait_a::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_a,
     trait_b::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...
 ) where T
-    polys = _intersection(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; kwargs...)
+    polys = _intersection(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; fix_multipoly, kwargs...)
     if isnothing(fix_multipoly)
-        return GI.MultiPolygon(polys)
+        return _fh_multipolygon(polys)
     else
-        return fix_multipoly(GI.MultiPolygon(polys))
+        return fix_multipoly(_fh_multipolygon(polys))
     end
 end
 
@@ -204,6 +210,7 @@ end
 
 """
     intersection_points(geom_a, geom_b, [T::Type])
+    intersection_points(manifold::Manifold, geom_a, geom_b, [T::Type])
 
 Return a list of intersection tuple points between two geometries. If no intersection points
 exist, returns an empty list.
@@ -220,11 +227,20 @@ inter_points = GO.intersection_points(line1, line2)
 # output
 1-element Vector{Tuple{Float64, Float64}}:
  (125.58375366067548, -14.83572303404496)
+```
+
+On `Spherical()`, edges are minor great-circle arcs. Results use the first input's
+coordinate representation (longitude/latitude tuples or `UnitSphericalPoint`s) and numeric
+type `T`. `NestedLoop()` and `AutoAccelerator()` support spherical inputs; tree accelerators
+currently require `Planar()`.
 """
 intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat = intersection_points(FosterHormannClipping(Planar()), geom_a, geom_b, T)
 function intersection_points(alg::FosterHormannClipping{M, A}, geom_a, geom_b, ::Type{T} = Float64) where {M, A, T <: AbstractFloat}
     return _intersection_points(alg.manifold, alg.accelerator, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
+
+intersection_points(m::Manifold, geom_a, geom_b, ::Type{T} = Float64) where {T <: AbstractFloat} =
+    intersection_points(FosterHormannClipping(m), geom_a, geom_b, T)
 
 function intersection_points(m::Manifold, a::IntersectionAccelerator, geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat
     return _intersection_points(m, a, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
@@ -235,9 +251,12 @@ end
 segments, line strings, linear rings, polygons, and multipolygons. =#
 function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = True()) where {M <: Manifold, A <: IntersectionAccelerator, T}
     # Initialize an empty list of points
-    result = Tuple{T, T}[]
-    # Check if the geometries extents even overlap
-    Extents.intersects(GI.extent(a), GI.extent(b)) || return result
+    P = _fh_out_point_type(manifold, a, T)
+    result = P[]
+    # Cartesian envelopes are not valid bounds for great-circle arcs.
+    if manifold isa Planar
+        Extents.intersects(GI.extent(a), GI.extent(b)) || return result
+    end
     # Create a list of edges from the two input geometries
     # edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
     # Loop over pairs of edges and add any unique intersection points to results
@@ -247,10 +266,10 @@ function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.Abstr
         line_orient, intr1, intr2 = _intersection_point(manifold, T, a_edge, b_edge; exact)
         line_orient == line_out && return LoopStateMachine.Action(:continue) # use LoopStateMachine.Continue() to skip this edge - in this case it doesn't matter but you could use it to e.g. break once you found the first intersecting point.
         pt1, _ = intr1
-        push!(result, pt1)  # if not line_out, there is at least one intersection point
+        push!(result, _fh_as_point(P, pt1, T))  # if not line_out, there is at least one intersection point
         if line_orient == line_over # if line_over, there are two intersection points
             pt2, _ = intr2
-            push!(result, pt2)
+            push!(result, _fh_as_point(P, pt2, T))
         end
     end
 
@@ -271,7 +290,7 @@ function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.Abstr
     returned from `_intersection_point`, but this would be different for curves vs polygons
     vs multipolygons depending on if the shape is closed. This then wouldn't allow using the
     `to_edges` functionality.  =# 
-    unique!(sort!(result))
+    unique!(sort!(result; by = Tuple))
     return result
 end
 
@@ -360,7 +379,7 @@ _intersection_point(m::Spherical, ::Type{T}, a::Edge, b::Edge; exact) where {T} 
 
 #-- Give a computed crossing back in the representation the edge arrived in.
 _as_ingested(x, ::Tuple, ::Type{T}) where {T} = _sph_lonlat(T, x)
-_as_ingested(x, ::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = x
+_as_ingested(x, ::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = UnitSpherical.UnitSphericalPoint{T}(x)
 
 function _sph_intersection_point(m::Spherical, ::Type{T}, (a1, a2), (b1, b2); exact) where {T}
     #= The sentinel point is never read: `line_out` carries no point, and `intr2` is only

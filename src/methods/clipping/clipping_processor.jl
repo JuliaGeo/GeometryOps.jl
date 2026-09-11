@@ -47,7 +47,16 @@ Applies the Foster-Hormann clipping algorithm.
 # Arguments
 - `manifold::M`: The manifold on which the algorithm operates. `Geodesic` is not supported
   (the constructor throws); use [`Spherical`](@ref) instead.
-- `accelerator::A`: The accelerator to use for the algorithm.  Can be `nothing` for automatic choice, or a custom accelerator.
+- `accelerator::A`: The accelerator to use. `NestedLoop()` and `AutoAccelerator()` support
+  spherical input; explicit tree accelerators currently require `Planar()`.
+
+Spherical clipping preserves the first input's coordinate representation and the requested
+numeric type. Exact predicates classify input arcs, but computed intersections are rounded
+floating-point coordinates. Repeatedly clipping an earlier result against the same boundary
+can therefore create inconsistent representable topology and raise `TracingError`. Avoid
+redundant clipping against overlapping multipolygon components by retaining the default
+`fix_multipoly` correction. Fully robust arbitrary chaining requires intersection provenance
+or exact constructions; this implementation does not silently snap nearby vertices.
 """
 struct FosterHormannClipping{M <: Manifold, A <: IntersectionAccelerator} <: GeometryOpsCore.Algorithm{M}
     manifold::M
@@ -129,7 +138,7 @@ Base.:(==)(pn1::PolyNode, pn2::PolyNode) = equals(pn1, pn2)
     FosterHormannCache([T = Float64])
 
 Preallocated buffers for [`FosterHormannClipping`](@ref): the vertex lists of the two rings,
-and the index of intersections within the first.
+the index of intersections within the first, and converted spherical inner edges.
 
 Pass this as the `cache` keyword argument to [`intersection_area`](@ref) to reuse the
 algorithm's working set instead of allocating it per call, as conservative regridding
@@ -161,9 +170,10 @@ struct FosterHormannCache{T, P}
     a_list::Vector{PolyNode{T, P}}
     b_list::Vector{PolyNode{T, P}}
     a_idx_list::Vector{Int}
+    b_edges::Vector{Tuple{P,P}}
 end
 FosterHormannCache{T, P}() where {T, P} =
-    FosterHormannCache{T, P}(PolyNode{T, P}[], PolyNode{T, P}[], Int[])
+    FosterHormannCache{T, P}(PolyNode{T, P}[], PolyNode{T, P}[], Int[], Tuple{P,P}[])
 
 #= The representation the manifold computes in, mirroring `SutherlandHodgmanCache`: planar
 clipping works in the chart, spherical clipping works on the unit sphere. =#
@@ -180,7 +190,7 @@ FosterHormannCache(::Type{T} = Float64) where {T <: AbstractFloat} =
 identities on points already in that representation, so 3D input reaches the node lists
 without arithmetic and comes back out bit-identical. =#
 _fh_ingest(::Planar, p, ::Type{T}) where {T} = _tuple_point(p, T)
-_fh_ingest(::Spherical, p, ::Type{T}) where {T} = _spherical_kernel_point(_tuple_point(p, T))
+_fh_ingest(::Spherical, p, ::Type{T}) where {T} = _spherical_edge_point(p, T)
 
 function _fh_check_cache(cache::FosterHormannCache{C, Q}, ::Type{T}, ::Type{P}) where {C, Q, T, P}
     (C === T && Q === P) || throw(ArgumentError(
@@ -271,6 +281,14 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     return foreach_pair_of_maybe_intersecting_edges_in_order(alg.manifold, alg.accelerator, f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
 end
 
+_reusable_inner_edges(m::Manifold, geom, ::Type{T}) where {T} = eachedge(m, geom, T)
+_reusable_inner_edges(m::Spherical, geom, ::Type{T}) where {T} =
+    GI.is3d(geom) ? eachedge(m, geom, T) : collect(eachedge(m, geom, T))
+
+_check_planar_edge_accelerator(::Planar, accelerator) = nothing
+_check_planar_edge_accelerator(m::Manifold, accelerator) = throw(ArgumentError(
+    "$(typeof(accelerator)) indexes planar edge extents and does not support $m. Use NestedLoop() or AutoAccelerator() for spherical clipping."))
+
 """
     foreach_pair_of_maybe_intersecting_edges_in_order(
         manifold::M, accelerator::A,
@@ -310,9 +328,9 @@ checks in the inner loop.
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::AutoAccelerator, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
-    # this is suitable for planar
-    # but spherical / geodesic will need s2 support at some point,
-    # or -- even now -- just buffering
+    if manifold isa Spherical
+        return foreach_pair_of_maybe_intersecting_edges_in_order(manifold, NestedLoop(), f_on_each_a, f_after_each_a, f_on_each_maybe_intersect, poly_a, poly_b, T)
+    end
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
     # Switching behaviour is turned off in the patch release
@@ -327,7 +345,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
 end
 
 function foreach_pair_of_maybe_intersecting_edges_in_order(
-    manifold::M, accelerator::NestedLoop, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
+    manifold::M, accelerator::NestedLoop, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64; inner_edges = nothing
 ) where {FA, FAAfter, FI, T, M <: Manifold}
     # this is suitable for planar
     # but spherical / geodesic will need s2 support at some point,
@@ -340,11 +358,19 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     # where we know the polygon will only ever have a few vertices.
     # This is also applicable to any manifold, since the checking is done within
     # the loop.
+    # Materialize spherical inner edges once: recreating their lazy iterator for every
+    # outer edge repeats all longitude/latitude conversions. Planar iterators are cheap.
+    edges_b = if inner_edges === nothing || GI.is3d(poly_b)
+        _reusable_inner_edges(manifold, poly_b, T)
+    else
+        empty!(inner_edges)
+        append!(inner_edges, eachedge(manifold, poly_b, T))
+    end
     # First, loop over "each edge" in poly_a
     for (i, (a1t, a2t)) in enumerate(eachedge(manifold, poly_a, T))
         a1t == a2t && continue
         isnothing(f_on_each_a) || f_on_each_a(a1t, i)
-        for (j, (b1t, b2t)) in enumerate(eachedge(manifold, poly_b, T))
+        for (j, (b1t, b2t)) in enumerate(edges_b)
             b1t == b2t && continue
             LoopStateMachine.@controlflow f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # this should be aware of manifold by construction.
         end
@@ -357,6 +383,7 @@ end
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::SingleSTRtree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
+    _check_planar_edge_accelerator(manifold, accelerator)
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
     # This is the "middle ground" case - run only a strtree 
@@ -415,6 +442,7 @@ end
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::SingleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
+    _check_planar_edge_accelerator(manifold, accelerator)
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
     ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
@@ -446,6 +474,7 @@ end
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::DoubleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
+    _check_planar_edge_accelerator(manifold, accelerator)
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
     edges_a = to_edgelist(poly_a, T)
@@ -506,6 +535,7 @@ end
 function foreach_pair_of_maybe_intersecting_edges_in_order(
     manifold::M, accelerator::ThinnedDoubleNaturalTree, f_on_each_a::FA, f_after_each_a::FAAfter, f_on_each_maybe_intersect::FI, poly_a, poly_b, _t::Type{T} = Float64
 ) where {FA, FAAfter, FI, T, M <: Manifold}
+    _check_planar_edge_accelerator(manifold, accelerator)
     na = GI.npoint(poly_a)
     nb = GI.npoint(poly_b)
     ext_a, ext_b = GI.extent(poly_a), GI.extent(poly_b)
@@ -667,7 +697,14 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     end
     ```
     =#
-    foreach_pair_of_maybe_intersecting_edges_in_order(alg, on_each_a, after_each_a, on_each_maybe_intersect, poly_a, poly_b, T)
+    if cache !== nothing && alg.manifold isa Spherical && alg.accelerator isa NestedLoop
+        foreach_pair_of_maybe_intersecting_edges_in_order(
+            alg.manifold, alg.accelerator, on_each_a, after_each_a, on_each_maybe_intersect,
+            poly_a, poly_b, T; inner_edges = cache.b_edges,
+        )
+    else
+        foreach_pair_of_maybe_intersecting_edges_in_order(alg, on_each_a, after_each_a, on_each_maybe_intersect, poly_a, poly_b, T)
+    end
 
     return a_list, a_idx_list, n_b_intrs
 end
@@ -1111,6 +1148,13 @@ _get_poly_type(::Type{T}, ::Type{P}) where {T, P} =
     GI.Polygon{_fh_pt_is3d(P), false,
         Vector{GI.LinearRing{_fh_pt_is3d(P), false, Vector{P}, Nothing, Nothing}}, Nothing, Nothing}
 
+# GeoInterface's convenience constructor inspects the first polygon even when Z/M
+# are explicit. Supply the concrete wrapper type so empty clipping results are valid.
+function _fh_multipolygon(polys::Vector{P}; crs = nothing) where {P}
+    Z = _fh_pt_is3d(_fh_poly_point_type(P))
+    return GI.MultiPolygon{Z, false, typeof(polys), Nothing, typeof(crs)}(polys, nothing, crs)
+end
+
 #= Egress mirrors ingress: the caller gets back the representation it supplied, so 3D input
 is returned untouched and lon/lat input converts back. A vertex that passed through the clip
 unchanged is not converted at all -- `srcidx` names its slot in the input ring, so it is
@@ -1129,11 +1173,11 @@ representation, so matching input is bit-exact; mismatched input is converted, n
 rejected. =#
 _fh_as_point(::Type{<:Tuple}, p, ::Type{T}) where {T} = _fh_tuple_point(p, T)
 _fh_as_point(::Type{<:UnitSpherical.UnitSphericalPoint}, p, ::Type{T}) where {T} =
-    _spherical_kernel_point(_tuple_point(p, T))
+    _spherical_edge_point(p, T)
 
 #-- `_tuple_point` is the identity on a `UnitSphericalPoint`, which is right for the node
 #-- lists and wrong here, where a tuple is what was asked for.
-_fh_tuple_point(p::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = _usp_to_lonlat(p)
+_fh_tuple_point(p::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = _sph_lonlat(T, p)
 _fh_tuple_point(p, ::Type{T}) where {T} = _tuple_point(p, T)
 
 _fh_as_ring(::Type{P}, ring, ::Type{T}) where {P, T} =
@@ -1216,8 +1260,12 @@ end
 _RingCollector(::Type{T}, ::Type{P} = Tuple{T, T}) where {T, P} =
     _RingCollector(Vector{_get_poly_type(T, P)}(undef, 0))
 
-_ring_start(::_RingCollector, pt) = [pt]
-_ring_step(::_RingCollector, pts, pt) = (push!(pts, pt); pts)
+function _ring_start(::_RingCollector{Poly}, pt) where {Poly}
+    P = _fh_poly_point_type(Poly)
+    return P[_fh_as_point(P, pt, _fh_float_type(P))]
+end
+_ring_step(::_RingCollector, pts::Vector{P}, pt) where {P} =
+    (push!(pts, _fh_as_point(P, pt, _fh_float_type(P))); pts)
 _ring_close!(sink::_RingCollector, pts) = (push!(sink.polys, GI.Polygon([pts])); nothing)
 
 # The total area of those same rings, accumulated as they are walked. This is what lets
@@ -1242,12 +1290,9 @@ function _ring_close!(sink::_RingMeasurer, (first_pt, prev, acc))
 end
 
 #-- the per-vertex terms of `_ring_area`'s two formulas (methods/area.jl), taken one
-#-- vertex at a time. Summed in the same order, they give the same answer. The spherical
-#-- one is untested: `FosterHormannClipping(Spherical())` is an ambiguous constructor call
-#-- today, so no spherical FH algorithm can be built to reach it.
+#-- vertex at a time. Summed in the same order, they give the same answer.
 _ring_term(::Planar, first_pt, prev, pt) = _area_component(prev, pt)
-#-- `_spherical_kernel_point` is the identity on the `UnitSphericalPoint`s the tracer now
-#-- carries, so this costs nothing there and still accepts lon/lat from other callers.
+#-- Use the same canonical unit-sphere points as the public spherical area calculation.
 _ring_term(::Spherical, first_pt, prev, pt) = _spherical_triangle_area(Eriksson(),
     _spherical_kernel_point(first_pt), _spherical_kernel_point(prev),
     _spherical_kernel_point(pt))
@@ -1386,7 +1431,7 @@ function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, retur
                 curr_poly = return_polys[j]
                 remove_poly_idx[j] && continue
                 curr_poly_ext = GI.nhole(curr_poly) > 0 ? GI.Polygon(StaticArrays.SVector(GI.getexterior(curr_poly))) : curr_poly
-                in_ext, on_ext, out_ext = _line_polygon_interactions(#=TODO: alg.manifold=#curr_hole, curr_poly_ext; exact, closed_line = true)
+                in_ext, on_ext, out_ext = _line_polygon_interactions(alg.manifold, curr_hole, curr_poly_ext; exact, closed_line = true)
                 if in_ext  # hole is at least partially within the polygon's exterior
                     new_hole, new_hole_poly, n_new_pieces = _combine_holes!(alg, T, curr_hole, curr_poly, return_polys, remove_hole_idx)
                     if n_new_pieces > 0
@@ -1408,7 +1453,7 @@ function _add_holes_to_polys!(alg::FosterHormannClipping{M, A}, ::Type{T}, retur
                         end
                     end
                 # polygon is completely within hole
-                elseif coveredby(#=TODO: alg.manifold=#curr_poly_ext, GI.Polygon(StaticArrays.SVector(curr_hole)))
+                elseif coveredby(alg.manifold, curr_poly_ext, GI.Polygon(StaticArrays.SVector(curr_hole)))
                     remove_poly_idx[j] = true
                 end
             end
@@ -1440,7 +1485,7 @@ function _combine_holes!(alg::FosterHormannClipping{M, A}, ::Type{T}, new_hole, 
     # Combine any existing holes in curr_poly with new hole
     for (k, old_hole) in enumerate(GI.gethole(curr_poly))
         old_hole_poly = GI.Polygon(StaticArrays.SVector(old_hole))
-        if intersects(#=TODO: alg.manifold=#new_hole_poly, old_hole_poly)
+        if intersects(alg.manifold, new_hole_poly, old_hole_poly)
             # If the holes intersect, combine them into a bigger hole
             hole_union = union(alg, new_hole_poly, old_hole_poly, T; target = GI.PolygonTrait())[1]
             push!(remove_hole_idx, k + 1)
@@ -1459,7 +1504,7 @@ function _combine_holes!(alg::FosterHormannClipping{M, A}, ::Type{T}, new_hole, 
     # If new polygon pieces created, make sure remaining holes are in the correct piece
     @views for piece in return_polys[end - n_new_polys + 1:end]
         for (k, old_hole) in enumerate(GI.gethole(curr_poly))
-            if !(k in remove_hole_idx) && within(old_hole, piece)
+            if !(k in remove_hole_idx) && within(alg.manifold, old_hole, piece)
                 push!(remove_hole_idx, k + 1)
                 push!(piece.geom, old_hole)
             end
