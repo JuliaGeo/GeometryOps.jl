@@ -90,6 +90,12 @@ function _spherical_region_extent(pts::Vector{<:UnitSpherical.UnitSphericalPoint
     ext = mapreduce(Extents.union, 1:n) do i
         UnitSpherical.spherical_arc_extent(pts[i], pts[mod1(i + 1, n)])
     end
+    return _spherical_region_extent(pts, n, ext)
+end
+
+# Reuse boundary bounds computed during local preparation; enclosed axes must
+# still be tested, since a boundary box alone cannot bound a spherical region.
+function _spherical_region_extent(pts::Vector{<:UnitSpherical.UnitSphericalPoint}, n::Int, ext)
     n < 3 && return ext
 
     #=
