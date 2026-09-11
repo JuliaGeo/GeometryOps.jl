@@ -104,6 +104,49 @@ using Random
         end
     end
 
+    @testset "Cells follow flattened input order" begin
+        rng = Xoshiro(21)
+        points = [(rand(rng), rand(rng)) for _ in 1:20]
+        boundary = GI.Polygon([[(-1.0, -1.0), (2.0, -1.0), (2.0, 2.0), (-1.0, 2.0), (-1.0, -1.0)]])
+        # Include a permutation and mixed geometries to exercise flattening order.
+        for ordered_points in (points, reverse(points))
+            geoms = [GI.Point(first(ordered_points)), GI.MultiPoint(ordered_points[2:end])]
+            for clip_polygon in (nothing, boundary)
+                polygons = GO.voronoi(geoms; clip_polygon, rng = Xoshiro(0))
+                @test length(polygons) == length(ordered_points)
+                # A cell's centroid must be closest to its own generator.
+                for (i, poly) in enumerate(polygons)
+                    center = GO.centroid(poly)
+                    distances = [sum(abs2, center .- p) for p in ordered_points]
+                    @test argmin(distances) == i
+                end
+            end
+        end
+    end
+
+    @testset "Clipping can omit cells without reordering survivors" begin
+        points = [(0.0, 0.0), (10.0, 0.0), (0.0, 10.0), (10.0, 10.0)]
+        boundary = GI.Polygon([[(-1.0, 6.0), (11.0, 6.0), (11.0, 11.0), (-1.0, 11.0), (-1.0, 6.0)]])
+        polygons = GO.voronoi(points; clip_polygon = boundary, rng = Xoshiro(0))
+        @test length(polygons) == 2
+        for (poly, i) in zip(polygons, (3, 4))
+            center = GO.centroid(poly)
+            @test argmin([sum(abs2, center .- p) for p in points]) == i
+        end
+    end
+
+    @testset "Explicit RNG controls triangulation and clipping" begin
+        points = [(0.1, 0.2), (0.8, 0.1), (0.9, 0.9), (0.2, 0.8), (0.4, 0.5)]
+        boundary = GI.Polygon([[(-1.0, -1.0), (2.0, -1.0), (2.0, 2.0), (-1.0, 2.0), (-1.0, -1.0)]])
+        for clip_polygon in (nothing, boundary)
+            default_rng_before = copy(Random.default_rng())
+            first_result = GO.voronoi(points; clip_polygon, rng = Xoshiro(17))
+            @test rand(copy(Random.default_rng()), UInt) == rand(default_rng_before, UInt)
+            second_result = GO.voronoi(points; clip_polygon, rng = Xoshiro(17))
+            @test GI.coordinates.(first_result) == GI.coordinates.(second_result)
+        end
+    end
+
     @testset "Clean clipping input" begin
         points = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0))
         order = (1, 2, 3, 4, 1)

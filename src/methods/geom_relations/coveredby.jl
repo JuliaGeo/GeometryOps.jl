@@ -66,7 +66,7 @@ Furthermore, `coveredby` returns the exact opposite result of `covers`. They are
 equivalent with the order of the arguments swapped.
 
 ## Examples
-```jldoctest setup=:(using GeometryOps, GeometryBasics)
+```jldoctest; setup=:(using GeometryOps, GeometryBasics)
 import GeometryOps as GO, GeoInterface as GI
 p1 = GI.Point(0.0, 0.0)
 p2 = GI.Point(1.0, 1.0)
