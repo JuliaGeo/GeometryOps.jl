@@ -527,6 +527,17 @@ end
 @inline _exact_node_dir(bt, k::NodeKey) =
     k.is_crossing ? _sph_crossing_dir(bt, k) : _vec3(bt, k.pt)
 
+# Canonical oriented projective coordinates for hashing a spherical node.
+# Dividing by a positive component magnitude removes scale while preserving
+# direction: antipodal nodes get opposite keys. Vertex directions and proper
+# crossing directions are nonzero by the kernel's input/crossing contracts.
+function _spherical_node_identity(k::NodeKey)
+    d = _exact_node_dir(True(), k)
+    pivot = findfirst(!iszero, d)
+    scale = abs(d[pivot])
+    return (d[1] / scale, d[2] / scale, d[3] / scale)
+end
+
 function rk_nodes_coincide(::Spherical, k1::NodeKey, k2::NodeKey; exact)
     k1 == k2 && return true
     bt = booltype(exact)
