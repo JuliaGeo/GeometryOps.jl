@@ -517,9 +517,10 @@ another crossing — lands in the same map entry, in every mode (not only
 under self-noding; e.g. RelateNGTest.testPolygonLineCrossingContained needs
 a B-line proper crossing of one A polygon merged with its vertex touch of
 another). Here node identity is symbolic, so the merge is an explicit pass,
-run whenever any crossing key exists.
+run whenever any crossing key exists on the plane. On the sphere, it also
+merges distinct vertex keys with the same oriented direction.
 
-Candidate grouping is by *exact bounding boxes* (the F1 follow-up to
+On the plane, candidate grouping is by *exact bounding boxes* (the F1 follow-up to
 design D3): a vertex key's box is its exact coordinate; a crossing key's
 box is the intersection of its two defining segments' bounding boxes,
 which provably contains the exact crossing point (the point lies on both
@@ -540,9 +541,13 @@ crossing key on every evaluation.
 A vertex key is preferred as the canonical merged node: its coordinate is
 exact, so the edge wheel and node location never need the rational apex.
 Otherwise the merged crossing node's wheel compares foreign directions
-around the exact rational apex (`rk_compare_edge_dir` slow path).
+around the exact rational apex (`rk_compare_edge_dir` slow path). Spherical
+nodes are grouped by exact oriented projective directions instead; endpoint
+coordinate boxes do not bound great-circle arcs.
 =#
-function _merge_coincident_nodes!(tc::TopologyComputer)
+_merge_coincident_nodes!(tc::TopologyComputer) = _merge_coincident_nodes!(tc, _manifold(tc))
+
+function _merge_coincident_nodes!(tc::TopologyComputer, ::Planar)
     nodemap = tc.node_sections
     length(nodemap) > 1 || return nothing
     any(k -> k.is_crossing, keys(nodemap)) || return nothing
@@ -567,6 +572,33 @@ function _merge_coincident_nodes!(tc::TopologyComputer)
         end
         j > i && _merge_coincident_y_clusters!(nodemap, items[i:j])
         i = j + 1
+    end
+    return nothing
+end
+
+# Great-circle arcs are not bounded by their endpoint coordinate boxes.
+# Instead, hash exact oriented projective directions: unlike normalized unit
+# coordinates, these are rational and require no rounded square root. This
+# groups spherical nodes in linear expected time, including proportional vertex
+# coordinates, without relying on planar candidate bounds.
+function _merge_coincident_nodes!(tc::TopologyComputer, ::Spherical)
+    nodemap = tc.node_sections
+    length(nodemap) > 1 || return nothing
+    canonical_keys = Dict{NTuple{3, Rational{BigInt}}, keytype(nodemap)}()
+    for k in collect(keys(nodemap))
+        identity = _spherical_node_identity(k)
+        canonical = get(canonical_keys, identity, nothing)
+        if canonical === nothing
+            canonical_keys[identity] = k
+            continue
+        end
+        # Prefer an input vertex to a symbolic crossing, just as on the plane.
+        if canonical.is_crossing && !k.is_crossing
+            _merge_node_sections!(nodemap[k], pop!(nodemap, canonical), k)
+            canonical_keys[identity] = k
+        else
+            _merge_node_sections!(nodemap[canonical], pop!(nodemap, k), canonical)
+        end
     end
     return nothing
 end
