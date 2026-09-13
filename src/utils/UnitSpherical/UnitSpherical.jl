@@ -6,6 +6,7 @@ import GeoInterface as GI, GeoFormatTypes as GFT
 import Extents
 
 import Random
+import ExactPredicates
 
 # using TestItems # this is a thin package that allows TestItems.@testitem to be parsed.
 
@@ -24,7 +25,8 @@ include("arc_intersection.jl")
 include("arc_extent.jl")
 
 export UnitSphericalPoint, UnitSphereFromGeographic, GeographicFromUnitSphere,
-       slerp, SphericalCap, spherical_distance, spherical_orient, point_on_spherical_arc,
+       slerp, SphericalCap, spherical_distance, spherical_orient, exact_spherical_orient,
+       point_on_spherical_arc,
        spherical_ring_contains, spherical_ring_encloses, spherical_exterior_anchor,
        spherical_arc_intersection, ArcIntersectionResult,
        arc_cross, arc_hinge, arc_overlap, arc_disjoint,
@@ -34,9 +36,8 @@ export UnitSphericalPoint, UnitSphereFromGeographic, GeographicFromUnitSphere,
 """
     to_unit_spherical_points(ring) -> Vector{<:UnitSphericalPoint}
 
-Convert a ring (linear ring or any GeoInterface point iterator) to a vector of
-UnitSphericalPoints, treating geographic input as (longitude, latitude).
-`UnitSphericalPoint`s pass through unchanged.
+Convert a ring's vertices to `UnitSphericalPoint`s. Interpret geographic input as (longitude,
+latitude); existing `UnitSphericalPoint`s pass through unchanged.
 """
 function to_unit_spherical_points(ring)
     return [UnitSphericalPoint(p) for p in GI.getpoint(ring)]
