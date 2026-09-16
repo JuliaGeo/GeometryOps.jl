@@ -109,7 +109,9 @@ Only geometry 13 — the polar cap — is returned: the band cells' boxes stop s
 pole even though their vertices reach latitude 80°, so the tree prunes them.
 
 The one thing to keep straight is that a tree and its queries must live on the same
-manifold.  `GI.extent(geom)` of a geographic geometry is a lon/lat box; handed to a
-spherical tree, `Extents.intersects` will happily compare its `X` (longitude, up to 180)
-against the tree's `X` (a Cartesian coordinate, up to 1) and return nonsense.  Convert
-the query the same way the tree was built: `Extents.extent(Spherical(), geom)`.
+manifold.  The tree records its manifold, so `query(tree, geom)` converts a geometry
+with `Extents.extent(tree.manifold, geom)`.  An extent or predicate you pass yourself is
+not converted: `GI.extent(geom)` of a geographic geometry is a lon/lat box, and
+`Extents.intersects` will happily compare its `X` (longitude, up to 180) against the
+tree's `X` (a Cartesian coordinate, up to 1) and return nonsense.  Build such queries
+the same way the tree was built: `Extents.extent(Spherical(), geom)`.

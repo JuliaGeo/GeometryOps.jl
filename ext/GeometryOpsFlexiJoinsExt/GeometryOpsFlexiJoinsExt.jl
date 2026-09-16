@@ -22,31 +22,74 @@ using Tables
 
 # First, we define the joining modes (Tree, NestedLoopFast) that the GO DE-9IM functions support.
 const GO_DE9IM_FUNCS = Union{typeof(GO.contains), typeof(GO.within), typeof(GO.intersects), typeof(GO.disjoint), typeof(GO.touches), typeof(GO.crosses), typeof(GO.overlaps), typeof(GO.covers), typeof(GO.coveredby), typeof(GO.equals)}
+
+# Both inputs are joined on one manifold, taken from their CRS: `Spherical()` for a
+# geographic CRS, `Planar()` otherwise.  The CRS has to be read from the inputs as passed,
+# since FlexiJoins converts a DataFrame to a StructArray (dropping its metadata) before
+# any of the join hooks below see it.  The manifold then travels with the predicate.
+function _join_manifold(table)
+    crs = GI.crs(table)
+    isnothing(crs) && return GO.Planar()
+    return _join_manifold(GO._crstrait(GI.crstrait(table), crs))
+end
+_join_manifold(::GI.AbstractGeographicTrait) = GO.Spherical()
+_join_manifold(::GI.AbstractProjectedTrait) = GO.Planar()
+
+function _join_manifold(a, b)
+    ma, mb = _join_manifold(a), _join_manifold(b)
+    ma == mb || throw(ArgumentError("Cannot join inputs on different manifolds, $ma and $mb. Give both inputs the same kind of CRS, e.g. by reprojecting one of them."))
+    return ma
+end
+
+# A GO predicate on the join manifold, with its arguments swapped when FlexiJoins swaps the sides.
+struct _ManifoldPredicate{F, M <: GO.Manifold}
+    pred::F
+    manifold::M
+    swapped::Bool
+end
+(p::_ManifoldPredicate)(a, b) = p.swapped ? _predicate(p.pred, p.manifold, b, a) : _predicate(p.pred, p.manifold, a, b)
+FlexiJoins.swap_sides(p::_ManifoldPredicate) = _ManifoldPredicate(p.pred, p.manifold, !p.swapped)
+
+# The default method stands for `Planar()`.  Equality of vertices does not depend on the manifold.
+_predicate(pred, m, a, b) = pred(m, a, b)
+_predicate(pred, ::GO.Planar, a, b) = pred(a, b)
+_predicate(pred::typeof(GO.equals), ::GO.Spherical, a, b) = pred(a, b)
+
+function FlexiJoins.flexijoin(datas::Union{NTuple{2, Any}, NamedTuple{<:Any, <:NTuple{2, Any}}}, cond::FlexiJoins.ByPred{<:GO_DE9IM_FUNCS}; kwargs...)
+    m = _join_manifold(datas...)
+    return FlexiJoins.flexijoin(datas, FlexiJoins.ByPred(cond.Lf, cond.Rf, _ManifoldPredicate(cond.pred, m, false)); kwargs...)
+end
+
+# A GO predicate that did not pass through `flexijoin` above, e.g. as part of a composite condition, stays planar.
+const _GOByPred = FlexiJoins.ByPred{<:Union{GO_DE9IM_FUNCS, _ManifoldPredicate}}
+_manifold(cond::FlexiJoins.ByPred{<:_ManifoldPredicate}) = cond.pred.manifold
+_manifold(cond::_GOByPred) = GO.Planar()
+
 # NestedLoopFast is the naive fallback method
-FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::FlexiJoins.ByPred{F}, datas) where F <: GO_DE9IM_FUNCS = true
+FlexiJoins.supports_mode(::FlexiJoins.Mode.NestedLoopFast, ::_GOByPred, datas) = true
 # This method allows you to cache a tree, which we do by using an STRtree.
 # TODO: wrap GO predicate functions in a `TreeJoiner` struct or something, to indicate that we want to use trees,
 # since they can be slower in some situations.
-FlexiJoins.supports_mode(::FlexiJoins.Mode.Tree, ::FlexiJoins.ByPred{F}, datas) where F <: GO_DE9IM_FUNCS = true
+FlexiJoins.supports_mode(::FlexiJoins.Mode.Tree, ::_GOByPred, datas) = true
 
 # Nested loop support is simple, and needs no further support.  
 # However, for trees, we need to define how the tree is prepared and how it is used.
-# This is done by defining the `prepare_for_join` function to return an STRTree,
-# and by defining the `findmatchix` function as querying that tree before checking
-# intersections.
+# This is done by defining the `prepare_for_join` function to return a spatial tree
+# on the join manifold, and by defining the `findmatchix` function as querying that
+# tree before checking the predicate.
 
-# In theory, one could extract the tree from e.g a GeoPackage or some future GeoDataFrame.
+# The geometries may come with a tree of their own, as a GeoDataFrames column does.
 
-function _spatialtree(X, selector)
+function _spatialtree(m, X, selector)
     tree_or_geometries = selector(X)
     tree_or_geometries === nothing && return nothing
     ismissing(tree_or_geometries) && return nothing
     isspatialtree(tree_or_geometries) && return tree_or_geometries
-    return spatialtree(tree_or_geometries)
+    return spatialtree(m, tree_or_geometries)
 end
 
-FlexiJoins.prepare_for_join(::FlexiJoins.Mode.Tree, X, cond::FlexiJoins.ByPred{<: GO_DE9IM_FUNCS}) = (X, _spatialtree(X, cond.Rf))
-function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{F}, ix_a, a, (B, tree)::Tuple, multi::typeof(identity)) where F<:GO_DE9IM_FUNCS
+FlexiJoins.prepare_for_join(::FlexiJoins.Mode.Tree, X, cond::_GOByPred) = (X, _spatialtree(_manifold(cond), X, cond.Rf))
+function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::_GOByPred, ix_a, a, (B, tree)::Tuple, multi::typeof(identity))
     # Implementation note:
     # here, `a` is a row, and `b` is the full table.
     # We extract the relevant columns using cond.Lf and cond.Rf.
@@ -55,7 +98,7 @@ function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{
     (isnothing(left_geom) || ismissing(left_geom) || GI.isempty(left_geom)) && return Int[]
     idxs = query(tree, left_geom)
     intersecting_idxs = filter!(idxs) do idx
-        cond.pred(cond.Lf(a), cond.Rf(B[idx]))
+        cond.pred(left_geom, cond.Rf(B[idx]))
     end
     return intersecting_idxs
 end

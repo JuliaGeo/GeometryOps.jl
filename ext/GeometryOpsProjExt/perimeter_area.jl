@@ -21,7 +21,7 @@ function GeometryOps._area_auto(
 end
 
 function GeometryOps._area_auto(
-    ::GI.UnknownTrait,
+    trait::GI.UnknownTrait,
     crs::Union{GeoFormatTypes.GeoFormat,Proj.CRS},
     geom,
     ::Type{T};
@@ -30,11 +30,13 @@ function GeometryOps._area_auto(
 ) where T
     # UnknownTrait is a projected-trait subtype, so classify its attached CRS before using that fallback.
     proj_crs = convert(Proj.CRS, crs)
-    if Proj.is_geographic(proj_crs)
-        return GeometryOps._area_auto(GI.GeographicTrait(), proj_crs, geom, T; threaded, kwargs...)
-    elseif Proj.is_projected(proj_crs)
-        return GeometryOps._area_auto(GI.ProjectedTrait(), proj_crs, geom, T; threaded, kwargs...)
-    end
+    return GeometryOps._area_auto(GeometryOps._crstrait(trait, proj_crs), proj_crs, geom, T; threaded, kwargs...)
+end
+
+function GeometryOps._crstrait(::GI.UnknownTrait, crs::Union{GeoFormatTypes.GeoFormat,Proj.CRS})
+    proj_crs = convert(Proj.CRS, crs)
+    Proj.is_geographic(proj_crs) && return GI.GeographicTrait()
+    Proj.is_projected(proj_crs) && return GI.ProjectedTrait()
     throw(ArgumentError("CRS $(crs) is neither geographic nor projected"))
 end
 
