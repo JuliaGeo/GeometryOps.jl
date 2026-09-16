@@ -38,7 +38,7 @@ In order to avoid this, GeometryOps combines CRS traits with manifolds.
 3. Proj, when loaded, which recognizes CRS definitions, supplies ellipsoid parameters, and converts projected linear units.
 
 
-`GO.area` uses `AutoManifold()` by default. With Proj, a recognized geographic CRS selects an ellipsoid-aware `Geodesic` calculation in square metres. Without Proj, a geographic CRS selects a degree longitude/latitude `Spherical` calculation. Projected, unknown, and CRS-less inputs use `Planar` native square units. For a collection, `GO.area` selects the manifold once from the collection's CRS; it does not inspect child CRSs.
+`GO.area`, `GO.perimeter`, `GO.distance` and `GO.segmentize` use `AutoManifold()` by default. With Proj, a recognized geographic CRS selects an ellipsoid-aware `Geodesic` calculation in metres or square metres. Without Proj, a geographic CRS selects a degree longitude/latitude `Spherical` calculation. Projected, unknown, and CRS-less inputs use `Planar` native units. For a collection, the manifold is selected once from the collection's CRS; child CRSs are not inspected. `GO.distance` takes two inputs: an input without a CRS takes the CRS of the other, and inputs with different CRSs are an error.
 
 Passing `Planar()` explicitly always computes in native coordinate units.  A map-plane area is a physical area only in an equal-area projection.
 

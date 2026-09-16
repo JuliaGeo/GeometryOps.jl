@@ -211,3 +211,80 @@ end
         @test GO.distance(GO.Spherical(), pt_60n_lon0, pt_60n_lon1) ≈ expected_1deg_lon_60 rtol=1e-4
     end
 end
+
+@testset "Spherical distance to curves and polygons" begin
+    unit_sphere = GO.Spherical(radius = 1.0)
+    equator = GI.LineString([(0.0, 0.0), (90.0, 0.0)])
+    # The closest point is inside the arc.
+    @test GO.distance(unit_sphere, (45.0, 30.0), equator) ≈ deg2rad(30.0)
+    @test GO.distance(unit_sphere, (45.0, -30.0), equator) ≈ deg2rad(30.0)
+    # The closest point is an endpoint.
+    @test GO.distance(unit_sphere, (-30.0, 0.0), equator) ≈ deg2rad(30.0)
+    @test GO.distance(unit_sphere, (120.0, 0.0), GI.Line([(0.0, 0.0), (90.0, 0.0)])) ≈ deg2rad(30.0)
+    # A great circle between two points on a parallel bows poleward of it.
+    parallel_edge = GI.LineString([(-50.0, 52.0), (50.0, 52.0)])
+    @test GO.distance(unit_sphere, (0.0, 63.0), parallel_edge) < deg2rad(1.0)
+
+    square = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    @test GO.distance(unit_sphere, (5.0, 5.0), square) == 0
+    @test GO.distance(unit_sphere, (5.0, -2.0), square) ≈ deg2rad(2.0)
+    @test GO.distance(unit_sphere, (5.0, -2.0), GI.LinearRing(GI.getpoint(GI.getexterior(square)) |> collect)) ≈ deg2rad(2.0)
+    @test GO.distance(unit_sphere, (5.0, -2.0), GI.MultiPolygon([square, square])) ≈ deg2rad(2.0)
+    @test GO.distance(unit_sphere, square, (5.0, -2.0), Float32) isa Float32
+end
+
+@testset "Geodesic distance" begin
+    import Proj
+    geodesic = GO.Geodesic()
+    proj_geodesic = Proj.geod_geodesic(geodesic.semimajor_axis, 1 / geodesic.inv_flattening)
+    # Brute-force distance to points sampled along the geodesic segment.
+    function sampled_distance(p, a, b; n = 20_000)
+        line = Proj.geod_inverseline(proj_geodesic, a[2], a[1], b[2], b[1])
+        return minimum(0:n) do i
+            lat, lon, _ = Proj.geod_position(line, i / n * line.s13)
+            first(Proj.geod_inverse(proj_geodesic, lat, lon, p[2], p[1]))
+        end
+    end
+
+    @test GO.distance(geodesic, (0.0, 0.0), (1.0, 1.0)) ≈ first(Proj.geod_inverse(proj_geodesic, 0.0, 0.0, 1.0, 1.0))
+    for (p, a, b) in [
+        ((5.0, 12.0), (0.0, 10.0), (10.0, 10.0)),   # closest point inside the segment
+        ((-5.0, 12.0), (0.0, 10.0), (10.0, 10.0)),  # closest point is an endpoint
+        ((100.0, -60.0), (80.0, -70.0), (120.0, -40.0)),
+        ((0.0, 0.0), (0.0, 0.0), (10.0, 10.0)),     # on a vertex
+    ]
+        d = GO.distance(geodesic, p, GI.Line([a, b]))
+        @test d ≈ sampled_distance(p, a, b) rtol = 1e-7 atol = 1e-3
+        @test d <= sampled_distance(p, a, b)
+    end
+
+    square = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
+    @test GO.distance(geodesic, (5.0, 5.0), square) == 0
+    @test GO.distance(geodesic, (5.0, 12.0), square) ≈ sampled_distance((5.0, 12.0), (0.0, 10.0), (10.0, 10.0)) atol = 1e-3
+end
+
+@testset "CRS-aware automatic distance" begin
+    import GeoFormatTypes, Proj
+    crs = GeoFormatTypes.EPSG(4326)
+    ring = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]
+    geographic_square = GI.Polygon([ring]; crs)
+    geographic_point = GI.Point((5.0, 12.0); crs)
+
+    # The CRS of either input selects the manifold.
+    expected = GO.distance(GO.Geodesic(), (5.0, 12.0), geographic_square)
+    @test GO.distance(geographic_point, geographic_square) == expected
+    @test GO.distance((5.0, 12.0), geographic_square) == expected
+    @test GO.distance(geographic_point, GI.Polygon([ring])) == expected
+    @test GO.distance(geographic_square, geographic_point) == expected
+    @test GO.distance(geographic_point, GI.Point((5.0, 10.0); crs)) ≈ GO.distance(GO.Geodesic(), (5.0, 12.0), (5.0, 10.0))
+
+    @test GO.distance((5.0, 12.0), GI.Polygon([ring])) == 2.0
+    @test GO.distance((5.0, 12.0), GI.Polygon([ring]; crs = GeoFormatTypes.EPSG(3857))) == 2.0
+    @test_throws ArgumentError GO.distance(GI.Point((5.0, 12.0); crs = GeoFormatTypes.EPSG(3857)), geographic_square)
+
+    # EPSG:4807 has coordinates in grads on the Clarke 1880 (IGN) ellipsoid.
+    clarke = GO.Geodesic(semimajor_axis = 6378249.2, inv_flattening = 293.466021293627)
+    grads_square = GI.Polygon([ring]; crs = GeoFormatTypes.EPSG(4807))
+    degree_square = GI.Polygon([[(0.9x, 0.9y) for (x, y) in ring]])
+    @test GO.distance((5.0, 12.0), grads_square) ≈ GO.distance(clarke, (4.5, 10.8), degree_square) rtol = 1e-10
+end

@@ -110,21 +110,12 @@ function area(geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: A
 end
 
 function area(::AutoManifold, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
-    _area_auto(GI.crstrait(geom), GI.crs(geom), geom, T; threaded, kwargs...)
+    m, scales = _auto_manifold(geom)
+    _area_auto(m, geom, T, scales; threaded, kwargs...)
 end
 
-function _area_auto(trait::GI.AbstractCRSTrait, crs, geom, ::Type{T}; threaded=false, kwargs...) where T
-    isnothing(crs) && return area(Planar(), geom, T; threaded, kwargs...)
-    _area_auto_with_crs(trait, crs, geom, T; threaded, kwargs...)
-end
-
-# Without Proj, GeoInterface's geographic trait is the only signal to interpret coordinates as lon/lat.
-_area_auto_with_crs(::GI.AbstractGeographicTrait, crs, geom, ::Type{T}; threaded=false, kwargs...) where T =
-    area(Spherical(), geom, T; threaded, kwargs...)
-
-# A projected CRS has map-plane coordinates; preserve their native square units without Proj.
-_area_auto_with_crs(::GI.AbstractProjectedTrait, crs, geom, ::Type{T}; threaded=false, kwargs...) where T =
-    area(Planar(), geom, T; threaded, kwargs...)
+# The Proj extension adds a `Geodesic` method that applies the CRS axis scales.
+_area_auto(m::Manifold, geom, ::Type{T}, scales; kwargs...) where T = area(m, geom, T; kwargs...)
 
 function area(::Planar, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
     applyreduce(WithTrait((trait, g) -> _area(T, trait, g)), +, _AREA_TARGETS, geom; threaded, init=zero(T), kwargs...)

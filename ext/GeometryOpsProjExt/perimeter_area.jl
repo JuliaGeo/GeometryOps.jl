@@ -5,38 +5,31 @@ import GeoFormatTypes
 # PROJ expects flattening, but GeometryOps stores inverse flattening; a sphere encodes both as zero.
 _flattening(inv_flattening) = iszero(inv_flattening) ? zero(inv_flattening) : inv(inv_flattening)
 
-function GeometryOps._area_auto(
+function GeometryOps._auto_manifold_with_crs(
     ::GI.AbstractGeographicTrait,
     crs::Union{GeoFormatTypes.GeoFormat,Proj.CRS},
-    geom,
-    ::Type{T};
-    threaded=false,
-    kwargs...,
-) where T
+)
     # A geographic CRS provides its ellipsoid and angular units, unlike the degree-only public Geodesic API.
     proj_crs = convert(Proj.CRS, crs)
-    geodesic = _geodesic_manifold(proj_crs)
-    longitude_scale, latitude_scale = _geographic_degree_scales(proj_crs)
-    _geodesic_area(geodesic, geom, T, longitude_scale, latitude_scale; threaded, kwargs...)
+    return _geodesic_manifold(proj_crs), _geographic_degree_scales(proj_crs)
 end
 
-function GeometryOps._area_auto(
+function GeometryOps._auto_manifold_with_crs(
     ::GI.UnknownTrait,
     crs::Union{GeoFormatTypes.GeoFormat,Proj.CRS},
-    geom,
-    ::Type{T};
-    threaded=false,
-    kwargs...,
-) where T
+)
     # UnknownTrait is a projected-trait subtype, so classify its attached CRS before using that fallback.
     proj_crs = convert(Proj.CRS, crs)
     if Proj.is_geographic(proj_crs)
-        return GeometryOps._area_auto(GI.GeographicTrait(), proj_crs, geom, T; threaded, kwargs...)
+        return GeometryOps._auto_manifold_with_crs(GI.GeographicTrait(), proj_crs)
     elseif Proj.is_projected(proj_crs)
-        return GeometryOps._area_auto(GI.ProjectedTrait(), proj_crs, geom, T; threaded, kwargs...)
+        return GeometryOps._auto_manifold_with_crs(GI.ProjectedTrait(), proj_crs)
     end
     throw(ArgumentError("CRS $(crs) is neither geographic nor projected"))
 end
+
+GeometryOps._area_auto(m::Geodesic, geom, ::Type{T}, (longitude_scale, latitude_scale); kwargs...) where T =
+    _geodesic_area(m, geom, T, longitude_scale, latitude_scale; kwargs...)
 
 function _geodesic_manifold(crs::Proj.CRS)
     ellipsoid = Proj.proj_get_ellipsoid(crs)
@@ -107,38 +100,46 @@ function _geographic_degree_scales(crs::Proj.CRS)
     end
 end
 
-function perimeter(m::Geodesic, geom, ::Type{T} = Float64; init = zero(T), kwargs...) where T
-    # Create a Proj geodesic object using the ellipsoid parameters from the Geodesic manifold
-    proj_geodesic = Ref(Proj.geod_geodesic(m.semimajor_axis, _flattening(m.inv_flattening)))
-    proj_polygon = Ref(Proj._null(Proj.geod_polygon))
-    
+function _geodesic_perimeter(
+    m::Geodesic,
+    geom,
+    ::Type{T},
+    longitude_scale,
+    latitude_scale;
+    init=zero(T),
+    kwargs...,
+) where T
     function _perimeter_geodesic_inner(trait, geom)
         @assert GI.npoint(geom) >= 2 "Geodesic perimeter requires at least 2 points"
-        
-        # Initialize the polygon
-        proj_polygon[] = Proj._null(Proj.geod_polygon)
+        # Proj objects are created per curve, so threaded reductions do not share them.
+        proj_geodesic = Ref(Proj.geod_geodesic(m.semimajor_axis, _flattening(m.inv_flattening)))
+        proj_polygon = Ref(Proj._null(Proj.geod_polygon))
+        # A polyline, so the length does not include a closing edge.
         Proj.geod_polygon_init(proj_polygon, 1)
-        
-        # Add all points to the polygon
+
         for point in GI.getpoint(trait, geom)
-            lat, lon = GI.y(point), GI.x(point)  # Proj expects lat, lon order
+            lat, lon = latitude_scale * GI.y(point), longitude_scale * GI.x(point)
             Proj.geod_polygon_addpoint(proj_geodesic, proj_polygon, lat, lon)
         end
-        
-        # Compute the polygon properties
-        # geod_polygon_compute returns (num_vertices, perimeter, area)
-        area_result, perimeter_result = Proj.geod_polygon_compute(proj_geodesic[], proj_polygon[], false, true)
-        
+
+        # geod_polygon_compute returns (area, perimeter)
+        _, perimeter_result = Proj.geod_polygon_compute(proj_geodesic[], proj_polygon[], false, true)
         return T(perimeter_result)
     end
-    
+
     return applyreduce(
-        WithTrait(_perimeter_geodesic_inner), 
-        +, 
-        TraitTarget(GI.AbstractCurveTrait), 
+        WithTrait(_perimeter_geodesic_inner),
+        +,
+        TraitTarget(GI.AbstractCurveTrait),
         geom; init, kwargs...
     )
 end
+
+perimeter(m::Geodesic, geom, ::Type{T} = Float64; kwargs...) where T =
+    _geodesic_perimeter(m, geom, T, 1, 1; kwargs...)
+
+GeometryOps._perimeter_auto(m::Geodesic, geom, ::Type{T}, (longitude_scale, latitude_scale); kwargs...) where T =
+    _geodesic_perimeter(m, geom, T, longitude_scale, latitude_scale; kwargs...)
 
 function _geodesic_area(
     m::Geodesic,
