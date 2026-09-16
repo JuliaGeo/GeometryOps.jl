@@ -65,14 +65,15 @@ end
 _extent(::Planar, trait, geom, ::Type{T}) where T = GI.extent(geom)
 
 _extent(::Spherical, ::GI.PointTrait, geom, ::Type{T}) where T =
-    GI.extent(UnitSpherical.UnitSphericalPoint(geom))
+    GI.extent(UnitSpherical.UnitSphericalPoint(_tuple_point(geom, T)))
 _extent(m::Spherical, ::Union{GI.LineTrait, GI.LineStringTrait}, geom, ::Type{T}) where T =
     mapreduce(GI.extent, Extents.union, lazy_edgelist(m, geom, T))
 # rings are regions: put the denoted region on the ring's left — a flip of
 # a copy for a CW ring in the default (enclosed-region) mode, a no-op under
 # `oriented = true` — since `_spherical_region_extent` bounds the left region
 function _extent(m::Spherical, ::GI.LinearRingTrait, geom, ::Type{T}) where T
-    pts = _orient_ring(m, UnitSpherical.to_unit_spherical_points(geom), false, false;
+    pts = [UnitSpherical.UnitSphericalPoint(_tuple_point(p, T)) for p in GI.getpoint(geom)]
+    pts = _orient_ring(m, pts, false, false;
         exact = True())
     return _spherical_region_extent(pts)
 end

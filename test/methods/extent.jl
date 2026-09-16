@@ -58,6 +58,13 @@ end
         @test ext.Z[1] ≈ sind(60) atol = 1e-12
     end
 
+    @testset "Non-Float64 coordinates are converted to T" begin
+        pts32 = [(5f0, 5f0), (15f0, 5f0), (15f0, 15f0), (5f0, 15f0), (5f0, 5f0)]
+        pts64 = [Float64.(p) for p in pts32]
+        @test GO.extent(m, GI.Polygon([pts32])) == GO.extent(m, GI.Polygon([pts64]))
+        @test GO.extent(m, GI.Point(5f0, 15f0)) == GO.extent(m, GI.Point(5.0, 15.0))
+    end
+
     @testset "No enclosure: region extent equals curve extent" begin
         pts = [(5.0, 5.0), (15.0, 5.0), (15.0, 15.0), (5.0, 15.0), (5.0, 5.0)]
         @test GO.extent(m, GI.Polygon([pts])) == GO.extent(m, GI.LineString(pts))
