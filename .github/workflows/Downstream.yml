@@ -26,6 +26,10 @@ jobs:
           - repository: JuliaGeo/ConservativeRegridding.jl
             ref: main
     steps:
+      - name: Install display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
       - uses: actions/checkout@v7
         with:
           path: GeometryOps
@@ -50,7 +54,7 @@ jobs:
           TOML
       - name: Instantiate and verify checkout dependencies
         run: |
-          julia --project=docs -e '
+          xvfb-run -a -s '-screen 0 1024x768x24' julia --project=docs -e '
             using Pkg
             Pkg.activate("downstream")
             Pkg.instantiate()
@@ -63,6 +67,7 @@ jobs:
             end'
       - uses: julia-actions/julia-runtest@v1
         with:
+          prefix: xvfb-run -a
           project: downstream
           check_bounds: auto
           coverage: 'false'
