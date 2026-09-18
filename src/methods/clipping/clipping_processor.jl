@@ -998,15 +998,16 @@ function _ring_close!(sink::_RingMeasurer, (first_pt, prev, acc))
 end
 
 #-- the per-vertex terms of `_ring_area`'s two formulas (methods/area.jl), taken one
-#-- vertex at a time. Summed in the same order, they give the same answer. The spherical
-#-- one is untested: `FosterHormannClipping(Spherical())` is an ambiguous constructor call
-#-- today, so no spherical FH algorithm can be built to reach it.
+#-- vertex at a time. Summed in the same order, they give the same answer, except that a
+#-- stream cannot move the fan apex away from a vertex's antipode as `_ring_area` does. The
+#-- spherical one is untested: `FosterHormannClipping(Spherical())` is an ambiguous
+#-- constructor call today, so no spherical FH algorithm can be built to reach it.
 _ring_term(::Planar, first_pt, prev, pt) = _area_component(prev, pt)
 _ring_term(::Spherical, first_pt, prev, pt) = _spherical_triangle_area(Eriksson(),
     UnitSphericalPoint(GI.PointTrait(), first_pt), UnitSphericalPoint(GI.PointTrait(), prev),
     UnitSphericalPoint(GI.PointTrait(), pt))
 _ring_total(::Planar, acc) = acc / 2
-_ring_total(::Spherical, acc) = acc
+_ring_total(m::Spherical, acc) = m.oriented ? acc : _fold_to_hemisphere(acc)
 
 _trace_polynodes(alg::FosterHormannClipping, ::Type{T}, a_list, b_list, a_idx_list, f_step, poly_a, poly_b) where {T} =
     _trace_polynodes!(_RingCollector(T), alg, T, a_list, b_list, a_idx_list, f_step, poly_a, poly_b).polys
