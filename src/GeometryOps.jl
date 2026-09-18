@@ -66,6 +66,10 @@ include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
 include("methods/buffer.jl")
+# The buffer's offset-curve generator. Both buffer files only CALL the OverlayNG
+# winding overlay (from function bodies, resolved at call time), so they need no
+# include-order relationship with it.
+include("methods/buffer_offset_curve.jl")
 include("methods/centroid.jl")
 include("methods/convex_hull.jl")
 include("methods/distance.jl")
