@@ -355,6 +355,76 @@ end
     @test GO.area(usph, holed) ≈ GO.area(usph, Lshape) - GO.area(usph, holepoly) rtol = 1e-12
 end
 
+@testset "Long rings: vertex at the fan apex's antipode, hemisphere fold" begin
+    using GeometryOps.UnitSpherical: UnitSphericalPoint
+    usph = GO.Spherical(radius = 1.0)
+
+    # Band |lat| ≤ 20° over lon ∈ [0, L] with a vertex every 0.5°. The top parallel is
+    # shifted by `shift`, so no vertex is antipodal to another unless `shift == 0`.
+    function band(L; shift = 0.25)
+        pts = Tuple{Float64,Float64}[]
+        for x in 0:0.5:L
+            push!(pts, (x, -20.0))
+        end
+        for x in (L - shift):-0.5:0
+            push!(pts, (x, 20.0))
+        end
+        push!(pts, pts[1])
+        return pts
+    end
+    closed(open) = [open..., open[1]]
+
+    # References: a BigFloat fan from an interior point of each band. S2 (`s2_area` on the
+    # same polygon) agrees with them to 3e-15 relative. Before the fix the 200°, 240° and
+    # 300° bands returned 4π minus these values: the fan from the first vertex sums to
+    # A − 4π once the ring encloses that vertex's antipode (180°, 20°).
+    expected = Dict(150 => 1.787838612702705, 200 => 2.384779718780402,
+        240 => 2.862332603642560, 300 => 3.578661930935798)
+    for (L, ref) in expected
+        pts = band(L)
+        open = pts[1:end - 1]
+        @test GO.area(usph, GI.Polygon([pts])) ≈ ref rtol = 1e-12
+        @test GO.area(usph, GI.Polygon([reverse(pts)])) ≈ ref rtol = 1e-12
+        @test GO._ring_area(GO.Spherical(), pts, Float64) ≈ ref rtol = 1e-12
+        @test GO._ring_area(GO.Spherical(), reverse(pts), Float64) ≈ -ref rtol = 1e-12
+        # The 0.5° chords approximate the parallel-bounded band `L · 2 sin 20°`.
+        @test GO.area(usph, GI.Polygon([pts])) ≈ deg2rad(L) * 2 * sind(20.0) rtol = 2e-3
+        # Independence of the start vertex, whose antipode may then lie outside the ring.
+        # Looser: from an apex on the band, hundreds of fan triangles reach within 0.25° of
+        # its antipode, and each carries an error of about ε / |v + apex| there.
+        for rot in (7, 400, length(open) ÷ 2)
+            @test GO.area(usph, GI.Polygon([closed(circshift(open, -rot))])) ≈ ref rtol = 1e-10
+        end
+    end
+
+    # With `shift = 0`, (180°, 20°) is the exact antipode of the first vertex (0°, −20°),
+    # so both fan triangles on that side have a zero denominator. Before the fix the 240°
+    # band returned 0.545 of a hemisphere instead of 0.456.
+    @test GO.area(usph, GI.Polygon([band(240; shift = 0.0)])) ≈ 2.865317309172949 rtol = 1e-12
+    @test GO.area(usph, GI.Polygon([band(300; shift = 0.0)])) ≈ 3.581646636466186 rtol = 1e-12
+
+    # `Girard` shares the fan.
+    girard = GO.NaiveTriangulatedSphericalArea(; radius = 1.0, method = GO.Girard())
+    @test GO.area(girard, GI.Polygon([band(300)])) ≈ expected[300] rtol = 1e-12
+    @test GO.area(girard, GI.Polygon([band(240; shift = 0.0)])) ≈ 2.865317309172949 rtol = 1e-12
+
+    # Rings with no vertex near the first vertex's antipode keep the first vertex as apex
+    # and sum exactly as before, term for term, under both `oriented` settings.
+    fan(open) = sum(GO._spherical_triangle_area(GO.Eriksson(),
+            UnitSphericalPoint(GI.PointTrait(), open[1]), UnitSphericalPoint(GI.PointTrait(), open[i]),
+            UnitSphericalPoint(GI.PointTrait(), open[i + 1])) for i in 2:(length(open) - 1))
+    tiny = [(0.0, 0.0), (0.01, 0.0), (0.01, 0.01), (0.0, 0.01)]
+    lshape = [(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (1.0, 1.0), (1.0, 3.0), (0.0, 3.0)]
+    octant = [(0.0, 0.0), (90.0, 0.0), (0.0, 90.0)]
+    for open in (tiny, lshape, octant, reverse(tiny), reverse(lshape))
+        @test GO._ring_area(GO.Spherical(), closed(open), Float64) === fan(open)
+        @test GO._ring_area(GO.Spherical(; oriented = true), closed(open), Float64) === fan(open)
+        @test GO.area(usph, GI.Polygon([closed(open)])) === abs(fan(open))
+        @test GO.area(GO.Spherical(; radius = 1.0, oriented = true), GI.Polygon([closed(open)])) === abs(fan(open))
+    end
+    @test GO.area(usph, GI.Polygon([closed(tiny)])) ≈ 3.0461741901e-8 rtol = 1e-9
+end
+
 @testset "area(Spherical(), geom) dispatch" begin
     # Test that Spherical manifold dispatches correctly
     octant = GI.Polygon([[(0.0, 0.0), (90.0, 0.0), (0.0, 90.0), (0.0, 0.0)]])
