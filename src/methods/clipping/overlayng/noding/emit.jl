@@ -24,13 +24,11 @@
 #   7.9 at 75° and 126 above 89.5°; along single parallels, 1 364 ULPs at 89.99°
 #   and 2 915 (6.5e-13 rad) at 89.999°. The blow-up is the chart's — a degree of
 #   longitude is `cos φ` of an arc — and it is what the default row removes.
-# - Planar crossings: a **certified double-double** fast path (spike S3, 100%
-#   certified on 64,982 real crossings, 0 disagreements with the rational answer,
-#   273×) — TwoSum on endpoint differences, compensated 2×2 determinants,
-#   dd division, dd recombination; the coordinate is accepted iff its residual
-#   plus the dd error bound is below ½ ulp, with the determinant-conditioning
-#   term so near-parallel pairs fail the certificate. Fallback: the exact
-#   `Rational{BigInt}` crossing point, rounded.
+# - Planar crossings: validated arithmetic propagates an absolute error bound
+#   through endpoint differences, the two determinants, division and coordinate
+#   recombination. A coordinate is accepted only when its full interval rounds
+#   to one `Float64`; an unsupported range or inconclusive certificate uses the
+#   exact `Rational{BigInt}` crossing point instead.
 # - Spherical crossings: the Float64 crossing direction `±(na×nb)`, accepted when
 #   the arcs clear a near-tangency conditioning gate (spike S3 measured the float
 #   direction at ≤1.4e-14° ≈ 1.5 nm; the trig on the lon/lat row is uncertified
@@ -47,51 +45,8 @@
 #   rounding is the same one the vertex row pays, with the same latitude
 #   dependence.
 
-# ## Error-free transforms and double-double primitives (spike S3, productionized)
-
-@inline function _twosum(a::Float64, b::Float64)
-    s = a + b; bb = s - a
-    return (s, (a - (s - bb)) + (b - bb))
-end
-@inline function _twoproduct(a::Float64, b::Float64)
-    p = a * b
-    return (p, fma(a, b, -p))
-end
-@inline _diff_dd(a::Float64, b::Float64) = _twosum(a, -b)   # (hi, lo) == a - b exactly
-
-@inline function _ddmul(ah, al, bh, bl)                     # (ah+al)*(bh+bl)
-    (ph, pl) = _twoproduct(ah, bh)
-    return _twosum(ph, pl + (ah * bl + al * bh))
-end
-@inline function _ddsub(ah, al, bh, bl)                     # (ah+al) - (bh+bl)
-    (sh, se) = _twosum(ah, -bh)
-    return _twosum(sh, (se + al) - bl)
-end
-@inline function _ddadd(ah, al, bh, bl)                     # (ah+al) + (bh+bl)
-    (sh, se) = _twosum(ah, bh)
-    return _twosum(sh, (se + al) + bl)
-end
-# det = a*d - b*c, each operand a double-double 2-tuple
-@inline function _det2_ddfull(a, b, c, d)
-    (mh, ml) = _ddmul(a[1], a[2], d[1], d[2])
-    (nh, nl) = _ddmul(b[1], b[2], c[1], c[2])
-    return _ddsub(mh, ml, nh, nl)
-end
-# dd / dd -> dd (Dekker)
-@inline function _div_dd(ah, al, bh, bl)
-    q1 = ah / bh
-    (ph, pl) = _twoproduct(q1, bh)
-    (sh, sl) = _twosum(ah, -ph)
-    r = ((sh - pl) + sl) + al - q1 * bl
-    return _twosum(q1, r / bh)
-end
-
-# Certified correctly-rounded emit of one coordinate: `xf = fl(hi+lo)`, exact
-# residual `rem` from TwoSum, accept iff `|rem| + dderr < ½ ulp(xf)`.
-@inline function _certify_coord(hi, lo, dderr)
-    (xf, rem) = _twosum(hi, lo)
-    return (xf, abs(rem) + dderr < 0.5 * eps(xf))
-end
+const _CrossingFloats = ValidatedFloats.CrossingFloats
+const _CrossingFloat = _CrossingFloats.CrossingFloat
 
 # Fast certified planar crossing of (a0,a1) × (b0,b1). Returns (x, y, certified).
 function _certified_crossing(a0, a1, b0, b1)
@@ -99,26 +54,22 @@ function _certified_crossing(a0, a1, b0, b1)
     ax1, ay1 = Float64(GI.x(a1)), Float64(GI.y(a1))
     bx0, by0 = Float64(GI.x(b0)), Float64(GI.y(b0))
     bx1, by1 = Float64(GI.x(b1)), Float64(GI.y(b1))
-    #-- exact endpoint differences as double-doubles
-    da_x = _diff_dd(ax1, ax0); da_y = _diff_dd(ay1, ay0)
-    db_x = _diff_dd(bx1, bx0); db_y = _diff_dd(by1, by0)
-    c0_x = _diff_dd(bx0, ax0); c0_y = _diff_dd(by0, ay0)
-    (denh, denl) = _det2_ddfull(da_x, da_y, db_x, db_y)   # da × db
-    (tnh, tnl)   = _det2_ddfull(c0_x, c0_y, db_x, db_y)   # (b0-a0) × db
-    (th, tl) = _div_dd(tnh, tnl, denh, denl)
-    (txh, txl) = _ddmul(th, tl, da_x[1], da_x[2]); (xh, xl) = _ddadd(ax0, 0.0, txh, txl)
-    (tyh, tyl) = _ddmul(th, tl, da_y[1], da_y[2]); (yh, yl) = _ddadd(ay0, 0.0, tyh, tyl)
-    #-- dd error bounds amplified by determinant conditioning: near-parallel ⇒
-    #-- small |denom| ⇒ large condK ⇒ certificate correctly fails (spike S3)
-    u2 = eps(Float64)^2
-    scale = abs(da_x[1]) + abs(da_y[1]) + abs(db_x[1]) + abs(db_y[1])
-    condK = (abs(da_x[1] * db_y[1]) + abs(da_y[1] * db_x[1])) / max(abs(denh), floatmin(Float64))
-    tmag = abs(th)
-    ex = 64 * u2 * (abs(xh) + tmag * abs(da_x[1]) * condK + scale)
-    ey = 64 * u2 * (abs(yh) + tmag * abs(da_y[1]) * condK + scale)
-    (xf, cx) = _certify_coord(xh, xl, ex)
-    (yf, cy) = _certify_coord(yh, yl, ey)
-    return (xf, yf, cx & cy)
+    ax0, ay0 = _CrossingFloat(ax0), _CrossingFloat(ay0)
+    ax1, ay1 = _CrossingFloat(ax1), _CrossingFloat(ay1)
+    bx0, by0 = _CrossingFloat(bx0), _CrossingFloat(by0)
+    bx1, by1 = _CrossingFloat(bx1), _CrossingFloat(by1)
+    da_x, da_y = ax1 - ax0, ay1 - ay0
+    db_x, db_y = bx1 - bx0, by1 - by0
+    c0_x, c0_y = bx0 - ax0, by0 - ay0
+    den = da_x * db_y - da_y * db_x
+    t = (c0_x * db_y - c0_y * db_x) / den
+    x = ax0 + t * da_x
+    y = ay0 + t * da_y
+    xf = _CrossingFloats.certify(Float64, x)
+    yf = _CrossingFloats.certify(Float64, y)
+    return (something(xf, _CrossingFloats.center(x)),
+            something(yf, _CrossingFloats.center(y)),
+            !isnothing(xf) & !isnothing(yf))
 end
 
 # ## Node coordinate realization (dispatched on the kernel point AND the output type)
