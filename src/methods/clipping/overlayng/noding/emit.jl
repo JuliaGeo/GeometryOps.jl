@@ -29,13 +29,27 @@
 #   recombination. A coordinate is accepted only when its full interval rounds
 #   to one `Float64`; an unsupported range or inconclusive certificate uses the
 #   exact `Rational{BigInt}` crossing point instead.
-# - Spherical crossings: the Float64 crossing direction `±(na×nb)`, accepted when
-#   the arcs clear a near-tangency conditioning gate (spike S3 measured the float
-#   direction at ≤1.4e-14° ≈ 1.5 nm; the trig on the lon/lat row is uncertified
-#   by design — no decision ever consumes an emitted coordinate). Fallback: the
-#   exact `_sph_crossing_dir`, normalized and converted. The gate bounds the
-#   direction's *magnitude* error only; WHICH of the two antipodal candidates is
-#   meant is a decision and `_sph_crossing_dir` settles it exactly on both paths.
+# - Spherical crossings: the **certified correctly rounded** unit direction. The
+#   emitted `xyz` is `(RN(x₁), RN(x₂), RN(x₃))` for `x = d/‖d‖` the exact unit
+#   crossing direction, `RN` round-to-nearest-even — the planar contract in the
+#   chart a spherical node already lives in. Fast path: double-double arithmetic
+#   where every intermediate carries a rigorous absolute error bound, so the
+#   cancellation in each plane normal (`|a0×a1| = sin θ` with ~eps absolute
+#   error, a relative error of eps/θ that no gate on the angle BETWEEN the
+#   planes can see) and the near-tangency loss in `na×nb` land in the bound
+#   instead of in the output; a coordinate is accepted iff its interval provably
+#   rounds to one Float64. Fallback: the exact `_sph_crossing_dir`, each
+#   component correctly rounded by an exact midpoint test. WHICH of the two
+#   antipodal candidates is meant is a decision, settled in dd when the bound
+#   allows and by the exact orients otherwise. The lon/lat row applies its trig
+#   to this point, uncertified by design — no decision ever consumes an emitted
+#   coordinate.
+#
+#   The contract is what `_ring_is_subgrid` (maximal_edge_ring.jl) is derived
+#   from: emission displaces a vertex by at most ½ ulp per coordinate, so
+#   `‖emitted − x‖ ≤ 2⁻⁵³`, and `rk_normalize_usp` is the identity on the result
+#   (`|‖u‖² − 1| ≤ 2⁻⁵² + 2 eps`, inside its window), so a cascade level's
+#   output re-enters the next level bit-for-bit.
 #
 #   A crossing has no exact Float64 image in EITHER chart — its position is a
 #   `Rational{BigInt}` direction with no finite decimal form — so "no rounding"
@@ -85,37 +99,79 @@ function _emit_node_coord(k::NodeKey{Tuple{Float64, Float64}},
     return (Float64(rx), Float64(ry))
 end
 
-# Near-tangency gate for the spherical float direction: |na×nb|² ≥ tol²·|na|²·|nb|²
-# means the arcs' planes meet at ≥ ~1e-9 rad, so the float direction's relative
-# error (≈ eps / sin θ) is bounded well below the ≤1.4e-14° the design accepts.
-# Below the gate the crossing is near-tangent and falls to the exact direction.
-const _SPH_TANGENT_GATE = 1e-9
+# ## Validated spherical arithmetic
+#
+# `CrossingFloat` owns the bounded double-double operations. Its standard
+# `cross` and `dot` methods keep the calculation below in vector notation while
+# preserving the per-operation error bounds needed after cancellation.
 
-# The crossing direction the two spherical rows share: the gated Float64
-# `±(na × nb)` when the arcs' planes are far enough from parallel, the exact
-# rational direction otherwise. Unnormalized on both branches — each row
-# normalizes into its own output chart, so nothing is normalized twice.
-function _sph_emit_dir(k::NodeKey{<:UnitSphericalPoint})
-    #-- float na, nb, d = na × nb, with the conditioning gate
+# ## Certified spherical crossing
+#
+# The arithmetic package admits its proven input range and fails closed outside
+# it; degenerate crossing directions likewise route to the exact fallback.
+
+# Fast path: `(certified, x, y, z)` with `(x, y, z)` the correctly rounded unit
+# crossing direction when certified.
+function _certified_sph_crossing_fast(k::NodeKey; safety = 2.0)
+    # The package owns its validated margin; legacy overrides fail closed.
+    safety == 2.0 || return (false, 0.0, 0.0, 0.0)
     A0 = _vec3(False(), k.pt); A1 = _vec3(False(), k.a1)
     B0 = _vec3(False(), k.b0); B1 = _vec3(False(), k.b1)
-    na = _cross3(A0, A1); nb = _cross3(B0, B1)
-    d = _cross3(na, nb)
-    d2 = _dot3(d, d); na2 = _dot3(na, na); nb2 = _dot3(nb, nb)
-    #-- `_sph_crossing_dir` picks the interior candidate of the antipodal pair
-    d2 >= _SPH_TANGENT_GATE^2 * na2 * nb2 && return _sph_crossing_dir(False(), k)
-    #-- near-tangent fallback: the exact direction (Rational)
-    return _sph_crossing_dir(True(), k)
+    a0 = UnitSphericalPoint(_CrossingFloat.(A0))
+    a1 = UnitSphericalPoint(_CrossingFloat.(A1))
+    b0 = UnitSphericalPoint(_CrossingFloat.(B0))
+    b1 = UnitSphericalPoint(_CrossingFloat.(B1))
+    d = cross(cross(a0, a1), cross(b0, b1))
+    #-- which antipode: `d = [b0,b1,a0]·a1 − [b0,b1,a1]·a0` with opposite-sign
+    #-- orients at a proper crossing, so `sign(d·(a0+a1)) = sign([b0,b1,a0])` —
+    #-- the sign `_crossing_dir_is_positive` computes from exact orients, which
+    #-- for short arcs fall under ExactPredicates' filter and cost a BigInt
+    #-- escalation each. Decided here with a validated dot product when its sign
+    #-- is certified.
+    tsign = _CrossingFloats.certified_sign(dot(d, a0 + a1))
+    pos = isnothing(tsign) ? _crossing_dir_is_positive(k) : tsign > 0
+    pos || (d = -d)
+    m = max(abs(_CrossingFloats.center(d[1])), abs(_CrossingFloats.center(d[2])),
+            abs(_CrossingFloats.center(d[3])))
+    (m > 0 && isfinite(m)) || return (false, 0.0, 0.0, 0.0)
+    #-- scale so max |hi| ∈ [1, 2): a power of two, so the scaling is exact
+    p = _CrossingFloats.PowerOfTwo(-exponent(m))
+    d = map(x -> _CrossingFloats.scale_pow2(x, p), d)
+    σ = sqrt(dot(d, d))
+    x = _CrossingFloats.certify(Float64, d[1] / σ)
+    x === nothing && return (false, 0.0, 0.0, 0.0)
+    y = _CrossingFloats.certify(Float64, d[2] / σ)
+    y === nothing && return (false, 0.0, 0.0, 0.0)
+    z = _CrossingFloats.certify(Float64, d[3] / σ)
+    z === nothing && return (false, 0.0, 0.0, 0.0)
+    return (true, x, y, z)
+end
+
+# Exact fallback: the rational direction, each component `dᵢ/√(d·d)` correctly
+# rounded by `_round_div_sqrt`.
+function _certified_sph_crossing_exact(k::NodeKey)
+    d = _sph_crossing_dir(True(), k)
+    S = d[1] * d[1] + d[2] * d[2] + d[3] * d[3]
+    return (_round_div_sqrt(d[1], S), _round_div_sqrt(d[2], S), _round_div_sqrt(d[3], S))
+end
+
+# The emitted point of a spherical crossing node: the componentwise correctly
+# rounded exact unit direction, whichever path produced it. `+ 0.0` clears a
+# negative zero so both paths agree bit-for-bit.
+function _certified_sph_crossing(k::NodeKey)
+    ok, x, y, z = _certified_sph_crossing_fast(k)
+    ok || ((x, y, z) = _certified_sph_crossing_exact(k))
+    return UnitSphericalPoint(x + 0.0, y + 0.0, z + 0.0)
 end
 
 # Spherical → unit-sphere xyz (the default). A vertex node's coordinate IS its
 # kernel point: it was normalized once at ingest and is emitted unchanged, so an
 # uncut input vertex survives an overlay bit-for-bit. A crossing is the exact
-# direction normalized to unit length — one rounding, in the chart the direction
-# is already expressed in.
+# direction correctly rounded to unit length — one rounding, in the chart the
+# direction is already expressed in.
 function _emit_node_coord(k::NodeKey{P}, ::Type{P}) where {P <: UnitSphericalPoint}
     k.is_crossing || return k.pt
-    return _dir_to_usp(_sph_emit_dir(k))
+    return _certified_sph_crossing(k)
 end
 
 # Spherical → (lon, lat) degrees. Both arms go through the same trigonometry,
@@ -124,19 +180,7 @@ end
 # that has an exact image in the output format does not get it.
 function _emit_node_coord(k::NodeKey{<:UnitSphericalPoint}, ::Type{Tuple{Float64, Float64}})
     k.is_crossing || return _usp_to_lonlat(k.pt)
-    return _dir_to_lonlat(_sph_emit_dir(k))
-end
-
-# A crossing direction (Float64 or `Rational{BigInt}` components) as a unit
-# `UnitSphericalPoint{Float64}` — the same construction `_node_kernel_point`
-# uses for the exact kernel position of a crossing node, so the emitted point
-# and the kernel point of a crossing are built by one formula.
-@inline _dir_to_usp(d) =
-    rk_normalize_usp(UnitSphericalPoint(Float64(d[1]), Float64(d[2]), Float64(d[3])))
-
-@inline function _dir_to_lonlat(d)
-    s = sqrt(Float64(d[1])^2 + Float64(d[2])^2 + Float64(d[3])^2)
-    return _usp_to_lonlat(UnitSphericalPoint(Float64(d[1]) / s, Float64(d[2]) / s, Float64(d[3]) / s))
+    return _usp_to_lonlat(_certified_sph_crossing(k))
 end
 
 @inline function _usp_to_lonlat(u)
