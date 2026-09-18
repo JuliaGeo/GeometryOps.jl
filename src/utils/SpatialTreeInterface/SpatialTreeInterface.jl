@@ -46,10 +46,21 @@ Return a sorted list of indices of the tree that satisfy the predicate.
 """
 function query(tree, predicate)
     a = Int[]
-    depth_first_search(Base.Fix1(push!, a), sanitize_predicate(predicate), tree)
+    depth_first_search(Base.Fix1(push!, a), sanitize_predicate(tree, predicate), tree)
     return sort!(a)
 end
 
+
+"""
+    sanitize_predicate(tree, pred)
+
+Convert a predicate for a query on `tree` to a function that returns a Boolean.
+
+By default, this is `sanitize_predicate(pred)`.  A tree whose extents are not the
+geometries' `GI.extent`s, such as one on a spherical manifold, overloads this to
+convert a geometry to its own kind of extent.
+"""
+sanitize_predicate(tree, pred) = sanitize_predicate(pred)
 
 """
     sanitize_predicate(pred)

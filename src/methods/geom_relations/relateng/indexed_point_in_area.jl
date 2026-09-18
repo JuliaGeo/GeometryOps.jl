@@ -153,7 +153,7 @@ const _PIASegment = Tuple{_PIAPoint, _PIAPoint}
 # y-intervals (see the header note on how this maps to JTS's
 # SortedPackedIntervalRTree).
 const _PIAExtent = Extents.Extent{(:Y,), Tuple{NTuple{2, Float64}}}
-const _PIAIndex = RTree{STR, _PIAExtent, Vector{_PIASegment}, Vector{Int}}
+const _PIAIndex = RTree{STR, _PIAExtent, Vector{_PIASegment}, Vector{Int}, Planar}
 
 # One polygon's cached kernel rings (spherical): shell plus holes, in the
 # even-odd composition order of `_locate_point_in_polygonal`.
@@ -170,7 +170,7 @@ end
 # longitude span contains the query longitude.
 const _SphPIASegment = Tuple{UnitSphericalPoint{Float64}, UnitSphericalPoint{Float64}}
 const _SphPIAExtent = Extents.Extent{(:X,), Tuple{NTuple{2, Float64}}}
-const _SphPIAIndex = RTree{STR, _SphPIAExtent, Vector{_SphPIASegment}, Vector{Int}}
+const _SphPIAIndex = RTree{STR, _SphPIAExtent, Vector{_SphPIASegment}, Vector{Int}, Planar}
 
 const _SPH_SOUTH_POLE = UnitSphericalPoint(0.0, 0.0, -1.0)
 const _SPH_NORTH_POLE = UnitSphericalPoint(0.0, 0.0, 1.0)

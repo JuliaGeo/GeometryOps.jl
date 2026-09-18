@@ -2,7 +2,7 @@
 
 using ..SpatialTreeInterface
 import ..SpatialTreeInterface: spatialtree, isspatialtree, isleaf, nchild, getchild,
-    child_indices_extents, depth_first_search
+    child_indices_extents, depth_first_search, sanitize_predicate
 
 """
     RTreeNode{T, E}
@@ -71,17 +71,23 @@ child_indices_extents(tree::RTree) = child_indices_extents(_rootnode(tree))
 
 # ## Queries
 
+# A geometry is queried by its extent on the tree's manifold.
+sanitize_predicate(tree::RTree, pred) = _sanitize_predicate(tree.manifold, GI.trait(pred), pred)
+sanitize_predicate(tree::RTree, pred::Extents.Extent) = sanitize_predicate(pred)
+_sanitize_predicate(m, ::Nothing, pred) = sanitize_predicate(pred)
+_sanitize_predicate(m, ::GI.AbstractTrait, geom) = sanitize_predicate(Extents.extent(m, geom))
+
 """
     query(tree::RTree, extent_or_geom)
 
 Indices (into the collection the tree was built from) of every leaf whose
-extent intersects the given extent — or the extent of the given geometry —
-in ascending order.
+extent intersects the given extent — or the extent of the given geometry on
+the tree's manifold — in ascending order.
 """
 query(tree::RTree, ext::Extents.Extent) =
     sort!(depth_first_search(Base.Fix1(Extents.intersects, ext), tree))
 function query(tree::RTree, geom)
-    ext = GI.extent(geom)
+    ext = Extents.extent(tree.manifold, geom)
     isnothing(ext) && throw(ArgumentError("no extent found on $(typeof(geom))"))
     return query(tree, ext)
 end

@@ -99,6 +99,10 @@ This shorthand uses the first column declared by `GeoInterface.geometrycolumns` 
 
 Here, you can see that the colors were assigned appropriately to the scattered points!
 
+### Coordinate reference systems
+
+The join takes its manifold from the tables' CRS (`GeoInterface.crs`).  When both tables have a geographic CRS, such as `EPSG(4326)`, the tree and the predicate work on `Spherical()`, so a polygon crossing the antimeridian matches the points it covers on the globe.  Otherwise the join is planar.  Tables on different manifolds, say one geographic and one projected or without a CRS, throw an `ArgumentError`; reproject one of them first.  Classifying a CRS as geographic needs Proj.jl to be loaded.  A predicate inside a composite condition (`by_pred(...) & by_key(...)`) is always planar.
+
 ## Real-world example
 
 Suppose I have a list of polygons representing administrative regions (or mining sites, or what have you), and I have a list of polygons for each country.  I want to find the country each region is in.

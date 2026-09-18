@@ -149,6 +149,14 @@ end
     pole_box = Extents.Extent(X = (-0.01, 0.01), Y = (-0.01, 0.01), Z = (0.99, 1.0))
     @test query(tree, pole_box) == [13]
 
+    # a geometry query takes the geometry's extent on the tree's manifold
+    @test tree.manifold isa GO.Spherical
+    @test query(tree, GI.Point(0.0, 90.0)) == [13]
+    across = RTree(GO.Spherical(), STR(), [GI.Point(179.9, 0.0), GI.Point(0.0, 0.0), GI.Point(-179.9, 0.0)])
+    @test query(across, GI.LineString([(179.0, -1.0), (-179.0, 1.0)])) == [1, 3]
+    @test STI.query(tree, GI.Point(0.0, 90.0)) == [13]
+    @test STI.query(across, GI.LineString([(179.0, -1.0), (-179.0, 1.0)])) == [1, 3]
+
     # a SphericalCap query against the 3D leaf boxes, end to end
     polecap = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), 0.05)
     @test STI.query(tree, Base.Fix1(Extents.intersects, polecap)) == [13]
@@ -167,6 +175,7 @@ end
     pt = RTree(GO.Planar(), HPR(), band)
     t = RTree(HPR(), band)
     @test pt.levels == t.levels && pt.indices == t.indices
+    @test pt.manifold == t.manifold == GO.Planar()
 
     # `indices` skips the unindexed elements, so `Extents.extent(m, ...)` is
     # never asked for an extent they have no way to give
