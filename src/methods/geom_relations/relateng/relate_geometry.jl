@@ -757,29 +757,36 @@ carried into [`NodeSection`](@ref)s, so parameterizing on the input geometry
 type would only re-specialize the whole edge machinery per geometry-type
 pair (a pure compile-time cost). Only `pts` — the per-segment hot path —
 stays concretely typed, on the manifold's kernel point type `P`.
+
+`input_geom` is `nothing` for a segment string that has no parent geometry at
+all: the OverlayNG noder is fed synthesized linework by the N-ary winding
+overlay, whose rings are computed, not extracted. Only the relate layer reads
+the field (`get_geometry`, and one lookup in `relate_ng.jl`), and no such string
+ever reaches it.
 """
 struct RelateSegmentString{P}
     is_a::Bool
     dim::Int8
     id::Int32
     ring_id::Int32
-    input_geom::RelateGeometry
+    input_geom::Union{Nothing, RelateGeometry}
     parent_polygonal::Any
     pts::Vector{P}
 end
 
 # Port of RelateSegmentString.createLine.
-_rss_create_line(pts::Vector, is_a::Bool, element_id::Integer, parent::RelateGeometry) =
+_rss_create_line(pts::Vector, is_a::Bool, element_id::Integer,
+        parent::Union{Nothing, RelateGeometry}) =
     _rss_create(pts, is_a, DIM_L, element_id, -1, nothing, parent)
 
 # Port of RelateSegmentString.createRing.
 _rss_create_ring(pts::Vector, is_a::Bool, element_id::Integer, ring_id::Integer,
-        poly, parent::RelateGeometry) =
+        poly, parent::Union{Nothing, RelateGeometry}) =
     _rss_create(pts, is_a, DIM_A, element_id, ring_id, poly, parent)
 
 # Port of RelateSegmentString.createSegmentString.
 function _rss_create(pts::Vector, is_a::Bool, dim::Int8, element_id::Integer,
-        ring_id::Integer, poly, parent::RelateGeometry)
+        ring_id::Integer, poly, parent::Union{Nothing, RelateGeometry})
     pts = _remove_repeated_points(pts)
     return RelateSegmentString(is_a, dim, Int32(element_id), Int32(ring_id), parent, poly, pts)
 end

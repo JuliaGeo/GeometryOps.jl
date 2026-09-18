@@ -127,10 +127,20 @@ end
 # Order one node's star of outgoing half-edge indices CCW and wire the origin ring
 # so that `he_onext` walks it (the spike's `_order_stars!`). `star` is mutated
 # into CCW order. All members must share the origin whose apex is `keys[origin]`.
-function he_order_star!(m::Manifold, edges, keys, star::Vector{Int32}; exact)
+function he_order_star!(m::Manifold, edges, keys, star::AbstractVector{Int32}; exact)
     n = length(star)
     if n == 1
         @inbounds edges[star[1]].o_next = star[1]
+        return nothing
+    elseif n == 2
+        #-- the overwhelmingly common degree: one comparison, no sort machinery
+        @inbounds a = star[1]; @inbounds b = star[2]
+        if he_compare_angular(m, edges, keys, b, a; exact) < 0
+            @inbounds star[1] = b; @inbounds star[2] = a
+            a, b = b, a
+        end
+        @inbounds edges[a].o_next = b
+        @inbounds edges[b].o_next = a
         return nothing
     end
     sort!(star; lt = (i, j) -> he_compare_angular(m, edges, keys, i, j; exact) < 0)
