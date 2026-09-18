@@ -210,19 +210,36 @@ end
 """
     spherical_exterior_anchor(pts, n) -> Union{UnitSphericalPoint{Float64}, Nothing}
 
-A reference point exterior BY DEFINITION of the enclosed-region semantics
-of the ring `pts[1:n]`: the antipode of the ring's normalized vertex mass
-(the sum of the unit vertex directions). For any ring whose enclosed region
-is meaningfully smaller than a hemisphere, the vertex mass points into the
-cap the vertices bound, so its antipode lies in the larger — exterior —
-region.
+A point provably exterior to the region enclosed by the ring `pts[1:n]`: the
+antipode of the centre of a spherical cap of radius below a quarter turn
+that holds every vertex, or `nothing` when no such cap exists.
 
-Returns `nothing` when the mass norm is tiny (below `1e-6` per vertex):
-near-hemisphere or vertex-symmetric rings, whose vertices spread over a
-near-great circle. There the enclosed/complement distinction is itself
-near-degenerate (the turning-angle winding tolerance already treats exact
-hemispheres permissively — see `_ring_is_ccw`), so callers fall back to the
-winding-consistent wedge bootstrap of [`spherical_ring_contains`](@ref).
+The guarantee rests on one containment argument. A cap of radius below a
+quarter turn is convex on the sphere, so the ring's edges — minor arcs
+between vertices in the cap — stay inside it, and the cap's complement is a
+connected region larger than a hemisphere that never meets the ring. The
+complement therefore lies on a single side of the ring, and since the
+enclosed region is the side smaller than a hemisphere, that side is the
+exterior. The cap centre's antipode lies in the complement.
+
+Two caps are tried, both verified against every vertex before their centre
+is trusted (the verification is what makes the anchor sound; a cheaper
+centre that happens to be exterior is still a bug waiting for a ring):
+
+- the cap about the normalized vertex mass — one pass, no allocation, and
+  the answer for every ordinary ring;
+- when the mass is degenerate (below `1e-6` per vertex) or some vertex lies
+  a quarter turn or more from it, the minimum enclosing cap of the vertices
+  (Welzl over the unit vectors, allocating one shuffled copy). A ring with
+  a dense vertex cluster and a sparse excursion pulls the mass onto the
+  cluster while a much tighter cap still exists.
+
+Vertices that span more than a hemisphere — an equatorial band longer than
+a half turn, a ring symmetric about a great circle — fit no such cap, and
+the result is `nothing`: callers fall back to the winding-consistent wedge
+bootstrap of [`spherical_ring_contains`](@ref). The cap radius must clear
+the quarter turn by `_ANCHOR_CAP_MARGIN`, which keeps the anchor exterior
+after the milliradian nudge callers apply when a query sits at its antipode.
 """
 function spherical_exterior_anchor(pts, n)
     n == 0 && return nothing
@@ -230,8 +247,54 @@ function spherical_exterior_anchor(pts, n)
     for i in 2:n
         mass += normalize(SVector{3, Float64}(pts[i]))
     end
-    norm(mass) <= 1e-6 * n && return nothing
-    return UnitSphericalPoint(-normalize(mass))
+    if norm(mass) > 1e-6 * n
+        c = normalize(mass)
+        _vertices_within_quarter_turn(pts, n, c) && return UnitSphericalPoint(-c)
+    end
+    c = SVector{3, Float64}(_minimum_enclosing_cap(pts, n).point)
+    _vertices_within_quarter_turn(pts, n, c) && return UnitSphericalPoint(-c)
+    return nothing
+end
+
+# How far short of a quarter turn the enclosing cap's radius must stay, in
+# radians. Matches the nudge callers apply to an anchor antipodal to the query.
+const _ANCHOR_CAP_MARGIN = 1e-3
+
+# Whether every vertex lies strictly within `π/2 - _ANCHOR_CAP_MARGIN` of the
+# unit vector `c`. Written so that a NaN centre (a degenerate Welzl cap) fails.
+function _vertices_within_quarter_turn(pts, n, c)
+    lim = sin(_ANCHOR_CAP_MARGIN)
+    for i in 1:n
+        v = SVector{3, Float64}(pts[i])
+        dot(v, c) > lim * norm(v) || return false
+    end
+    return true
+end
+
+#= The minimum enclosing cap of `pts[1:n]`: Welzl's move-to-front iteration
+over the unit vectors, expected linear time after one shuffle (a ring's
+vertices arrive in boundary order, the adversarial order for the plain scan).
+The membership slack absorbs the rounding of a boundary point's own distance
+so it cannot be re-added; the caller verifies the result against every vertex
+with its own margin, so the slack decides only how tight the cap is. =#
+function _minimum_enclosing_cap(pts, n)
+    v = [UnitSphericalPoint(normalize(SVector{3, Float64}(pts[i]))) for i in 1:n]
+    Random.shuffle!(Random.Xoshiro(0), v)
+    inside(p, cap) = dot(p, cap.point) >= cap.radiuslike - 1e-12
+    cap = SphericalCap(v[1], 0.0)
+    for i in 2:n
+        inside(v[i], cap) && continue
+        cap = SphericalCap(v[i], 0.0)
+        for j in 1:i-1
+            inside(v[j], cap) && continue
+            cap = SphericalCap(slerp(v[i], v[j], 0.5), spherical_distance(v[i], v[j]) / 2)
+            for k in 1:j-1
+                inside(v[k], cap) && continue
+                cap = SphericalCap(v[i], v[j], v[k])
+            end
+        end
+    end
+    return cap
 end
 
 """
@@ -241,8 +304,8 @@ end
 Whether `q` lies in the region ENCLOSED by the ring `pts[1:n]` (the closing
 edge `pts[n] → pts[1]` is implied; boundary points count as enclosed):
 even-odd crossing parity of the arc from `q` to a reference point that is
-exterior *by definition* of the enclosed-region semantics — `anchor`, by
-default the antipode of the normalized vertex mass
+provably exterior — `anchor`, by default the antipode of the centre of a
+sub-hemisphere cap holding every vertex
 ([`spherical_exterior_anchor`](@ref)).
 
 Winding-independent, like [`spherical_ring_contains`](@ref) composed with a
@@ -256,10 +319,10 @@ even-odd semantics: both lobes enclosed, the far side out.
 
 Returns `nothing` — callers fall back conservatively — when:
 
-- `anchor === nothing` (degenerate vertex mass, see
+- `anchor === nothing` (the vertices fit no sub-hemisphere cap, see
   [`spherical_exterior_anchor`](@ref));
 - `q` is (nearly) antipodal to the anchor (the test arc is ill-defined:
-  `q` sits at the center of the vertex mass);
+  `q` sits at the centre of the enclosing cap);
 - the anchor lies exactly ON a ring edge (the test arc ends on the ring);
   or
 - `proper_crossing` reports a crossing as too close to call (`-1`; never

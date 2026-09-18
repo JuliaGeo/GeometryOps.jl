@@ -114,9 +114,9 @@ Move the anchor off `q`'s antipode, if that is where it landed.
 
 The parity walk runs a test arc from `q` to the anchor, which is undefined when
 the two are antipodal — and they are *exactly* antipodal for the most natural
-query there is: a ring's own centre, since the default anchor is the antipode of
-the vertex mass. Without this, locating a cell's centroid inside its own cell
-fails.
+query there is: a ring's own centre, since for an ordinary ring the default
+anchor is the antipode of the vertex mass. Without this, locating a cell's
+centroid inside its own cell fails.
 
 The anchor is a free choice of any point in the exterior region, so nudging it a
 milliradian off the antipode is legitimate: a ring whose enclosed region falls
@@ -169,8 +169,9 @@ end
 
 @noinline _throw_degenerate_ring_orientation(q) = throw(ArgumentError(
     "the lightweight spherical predicates cannot locate the point $(q) against " *
-    "this ring: its vertex mass is degenerate (a near-hemisphere or " *
-    "vertex-symmetric ring), so no definitionally exterior anchor exists. Use " *
+    "this ring: its vertices fit no cap smaller than a hemisphere (a " *
+    "near-hemisphere, band or vertex-symmetric ring), so no provably exterior " *
+    "anchor exists. Use " *
     "`relate_predicate(RelateNG(Spherical()), pred, a, b)`, which falls back to " *
     "a winding-consistent wedge bootstrap."))
 
