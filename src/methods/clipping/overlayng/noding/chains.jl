@@ -65,6 +65,22 @@ The chain counterpart of `_relate_edge_index`: an `Unsorted` R-tree over chain
 envelopes whose leaf data is `(string index, first point, last point)`. Wrapped
 in `ChainIndex` so `_collect_self_pairs!` can dispatch on it — a segment index
 and a chain index are the same `RTree` type and differ only in what a leaf means.
+
+Both constants here are measured over 24 buffer workloads, not inherited.
+
+**`Unsorted` beats a packed load** — STR by 1.3x and Hilbert by 1.4x on the
+whole-`buffer` total. The offset curve arrives in the order a pen draws it, so
+a run of consecutive chains is one short arc and the natural node boxes are
+already tight, tighter than either packing's on two thirds of the workloads.
+Both packings normalize to a square grid, which scrambles a curve whose
+footprint is elongated: on a meander 9 500 times wider than tall they make the
+nodes 17-20x looser and the collect stage 9-11x slower.
+
+**Capacity 8 beats 16** by 1.14x on the collect stage and 1.20x on the
+traversal alone, because `_self_pair_search` enumerates all pairs within a leaf
+— cost quadratic in the capacity — while the work above the leaf is not.
+`_relate_edge_index` keeps 16: RelateNG shares it and this sweep did not cover
+its query patterns.
 =#
 struct ChainIndex{TR}
     tree::TR
@@ -100,7 +116,7 @@ end
 function _relate_chain_index(m::Planar, ss_list)
     extents, owners, nseg = _chain_extent_table(m, ss_list)
     isempty(extents) && return nothing
-    return ChainIndex(RTree(Unsorted(), owners; extents, nodecapacity = 16),
+    return ChainIndex(RTree(Unsorted(), owners; extents, nodecapacity = 8),
                       length(owners), nseg)
 end
 
