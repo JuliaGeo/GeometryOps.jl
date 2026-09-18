@@ -557,6 +557,37 @@ end
     @test point_on_spherical_arc(far, a2, b2) == false
 end
 
+@testset "spherical_exterior_anchor" begin
+    geo = UnitSphereFromGeographic()
+    # A dense cluster with a sparse excursion: the vertex mass sits on the
+    # cluster, more than a quarter turn from the far vertices, yet every vertex
+    # fits a cap of radius ~77° whose centre's antipode is exterior.
+    ring = [(-75.0 + 3cosd(t), 3sind(t)) for t in 90.0:1.0:270.0]
+    append!(ring, [(75.0, -1.0), (75.0, 1.0)])
+    v = [geo(p) for p in ring]; n = length(v)
+    mass = normalize(sum(v))
+    @test any(p -> dot(p, mass) <= 0, v)
+    a = spherical_exterior_anchor(v, n)
+    @test a !== nothing
+    @test all(p -> spherical_distance(p, a) > π / 2, v)
+    @test spherical_ring_contains(v, n, a) == false    # CCW ring: left side is enclosed
+    # An ordinary ring: the antipode of the normalized vertex mass, unchanged.
+    sq = [geo(p) for p in [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)]]
+    @test spherical_exterior_anchor(sq, 4) == UnitSphericalPoint(-normalize(sum(normalize(p) for p in sq)))
+    # Vertices spanning more than a hemisphere fit no such cap: no anchor,
+    # whether the vertex mass happens to point off the ring (uniform band) or
+    # onto it (end-heavy band).
+    top = [(lon, 20.0) for lon in 0.0:10.0:240.0]; bottom = [(lon, -20.0) for lon in 240.0:-10.0:0.0]
+    uniform = [geo(p) for p in vcat(top, bottom)]
+    @test spherical_exterior_anchor(uniform, length(uniform)) === nothing
+    ends = vcat([(240.0, lat) for lat in 19.0:-1.0:-19.0], [(0.0, lat) for lat in -19.0:1.0:19.0])
+    heavy = [geo(p) for p in vcat(top, ends[1:39], bottom, ends[40:end])]
+    @test spherical_exterior_anchor(heavy, length(heavy)) === nothing
+    # An exact great-circle ring: degenerate mass and a hemispherical cap.
+    eq = [geo(p) for p in [(0.0, 0.0), (90.0, 0.0), (180.0, 0.0), (-90.0, 0.0)]]
+    @test spherical_exterior_anchor(eq, 4) === nothing
+end
+
 @testset "Great circle arc intersection" begin
     using GeometryOps.UnitSpherical: spherical_arc_intersection, ArcIntersectionResult
     using GeometryOps.UnitSpherical: arc_cross, arc_hinge, arc_disjoint, arc_overlap
