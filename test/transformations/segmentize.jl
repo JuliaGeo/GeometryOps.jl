@@ -156,3 +156,26 @@ end
             [(1.0, 2.0), (1.0, 2.0)]
     end
 end
+
+@testset "CRS-aware automatic segmentize" begin
+    import GeoFormatTypes
+    points = [(0.0, 50.0), (10.0, 60.0)]
+    geographic_line = GI.LineString(points; crs = GeoFormatTypes.EPSG(4326))
+    @test collect(GI.getpoint(GO.segmentize(geographic_line; max_distance = 100_000))) ==
+        collect(GI.getpoint(GO.segmentize(GO.Geodesic(), geographic_line; max_distance = 100_000)))
+    @test collect(GI.getpoint(GO.segmentize(geographic_line, 100_000))) ==
+        collect(GI.getpoint(GO.segmentize(GO.Geodesic(), geographic_line; max_distance = 100_000)))
+
+    @test GI.npoint(GO.segmentize(GI.LineString(points); max_distance = 1)) == 16
+    @test GI.npoint(GO.segmentize(GI.LineString(points; crs = GeoFormatTypes.EPSG(3857)); max_distance = 1)) == 16
+
+    # EPSG:4807 has coordinates in grads on the Clarke 1880 (IGN) ellipsoid.
+    clarke = GO.Geodesic(semimajor_axis = 6378249.2, inv_flattening = 293.466021293627)
+    grads_line = GI.LineString(points; crs = GeoFormatTypes.EPSG(4807))
+    degree_line = GI.LineString([(0.9x, 0.9y) for (x, y) in points])
+    grads_points = collect(GI.getpoint(GO.segmentize(grads_line; max_distance = 100_000)))
+    degree_points = collect(GI.getpoint(GO.segmentize(clarke, degree_line; max_distance = 100_000)))
+    @test length(grads_points) == length(degree_points)
+    @test all((((x, y), (lon, lat)),) -> 0.9x ≈ lon && 0.9y ≈ lat, zip(grads_points, degree_points))
+    @test first(grads_points) == points[1] && last(grads_points) == points[2]
+end
