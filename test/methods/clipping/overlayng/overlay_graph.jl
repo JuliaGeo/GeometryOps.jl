@@ -183,22 +183,22 @@ end
     ne(lo, hi) = GO.NodedEdge(Int32(1), Int32(1), Int32(lo), Int32(hi))
     # same direction: deltas add
     base = GO._merge_edge(ne(3, 7), srcA(1, false))
-    GO._merge!(base, GO._merge_edge(ne(3, 7), srcA(1, false)))
+    base = GO._merge(base, GO._merge_edge(ne(3, 7), srcA(1, false)))
     @test base.a_depth_delta == 2
     # opposite direction (a-b-a spike): deltas cancel -> DIM_COLLAPSE
     base = GO._merge_edge(ne(3, 7), srcA(-1, false))
-    GO._merge!(base, GO._merge_edge(ne(7, 3), srcA(-1, false)))   # reversed
+    base = GO._merge(base, GO._merge_edge(ne(7, 3), srcA(-1, false)))   # reversed
     @test base.a_depth_delta == 0
     lbl = GO._create_label(base)
     @test GO.is_collapse(lbl, 0)
     @test lbl.a_dim == DIM_COLLAPSE
     # hole-role merge: a shell contributor makes the merged edge a shell
     base = GO._merge_edge(ne(3, 7), srcA(-1, true))              # hole
-    GO._merge!(base, GO._merge_edge(ne(3, 7), srcA(-1, false)))  # shell
+    base = GO._merge(base, GO._merge_edge(ne(3, 7), srcA(-1, false)))  # shell
     @test base.a_is_hole == false
     # two holes stay a hole
     base = GO._merge_edge(ne(3, 7), srcA(-1, true))
-    GO._merge!(base, GO._merge_edge(ne(3, 7), srcA(-1, true)))
+    base = GO._merge(base, GO._merge_edge(ne(3, 7), srcA(-1, true)))
     @test base.a_is_hole == true
 end
 
