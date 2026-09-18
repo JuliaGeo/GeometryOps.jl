@@ -79,12 +79,18 @@ const _AM_POLE_TOL = 1e-9
 const _AM_SEAM_TOL = 1e-9
 
 """
-    antimeridian_split(geom; antimeridian = 180.0, north_pole = nothing, pole_spacing = 5.0)
+    antimeridian_split(geom; antimeridian = 180.0, north_pole = nothing, pole_spacing = 5.0, threaded = false)
 
-Split a lon/lat `Polygon` or `MultiPolygon` at the antimeridian, returning a
-`GI.MultiPolygon` whose pieces each stay within one 360°-wide longitude branch
-(none crosses the seam). The spherical region is preserved exactly — this is an
-encoding repair, not a geometry change.
+Split the lon/lat polygons of `geom` at the antimeridian. Every `Polygon` /
+`MultiPolygon` in `geom` is replaced by a `GI.MultiPolygon` whose pieces each
+stay within one 360°-wide longitude branch (none crosses the seam); the spherical
+region is preserved exactly — this is an encoding repair, not a geometry change.
+
+`geom` may be a bare geometry, a feature, a feature collection, a table, or
+(nested) vectors of any of those: the split runs through [`apply`](@ref) on the
+`PolygonTrait`/`MultiPolygonTrait` target, so everything above the polygons is
+rebuilt around the split result. A bare `Polygon` therefore comes back as a
+`MultiPolygon`.
 
 ## Keyword arguments
 
@@ -103,20 +109,49 @@ encoding repair, not a geometry change.
   the two branch corners. The corners are never optional — they are the
   topological product of the face walk; only the infill between them is
   controlled here.
+- `threaded = false`: passed to [`apply`](@ref); threads over the outermost level
+  of a collection input (array, feature collection, …).
 
-Only `PolygonTrait` and `MultiPolygonTrait` inputs are supported; other traits
-throw an `ArgumentError` (LineString support is future work).
+Only `PolygonTrait` and `MultiPolygonTrait` geometries are supported; a bare
+geometry of another trait throws an `ArgumentError` (LineString support is future
+work).
 """
-function antimeridian_split(geom; antimeridian = 180.0, north_pole = nothing, pole_spacing = 5.0)
-    t = GI.trait(geom)
-    (t isa GI.PolygonTrait || t isa GI.MultiPolygonTrait) || throw(ArgumentError(
-        "antimeridian_split supports PolygonTrait and MultiPolygonTrait inputs; " *
-        "got $(t === nothing ? typeof(geom) : typeof(t)). (LineString support is future work.)"))
+function antimeridian_split(geom; antimeridian = 180.0, north_pole = nothing, pole_spacing = 5.0, threaded = false)
+    _check_split_trait(GI.trait(geom))
     λn = _normalize_seam(Float64(antimeridian))
     work = north_pole === nothing ? geom :
            _rotate_to_pole(geom, Float64(north_pole[1]), Float64(north_pole[2]))
+    return apply(WithTrait((trait, g) -> _split_geom(trait, g, λn, pole_spacing)),
+                 _AM_TARGETS, work; threaded)
+end
+
+const _AM_TARGETS = TraitTarget{Union{GI.PolygonTrait, GI.MultiPolygonTrait}}()
+
+# `apply` descends into arrays, tables, features and feature collections on its
+# own (trait `nothing` / the feature traits), so only a bare geometry of an
+# unsupported trait — which `apply` would take apart down to its points and never
+# hand to the split — is rejected here.
+function _check_split_trait(t)
+    t isa GI.AbstractGeometryTrait && !(t isa GI.PolygonTrait || t isa GI.MultiPolygonTrait) &&
+        throw(ArgumentError(
+            "antimeridian_split supports PolygonTrait and MultiPolygonTrait geometries; " *
+            "got $(typeof(t)). (LineString support is future work.)"))
+    return nothing
+end
+
+# The target methods: each polygonal geometry becomes the MultiPolygon of its
+# branch-confined pieces. A MultiPolygon is split part by part into one flat
+# piece list — its parts are independent, but the result is one geometry, so it
+# must not become a MultiPolygon of MultiPolygons.
+function _split_geom(::GI.PolygonTrait, poly, λn, pole_spacing)
     pieces = Vector{Vector{Vector{Tuple{Float64, Float64}}}}()
-    _each_polygon(work) do poly
+    _split_polygon!(pieces, poly, λn; pole_spacing)
+    return GI.MultiPolygon(pieces)
+end
+
+function _split_geom(::GI.MultiPolygonTrait, multipoly, λn, pole_spacing)
+    pieces = Vector{Vector{Vector{Tuple{Float64, Float64}}}}()
+    for poly in GI.getgeom(multipoly)
         _split_polygon!(pieces, poly, λn; pole_spacing)
     end
     return GI.MultiPolygon(pieces)
@@ -132,18 +167,6 @@ end
 # segments (a single antipodal segment has no unique arc and is rejected at
 # ingest).
 _meridian_arc(λn) = GI.LineString([(λn, -90.0), (λn, 0.0), (λn, 90.0)])
-
-# Iterate the polygon parts of a Polygon/MultiPolygon.
-function _each_polygon(f::F, geom) where {F}
-    if GI.trait(geom) isa GI.PolygonTrait
-        f(geom)
-    else
-        for poly in GI.getgeom(geom)
-            f(poly)
-        end
-    end
-    return nothing
-end
 
 # The exterior ring followed by the hole rings of a polygon.
 _rings_of(poly) = (GI.getexterior(poly), GI.gethole(poly)...)
