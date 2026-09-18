@@ -9,6 +9,19 @@ import GeometryOps: Planar, Spherical, True, False
 import GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
 using LinearAlgebra: cross, dot, norm
 import Random
+using Random: MersenneTwister
+
+@testset "validated UnitSphericalPoint arithmetic" begin
+    CF = GO.ValidatedFloats.CrossingFloats
+    a = UnitSphericalPoint(CF.CrossingFloat.((0.8, 0.6, 0.0)))
+    b = UnitSphericalPoint(CF.CrossingFloat.((0.8, 0.0, 0.6)))
+    c = @inferred cross(a, b)
+    q = @inferred dot(a, b)
+    @test Tuple(c) === cross(Tuple(a), Tuple(b))
+    @test q === dot(Tuple(a), Tuple(b))
+    @test which(cross, (typeof(a), typeof(b))).module === CF
+    @test which(dot, (typeof(a), typeof(b))).module === CF
+end
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -190,41 +203,255 @@ end
     @test emit_ok                                     # node_point is the rational answer either way
 end
 
+function _rational_planar_crossing(a0, a1, b0, b1)
+    R = Rational{BigInt}
+    ax0, ay0 = R(a0[1]), R(a0[2]); ax1, ay1 = R(a1[1]), R(a1[2])
+    bx0, by0 = R(b0[1]), R(b0[2]); bx1, by1 = R(b1[1]), R(b1[2])
+    dax, day = ax1 - ax0, ay1 - ay0
+    dbx, dby = bx1 - bx0, by1 - by0
+    c0x, c0y = bx0 - ax0, by0 - ay0
+    t = (c0x * dby - c0y * dbx) / (dax * dby - day * dbx)
+    return Float64(ax0 + t * dax), Float64(ay0 + t * day)
+end
+
+@testset "planar emission: validated arithmetic domains" begin
+    large = 0x1p200
+    large_step = eps(large)
+    outside = 0x1p500
+    outside_step = eps(outside)
+    cases = [
+        ((0.0, 0.0), (10.0, 10.0), (0.0, 10.0), (10.0, 0.0)),
+        ((large, large), (large + 16large_step, large + 12large_step),
+         (large, large + 12large_step), (large + 16large_step, large)),
+        ((0.0, 0.0), (0x1p-200, 0x1p-200),
+         (0.0, 0x1p-200), (0x1p-200, 0.0)),
+        ((0.0, 0.0), (1.0, 1.0),
+         (0.0, -0x1p-41), (1.0, 1.0 + 0x1p-41)),
+        ((outside, outside), (outside + 16outside_step, outside + 12outside_step),
+         (outside, outside + 12outside_step), (outside + 16outside_step, outside)),
+    ]
+    ncert = 0
+    for (a0, a1, b0, b1) in cases
+        x, y, cert = GO._certified_crossing(a0, a1, b0, b1)
+        want = _rational_planar_crossing(a0, a1, b0, b1)
+        k = GO.crossing_node(a0, a1, b0, b1)
+        @test GO._emit_node_coord(k, Tuple{Float64, Float64}) == want
+        if cert
+            @test (x, y) == want
+            ncert += 1
+        end
+    end
+    @test 0 < ncert < length(cases)
+    @test !GO._certified_crossing(cases[end]...)[3]
+end
+
 #=
-Both spherical output rows, against the same exact authority. The gated Float64
-direction is what emission uses when the arcs are not near-tangent, and the
-question is how far it lands from `_sph_crossing_dir(True(), k)` — measured in
-degrees on the lon/lat row and as a chord in R³ on the xyz row, because that is
-the unit each row's own consumers measure in.
+Both spherical output rows, against an oracle independent of the emitter. The
+contract is correct rounding: the xyz row emits `(RN(x₁), RN(x₂), RN(x₃))` of
+the exact unit crossing direction `x = d/‖d‖`, and the lon/lat row is that
+point sent through the vertex row's trigonometry.
+
+The oracle normalizes the exact rational `d` in 4096-bit BigFloat and rounds
+each component to Float64 once. That decides the same rounding as exact
+arithmetic unless `xᵢ` lies within ~2⁻⁴⁰⁹⁰ of a Float64 midpoint without being
+one. `xᵢ` is algebraic of degree ≤ 2 (a rational over a square root) with
+coefficient height below 2⁷⁰⁰ for Float64 inputs, and a midpoint is a rational
+with denominator ≤ 2¹⁰⁷⁵, so Liouville's bound keeps any such distance above
+2⁻³⁰⁰⁰. An exact tie is a rational `xᵢ`, which the oracle would still round
+correctly only by luck; none of the populations below produces one (it needs
+`‖d‖` rational), and the tie rule is tested on constructed inputs in the
+`_round_div_sqrt` testset instead.
+
+Populations are the ones the emitter is sensitive to in different ways:
+long arcs (nothing cancels), metre/centimetre/micro arcs (`a0×a1` cancels by
+the arc length), near-tangent arcs (`na×nb` cancels by the plane angle, into
+the exact fallback), and lon/lat grid data, where an equator or meridian arc
+puts the crossing on a coordinate plane and one component is exactly zero.
 =#
-@testset "spherical emission: direction within bound of exact" begin
+const _SPH = Spherical()
+_canon(v) = GO._spherical_kernel_point(UnitSphericalPoint(v[1], v[2], v[3]))
+_logu(rng, lo, hi) = exp(log(lo) + rand(rng) * (log(hi) - log(lo)))
+function _frame(p)
+    e = zeros(3); e[argmin(abs.(p))] = 1.0
+    u = cross(p, e) ./ norm(cross(p, e))
+    return (u, cross(p, u))
+end
+_walk(p, t, s) = cos(s) .* p .+ sin(s) .* t
+
+# a proper crossing through a random point, arc lengths La, Lb, plane angle φ
+function _crossing_case(rng, La, Lb, φ)
+    X = randn(rng, 3); X ./= norm(X); u, w = _frame(X)
+    α = 2π * rand(rng)
+    ta = cos(α) .* u .+ sin(α) .* w
+    tb = cos(α + φ) .* u .+ sin(α + φ) .* w
+    fa = 0.1 + 0.8rand(rng); fb = 0.1 + 0.8rand(rng)
+    return (_canon(_walk(X, -ta, fa * La)), _canon(_walk(X, ta, (1 - fa) * La)),
+            _canon(_walk(X, -tb, fb * Lb)), _canon(_walk(X, tb, (1 - fb) * Lb)))
+end
+
+# grid-ish lon/lat data: integer / half / quarter degrees, equator, meridians
+function _lonlat_case(rng)
+    g() = rand(rng, (1.0, 0.5, 0.25, 0.1))
+    λ0 = round(rand(rng) * 360 - 180); φ0 = round(rand(rng) * 170 - 85)
+    kind = rand(rng, 1:3)
+    a0, a1, b0, b1 = if kind == 1          # meridian arc vs parallel-endpoint arc
+        (λ0, φ0 - g()), (λ0, φ0 + g()), (λ0 - g(), φ0), (λ0 + g(), φ0)
+    elseif kind == 2                       # equator arc vs slanted arc
+        (λ0 - g(), 0.0), (λ0 + g(), 0.0), (λ0 - g() / 3, -g()), (λ0 + g() / 7, g())
+    else                                   # prime meridian vs diagonal
+        (0.0, φ0 - g()), (0.0, φ0 + g()), (-g(), φ0 - g() / 2), (g(), φ0 + g() / 3)
+    end
+    f = GO._spherical_kernel_point
+    return (f(a0), f(a1), f(b0), f(b1))
+end
+
+_is_proper(c) = GO.rk_classify_intersection(_SPH, c...; exact = True()).kind == GO.SS_PROPER
+
+function _sample_crossings(gen, n)
+    ks = GO.NodeKey{USP}[]
+    tries = 0
+    while length(ks) < n && tries < 50n
+        tries += 1
+        c = gen()
+        _is_proper(c) && push!(ks, GO.crossing_node(c...))
+    end
+    return ks
+end
+
+# the independent oracle: exact rational direction, normalized in BigFloat
+function _oracle_usp(k)
+    d = GO._sph_crossing_dir(True(), k)
+    return setprecision(BigFloat, 4096) do
+        x = BigFloat.(collect(d)); x ./= sqrt(sum(x .^ 2))
+        UnitSphericalPoint(Float64(x[1]) + 0.0, Float64(x[2]) + 0.0, Float64(x[3]) + 0.0)
+    end
+end
+
+@testset "spherical emission: certified == correctly rounded, per population" begin
+    rng = MersenneTwister(11)
+    N = 30
+    pops = [
+        ("long arcs",          () -> _crossing_case(rng, _logu(rng, 0.01, 1.0), _logu(rng, 0.01, 1.0), (0.05 + 0.9rand(rng)) * π), true),
+        ("metre arcs",         () -> _crossing_case(rng, 1.6e-7, 1.6e-7 * (0.5 + rand(rng)), (0.05 + 0.9rand(rng)) * π), true),
+        ("centimetre arcs",    () -> _crossing_case(rng, 1.6e-9, 1.6e-9, (0.05 + 0.9rand(rng)) * π), true),
+        ("micro arcs",         () -> _crossing_case(rng, _logu(rng, 1e-13, 1e-11), _logu(rng, 1e-13, 1e-11), (0.05 + 0.9rand(rng)) * π), false),
+        ("near-tangent 100 km", () -> _crossing_case(rng, 0.0157, 0.0157, _logu(rng, 1e-15, 1e-3)), false),
+        ("near-tangent 1 km",  () -> _crossing_case(rng, 1.6e-4, 1.6e-4, _logu(rng, 1e-12, 1e-3)), false),
+        ("lon/lat grid",       () -> _lonlat_case(rng), true),
+    ]
+    nfallback = 0
+    for (name, gen, all_fast) in pops
+        ks = _sample_crossings(gen, N)
+        @testset "$name" begin
+            @test length(ks) == N
+            nfast = 0
+            for k in ks
+                want = _oracle_usp(k)
+                got = GO._emit_node_coord(k, USP)
+                @test got === want                                # bit-for-bit, both signs of zero
+                #-- the two paths agree with each other, so the output is a
+                #-- function of the node's exact position alone
+                (ok, x, y, z) = GO._certified_sph_crossing_fast(k)
+                ok && (nfast += 1)
+                @test (x + 0.0, y + 0.0, z + 0.0) == GO._certified_sph_crossing_exact(k) || !ok
+                #-- the lon/lat row is the vertex row's trigonometry applied to it
+                @test GO._emit_node_coord(k, Tuple{Float64, Float64}) == GO._usp_to_lonlat(want)
+                #-- re-ingest identity: a cascade level's output re-enters the
+                #-- next level bit-for-bit
+                @test GO.rk_normalize_usp(got) === got
+                @test GO._spherical_kernel_point(got) === got
+            end
+            all_fast && @test nfast == N
+            nfallback += N - nfast
+        end
+    end
+    @test nfallback > 0                     # the near-tangent populations reach the exact fallback
+end
+
+# An exactly-zero component certifies on the fast path. The neighbour gap at
+# 0.0 is 5e-324, so a bound lumped over the expression would send every
+# crossing on a coordinate plane to the exact fallback; the per-operation bounds
+# propagate an exact zero with a zero bound instead.
+@testset "spherical emission: exact zeros on the fast path" begin
+    f = GO._spherical_kernel_point
+    #-- equator × meridian: z = 0 and the crossing is on the meridian plane
+    k = GO.crossing_node(f((0.0, 0.0)), f((10.0, 0.0)), f((5.0, -1.0)), f((5.0, 1.0)))
+    (ok, x, y, z) = GO._certified_sph_crossing_fast(k)
+    @test ok
+    @test z == 0.0
+    @test GO._emit_node_coord(k, USP) === _oracle_usp(k)
+    @test GO._certified_sph_crossing_fast(k; safety = 4.0) === (false, 0.0, 0.0, 0.0)
+    #-- prime meridian × slanted arc: y = 0
+    k = GO.crossing_node(f((0.0, 40.0)), f((0.0, 50.0)), f((-1.0, 44.0)), f((1.0, 46.0)))
+    (ok, x, y, z) = GO._certified_sph_crossing_fast(k)
+    @test ok
+    @test y == 0.0
+    @test GO._emit_node_coord(k, USP) === _oracle_usp(k)
+end
+
+# The exact fallback's rounding: `_round_div_sqrt(a, S)` is `a/√S` rounded to
+# nearest, ties to even, decided by exact midpoint comparison.
+@testset "_round_div_sqrt: correct rounding incl. exact ties" begin
+    R = Rational{BigInt}
+    #-- exactly representable quotients come back exactly
+    @test GO._round_div_sqrt(R(3), R(4)) == 1.5
+    @test GO._round_div_sqrt(R(-3), R(4)) == -1.5
+    @test GO._round_div_sqrt(R(0), R(7)) == 0.0
+    @test GO._round_div_sqrt(R(1, 3), R(1, 9)) == 1.0
+    #-- exact ties go to the even neighbour, from either side of it
+    tie_hi = R(1) + R(1, 2)^53                                   # midpoint of 1.0 and nextfloat(1.0)
+    @test GO._round_div_sqrt(tie_hi, R(1)) == 1.0
+    @test GO._round_div_sqrt(tie_hi * 3, R(9)) == 1.0
+    odd = nextfloat(1.0)                                         # odd significand
+    tie_odd = (R(odd) + R(nextfloat(odd))) / 2
+    @test GO._round_div_sqrt(tie_odd, R(1)) == nextfloat(odd)    # even neighbour is above
+    tie_lo = (R(1.0) + R(prevfloat(1.0))) / 2                    # power-of-two boundary
+    @test GO._round_div_sqrt(tie_lo, R(1)) == 1.0
+    #-- generic quotients agree with a high-precision evaluation
+    rng = MersenneTwister(5)
+    for _ in 1:200
+        a = R(randn(rng) * 2.0^rand(rng, -40:40)); S = R(abs(randn(rng)) * 2.0^rand(rng, -80:80)) + R(1, 10^9)
+        want = setprecision(BigFloat, 4096) do
+            Float64(BigFloat(a) / sqrt(BigFloat(S)))
+        end
+        @test GO._round_div_sqrt(a, S) == want
+    end
+end
+
+# The same contract through the arrangement: crossing keys as noding produces
+# them, realized and cached by `node_point`, on both output rows selected via
+# `point_type`. One assertion per property, accumulated over the ~3600
+# crossings; the 4096-bit oracle costs ~1 ms per crossing, so this is the
+# file's slowest block by design and needs no sampling.
+@testset "spherical emission through the arrangement: every node_point == oracle" begin
     Ag = GI.MultiLineString([[(Float64(k) * 0.09 + 0.05, 0.0), (Float64(k) * 0.09 + 0.05 + 0.031, 20.0)] for k in 1:60])
     Bg = GI.MultiLineString([[(0.0, Float64(j) * 0.09 + 0.05), (20.0, Float64(j) * 0.09 + 0.05 + 0.029)] for j in 1:60])
 
+    #-- the default row: unit-sphere xyz, bit-for-bit the correctly rounded direction
+    arr_x = GO.NodedArrangement(Spherical(), Ag, Bg; exact = True())
+    ids = _crossing_ids(arr_x)
+    oracle = Dict(i => _oracle_usp(arr_x.nodes.keys[i]) for i in ids)
+    all_usp = true; all_equal = true; all_cached = true
+    for i in ids
+        emitted = GO.node_point(arr_x, i)
+        emitted isa UnitSphericalPoint{Float64} || (all_usp = false)
+        emitted === oracle[i] || (all_equal = false)
+        GO.node_point(arr_x, i) === emitted || (all_cached = false)   # realized once, read back
+    end
+    @test length(ids) > 1000
+    @test all_usp
+    @test all_equal
+    @test all_cached
+
+    #-- the lon/lat row: the vertex trigonometry applied to that same point
     arr = GO.NodedArrangement(Spherical(), Ag, Bg; exact = True(),
                               point_type = Tuple{Float64, Float64})
-    maxdev = 0.0
+    all_ll = true
     for i in _crossing_ids(arr)
-        k = arr.nodes.keys[i]
-        emitted = GO.node_point(arr, i)
-        exact = GO._dir_to_lonlat(GO._sph_crossing_dir(True(), k))
-        maxdev = max(maxdev, abs(emitted[1] - exact[1]), abs(emitted[2] - exact[2]))
+        GO.node_point(arr, i) == GO._usp_to_lonlat(_oracle_usp(arr.nodes.keys[i])) || (all_ll = false)
     end
-    @test length(_crossing_ids(arr)) > 1000
-    @test maxdev <= 1e-8                              # measured ≤1.4e-14° (S3)
-
-    #-- the default row: unit vectors, so the deviation is a chord and 1e-8 rad
-    #-- is the same bar 1e-8° was, an order of magnitude tighter
-    arr_x = GO.NodedArrangement(Spherical(), Ag, Bg; exact = True())
-    maxchord = 0.0
-    for i in _crossing_ids(arr_x)
-        k = arr_x.nodes.keys[i]
-        emitted = GO.node_point(arr_x, i)
-        @test emitted isa UnitSphericalPoint{Float64}
-        exact = GO._dir_to_usp(GO._sph_crossing_dir(True(), k))
-        maxchord = max(maxchord, sqrt(GO._usp_chord2(emitted, exact)))
-    end
-    @test maxchord <= 1e-8
+    @test length(_crossing_ids(arr)) == length(ids)
+    @test all_ll
 end
 
 # ---------------------------------------------------------------------------
@@ -360,46 +587,4 @@ end
         @test count(i -> GO.node_point(arr, i) == v, 1:GO.num_nodes(arr)) == 1
         nbatch += 1
     end
-end
-
-function _rational_planar_crossing(a0, a1, b0, b1)
-    R = Rational{BigInt}
-    ax0, ay0 = R(a0[1]), R(a0[2]); ax1, ay1 = R(a1[1]), R(a1[2])
-    bx0, by0 = R(b0[1]), R(b0[2]); bx1, by1 = R(b1[1]), R(b1[2])
-    dax, day = ax1 - ax0, ay1 - ay0
-    dbx, dby = bx1 - bx0, by1 - by0
-    c0x, c0y = bx0 - ax0, by0 - ay0
-    t = (c0x * dby - c0y * dbx) / (dax * dby - day * dbx)
-    return Float64(ax0 + t * dax), Float64(ay0 + t * day)
-end
-
-@testset "planar emission: validated arithmetic domains" begin
-    large = 0x1p200
-    large_step = eps(large)
-    outside = 0x1p500
-    outside_step = eps(outside)
-    cases = [
-        ((0.0, 0.0), (10.0, 10.0), (0.0, 10.0), (10.0, 0.0)),
-        ((large, large), (large + 16large_step, large + 12large_step),
-         (large, large + 12large_step), (large + 16large_step, large)),
-        ((0.0, 0.0), (0x1p-200, 0x1p-200),
-         (0.0, 0x1p-200), (0x1p-200, 0.0)),
-        ((0.0, 0.0), (1.0, 1.0),
-         (0.0, -0x1p-41), (1.0, 1.0 + 0x1p-41)),
-        ((outside, outside), (outside + 16outside_step, outside + 12outside_step),
-         (outside, outside + 12outside_step), (outside + 16outside_step, outside)),
-    ]
-    ncert = 0
-    for (a0, a1, b0, b1) in cases
-        x, y, cert = GO._certified_crossing(a0, a1, b0, b1)
-        want = _rational_planar_crossing(a0, a1, b0, b1)
-        k = GO.crossing_node(a0, a1, b0, b1)
-        @test GO._emit_node_coord(k, Tuple{Float64, Float64}) == want
-        if cert
-            @test (x, y) == want
-            ncert += 1
-        end
-    end
-    @test 0 < ncert < length(cases)
-    @test !GO._certified_crossing(cases[end]...)[3]
 end
