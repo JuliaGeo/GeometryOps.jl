@@ -128,6 +128,7 @@ include("methods/geom_relations/relateng/relate_ng.jl")
 
 # OverlayNG noding substrate (phase 1): geometries → exactly-noded arrangement.
 include("methods/clipping/overlayng/noding/noded_arrangement.jl")
+include("methods/clipping/overlayng/noding/chains.jl")
 include("methods/clipping/overlayng/noding/collect.jl")
 include("methods/clipping/overlayng/noding/node_identity.jl")
 include("methods/clipping/overlayng/noding/split.jl")
