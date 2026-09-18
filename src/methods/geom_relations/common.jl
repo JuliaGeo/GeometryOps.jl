@@ -1,11 +1,16 @@
 # Identical boilerplate methods for geom relations live here
 
 #= The manifold-threaded family: every forwarding method carries the manifold
-through to the underlying call. `crosses` and `overlaps` are generated below
-instead, without a manifold, because they still run on their own planar helpers
-rather than the shared processors. =#
-for f in (:coveredby, :disjoint, :touches, :within)
+through to the underlying call. `overlaps` is generated below instead, without
+a manifold, because it still runs on its own planar helpers rather than the
+shared processors. =#
+for f in (:coveredby, :crosses, :disjoint, :touches, :within)
     _f = Symbol(:_, f)
+
+    #= `Extents` has no `crosses`, and needs none: two extents are both
+    two-dimensional, and no two geometries of equal dimension above one can
+    cross. =#
+    ext_ext = f === :crosses ? :(false) : :(Extents.$f(e1, e2))
 
     @eval begin
         # Features
@@ -23,9 +28,10 @@ for f in (:coveredby, :disjoint, :touches, :within)
         $_f(m::Manifold, ::GI.RectangleTrait, e1::Extents.Extent, t2::GI.AbstractGeometryTrait, g2; kw...) =
             $_f(m, GI.PolygonTrait(), extent_to_polygon(e1), t2, g2; kw...)
         #= Two bare extents carry no manifold information — they are coordinate
-        boxes, not geometries — so both manifolds answer with the box predicate. =#
+        boxes, not geometries — so both manifolds answer with the box predicate
+        (or, for `crosses`, with the constant the box predicate would be). =#
         $_f(m::Manifold, ::GI.RectangleTrait, e1::Extents.Extent, ::GI.RectangleTrait, e2::Extents.Extent; kw...) =
-            Extents.$f(e1, e2)
+            $ext_ext
 
         # Backwards compatibility for when Extent traits were Nothing
         $_f(m::Manifold, t1::GI.FeatureTrait, f1, ::Nothing, e::Extents.Extent; kw...) =
@@ -37,7 +43,7 @@ for f in (:coveredby, :disjoint, :touches, :within)
         $_f(m::Manifold, ::Nothing, e1::Extents.Extent, t2::GI.AbstractGeometryTrait, g2; kw...) =
             $_f(m, GI.PolygonTrait(), extent_to_polygon(e1), t2, g2; kw...)
         $_f(m::Manifold, ::Nothing, e1::Extents.Extent, ::Nothing, e2::Extents.Extent; kw...) =
-            Extents.$f(e1, e2)
+            $ext_ext
 
         # Table rows ? or error
         $_f(m::Manifold, ::Nothing, g1, ::GI.FeatureTrait, f2; kw...) = $f(m, _geometry_or_error(g1; kw...), f2)
@@ -49,7 +55,10 @@ for f in (:coveredby, :disjoint, :touches, :within)
     end
 end
 
-for f in (:crosses, :overlaps)
+#= The one relation still without a manifold: `overlaps` runs on its own planar
+helpers rather than the shared processors, so its forwarding methods take no
+manifold either. =#
+for f in (:overlaps,)
     _f = Symbol(:_, f)
 
     @eval begin
