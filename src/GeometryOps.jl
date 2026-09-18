@@ -139,6 +139,10 @@ include("methods/clipping/overlayng/overlay_label.jl")
 include("methods/clipping/overlayng/edge_source.jl")
 include("methods/clipping/overlayng/half_edge.jl")
 include("methods/clipping/overlayng/overlay_graph.jl")
+# Polyline-run splitting and merging for the N-ary winding overlay. After
+# `overlay_graph.jl` (it builds `MergeEdge`s) and before `maximal_edge_ring.jl`
+# (whose builder context holds a `WindingRuns` field).
+include("methods/clipping/overlayng/noding/run_split.jl")
 
 # OverlayNG engine core (phase 2b): labeller, result builders, and the driver.
 include("methods/clipping/overlayng/overlay_labeller.jl")
@@ -147,6 +151,9 @@ include("methods/clipping/overlayng/polygon_builder.jl")
 include("methods/clipping/overlayng/line_builder.jl")
 include("methods/clipping/overlayng/intersection_point_builder.jl")
 include("methods/clipping/overlayng/overlay_ng.jl")
+# The N-ary winding-number overlay: after the builders and the driver (it uses
+# `_build_polygons` and the driver's result types), and the engine behind `buffer`.
+include("methods/clipping/overlayng/winding_overlay.jl")
 
 # OverlayNG point inputs and mixed-dimension results (phase 3).
 include("methods/clipping/overlayng/overlay_points.jl")

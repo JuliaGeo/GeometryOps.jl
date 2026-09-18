@@ -29,11 +29,12 @@
 # segment's original endpoints) are read at graph-build time. Topology info is the
 # JTS `Edge` a/b `dim`/`depth_delta`/`is_hole` fields.
 
-mutable struct MergeEdge
+struct MergeEdge
     node_lo     :: Int32   # canonical origin node id (base contributor's sub-edge start)
     node_hi     :: Int32   # canonical dest node id (base contributor's sub-edge end)
     string_idx  :: Int32   # base contributor's parent string (for direction points)
-    seg_idx     :: Int32   # base contributor's parent segment
+    seg_idx     :: Int32   # base contributor's FIRST parent segment
+    seg_hi      :: Int32   # base contributor's LAST parent segment (== seg_idx unless a run)
 
     a_dim         :: Int8
     a_depth_delta :: Int32  # summed across merges — widened from the Int8 source delta
@@ -44,15 +45,22 @@ mutable struct MergeEdge
     b_is_hole     :: Bool
 end
 
+# Single-segment spelling: `seg_hi` defaults to `seg_idx`, which is what every
+# edge the binary path merges has.
+MergeEdge(node_lo, node_hi, string_idx, seg_idx, a_dim, a_depth_delta, a_is_hole,
+          b_dim, b_depth_delta, b_is_hole) =
+    MergeEdge(node_lo, node_hi, string_idx, seg_idx, seg_idx, a_dim, a_depth_delta,
+              a_is_hole, b_dim, b_depth_delta, b_is_hole)
+
 # Build the base `MergeEdge` for a noded edge, carrying its single source's info
 # on the matching input index (port of JTS `Edge(pts, info)` + `copyInfo`).
 function _merge_edge(ne::NodedEdge, src::EdgeSourceInfo)
     if src.index == 0
-        return MergeEdge(ne.node_lo, ne.node_hi, ne.string_idx, ne.seg_idx,
+        return MergeEdge(ne.node_lo, ne.node_hi, ne.string_idx, ne.seg_idx, ne.seg_hi,
                          src.dim, Int32(src.depth_delta), src.is_hole,
                          DIM_NOT_PART, Int32(0), false)
     else
-        return MergeEdge(ne.node_lo, ne.node_hi, ne.string_idx, ne.seg_idx,
+        return MergeEdge(ne.node_lo, ne.node_hi, ne.string_idx, ne.seg_idx, ne.seg_hi,
                          DIM_NOT_PART, Int32(0), false,
                          src.dim, Int32(src.depth_delta), src.is_hole)
     end
@@ -72,15 +80,16 @@ _me_is_hole_merged(gi::Integer, e1::MergeEdge, e2::MergeEdge) =
 # depth deltas sum with a direction flip. The flip is exact from node ids: the
 # unordered pair is unique, so `inc` runs the same direction as `base` iff their
 # `node_lo` agree (design §3 amendment 2) — no coordinate comparison.
-function _merge!(base::MergeEdge, inc::MergeEdge)
-    base.a_is_hole = _me_is_hole_merged(0, base, inc)
-    base.b_is_hole = _me_is_hole_merged(1, base, inc)
-    inc.a_dim > base.a_dim && (base.a_dim = inc.a_dim)
-    inc.b_dim > base.b_dim && (base.b_dim = inc.b_dim)
+# `MergeEdge` is immutable and lives inline in the `merged` vector, so this
+# returns the merged value for the caller to store back. Hole status is computed
+# from the pre-update dims, which is why both lines come first.
+@inline function _merge(base::MergeEdge, inc::MergeEdge)
+    a_is_hole = _me_is_hole_merged(0, base, inc)
+    b_is_hole = _me_is_hole_merged(1, base, inc)
     flip = inc.node_lo == base.node_lo ? Int32(1) : Int32(-1)
-    base.a_depth_delta += flip * inc.a_depth_delta
-    base.b_depth_delta += flip * inc.b_depth_delta
-    return base
+    return MergeEdge(base.node_lo, base.node_hi, base.string_idx, base.seg_idx, base.seg_hi,
+        max(base.a_dim, inc.a_dim), base.a_depth_delta + flip * inc.a_depth_delta, a_is_hole,
+        max(base.b_dim, inc.b_dim), base.b_depth_delta + flip * inc.b_depth_delta, b_is_hole)
 end
 
 # ## Label creation from a merged edge (port of JTS `Edge.createLabel` + statics)
@@ -149,7 +158,7 @@ function _merge_noded_edges(arr::NodedArrangement, sources::Vector{EdgeSourceInf
             push!(merged, _merge_edge(ne, src))
             edgemap[key] = length(merged)
         else
-            _merge!(merged[idx], _merge_edge(ne, src))
+            merged[idx] = _merge(merged[idx], _merge_edge(ne, src))
         end
     end
     return merged
@@ -312,31 +321,74 @@ Coincident noded edges are merged (JTS `Edge.merge` semantics), each merged edge
 becomes a symmetric `OverlayEdge` pair sharing one label, and every node's star
 is ordered CCW about its symbolic apex via the exact kernel comparator.
 """
-function OverlayGraph(m::Manifold, arr::NodedArrangement{P, T}, sources::Vector{EdgeSourceInfo};
-        exact = True()) where {P, T}
+OverlayGraph(m::Manifold, arr::NodedArrangement, sources::Vector{EdgeSourceInfo};
+        exact = True()) =
+    first(_overlay_graph_with_merged_edges(m, arr, sources; exact))
+
+#=
+The same build, also returning the `MergeEdge` vector it consumed.
+
+`_create_label` reduces a merged edge's summed `depth_delta` to a *sign* — which
+is all the binary ops need, since a valid input's rings never stack. The N-ary
+winding overlay needs the integer itself, so it takes this entry point instead of
+copying the build. The pairing between the two is positional and is asserted by
+the caller: half-edges `2i-1` and `2i` are the forward and reverse halves of
+`merged[i]`, in the order the loop below pushes them.
+=#
+function _overlay_graph_with_merged_edges(m::Manifold, arr::NodedArrangement{P, T},
+        sources::Vector{EdgeSourceInfo}; exact = True()) where {P, T}
     merged = _merge_noded_edges(arr, sources)
+    return _graph_from_merged(m, arr, merged; exact), merged
+end
+
+#=
+Build the half-edge graph from an already-merged edge list.
+
+Stars are held in CSR form: one `Int32` offset array over one flat `Int32`
+buffer, both sized from the degrees, which `merged` gives in a single counting
+pass. The whole star structure is therefore two allocations whatever the node
+count — and most nodes carry two edges or none, so a `Vector{Vector{Int32}}`
+spends one heap object apiece to hold a pair of `Int32`s.
+=#
+function _graph_from_merged(m::Manifold, arr::NodedArrangement{P, T},
+        merged::Vector{MergeEdge}; exact = True()) where {P, T}
     nnodes = num_nodes(arr)
     edges = Vector{OverlayEdge{P}}()
     sizehint!(edges, 2 * length(merged))
-    stars = [Int32[] for _ in 1:nnodes]
+    #-- CSR star layout: `star[star_off[n] : star_off[n+1]-1]` is node `n`'s star
+    star_off = zeros(Int32, nnodes + 2)
+    @inbounds for me in merged
+        star_off[me.node_lo + 1] += Int32(1)
+        star_off[me.node_hi + 1] += Int32(1)
+    end
+    star_off[1] = Int32(1)
+    @inbounds for i in 2:(nnodes + 1)
+        star_off[i] += star_off[i - 1]
+    end
+    cursor = star_off[1:(nnodes + 1)]
+    star = Vector{Int32}(undef, 2 * length(merged))
     for me in merged
         label = _create_label(me)
         ss = arr.segstrings[me.string_idx]
         #-- direction points are the parent segment's original endpoints, so the
         #-- forward half-edge (origin node_lo) heads toward the node_hi side and
         #-- the reverse (origin node_hi) toward the node_lo side (design §3.1).
+        #-- For a run these are the first and last segment of the run, which is
+        #-- the same segment whenever `seg_hi == seg_idx`.
         fwd_dir = ss.pts[me.seg_idx + 1]
-        bwd_dir = ss.pts[me.seg_idx]
+        bwd_dir = ss.pts[me.seg_hi]
         push!(edges, _overlay_edge(me.node_lo, fwd_dir, true, label))
         i_fwd = Int32(length(edges))
         push!(edges, _overlay_edge(me.node_hi, bwd_dir, false, label))
         i_rev = Int32(length(edges))
         he_link!(edges, i_fwd, i_rev)
-        push!(stars[me.node_lo], i_fwd)
-        push!(stars[me.node_hi], i_rev)
+        @inbounds star[cursor[me.node_lo]] = i_fwd
+        @inbounds cursor[me.node_lo] += Int32(1)
+        @inbounds star[cursor[me.node_hi]] = i_rev
+        @inbounds cursor[me.node_hi] += Int32(1)
     end
     node_edges = zeros(Int32, nnodes)
-    _order_all_stars!(m, edges, arr.nodes.keys, stars, node_edges; exact)
+    _order_all_stars!(m, edges, arr.nodes.keys, star, star_off, node_edges; exact)
     return OverlayGraph{P, T}(arr, edges, node_edges)
 end
 
@@ -347,12 +399,13 @@ end
 
 # Order every node's star once (function barrier: the abstract `m` dispatches into
 # the exact comparator here, off the type-stable build loop).
-function _order_all_stars!(m::Manifold, edges, keys, stars, node_edges; exact)
-    for nid in eachindex(stars)
-        star = stars[nid]
-        isempty(star) && continue
-        he_order_star!(m, edges, keys, star; exact)
-        @inbounds node_edges[nid] = star[1]
+function _order_all_stars!(m::Manifold, edges, keys, star::Vector{Int32},
+        star_off::Vector{Int32}, node_edges; exact)
+    @inbounds for nid in eachindex(node_edges)
+        lo = star_off[nid]; hi = star_off[nid + 1] - Int32(1)
+        lo > hi && continue
+        he_order_star!(m, edges, keys, view(star, lo:hi); exact)
+        node_edges[nid] = star[lo]
     end
     return nothing
 end
