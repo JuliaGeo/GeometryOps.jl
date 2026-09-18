@@ -1,0 +1,75 @@
+name: Downstream
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+  test:
+    name: ${{ matrix.repository }} (${{ matrix.ref }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Add repositories here; each must provide test/Project.toml.
+        include:
+          - repository: JuliaGeo/ConservativeRegridding.jl
+            ref: main
+    steps:
+      - name: Install display dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev
+      - uses: actions/checkout@v7
+        with:
+          path: GeometryOps
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ matrix.repository }}
+          ref: ${{ matrix.ref }}
+          path: downstream
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+      - name: Create downstream workspace
+        run: |
+          test -f downstream/test/Project.toml
+          cat > Project.toml <<'TOML'
+          [workspace]
+          projects = ["GeometryOps", "downstream", "downstream/test"]
+          TOML
+      - name: Instantiate and verify checkout dependencies
+        run: |
+          xvfb-run -a -s '-screen 0 1024x768x24' julia --project=docs -e '
+            using Pkg
+            Pkg.activate("downstream")
+            Pkg.instantiate()
+            for (name, path) in [
+                ("GeometryOps", "GeometryOps"),
+                ("GeometryOpsCore", "GeometryOps/GeometryOpsCore"),
+            ]
+                dep = only(filter(p -> p.name == name, collect(values(Pkg.dependencies()))))
+                @assert realpath(dep.source) == realpath(path) "$name must use the checkout"
+            end'
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          prefix: xvfb-run -a
+          project: downstream
+          check_bounds: auto
+          coverage: 'false'
+          allow_reresolve: 'false'
+          force_latest_compatible_version: 'false'
