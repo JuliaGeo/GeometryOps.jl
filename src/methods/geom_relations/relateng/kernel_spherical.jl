@@ -997,17 +997,18 @@ _ring_kernel_pts(::False, ring) = _ring_usp(ring)
 # decision is as exact as the predicates.
 #
 # In the default enclosed-region mode the parity is the shared
-# `spherical_ring_encloses`: even-odd crossing parity anchored at the
-# antipode of the ring's vertex mass, a point exterior BY DEFINITION of the
-# semantics. No winding bit is consulted, so a ring that self-intersects on
-# the sphere (a planar-valid figure-eight — see the `prepare` validation)
+# `spherical_ring_encloses`: even-odd crossing parity anchored at a point
+# provably exterior — the antipode of the centre of a sub-hemisphere cap
+# holding every vertex. No winding bit is consulted, so a ring that
+# self-intersects on the sphere (a planar-valid figure-eight — see the
+# `prepare` validation)
 # degrades to even-odd answers instead of inverting globally: the previous
 # bootstrap composed the local interior-side wedge of one edge
 # (`spherical_ring_contains`) with the turning-angle winding
 # (`_ring_interior_on_left`), and a figure-eight defeats both at once — the
 # lobes cancel the turning angle while the wedge propagates whichever lobe
-# hosts the anchor edge. When the definitional anchor is itself degenerate
-# (near-hemisphere vertex mass, or `p` at the mass center) the query falls
+# hosts the anchor edge. When no anchor is provable (vertices spanning a
+# hemisphere, or `p` at the anchor's antipode) the query falls
 # back to that wedge-plus-winding bootstrap — for such rings the
 # enclosed/complement distinction is near-degenerate anyway, and the
 # turning-angle tolerance already treats hemispheres permissively.
@@ -1033,8 +1034,8 @@ ring has no repeated vertices), the ring's denoted-region bit
 manifold — its declared role; the same bit edge topology and interaction
 bounds use), and — in enclosed-region mode — the definitional-exterior
 parity anchor (`spherical_exterior_anchor`; `nothing` on an oriented
-manifold, which never consults it, or for a degenerate vertex mass, where
-queries fall back to the wedge bootstrap).
+manifold, which never consults it, or when the vertices fit no
+sub-hemisphere cap, where queries fall back to the wedge bootstrap).
 
 `rk_point_in_ring` re-derived all of this from lon/lat on every query —
 vertex conversion alone was ~60% of a prepared spherical point query. The

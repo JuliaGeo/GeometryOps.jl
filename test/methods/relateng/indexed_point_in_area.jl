@@ -13,6 +13,7 @@
 
 using Test
 using Random
+using LinearAlgebra: normalize
 import GeometryOps as GO
 import GeometryOps: Planar, Spherical, True
 import GeoInterface as GI
@@ -344,6 +345,59 @@ end
             append!(qs, [(ll[1], c[2] + 12rand(frng) - 6) for ll in pts])   # share vertex longitudes
             check_sph_agreement(GI.Polygon([GI.LinearRing(pts)]), qs)
         end
+    end
+
+    #= An equatorial band whose meridian ends carry far more vertices than its
+    parallels (as a buffer's round caps do). Vertices spanning more than a
+    hemisphere admit no exterior anchor, so both locators must fall back to the
+    winding bootstrap; membership is analytic: `0 < lon < L`, `|lat| < w`. =#
+    function band(L; w = 20.0, step_along = 10.0, step_end = 0.25)
+        pts = Tuple{Float64, Float64}[]
+        for lon in 0.0:step_along:L; push!(pts, (lon, w)); end
+        for lat in w-step_end:-step_end:-w+step_end; push!(pts, (L, lat)); end
+        for lon in L:-step_along:0.0; push!(pts, (lon, -w)); end
+        for lat in -w+step_end:step_end:w-step_end; push!(pts, (0.0, lat)); end
+        push!(pts, pts[1])
+        return GI.Polygon([GI.LinearRing(pts)])
+    end
+    function check_band(L; w = 20.0, N = 300, clearance = 3.0)
+        poly = band(L; w)
+        idx = GO.IndexedPointInAreaLocator(m, poly; exact = True())
+        scan = GO.IndexedPointInAreaLocator(m, poly; exact = True(), indexed = false)
+        brng = Xoshiro(7)
+        n_wrong_idx = n_wrong_scan = 0
+        n = 0
+        while n < N
+            lon = rand(brng) * 360 - 180
+            lat = rand(brng) * 180 - 90
+            # well clear of the band's parallels and meridian ends
+            abs(abs(lat) - w) < clearance && continue
+            min(mod(lon, 360), abs(mod(lon, 360) - L)) < clearance && continue
+            n += 1
+            truth = (0 < mod(lon, 360) < L) && abs(lat) < w
+            q = kp((lon, lat))
+            n_wrong_idx += (GO.locate(idx, q) == GO.LOC_INTERIOR) != truth
+            n_wrong_scan += (GO.locate(scan, q) == GO.LOC_INTERIOR) != truth
+        end
+        @test n_wrong_idx == 0
+        @test n_wrong_scan == 0
+    end
+
+    @testset "equatorial band spanning 240° of longitude" begin
+        check_band(240.0)
+    end
+
+    @testset "equatorial band spanning 200° of longitude" begin
+        check_band(200.0)
+    end
+
+    @testset "small ordinary ring: the vertex-mass anchor still answers" begin
+        v = [GO.UnitSpherical.UnitSphereFromGeographic()(p)
+             for p in GI.getpoint(GI.getexterior(band(60.0)))][1:end-1]
+        mass = sum(normalize(p) for p in v)
+        @test GO.UnitSpherical.spherical_exterior_anchor(v, length(v)) ==
+              GO.UnitSpherical.UnitSphericalPoint(-normalize(mass))
+        check_band(60.0)
     end
 
     @testset "empty spherical element" begin
