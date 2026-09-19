@@ -20,9 +20,10 @@ struct ValidatedFloat <: Real
     function ValidatedFloat(hi::Float64, lo::Float64, rad::Float64)
         isnan(rad) && throw(ArgumentError("radius must not be NaN"))
         rad < 0 && throw(ArgumentError("radius must be nonnegative"))
-        uppergap = isfinite(nextfloat(hi)) ? abs(nextfloat(hi) - hi) : abs(hi - prevfloat(hi))
+        uppergap = isfinite(nextfloat(hi)) ? abs(nextfloat(hi) - hi) : 0.0
+        lowergap = isfinite(prevfloat(hi)) ? abs(hi - prevfloat(hi)) : 0.0
         if isfinite(rad) && (!isfinite(hi) || !isfinite(lo) ||
-                (hi == 0 ? lo != 0 : abs(lo) > max(uppergap, abs(hi - prevfloat(hi)))))
+                (hi == 0 ? lo != 0 : abs(lo) > max(uppergap, lowergap)))
             throw(ArgumentError("center must be a finite normalized two-limb expansion"))
         end
         new(hi, lo, rad)

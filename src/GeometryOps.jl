@@ -28,7 +28,6 @@ import Tables, DataAPI
 import StaticArrays
 import DelaunayTriangulation # for convex hull and triangulation
 import ExactPredicates
-import ValidatedFloats
 import Base.@kwdef
 import GeoInterface.Extents: Extents
 import SortTileRecursiveTree
@@ -44,6 +43,7 @@ include("types.jl")
 include("primitives.jl")
 include("not_implemented_yet.jl")
 
+include("utils/ValidatedFloats/ValidatedFloats.jl")
 include("utils/LoopStateMachine/LoopStateMachine.jl")
 include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
 include("utils/UnitSpherical/UnitSpherical.jl")

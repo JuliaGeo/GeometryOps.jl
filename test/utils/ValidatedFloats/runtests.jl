@@ -1,5 +1,5 @@
 using Test
-using ValidatedFloats
+using GeometryOps.ValidatedFloats: ValidatedFloat, center, radius, isbounded, certify, certified_sign
 
 exactcenter(x) = BigFloat(x.hi) + BigFloat(x.lo)
 contains(x, exact) = !isbounded(x) || abs(exactcenter(x) - exact) <= BigFloat(radius(x))
@@ -12,6 +12,15 @@ contains(x, exact) = !isbounded(x) || abs(exactcenter(x) - exact) <= BigFloat(ra
     end
     @test !isbounded(ValidatedFloat(Inf))
     @test certify(Float64, ValidatedFloat(Inf)) === nothing
+    for hi in (-floatmax(Float64), floatmax(Float64))
+        gap = floatmax(Float64) - prevfloat(floatmax(Float64))
+        for lo in (-gap, 0.0, gap)
+            @test isbounded(ValidatedFloat(hi, lo, 0.0))
+        end
+        for lo in (-floatmax(Float64), floatmax(Float64), -nextfloat(gap), nextfloat(gap))
+            @test_throws ArgumentError ValidatedFloat(hi, lo, 0.0)
+        end
+    end
 end
 
 @testset "rounding boundaries do not falsely certify" begin

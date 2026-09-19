@@ -1,10 +1,10 @@
-# ValidatedFloats (experimental spike)
+# ValidatedFloats (internal module)
 
 `ValidatedFloats` is a fixed two-limb `Float64` prototype for the narrow
 arithmetic used by GeometryOps crossing emission. It is not a general interval
-package or an arbitrary precision multifloat. This worktree's planar and
-spherical crossing emitters use the restricted domain through the local
-workspace dependency.
+package or an arbitrary precision multifloat. The planar and spherical crossing emitters use the restricted domain.
+The module lives inside GeometryOps and adds no dependencies beyond its existing
+LinearAlgebra and StaticArrays dependencies.
 
 Each `ValidatedFloat` represents an exact two-limb center `hi + lo` and a
 nonnegative absolute radius `r`. While `isbounded(x)` is true, the represented
@@ -39,7 +39,7 @@ The public vector interface uses `StaticArrays` and `LinearAlgebra`:
 
 ```julia
 using LinearAlgebra, StaticArrays
-using ValidatedFloats.CrossingFloats
+using GeometryOps.ValidatedFloats.CrossingFloats
 
 a = SVector(CrossingFloat.((0.8, 0.6, 0.0)))
 b = SVector(CrossingFloat.((0.8, 0.0, 0.6)))
@@ -60,17 +60,17 @@ See [`docs/crossing-floats-proof.md`](docs/crossing-floats-proof.md) for the
 local scalar/fused proof outline and test scope, and
 [`docs/exact3-proof.md`](docs/exact3-proof.md) for the specialized kernel audit.
 
-Both arithmetic domains remain experimental. The local workspace resolves this
-unregistered package by path; publishing GeometryOps with this dependency requires
-registering the subpackage or choosing a bundled distribution.
+Both arithmetic domains remain internal and experimental. The module, tests,
+and proof notes are kept together by topic to allow extraction into a separate
+package later.
 
 ## General `ValidatedFloat` bound construction
 
 The general `ValidatedFloat` addition and multiplication propagate input radii and outward-round every
 nonnegative bound operation. TwoSum and TwoProduct preserve the exact leading
-operation in their guarded normal ranges. A product of exact Float64 inputs
-therefore keeps a zero radius, which is needed when two such products nearly
-cancel in a cross product.
+operation in their guarded normal ranges. The general multiplication bound can introduce a positive radius even for
+exact Float64 inputs; the restricted `CrossingFloat` exact-input product path
+preserves zero radius when its preconditions hold.
 
 Division first computes a two-limb candidate `q`, then encloses its error using
 
@@ -94,15 +94,15 @@ successful certificate.
 
 ## Running tests
 
-From the GeometryOps repository root, run the package tests in the docs
+From the GeometryOps repository root, run the internal module tests in the docs
 workspace environment:
 
 ```bash
-julia --project=docs -e 'using Pkg; Pkg.test("ValidatedFloats")'
+julia --project=docs -e 'push!(LOAD_PATH, abspath("test")); include("test/utils/ValidatedFloats/runtests.jl")'
 ```
 
 For a persistent Julia daemon, the equivalent command is:
 
 ```bash
-jld --project=docs eval 'using Pkg; Pkg.test("ValidatedFloats")'
+jld --project=docs eval 'push!(LOAD_PATH, abspath("test")); include("test/utils/ValidatedFloats/runtests.jl")'
 ```

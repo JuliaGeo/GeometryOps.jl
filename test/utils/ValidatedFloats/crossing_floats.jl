@@ -4,7 +4,7 @@ using Test
 using Random
 using LinearAlgebra
 using StaticArrays
-import ValidatedFloats
+import GeometryOps.ValidatedFloats
 const CF = ValidatedFloats.CrossingFloats
 const R = Rational{BigInt}
 
