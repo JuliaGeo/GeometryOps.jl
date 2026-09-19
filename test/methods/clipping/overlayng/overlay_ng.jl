@@ -415,6 +415,55 @@ checked alongside, since the sign choice is a spherical-only construction.
     @test GO._emit_node_coord(k, USP) ≈ GO._to_kernel_point(m, (lon, lat))
 end
 
+#=
+Crossings at centimetre scale on the unit sphere. Five 32-gon discs of radius
+1 cm, centres 1.2 cm apart at 45° N, cascade-unioned: every crossing is between
+arcs ~2 mm long (3e-10 rad), where a Float64 plane normal `a0×a1` has lost ten
+digits to cancellation. Emitting that direction displaced crossings by metres,
+far enough that the builder saw a ring whose exact and rounded topology
+disagreed and threw `OverlayTopologyError`. Correctly rounded emission places
+every crossing within ½ ulp per coordinate and the union is one disc-chain
+without holes. The metre-scale sibling passed before too, and pins the shape.
+=#
+@testset "spherical union at centimetre scale" begin
+    RE = Spherical().radius
+    sph = GO.OverlayNG(Spherical())
+    #-- a small circle of radius `r` metres about lon/lat `c`, `n` vertices,
+    #-- walked on the tangent frame so the vertices are exactly on the sphere
+    function disc(c, r, n)
+        ρ = r / RE
+        p = GO._to_kernel_point(Spherical(), c)
+        e = abs(p[3]) < 0.9 ? (0.0, 0.0, 1.0) : (1.0, 0.0, 0.0)
+        u = GO._cross3(p, e); u = u ./ sqrt(GO._dot3(u, u)); w = GO._cross3(p, u)
+        pts = [begin
+                   θ = 2π * i / n
+                   q = cos(ρ) .* p .+ sin(ρ) .* (cos(θ) .* u .+ sin(θ) .* w)
+                   ll = GO.UnitSpherical.GeographicFromUnitSphere()(USP(q...))
+                   (Float64(ll[1]), Float64(ll[2]))
+               end for i in 0:n-1]
+        push!(pts, pts[1])
+        return GI.Polygon([pts])
+    end
+    function cascade(polys)
+        level = collect(Any, polys)
+        while length(level) > 1
+            level = [i == length(level) ? level[i] :
+                     GO.union(sph, level[i], level[i + 1]; target = GI.MultiPolygonTrait())
+                     for i in 1:2:length(level)]
+        end
+        return level[1]
+    end
+    for (spacing, r) in ((0.012, 0.01), (1.2, 1.0))
+        discs = [disc((10.0 + spacing * i / (111195.0 * cosd(45)), 45.0), r, 32) for i in 0:4]
+        res = cascade(discs)
+        @test GI.ngeom(res) == 1
+        @test GI.nhole(GI.getgeom(res, 1)) == 0
+        #-- the chain covers more than one disc and less than five
+        a = GO.area(Spherical(), res)
+        @test 1.5π * r^2 < a < 5π * r^2
+    end
+end
+
 @testset "spherical empty-vs-full disambiguation (§3 amendment 6)" begin
     A = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.0)]])
     Bdisjoint = GI.Polygon([[(40.0, 0.0), (50.0, 0.0), (50.0, 10.0), (40.0, 10.0), (40.0, 0.0)]])

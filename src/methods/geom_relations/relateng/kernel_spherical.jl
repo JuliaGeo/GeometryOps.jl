@@ -481,6 +481,44 @@ function _sph_crossing_dir(bt, node::NodeKey)
     return _crossing_dir_is_positive(node) ? d : _neg3(d)
 end
 
+# `sign(a − b·√S)` for rationals `a`, `b` and `S > 0`, decided exactly: when the
+# two terms share a sign, compare `a²` with `b²S`.
+function _sign_diff_sqrt(a, b, S)
+    iszero(b) && return sign(a)
+    iszero(a) && return -sign(b)
+    sign(a) != sign(b) && return sign(a)
+    c = sign(a * a - b * b * S)
+    return a > 0 ? c : -c
+end
+
+# `a / √S` correctly rounded to Float64 (nearest, ties to even) for rationals
+# `a` and `S > 0`. A 256-bit `BigFloat` quotient is only the starting guess;
+# the answer is the neighbour whose two midpoints bracket the exact value under
+# `_sign_diff_sqrt`, so no precision heuristic decides a rounding and a value
+# exactly on a midpoint goes to the even neighbour.
+function _round_div_sqrt(a::Rational{BigInt}, S::Rational{BigInt})
+    f = setprecision(BigFloat, 256) do
+        Float64(BigFloat(a) / sqrt(BigFloat(S)))
+    end
+    R = Rational{BigInt}
+    while true
+        hi = nextfloat(f); lo = prevfloat(f)
+        chi = _sign_diff_sqrt(a, (R(f) + R(hi)) / 2, S)
+        clo = _sign_diff_sqrt(a, (R(f) + R(lo)) / 2, S)
+        if chi > 0
+            f = hi
+        elseif clo < 0
+            f = lo
+        elseif chi == 0
+            return iseven(reinterpret(Int64, f)) ? f : hi
+        elseif clo == 0
+            return iseven(reinterpret(Int64, f)) ? f : lo
+        else
+            return f
+        end
+    end
+end
+
 # A locator needs a unit-sphere point, not a planar XY intersection or lon/lat.
 # Compute the on-arc direction exactly, then scale before conversion so even
 # very small crossing directions remain representable. Proper crossings have
@@ -619,7 +657,7 @@ The filter's escalation trigger is the relative error of `disc` itself: the two
 directions' relative errors plus the arc normal's, plus the handful of roundings
 in the cross-and-dot that forms `disc`.
 
-This SUBSUMES a `_SPH_TANGENT_GATE`-style hard gate on `|na×nb|² ≥ g²|na|²|nb|²`
+This SUBSUMES a hard near-tangency gate of the form `|na×nb|² ≥ g²|na|²|nb|²`
 rather than needing one alongside it. `|disc| ≤ |da||db||N| = mag` always, so as
 soon as `rel ≥ 1` the bound is `≥ mag ≥ |disc|` and the float path can never be
 taken — and `rel ≥ 1` is precisely "the direction has no significant digits
