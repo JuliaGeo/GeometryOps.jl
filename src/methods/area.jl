@@ -262,29 +262,87 @@ function _spherical_triangle_area(::Eriksson, a::UnitSphericalPoint, b::UnitSphe
     return 2 * atan(numerator, denominator)
 end
 
+# ## Fan triangulation of a ring
+#
+# A ring's signed area is the sum of the signed excesses of the triangles `(apex, vᵢ, vᵢ₊₁)`
+# over its edges, with the apex one of its own vertices. Two things about the apex matter.
+#
+# The apex must not have a vertex near its antipode. Both triangle formulas above lose
+# their conditioning there — for `Eriksson`, a vertex `v` with `v ≈ -apex` makes
+# `denominator = (v + apex) ⋅ (…)` cancel to rounding noise, and the two triangles sharing
+# that fan side come out with the wrong magnitude (or, past ~1e-9, the wrong quadrant).
+# With `v = -apex` exactly the fan side is not even a well-defined arc. So the fan starts
+# from the first vertex, and moves to another one only if the ring puts a vertex within
+# `_FAN_APEX_ANTIPODE_TOL` (chord length, about 0.06°) of the first vertex's antipode: that
+# can only happen to a ring spanning nearly 180°, so ordinary rings sum exactly as before.
+#
+# The apex also fixes which of the two regions a ring bounds is "outside": the fan never
+# covers the apex's antipode, so the sum is `A` when that antipode is outside the ring and
+# `A - 4π` when it is inside. Under `oriented = false` the interior is by definition the
+# smaller region, and `_fold_to_hemisphere` picks the representative in `[-2π, 2π]`, so the
+# result does not depend on which vertex the ring starts from. Under `oriented = true` the
+# sum is returned as is: choosing between `A` and `A - 4π` there needs the ring's
+# orientation, which this kernel does not see.
+const _FAN_APEX_ANTIPODE_TOL = 1e-3
+_near_antipodal(a::UnitSphericalPoint, b::UnitSphericalPoint) = dot(a, b) < -1 + _FAN_APEX_ANTIPODE_TOL^2 / 2
 
+function _fold_to_hemisphere(s::T) where T
+    s > T(2π) && return s - T(4π)
+    s < -T(2π) && return s + T(4π)
+    return s
+end
 
-# Compute signed area of a ring using streaming iteration (no allocation)
-function _naive_triangulated_spherical_ring_area(method::SphericalTriangleAreaMethod, trait::GI.AbstractCurveTrait, ring, T)
-    GI.npoint(trait, ring) < 3 && return zero(T)
-    # Get first point and remaining points
-    p1_geo, rest = Iterators.peel(GI.getpoint(trait, ring))
-    p1 = UnitSphericalPoint(GI.PointTrait(), p1_geo)
-    pfirst = p1
-    # Collect remaining points, converting to unit sphere
-    points = collect(Iterators.map(p -> UnitSphericalPoint(GI.PointTrait(), p), rest))
-    isempty(points) && return zero(T)
-    # Skip closing point if it matches first
-    if points[end] ≈ pfirst
-        pop!(points)
-    end
-    length(points) < 2 && return zero(T)
-    # Triangulate from first vertex
+# Fan of the first `n` entries of `pts` (any GeoInterface points) from `pts[k]`, in ring
+# order. `ok` is false if some vertex disqualifies the apex; with `bail` the sum is then
+# abandoned early.
+function _spherical_fan_from(method::SphericalTriangleAreaMethod, pts, n, k, ::Type{T}, bail::Bool) where T
+    apex = UnitSphericalPoint(GI.PointTrait(), pts[k])
+    ok = true
     area = zero(T)
-    for i in 1:(length(points)-1)
-        area += _spherical_triangle_area(method, pfirst, points[i], points[i+1])
+    b = UnitSphericalPoint(GI.PointTrait(), pts[mod1(k + 1, n)])
+    for j in 1:(n - 2)
+        a = b
+        b = UnitSphericalPoint(GI.PointTrait(), pts[mod1(k + j + 1, n)])
+        if _near_antipodal(apex, a)
+            ok = false
+            bail && return (area, false)
+        end
+        area += _spherical_triangle_area(method, apex, a, b)
     end
-    return area
+    _near_antipodal(apex, b) && (ok = false)
+    return (area, ok)
+end
+
+# Signed unit-sphere area of the ring `pts[1:n]` (open: no repeated closing point).
+function _spherical_fan_area(method::SphericalTriangleAreaMethod, oriented::Bool, pts, n, ::Type{T}) where T
+    area, ok = _spherical_fan_from(method, pts, n, 1, T, false)
+    if !ok
+        #-- Candidates spread around the ring: a band symmetric about the equator is
+        #-- antipodally symmetric along a stretch, so consecutive vertices would all fail.
+        #-- A ring where every candidate fails is essentially a great circle, and keeps the
+        #-- first-vertex sum.
+        for j in (4, 2, 6, 1, 3, 5, 7)
+            k = 1 + (j * n) ÷ 8
+            k == 1 && continue
+            alt, ok = _spherical_fan_from(method, pts, n, k, T, true)
+            if ok
+                area = alt
+                break
+            end
+        end
+    end
+    return oriented ? area : _fold_to_hemisphere(area)
+end
+
+# Compute signed area of a ring given as a geometry
+function _naive_triangulated_spherical_ring_area(alg::NaiveTriangulatedSphericalArea, trait::GI.AbstractCurveTrait, ring, T)
+    GI.npoint(trait, ring) < 3 && return zero(T)
+    points = collect(Iterators.map(p -> UnitSphericalPoint(GI.PointTrait(), p), GI.getpoint(trait, ring)))
+    n = length(points)
+    # Skip closing point if it matches first
+    points[n] ≈ points[1] && (n -= 1)
+    n < 3 && return zero(T)
+    return _spherical_fan_area(alg.method, manifold(alg).oriented, points, n, T)
 end
 # Dispatch area(::Spherical, ...) to use NaiveTriangulatedSphericalArea with Eriksson's formula for triangles
 function area(m::Spherical, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
@@ -295,17 +353,17 @@ end
 # These must be top-level functions: a multi-method local function captured by a
 # closure gets lowered into a `Core.Box`, making `area` infer as `Any`.
 # See https://github.com/JuliaGeo/GeometryOps.jl/issues/407.
-function _naive_triangulated_spherical_polygon_area(method::SphericalTriangleAreaMethod, ::Type{T}, ::GI.PolygonTrait, poly) where T
+function _naive_triangulated_spherical_polygon_area(alg::NaiveTriangulatedSphericalArea, ::Type{T}, ::GI.PolygonTrait, poly) where T
     GI.isempty(poly) && return zero(T)
     ext = GI.getexterior(poly)
-    ext_area = abs(_naive_triangulated_spherical_ring_area(method, GI.trait(ext), ext, T))
+    ext_area = abs(_naive_triangulated_spherical_ring_area(alg, GI.trait(ext), ext, T))
     for hole in GI.gethole(poly)
         hole_trait = GI.trait(hole)
-        ext_area -= abs(_naive_triangulated_spherical_ring_area(method, hole_trait, hole, T))
+        ext_area -= abs(_naive_triangulated_spherical_ring_area(alg, hole_trait, hole, T))
     end
     return ext_area
 end
-_naive_triangulated_spherical_polygon_area(::SphericalTriangleAreaMethod, ::Type{T}, ::GI.PointTrait, point) where T = zero(T)
+_naive_triangulated_spherical_polygon_area(::NaiveTriangulatedSphericalArea, ::Type{T}, ::GI.PointTrait, point) where T = zero(T)
 
 # ## Ring area over a plain vector of points
 #
@@ -332,23 +390,17 @@ function _ring_area(::Planar, pts::AbstractVector, ::Type{T}; closed::Bool = tru
     return T(area / 2)
 end
 
-# Signed unit-sphere area, by the same fan triangulation from the first vertex.
-function _ring_area(::Spherical, pts::AbstractVector, ::Type{T}; closed::Bool = true) where T
+# Signed unit-sphere area, by the same fan triangulation.
+function _ring_area(m::Spherical, pts::AbstractVector, ::Type{T}; closed::Bool = true) where T
     n = length(pts)
     n < 3 && return zero(T)
-    p1 = UnitSphericalPoint(GI.PointTrait(), pts[1])
     #-- Drop the closing point. Only a ring the caller called closed has one: the `≈` is
     #-- `isapprox`'s default `rtol` (~1.5e-8), which on an OPEN ring would swallow the last
     #-- vertex of any sliver whose ends fall within that of each other — halving its area,
     #-- or zeroing it outright once the remaining fan degenerates.
-    closed && UnitSphericalPoint(GI.PointTrait(), pts[n]) ≈ p1 && (n -= 1)
+    closed && UnitSphericalPoint(GI.PointTrait(), pts[n]) ≈ UnitSphericalPoint(GI.PointTrait(), pts[1]) && (n -= 1)
     n < 3 && return zero(T)
-    area = zero(T)
-    for i in 2:(n - 1)
-        area += _spherical_triangle_area(Eriksson(), p1,
-            UnitSphericalPoint(GI.PointTrait(), pts[i]), UnitSphericalPoint(GI.PointTrait(), pts[i + 1]))
-    end
-    return T(area)
+    return T(_spherical_fan_area(Eriksson(), m.oriented, pts, n, T))
 end
 
 # The factor an area on the unit sphere is scaled by to reach the manifold's own units.
@@ -358,7 +410,7 @@ _area_scale(m::Spherical) = m.radius^2
 # Main implementation for NaiveTriangulatedSphericalArea
 function area(alg::NaiveTriangulatedSphericalArea, geom, ::Type{T} = Float64; threaded=false, kwargs...) where T <: AbstractFloat
     unit_area = applyreduce(
-        WithTrait((trait, g) -> _naive_triangulated_spherical_polygon_area(alg.method, T, trait, g)),
+        WithTrait((trait, g) -> _naive_triangulated_spherical_polygon_area(alg, T, trait, g)),
         +,
         TraitTarget{Union{GI.PolygonTrait, GI.PointTrait}}(),
         geom;
