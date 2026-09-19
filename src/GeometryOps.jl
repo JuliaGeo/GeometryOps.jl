@@ -66,6 +66,10 @@ include("methods/angles.jl")
 include("methods/area.jl")
 include("methods/barycentric.jl")
 include("methods/buffer.jl")
+# The buffer's offset-curve generator. Both buffer files only CALL the OverlayNG
+# winding overlay (from function bodies, resolved at call time), so they need no
+# include-order relationship with it.
+include("methods/buffer_offset_curve.jl")
 include("methods/centroid.jl")
 include("methods/convex_hull.jl")
 include("methods/distance.jl")
@@ -128,6 +132,7 @@ include("methods/geom_relations/relateng/relate_ng.jl")
 
 # OverlayNG noding substrate (phase 1): geometries → exactly-noded arrangement.
 include("methods/clipping/overlayng/noding/noded_arrangement.jl")
+include("methods/clipping/overlayng/noding/chains.jl")
 include("methods/clipping/overlayng/noding/collect.jl")
 include("methods/clipping/overlayng/noding/node_identity.jl")
 include("methods/clipping/overlayng/noding/split.jl")
@@ -138,6 +143,10 @@ include("methods/clipping/overlayng/overlay_label.jl")
 include("methods/clipping/overlayng/edge_source.jl")
 include("methods/clipping/overlayng/half_edge.jl")
 include("methods/clipping/overlayng/overlay_graph.jl")
+# Polyline-run splitting and merging for the N-ary winding overlay. After
+# `overlay_graph.jl` (it builds `MergeEdge`s) and before `maximal_edge_ring.jl`
+# (whose builder context holds a `WindingRuns` field).
+include("methods/clipping/overlayng/noding/run_split.jl")
 
 # OverlayNG engine core (phase 2b): labeller, result builders, and the driver.
 include("methods/clipping/overlayng/overlay_labeller.jl")
@@ -146,6 +155,9 @@ include("methods/clipping/overlayng/polygon_builder.jl")
 include("methods/clipping/overlayng/line_builder.jl")
 include("methods/clipping/overlayng/intersection_point_builder.jl")
 include("methods/clipping/overlayng/overlay_ng.jl")
+# The N-ary winding-number overlay: after the builders and the driver (it uses
+# `_build_polygons` and the driver's result types), and the engine behind `buffer`.
+include("methods/clipping/overlayng/winding_overlay.jl")
 
 # OverlayNG point inputs and mixed-dimension results (phase 3).
 include("methods/clipping/overlayng/overlay_points.jl")

@@ -681,10 +681,10 @@ function self_nodes(A, B, op)
     tb = GO._relate_edge_index(P, ssb)
     function census(ss, off, tree, clip)
         t = GO.NodeTable{Tuple{Float64, Float64}, Tuple{Float64, Float64}}()
-        sn = Dict{Tuple{Int32, Int32}, Vector{Int32}}()
+        sn = NTuple{3, Int32}[]
         GO._collect_self_crossings!(P, t, sn, ss, Int32(off); exact = EX, clip)
         GO._collect_self_vertex_nodes!(P, t, sn, ss, Int32(off), tree; exact = EX, clip)
-        return sum(length, values(sn); init = 0)
+        return length(sn)
     end
     return (a_clipped = census(ssa, 0, ta, ca), a_plain = census(ssa, 0, ta, nothing),
             b_clipped = census(ssb, length(ssa), tb, cb),

@@ -29,6 +29,7 @@ end
 @safetestset "Area without Proj" begin include("methods/area_no_proj.jl") end
 @safetestset "Area" begin include("methods/area.jl") end
 @safetestset "Perimeter" begin include("methods/perimeter.jl") end
+@safetestset "Buffer" begin include("methods/buffer.jl") end
 @safetestset "Barycentric coordinate operations" begin include("methods/barycentric.jl") end
 @safetestset "Orientation" begin include("methods/orientation.jl") end
 @safetestset "Centroid" begin include("methods/centroid.jl") end

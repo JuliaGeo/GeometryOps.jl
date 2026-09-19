@@ -44,8 +44,8 @@ function check_invariants(arr, na_strings)
     @test all(e -> e.node_lo != e.node_hi, arr.edges)                  # 3
     @test all(_crossing_ids(arr)) do cid                               # 1
         a_hits = b_hits = 0
-        for ((si, _), ids) in arr.seg_nodes
-            cid in ids && (si <= na_strings ? (a_hits += 1) : (b_hits += 1))
+        for (si, _, nid) in arr.seg_nodes
+            nid == cid && (si <= na_strings ? (a_hits += 1) : (b_hits += 1))
         end
         a_hits >= 1 && b_hits >= 1
     end
@@ -128,7 +128,7 @@ end
         arr = GO.NodedArrangement(m, A, B; exact = True())
         #-- zero phantom crossings: a crossing node is interned only alongside
         #-- its two interior records, so an empty `seg_nodes` implies none exists
-        @test sum(length, values(arr.seg_nodes); init = 0) == 0
+        @test isempty(arr.seg_nodes)
     end
 end
 
@@ -154,7 +154,7 @@ end
     B = GI.MultiLineString([[(Float64(i) + 0.3, -1.0), (Float64(i) + 0.3, 1.0)] for i in 1:200])
     arr = GO.NodedArrangement(Planar(), A, B; exact = True())
     # A is string 1, its single segment carries all 200 interior crossings
-    ids = arr.seg_nodes[(Int32(1), Int32(1))]
+    ids = [nid for (si, k, nid) in arr.seg_nodes if (si, k) == (Int32(1), Int32(1))]
     @test length(ids) == 200
     s0 = arr.segstrings[1].pts[1]; s1 = arr.segstrings[1].pts[2]
     @test ids == exact_order(arr, s0, s1, ids)          # elementwise
@@ -170,7 +170,7 @@ end
     A = GI.LineString([(0.0, 0.0), (60.0, 0.0)])
     B = GI.MultiLineString([[(Float64(i) * 0.25 + 0.1, -1.0), (Float64(i) * 0.25 + 0.1, 1.0)] for i in 1:200])
     arr = GO.NodedArrangement(Spherical(), A, B; exact = True())
-    ids = arr.seg_nodes[(Int32(1), Int32(1))]
+    ids = [nid for (si, k, nid) in arr.seg_nodes if (si, k) == (Int32(1), Int32(1))]
     @test length(ids) == 200
     s0 = arr.segstrings[1].pts[1]; s1 = arr.segstrings[1].pts[2]
     @test ids == exact_order_sph(arr, s0, s1, ids)

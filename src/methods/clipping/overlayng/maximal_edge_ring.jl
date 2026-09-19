@@ -84,13 +84,19 @@ mutable struct _PolyBuilderCtx{M <: Manifold, P, E, T, NB, L}
     #-- first use so the planar path pays nothing.
     kernel_cache::Vector{P}
     kernel_ok::Vector{Bool}
+    #-- the winding overlay's polyline runs (`run_split.jl`), or `nothing` when
+    #-- every graph edge is a single segment — which is every binary overlay.
+    #-- Declared as the small union rather than a type parameter so the existing
+    #-- `_PolyBuilderCtx{M, P, E, T, NB, L}` signatures keep matching; the one
+    #-- loop that reads it takes a function barrier on `typeof(runs)`.
+    runs::Union{Nothing, WindingRuns}
 end
 
 _PolyBuilderCtx(m::M, edges::Vector{OverlayEdge{P}}, arr::NodedArrangement{P, T}, exact::E,
         max_rings, edge_rings::Vector{_OverlayEdgeRing{T, NB, L}}, shell_list,
-        free_hole_list) where {M <: Manifold, P, E, T, NB, L} =
+        free_hole_list, runs = nothing) where {M <: Manifold, P, E, T, NB, L} =
     _PolyBuilderCtx{M, P, E, T, NB, L}(m, edges, arr, exact, max_rings, edge_rings, shell_list,
-                                    free_hole_list, Int32[], P[], Bool[])
+                                    free_hole_list, Int32[], P[], Bool[], runs)
 
 @inline _ctx_point_type(::_PolyBuilderCtx{M, P}) where {M, P} = P
 @inline output_point_type(::_PolyBuilderCtx{M, P, E, T}) where {M, P, E, T} = T
@@ -608,33 +614,96 @@ end
 # `next_result`, collecting the arrangement node ids it visits and their emitted
 # points; then derive the shell/hole role and the bounding box.
 function _compute_ring!(ctx::_PolyBuilderCtx{M, P, E, T}, ring::_OverlayEdgeRing) where {M, P, E, T}
+    #-- function barrier on the run table's concrete type (`Nothing` for every
+    #-- binary overlay, where the walk below is byte-for-byte the old one)
+    (pts, ids) = _walk_ring(ctx, ring, ctx.runs, T)
+
+    ring.ring_pts = pts
+    ring.node_ids = ids
+    ring.is_hole = _ring_is_ccw_exact(ctx, ids)
+    ring.bbox = _ring_bbox(pts)
+    return nothing
+end
+
+#=
+Walk the minimal ring via `next_result`, collecting node ids and emitted points.
+
+`runs === nothing` is the per-segment graph the binary overlay builds: each
+half-edge contributes its destination and nothing else. A `WindingRuns` graph
+edge is a polyline, so the vertices between its two nodes are emitted too,
+forward or reversed with the half-edge — they carry the run's shape, which is
+the whole reason the run exists.
+=#
+function _walk_ring(ctx::_PolyBuilderCtx, ring::_OverlayEdgeRing, runs::R,
+        ::Type{T}) where {R, T}
     edges = ctx.edges
+    arr = ctx.arr
     pts = T[]
     ids = Int32[]
+    #-- size both once. `_ring_emit_count` is a pointer walk over the same cycle
+    #-- the loop below walks, which is cheaper than regrowing two vectors to a
+    #-- length no half-edge count predicts: with runs, one graph edge can carry
+    #-- thousands of vertices.
+    n = _ring_emit_count(edges, ring, runs)
+    sizehint!(pts, n + 1); sizehint!(ids, n)
     origin = he_origin(edges, ring.start_edge)
     push!(ids, Int32(origin))
-    _ring_add!(pts, node_point(ctx.arr, origin))
+    _ring_add!(pts, node_point(arr, origin))
     edge = ring.start_edge
     while true
         edges[edge].edge_ring == ring.id &&
             throw(_OverlayTopologyError("Edge visited twice during ring-building"))
         dest = he_dest(edges, edge)
         edges[edge].edge_ring = ring.id
+        _add_run_interior!(runs, pts, ids, arr, edges, edge)
         ne = oe_next_result(edges, edge)
         ne == 0 && throw(_OverlayTopologyError("Found null edge in ring"))
         edge = ne
         #-- `ids` stays OPEN: the final dest is the start origin, already pushed
-        edge == ring.start_edge && (_ring_add!(pts, node_point(ctx.arr, dest)); break)
+        edge == ring.start_edge && (_ring_add!(pts, node_point(arr, dest)); break)
         push!(ids, Int32(dest))
-        _ring_add!(pts, node_point(ctx.arr, dest))
+        _ring_add!(pts, node_point(arr, dest))
     end
     #-- the last dest is the start origin, so pts is already closed; be defensive
     pts[end] == pts[1] || push!(pts, pts[1])
+    return (pts, ids)
+end
 
-    ring.ring_pts = pts
-    ring.node_ids = ids
-    ring.is_hole = _ring_is_ccw_exact(ctx, ids)
-    ring.bbox = _ring_bbox(pts)
+# How many coordinates the ring walk will emit: one per half-edge, plus each
+# run's interior. A broken cycle (`next_result == 0`) is the walk's own error to
+# report, so this stops and lets it.
+function _ring_emit_count(edges, ring::_OverlayEdgeRing, runs::R) where {R}
+    n = 1
+    e = ring.start_edge
+    while true
+        n += 1 + _run_interior_len(runs, e)
+        e = oe_next_result(edges, e)
+        (e == 0 || e == ring.start_edge) && break
+    end
+    return n
+end
+
+@inline _run_interior_len(::Nothing, edge) = 0
+@inline _run_interior_len(runs::WindingRuns, edge) =
+    length(_run_interior_range(runs, cld(Int(edge), 2)))
+
+@inline _add_run_interior!(::Nothing, pts, ids, arr, edges, edge) = nothing
+
+function _add_run_interior!(runs::WindingRuns, pts, ids, arr, edges, edge)
+    rng = _run_interior_range(runs, cld(Int(edge), 2))
+    isempty(rng) && return nothing
+    vids = runs.vids
+    if oe_is_forward(edges, edge)
+        @inbounds for i in rng
+            id = vids[i]
+            push!(ids, id); _ring_add!(pts, node_point(arr, id))
+        end
+    else
+        @inbounds for i in Iterators.reverse(rng)
+            id = vids[i]
+            push!(ids, id); _ring_add!(pts, node_point(arr, id))
+        end
+    end
     return nothing
 end
 
