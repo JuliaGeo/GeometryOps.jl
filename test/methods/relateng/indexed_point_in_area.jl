@@ -283,6 +283,69 @@ end
             [(10.0, 10.0), (10.0, 5.0), (2.0, 2.0)]))
     end
 
+    @testset "edge index: endpoint longitude rounding" begin
+        # a vertex at a tiny non-zero longitude next to a long edge: an
+        # interval end that is not the endpoint's own `atan` value can miss
+        # it by ~ulp(edge span), thousands of ulps of the tiny end, so every
+        # query on that side of the vertex's meridian lost the edge and
+        # inverted its parity — an ordinary mid-latitude ring, no pole
+        tri = [(0.0017, 30.0), (40.0, 30.0), (20.0, 60.0), (0.0017, 30.0)]
+        v = kp(tri[1]); λ = atan(v[2], v[1])
+        qs = [(rad2deg(k >= 0 ? nextfloat(λ, k) : prevfloat(λ, -k)), lat)
+              for lat in 31.0:2.0:59.0 for k in -40:40]
+        append!(qs, [(0.0017, lat) for lat in 31.0:1.0:59.0])
+        check_sph_agreement(GI.Polygon([GI.LinearRing(tri)]), qs)
+        # the same shape at a pole-hugging vertex, where the longitude
+        # itself is ill-conditioned and the edge takes the full range
+        ph = [(0.0033563130853053735, -89.99999999813261), (46.891183665388354, -89.9999999962315),
+              (93.63815566658627, -89.99999999842129), (142.0182497462225, -89.99999993297193),
+              (180.64483654387297, -72.73095921005729), (225.34348517929183, -89.9999999999999),
+              (277.31417119248607, -65.32296008285503), (319.1523906912383, -54.67823057378641),
+              (0.0033563130853053735, -89.99999999813261)]
+        v = kp(ph[1]); λ = atan(v[2], v[1])
+        qs = [(rad2deg(k >= 0 ? nextfloat(λ, k) : prevfloat(λ, -k)), -lat)
+              for lat in (30.0, 60.0, 85.0, 89.9, 89.999999) for k in (-200, -64, -33, -1, 0, 1, 33, 64, 200)]
+        check_sph_agreement(GI.Polygon([GI.LinearRing(ph)]), qs)
+    end
+
+    @testset "pole-hugging rings: seeded fuzz against the exact scan" begin
+        # vertices within 1e-6..1e-12 degrees of a pole mixed with ordinary
+        # ones, queries random plus stabs a few-to-many ulps around each
+        # vertex longitude — the index must never drop or double-count an edge
+        frng = Xoshiro(3)
+        for trial in 1:60
+            pole = rand(frng, (-1, 1))
+            pts = Tuple{Float64, Float64}[]
+            for t in 0:45:315
+                lat = rand(frng, Bool) ? pole * (90 - 10.0^(-rand(frng, 6:12)) * rand(frng)) :
+                                         pole * (50 + 30rand(frng))
+                push!(pts, (t + 10rand(frng), lat))
+            end
+            push!(pts, pts[1])
+            geom = GI.Polygon([GI.LinearRing(pts)])
+            qs = [(360rand(frng) - 180, pole * (40 + 50rand(frng))) for _ in 1:100]
+            for ll in pts
+                v = kp(ll); λ = atan(v[2], v[1])
+                for k in (-200, -33, 0, 33, 200), lat in (30.0, 85.0, 89.999999)
+                    push!(qs, (rad2deg(k >= 0 ? nextfloat(λ, k) : prevfloat(λ, -k)), pole * lat))
+                end
+            end
+            check_sph_agreement(geom, qs)
+        end
+    end
+
+    @testset "ordinary mid-latitude rings: seeded fuzz against the exact scan" begin
+        frng = Xoshiro(7)
+        for trial in 1:20
+            c = (360rand(frng) - 180, 120rand(frng) - 60)
+            pts = [(c[1] + (5 + 3rand(frng)) * cosd(t), c[2] + (5 + 3rand(frng)) * sind(t)) for t in 0:30:330]
+            push!(pts, pts[1])
+            qs = [(c[1] + 20rand(frng) - 10, c[2] + 20rand(frng) - 10) for _ in 1:150]
+            append!(qs, [(ll[1], c[2] + 12rand(frng) - 6) for ll in pts])   # share vertex longitudes
+            check_sph_agreement(GI.Polygon([GI.LinearRing(pts)]), qs)
+        end
+    end
+
     @testset "empty spherical element" begin
         # as in the planar empty case: no rings, no index, everything exterior
         loc = GO.IndexedPointInAreaLocator(m, True(), nothing, GO._SphPolyRings[],

@@ -277,9 +277,19 @@ function locate(loc::IndexedPointInAreaLocator{<:Spherical}, p)
         q == loc.anchor && return loc.anchor_loc
         return _sph_scan_locate(loc.m, loc.polys, q; exact = loc.exact)
     end
+    #-- the query longitude carries the same conditioning-dependent rounding
+    #-- as the indexed ends: too ill-conditioned to pad, it takes the exact
+    #-- scan like the axis does
+    pad = _sph_lon_pad(hypot(q[1], q[2]))
+    pad > _SPH_LON_PAD_MAX && return _sph_scan_locate(loc.m, loc.polys, q; exact = loc.exact)
     acc = ArcCrossingCounter(loc.m, loc.exact, q, loc.anchor, 0, false)
     λ = atan(q[2], q[1])
-    stab = Extents.Extent(X = (λ, λ))
+    #-- the stab widens by the pad and clamps to [-π, π] rather than wrapping:
+    #-- an edge reaching past the seam is split with a piece ending at ±π on
+    #-- this side, so clamping loses nothing, while a wrapped or full-range
+    #-- stab would meet both pieces and count the edge twice
+    halfturn = Float64(π)
+    stab = Extents.Extent(X = (max(λ - pad, -halfturn), min(λ + pad, halfturn)))
     #-- count every edge whose longitude interval contains the query's
     SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, stab), index) do i
         seg = index.data[i]
@@ -477,18 +487,29 @@ circle normal) — so an edge spans exactly the wrapped interval between its
 endpoint longitudes; and since `n_z = cos(lat_a) cos(lat_b) sin(λ_b − λ_a)`
 the sweep is always the SHORTER of the two candidate intervals. (The design
 note's worry that longitude "bulges" like latitude does not arise.)
-Intervals are padded a few ulps against `atan` rounding, as the arc extents
-pad. Conservative full-interval fallbacks, where the float longitudes do
-not determine the sweep: an endpoint exactly on the polar axis (undefined
-longitude), or endpoint longitudes within ~1e-9 of half a turn apart
-(pole-hugging edges — the short/long choice would hang on the sign of a
-vanishing cross product). An interval crossing the antimeridian contributes
-two entries; the two never overlap, so no edge is double-counted.
+The interval ends are the endpoints' own `atan` values — an end rebuilt as
+`λa + Δ` is off by up to `ulp(Δ)`, thousands of ulps of an end near
+longitude 0 — padded by `_sph_lon_pad` of the worse-conditioned endpoint.
+The endpoints alone bound the interval: the sweep needs only the SIGN of
+`n_z` constant, not its size, so a vanishing `n_z` is a point interval
+(`Δ ≈ 0`, meridian-aligned edges — the bulk of gridded data), a polar
+endpoint, or the half-turn case below. Conservative full-interval
+fallbacks, where the float longitudes do not determine the sweep: an
+endpoint exactly on the polar axis (undefined longitude), a pad above
+`_SPH_LON_PAD_MAX` (a longitude its coordinates barely determine), or
+endpoint longitudes within ~1e-9 of half a turn apart (pole-hugging edges —
+the short/long choice would hang on the sign of a vanishing cross product).
+An interval crossing the antimeridian contributes two entries; the two
+never overlap — the pad is far below the gap `2π − |Δ|`, and a padded span
+that would close it is one full-range entry instead — so no edge is
+double-counted.
 =#
 function _sph_lon_entries!(exts, segs, a, b)
     seg = (a, b)
     halfturn = Float64(π)
-    if (a[1] == 0.0 && a[2] == 0.0) || (b[1] == 0.0 && b[2] == 0.0)
+    ra = hypot(a[1], a[2])
+    rb = hypot(b[1], b[2])
+    if ra == 0.0 || rb == 0.0
         return _push_lon_entry!(exts, segs, seg, -halfturn, halfturn)
     end
     λa = atan(a[2], a[1])
@@ -499,9 +520,20 @@ function _sph_lon_entries!(exts, segs, a, b)
     if abs(Δ) > halfturn - 1e-9
         return _push_lon_entry!(exts, segs, seg, -halfturn, halfturn)
     end
-    lo, hi = Δ >= 0 ? (λa, λa + Δ) : (λa + Δ, λa)
-    lo = prevfloat(lo, 32)
-    hi = nextfloat(hi, 32)
+    pad = _sph_lon_pad(min(ra, rb))
+    pad > _SPH_LON_PAD_MAX && return _push_lon_entry!(exts, segs, seg, -halfturn, halfturn)
+    #-- the sweep runs eastward from `lo` to `hi`; `lo > hi` is a sweep
+    #-- through the antimeridian
+    lo, hi = Δ >= 0 ? (λa, λb) : (λb, λa)
+    wraps = lo > hi
+    lo -= pad
+    hi += pad
+    if wraps
+        lo <= hi && return _push_lon_entry!(exts, segs, seg, -halfturn, halfturn)
+        _push_lon_entry!(exts, segs, seg, lo, halfturn)
+        return _push_lon_entry!(exts, segs, seg, -halfturn, hi)
+    end
+    hi - lo >= 2halfturn && return _push_lon_entry!(exts, segs, seg, -halfturn, halfturn)
     #-- antimeridian wraparound: split the overflow back into [-π, π]
     if lo < -halfturn
         _push_lon_entry!(exts, segs, seg, lo + 2halfturn, halfturn)
@@ -512,6 +544,15 @@ function _sph_lon_entries!(exts, segs, a, b)
     end
     return _push_lon_entry!(exts, segs, seg, lo, hi)
 end
+
+# The longitude pad of a point whose distance from the polar axis has sine
+# `r = hypot(x, y)`: `atan(y, x)` moves by `eps / r` per eps of coordinate
+# rounding, so a fixed count of longitude ulps understates the rounding
+# near the poles without bound. Above `_SPH_LON_PAD_MAX` the longitude is
+# too ill-conditioned to index: an edge takes the full range, a query the
+# exact scan.
+const _SPH_LON_PAD_MAX = 1e-7
+_sph_lon_pad(r) = 32 * eps(Float64) / r
 
 function _push_lon_entry!(exts, segs, seg, lo, hi)
     push!(exts, Extents.Extent(X = (lo, hi)))
