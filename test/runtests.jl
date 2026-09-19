@@ -17,6 +17,7 @@ end
 @safetestset "WKB codec" begin include("wkb.jl") end
 
 # Utils
+@safetestset "ValidatedFloats" begin include("utils/ValidatedFloats/runtests.jl") end
 @safetestset "Utils" begin include("utils/utils.jl") end
 @safetestset "LoopStateMachine" begin include("utils/LoopStateMachine.jl") end
 @safetestset "SpatialTreeInterface" begin include("utils/SpatialTreeInterface.jl") end
