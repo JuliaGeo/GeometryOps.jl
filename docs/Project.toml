@@ -1,6 +1,7 @@
 [deps]
 AccurateArithmetic = "22286c92-06ac-501d-9306-4abd417d9753"
 AdaptivePredicates = "35492f91-a3bd-45ad-95db-fcad7dcfedb7"
+AlgebraOfGraphics = "cbdf2221-f076-402e-a563-3d30da359d67"
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"

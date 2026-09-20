@@ -18,6 +18,28 @@ function check_linear_boundary(lines, rule, expected_boundary)
     check_boundary_points(lb, lines, expected_boundary)
 end
 
+@testset "RelatePointLocator element storage" begin
+    line1 = GI.LineString([(0.0, 0.0), (1.0, 1.0)])
+    line2 = GI.LineString([(2.0, 0.0), (3.0, 1.0)])
+    poly1 = GI.Polygon([[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 0.0)]])
+    poly2 = GI.Polygon([[(2.0, 0.0), (3.0, 0.0), (3.0, 1.0), (2.0, 0.0)]])
+    homogeneous = GI.GeometryCollection(Any[line1, line2, poly1, poly2])
+    loc = GO.RelatePointLocator(Planar(), homogeneous; exact = True())
+
+    @test isconcretetype(eltype(loc.lines))
+    @test isconcretetype(eltype(loc.polygons))
+    @test @inferred(GO.locate_on_polygonal(loc, (0.75, 0.25), false, nothing, 1)) ==
+          GO.LOC_INTERIOR
+
+    # Mixed polygonal implementations remain supported and widen naturally.
+    multipoly = GI.MultiPolygon([[[(4.0, 0.0), (5.0, 0.0), (5.0, 1.0),
+                                    (4.0, 0.0)]]])
+    heterogeneous = GI.GeometryCollection(Any[poly1, multipoly])
+    mixed_loc = GO.RelatePointLocator(Planar(), heterogeneous; exact = True())
+    @test !isconcretetype(eltype(mixed_loc.polygons))
+    @test GO.locate(mixed_loc, (4.75, 0.25)) == GO.LOC_INTERIOR
+end
+
 # Port of LinearBoundaryTest.checkBoundaryPoints (+ extractPoints).
 function check_boundary_points(lb, lines, expected_boundary)
     bdy_set = expected_boundary === nothing ? Set{Tuple{Float64, Float64}}() :

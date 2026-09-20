@@ -135,6 +135,7 @@ end
         rgeom = relate_geom(gc)
         eff = GO.get_effective_points(rgeom)
         @test length(eff) == 1
+        @test isconcretetype(eltype(eff))
         @test GO._tuple_point(only(eff)) == (20.0, 20.0)
         # For a P-dimension geometry all points are returned unfiltered.
         mp = GI.MultiPoint([(0.0, 0.0), (5.0, 5.0)])

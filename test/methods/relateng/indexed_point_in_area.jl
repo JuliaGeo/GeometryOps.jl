@@ -78,6 +78,19 @@ end
     @test locate_in_ring((0.0, 0.0), diamond) == GO.LOC_BOUNDARY
 end
 
+@testset "manifold-specific index storage" begin
+    tri = GI.Polygon([[(0.0, 0.0), (10.0, 0.0), (0.0, 10.0), (0.0, 0.0)]])
+
+    planar = GO.IndexedPointInAreaLocator(Planar(), tri; exact = True())
+    @test fieldtype(typeof(planar), :index) == Union{Nothing, GO._PIAIndex}
+    @test @inferred(GO.locate(planar, (1.0, 1.0))) == GO.LOC_INTERIOR
+
+    spherical = GO.IndexedPointInAreaLocator(Spherical(), tri; exact = True())
+    @test fieldtype(typeof(spherical), :index) == Union{Nothing, GO._SphPIAIndex}
+    q = GO._to_kernel_point(Spherical(), GI.Point(1.0, 1.0))
+    @test @inferred(GO.locate(spherical, q)) == GO.LOC_INTERIOR
+end
+
 # -- prepared vs unprepared location agreement --------------------------------
 
 # 10k-vertex circle

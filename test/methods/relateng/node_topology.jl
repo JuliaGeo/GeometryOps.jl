@@ -129,6 +129,7 @@ end
 
 @testset "NodeSections prepare_sections! ordering invariant" begin
     nss = GO.NodeSections(NODE)
+    @test !ismutabletype(typeof(nss))
     @test GO.get_coordinate(nss) === NODE
     s_line_a = make_section(; is_a = true, dim = GO.DIM_L, id = 5, ring_id = -1, v1 = nothing)
     s_shell_a1 = make_section(; is_a = true, dim = GO.DIM_A, id = 1, ring_id = 0)
