@@ -112,6 +112,9 @@ dimensions of the arguments:
 `manifold` defaults to `Planar()`. `Spherical()` asks the same questions with
 great-circle arcs in place of straight segments.
 
+Unsupported geometry pairs throw [`UnsupportedCrossesError`](@ref). Use
+`relate_predicate(RelateNG(), pred_crosses(), geom1, geom2)` for those pairs.
+
 ## Examples
 ```jldoctest
 import GeometryOps as GO, GeoInterface as GI
@@ -180,12 +183,22 @@ _crosses_point_out_polygon(m::Manifold, point, polygons) = all(_crosses_polygons
     _point_polygon_process(m, point, polygon; CROSSES_POINT_OUT_ONLY..., CROSSES_EXACT...)
 end
 
-@noinline _throw_crosses_unsupported(t1, t2) = throw(ArgumentError(
-    "`crosses` has no implementation for $(typeof(t1).name.name) against " *
-    "$(typeof(t2).name.name): the lightweight processors work one polygon and " *
-    "one curve at a time, and neither the exterior of a multi-polygon nor the " *
-    "dimension of a geometry collection is the union of its parts' answers. " *
-    "Use `relate_predicate(RelateNG(), pred_crosses(), a, b)` instead."))
+"""
+    UnsupportedCrossesError(trait1, trait2)
+
+The lightweight `crosses` implementation does not support this geometry pair.
+Use `relate_predicate(RelateNG(), pred_crosses(), a, b)` for these geometries.
+"""
+struct UnsupportedCrossesError{T1 <: GI.AbstractTrait, T2 <: GI.AbstractTrait} <: Exception
+    trait1::T1
+    trait2::T2
+end
+
+function Base.showerror(io::IO, err::UnsupportedCrossesError)
+    print(io, "`crosses` has no implementation for ", nameof(typeof(err.trait1)),
+        " against ", nameof(typeof(err.trait2)), ". ",
+        "Use `relate_predicate(RelateNG(), pred_crosses(), a, b)` instead.")
+end
 
 
 # # Points cross nothing
@@ -346,17 +359,17 @@ decomposed over the components the way `in_require` can. Rather than answer
 with the weaker per-component question, refuse and point at the engine that
 does compute the union. =#
 _crosses(m::Manifold, t1::CROSSES_LINE_LIKE, g1, t2::GI.MultiPolygonTrait, g2) =
-    _throw_crosses_unsupported(t1, t2)
+    throw(UnsupportedCrossesError(t1, t2))
 _crosses(m::Manifold, t1::GI.MultiPolygonTrait, g1, t2::CROSSES_LINE_LIKE, g2) =
-    _throw_crosses_unsupported(t1, t2)
+    throw(UnsupportedCrossesError(t1, t2))
 
 #= A geometry collection's dimension is the largest of its parts', and which of
 the three `crosses` patterns applies depends on it, so a collection cannot be
 answered part by part either. =#
 _crosses(m::Manifold, t1::GI.GeometryCollectionTrait, g1, t2::CROSSES_TRAITS, g2) =
-    _throw_crosses_unsupported(t1, t2)
+    throw(UnsupportedCrossesError(t1, t2))
 _crosses(
     m::Manifold,
     t1::Union{GI.MultiPointTrait, CROSSES_LINE_LIKE, CROSSES_AREA_LIKE}, g1,
     t2::GI.GeometryCollectionTrait, g2,
-) = _throw_crosses_unsupported(t1, t2)
+) = throw(UnsupportedCrossesError(t1, t2))

@@ -505,8 +505,20 @@ end
         component. The processors refuse rather than answer the weaker
         question. =#
         mp = GI.MultiPolygon([[[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0), (0.0, 0.0)]]])
-        @test_throws ArgumentError GO.crosses(l_through, mp)
-        @test_throws ArgumentError GO.crosses(mp, l_through)
+        @testset_implementations "unsupported polygon pairs" begin
+            @test_throws GO.UnsupportedCrossesError GO.crosses($l_through, $mp)
+            @test_throws GO.UnsupportedCrossesError GO.crosses($mp, $l_through)
+        end
+        collection = GI.GeometryCollection([poly_edge])
+        for m in (GO.Planar(), GO.Spherical())
+            @test_throws GO.UnsupportedCrossesError GO.crosses(m, collection, poly_edge)
+            @test_throws GO.UnsupportedCrossesError GO.crosses(m, poly_edge, collection)
+            @test_throws GO.UnsupportedCrossesError GO.crosses(m, collection, collection)
+        end
+        err = GO.UnsupportedCrossesError(GI.LineStringTrait(), GI.MultiPolygonTrait())
+        message = sprint(showerror, err)
+        @test occursin("LineStringTrait against MultiPolygonTrait", message)
+        @test occursin("relate_predicate(RelateNG(), pred_crosses(), a, b)", message)
     end
 end
 
