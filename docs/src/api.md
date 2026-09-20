@@ -110,3 +110,9 @@ Modules = [GeometryOps.NaturalIndexing]
 ```@autodocs
 Modules = [GeometryOps.LoopStateMachine]
 ```
+
+### ValidatedFloats
+
+```@autodocs
+Modules = [GeometryOps.ValidatedFloats, GeometryOps.ValidatedFloats.CrossingFloats]
+```
