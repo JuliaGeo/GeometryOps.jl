@@ -117,7 +117,7 @@ Now, let's make the `LinearRing` into a `Polygon`.
 polygon1 = GI.Polygon([ring1]);
 ````
 
-Now, we can use GeometryOps and CoordinateTransformations to shift `polygon1` up, to avoid plotting over our earlier results.  This is done through the [GeometryOps.transform](@ref) function.
+Now, we can use GeometryOps and CoordinateTransformations to shift `polygon1` up, to avoid plotting over our earlier results.  This is done through the [`GeometryOps.transform`](@ref) function.
 
 ````@example creating_geometry
 xoffset = 0.

@@ -7,6 +7,10 @@ CollapsedDocStrings = true
 
 ```@docs; canonical=false
 SphericalCap
+Extents.contains
+Extents.within
+Extents.union
+Extents.grow
 circumcenter_on_unit_sphere
 ```
 
@@ -25,6 +29,12 @@ The `SphericalCap` type offers multiple constructors to create caps from:
 - UnitSphericalPoint and radius
 - Geographic coordinates and radius
 - Three points on the unit sphere (circumcircle)
+
+!!! note Interop with Extents
+    You can convert a spherical cap to a 3D extent in the Cartesian space that holds the unit sphere
+    by `convert(Extent, cap)`.  All of the Extents.jl predicates like covers, within, etc are also 
+    extended to work and compare `Extent{(:X, :Y, :Z)}` with spherical caps - assuming everything on
+    the unit sphere.
 
 ## Examples
 
@@ -94,24 +104,93 @@ end
 
 # TODO: this returns an approximately antipodal point...
 
+# The margin by which the cheap bounds in `_intersects` must clear the decision
+# before they are trusted: comfortably above the rounding of a squared chord
+# (~4 eps relative) and comfortably below any distance anyone cares about.
+const _CAP_CHORD_GUARD = 2.0^-40
+
 # TODO: exact-predicate intersection
 # This is all inexact and thus subject to floating point error
+#=
+Two caps intersect iff the angle `d` between their centers is at most the sum
+`r` of their radii. We can shortcut by computing the *squared chord* between
+the centers, `c² = ‖p - q‖²`, which is 3 subtractions and 3 multiplications. It
+brackets `d` tightly enough to settle almost every pair without ever forming
+`d`:
+
+    c  ≤  d = 2 asin(c/2)  ≤  c * (1 + c²/20)        for 0 ≤ c ≤ 1
+
+(The lower bound is `asin(x) ≥ x`; for the upper, `2 asin(c/2) - c` has the
+series `c³/24 + 3c⁵/640 + 15c⁷/21504 + …`, which stays under `c³/20` on `c ≤ 1`
+with minimum slack `1.0e-18` at `c → 0` and `2.6e-3` at `c = 1`.) Squaring
+both sides keeps it `sqrt`-free.
+
+This acts as an adaptive filter, similar to the predicates. Pairs far from the
+boundary use the cheap bounds; closer pairs use `spherical_distance`.
+
+For `c > 1` only the reject bound applies. A radius sum of at least `π` accepts
+outright. NaN and negative radii fall through to the original comparison.
+
+The chord is also more accurate for nearly equal centers, where
+`spherical_distance` loses precision. Centers are assumed to have unit length.
+=#
 function _intersects(x::SphericalCap, y::SphericalCap)
-    spherical_distance(x.point, y.point) <= x.radius + y.radius
+    r = x.radius + y.radius
+    p, q = x.point, y.point
+    dx = p[1] - q[1]
+    dy = p[2] - q[2]
+    dz = p[3] - q[3]
+    c² = dx * dx + dy * dy + dz * dz
+    if r >= 0                       # false for NaN, and for negative radii
+        r >= oftype(r, π) && return true  # no two points on the sphere are further apart
+        r² = r * r
+        g = _CAP_CHORD_GUARD
+        c² > r² * (1 + g) && return false            # d ≥ c > r
+        b = 1 + 0.05 * c²   # 0.05 rounds up from 1/20, so `b` stays an upper bound
+        c² <= 1 && c² * b * b <= r² * (1 - g) && return true   # d ≤ c(1 + c²/20) ≤ r
+    end
+    return spherical_distance(p, q) <= r
 end
 
 _disjoint(x::SphericalCap, y::SphericalCap) = !_intersects(x, y)
 
-function _contains(big::SphericalCap, small::SphericalCap)
+"""
+    Extents.contains(big::SphericalCap, small::SphericalCap; strict=false)
+
+Whether the closed cap `big` contains all of `small`.
+"""
+function Extents.contains(big::SphericalCap, small::SphericalCap; strict=false)
+    big.radius >= oftype(big.radius, π) && return true
+    small.radius >= oftype(small.radius, π) && return false
     dist = spherical_distance(big.point, small.point)
     # small circle fits in big circle; `<=` so internally-tangent small
     # caps count as contained, matching the point overload below and
     # S2's `S2Cap::Contains(const S2Cap&)` convention.
     return dist + small.radius <= big.radius
 end
+"""
+    Extents.within(small::SphericalCap, big::SphericalCap; strict=false)
+
+Whether the closed cap `small` is within `big`.
+"""
+Extents.within(small::SphericalCap, big::SphericalCap; strict=false) =
+    Extents.contains(big, small; strict)
+
+# Point membership stays internal: a point is not an `Extents.Extent`, so the
+# Extents DE-9IM containment generic does not describe this mixed relation.
 function _contains(cap::SphericalCap, point::UnitSphericalPoint)
+    cap.radius >= oftype(cap.radius, π) && return true
     spherical_distance(cap.point, point) <= cap.radius
 end
+
+# ## Cap intersection
+
+"""
+    Extents.intersects(x::SphericalCap, y::SphericalCap)
+
+Whether the two closed caps intersect, including at tangency.
+"""
+Extents.intersects(x::SphericalCap, y::SphericalCap) = _intersects(x, y)
 
 # ## Cap–extent intersection
 
@@ -141,22 +220,96 @@ end
 Extents.intersects(ext::Extents.Extent{(:X, :Y, :Z)}, cap::SphericalCap) =
     Extents.intersects(cap, ext)
 
-#Comment by asinghvi: this could be transformed to GO.union
-function _merge(x::SphericalCap, y::SphericalCap)
+"""
+    convert(::Type{<:Extents.Extent}, cap::SphericalCap) -> Extents.Extent{(:X, :Y, :Z)}
+
+Convert `cap` to an outward-rounded Cartesian bounding box containing every
+unit-sphere point in the cap. The result is intended for Cartesian spatial
+indexes over unit-spherical data.
+
+Extent extraction conventionally means that an object *has* a Cartesian
+extent. A `SphericalCap` is instead a spherical query object, so conversion
+makes this boundary crossing explicit.
+
+Valid caps have radii in `[0, π]`. A radius at least `π`, or a non-finite or
+negative radius, conservatively returns the whole unit-sphere box.
+
+The abstract target `Extents.Extent` and compatible concrete targets are
+accepted. Incompatible concrete targets throw an `ArgumentError`.
+"""
+function Base.convert(target::Type{<:Extents.Extent}, cap::SphericalCap{T}) where {
+        T <: AbstractFloat}
+    oneT = one(T)
+    whole = (-oneT, oneT)
+    r = cap.radius
+    if !(zero(T) <= r < T(π))
+        result = Extents.Extent(X = whole, Y = whole, Z = whole)
+        result isa target || throw(ArgumentError(
+            "cannot convert SphericalCap{$T} to incompatible extent type $target"))
+        return result
+    end
+
+    cr, sr = cos(r), sin(r)
+    # Covers the accumulated error in sin/cos, the transverse square root,
+    # and the multiply-adds. The final adjacent-float step makes the direction
+    # of rounding explicit even when subtracting the guard is exact.
+    guard = 8 * eps(T)
+    bounds = ntuple(Val(3)) do i
+        x = clamp(cap.point[i], -oneT, oneT)
+        transverse = sqrt(max(zero(T), (oneT - x) * (oneT + x)))
+        lo = x <= -cr ? -oneT : x * cr - transverse * sr
+        hi = x >= cr ? oneT : x * cr + transverse * sr
+        (max(-oneT, prevfloat(lo - guard)),
+         min(oneT, nextfloat(hi + guard)))
+    end
+    result = Extents.Extent(X = bounds[1], Y = bounds[2], Z = bounds[3])
+    result isa target || throw(ArgumentError(
+        "cannot convert SphericalCap{$T} to incompatible extent type $target"))
+    return result
+end
+
+"""
+    Extents.grow(cap::SphericalCap, factor::Real) -> SphericalCap
+
+Grow the cap's angular diameter by `factor` on each side.
+"""
+function Extents.grow(cap::SphericalCap{T}, factor::Real) where {T <: AbstractFloat}
+    δ = convert(T, factor)
+    δ == zero(T) && return cap
+    δ > zero(T) && cap.radius >= T(π) && return cap
+    grown = cap.radius + 2 * cap.radius * δ
+    grown >= zero(T) || throw(DomainError(factor, "cap growth factor produces a negative radius"))
+    radius = grown > cap.radius ? min(T(π), nextfloat(grown)) : grown
+    return SphericalCap(cap.point, radius)
+end
+
+"""
+    Extents.union(x::SphericalCap, y::SphericalCap; strict=false) -> SphericalCap
+
+Return a cap containing both `x` and `y`.
+
+If either input already contains the other it is returned unchanged.
+Otherwise, the centre lies between the input caps' centres, and the radius is
+rounded outward to preserve coverage.
+
+`strict` is accepted for consistency with the Extents API and has no effect
+because both inputs use the same domain.
+"""
+function Extents.union(x::SphericalCap, y::SphericalCap; strict=false)
+    Extents.contains(x, y; strict) && return x
+    Extents.contains(y, x; strict) && return y
 
     d = spherical_distance(x.point, y.point)
     newradius = (x.radius + y.radius + d) / 2
-    if newradius < x.radius
-        #x contains y
-        x
-    elseif newradius < y.radius
-        #y contains x
-        y
-    else
-        excenter = 0.5 * (1 - (x.radius - y.radius) / d)
-        newcenter = slerp(x.point, y.point, excenter)
-        SphericalCap(newcenter, newradius)
-    end
+    excenter = 0.5 * (1 - (x.radius - y.radius) / d)
+    newcenter = slerp(x.point, y.point, excenter)
+    # Re-evaluate coverage at the computed centre: this absorbs interpolation
+    # and distance rounding, not only the closed-form radius's rounding.
+    covering_radius = max(newradius,
+        spherical_distance(newcenter, x.point) + x.radius,
+        spherical_distance(newcenter, y.point) + y.radius)
+    radius = min(oftype(covering_radius, π), nextfloat(covering_radius))
+    return SphericalCap(newcenter, radius)
 end
 
 """

@@ -3,26 +3,21 @@ export intersection, intersection_points
 
 """
     Enum LineOrientation
-Enum for the orientation of a line with respect to a curve. A line can be
-`line_cross` (crossing over the curve), `line_hinge` (crossing the endpoint of the curve),
-`line_over` (collinear with the curve), or `line_out` (not interacting with the curve).
+Classify a line against a curve: `line_cross` crosses its interior, `line_hinge` meets
+an endpoint, `line_over` overlaps, and `line_out` is disjoint.
 """
 @enum LineOrientation line_cross=1 line_hinge=2 line_over=3 line_out=4
 
 """
     intersection(geom_a, geom_b, [T::Type]; target::Type, fix_multipoly = UnionIntersectingPolygons())
 
-Return the intersection between two geometries as a list of geometries. Return an empty list
-if none are found. The type of the list will be constrained as much as possible given the
-input geometries. Furthermore, the user can provide a `target` type as a keyword argument and
-a list of target geometries found in the intersection will be returned. The user can also
-provide a float type that they would like the points of returned geometries to be. If the
-user is taking a intersection involving one or more multipolygons, and the multipolygon
-might be comprised of polygons that intersect, if `fix_multipoly` is set to an
-`IntersectingPolygons` correction (the default is `UnionIntersectingPolygons()`), then the
-needed multipolygons will be fixed to be valid before performing the intersection to ensure
-a correct answer. Only set `fix_multipoly` to nothing if you know that the multipolygons are
-valid, as it will avoid unneeded computation. 
+Return the intersection as a list of geometries, empty when no result exists. The list type is
+constrained by the inputs; `target` selects output geometry types and `T` sets coordinate
+precision.
+
+`fix_multipoly` corrects intersecting multipolygon components before clipping. The default
+union correction inherits the caller’s algorithm, manifold, and numeric type. Set
+`fix_multipoly = nothing` only when the input multipolygons are valid.
 
 ## Example
 
@@ -52,11 +47,11 @@ end
 function intersection(
     geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...
 ) where {T<:AbstractFloat}
-    return intersection(FosterHormannClipping(Planar()), geom_a, geom_b; target, kwargs...)
+    return intersection(FosterHormannClipping(Planar()), geom_a, geom_b, T; target, kwargs...)
 end
 # if manifold but no algorithm - assume FosterHormannClipping with provided manifold.
 function intersection(m::Manifold, geom_a, geom_b, ::Type{T}=Float64; target=nothing, kwargs...) where {T<:AbstractFloat}
-    return intersection(FosterHormannClipping(m), geom_a, geom_b; target, kwargs...)
+    return intersection(FosterHormannClipping(m), geom_a, geom_b, T; target, kwargs...)
 end
 
 # Curve-Curve Intersections with target Point
@@ -67,10 +62,8 @@ _intersection(
     kwargs...,
 ) where T = _intersection_points(alg.manifold, alg.accelerator, T, trait_a, geom_a, trait_b, geom_b)
 
-#= Polygon-Polygon Intersections with target Polygon
-The algorithm to determine the intersection was adapted from "Efficient clipping
-of efficient polygons," by Greiner and Hormann (1998).
-DOI: https://doi.org/10.1145/274363.274364 =#
+#= Polygon intersection uses Greiner and Hormann (1998):
+https://doi.org/10.1145/274363.274364 =#
 function _intersection(
     alg::FosterHormannClipping, ::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
@@ -84,11 +77,14 @@ function _intersection(
     a_list, b_list, a_idx_list = _build_ab_list(alg, T, ext_a, ext_b, _inter_delay_cross_f, _inter_delay_bounce_f; exact)
     polys = _trace_polynodes(alg, T, a_list, b_list, a_idx_list, _inter_step, poly_a, poly_b)
     if isempty(polys) # no crossing points, determine if either poly is inside the other
+        #= The contained polygon is the answer, rebuilt in whatever representation the
+        tracer would have emitted -- `polys` is already committed to that element type. =#
+        P = _fh_out_point_type(alg.manifold, poly_a, T)
         a_in_b, b_in_a = _find_non_cross_orientation(alg, a_list, b_list, ext_a, ext_b; exact)
         if a_in_b
-            push!(polys, GI.Polygon([tuples(ext_a)]))
+            push!(polys, GI.Polygon([_fh_as_ring(P, ext_a, T)]))
         elseif b_in_a
-            push!(polys, GI.Polygon([tuples(ext_b)]))
+            push!(polys, GI.Polygon([_fh_as_ring(P, ext_b, T)]))
         end
     end
     remove_idx = falses(length(polys))
@@ -103,69 +99,66 @@ function _intersection(
 end
 # # Helper functions for Intersections with Greiner and Hormann Polygon Clipping
 
-#= When marking the crossing status of a delayed crossing, the chain start point is bouncing
-when the start point is a entry point and is a crossing point when the start point is an
-exit point. The end of the chain has the opposite crossing / bouncing status. x is the 
-entry/exit status. =#
+#= A delayed crossing starts as bouncing on entry (`x`) and crossing on exit.
+Its final endpoint has the opposite classification. =#
 _inter_delay_cross_f(x) = (!x, x)
-#= When marking the crossing status of a delayed bouncing, the chain start and end points
-are crossing if the current polygon's adjacent edges are within the non-tracing polygon. If
-the edges are outside then the chain endpoints are marked as bouncing. x is a boolean
-representing if the edges are inside or outside of the polygon. =#
+#= Delayed-bounce endpoints cross if adjacent edges lie inside the other polygon
+(`x`); otherwise they bounce. =#
 _inter_delay_bounce_f(x, _) = x
 #= When tracing polygons, step forward if the most recent intersection point was an entry
 point, else step backwards where x is the entry/exit status. =#
 _inter_step(x, _) =  x ? 1 : (-1)
 
-#= Polygon with multipolygon intersection - note that all intersection regions between
-`poly_a` and any of the sub-polygons of `multipoly_b` are counted as intersection polygons.
-Unless specified with `fix_multipoly = nothing`, `multipolygon_b` will be validated using
-the given (default is `UnionIntersectingPolygons()`) correction. =#
+#= Intersect `poly_a` with each component of `multipoly_b`. Correct the multipolygon
+unless `fix_multipoly = nothing`. =#
 function _intersection(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix multipoly_b to prevent duplicated intersection regions
         multipoly_b = fix_multipoly(multipoly_b)
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, poly_a, T))}()
     for poly_b in GI.getpolygon(multipoly_b)
-        append!(polys, intersection(alg, poly_a, poly_b; target))
+        append!(polys, intersection(alg, poly_a, poly_b, T; target))
     end
     return polys
 end
 
-#= Multipolygon with polygon intersection is equivalent to taking the intersection of the
-polygon with the multipolygon and thus simply switches the order of operations and calls the
-above method. =#
-_intersection(
+#= Preserve operand order so mixed representations do not round-trip passthrough vertices. =#
+function _intersection(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.PolygonTrait, poly_b;
-    kwargs...,
-) where T = intersection(alg, poly_b, multipoly_a; target , kwargs...)
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
+) where T
+    isnothing(fix_multipoly) || (multipoly_a = fix_multipoly(multipoly_a))
+    P = _fh_out_point_type(alg.manifold, multipoly_a, T)
+    polys = _get_poly_type(T, P)[]
+    for poly_a in GI.getpolygon(multipoly_a)
+        append!(polys, intersection(alg, poly_a, poly_b, T; target))
+    end
+    return polys
+end
 
-#= Multipolygon with multipolygon intersection - note that all intersection regions between
-any sub-polygons of `multipoly_a` and any of the sub-polygons of `multipoly_b` are counted
-as intersection polygons. Unless specified with `fix_multipoly = nothing`, both 
-`multipolygon_a` and `multipolygon_b` will be validated using the given (default is
-`UnionIntersectingPolygons()`) correction. =#
+#= Intersect every pair of components. Correct both multipolygons unless
+`fix_multipoly = nothing`. =#
 function _intersection(
     alg::FosterHormannClipping, target::TraitTarget{GI.PolygonTrait}, ::Type{T},
     ::GI.MultiPolygonTrait, multipoly_a,
     ::GI.MultiPolygonTrait, multipoly_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...,
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...,
 ) where T
     if !isnothing(fix_multipoly) # Fix both multipolygons to prevent duplicated regions
         multipoly_a = fix_multipoly(multipoly_a)
         multipoly_b = fix_multipoly(multipoly_b)
         fix_multipoly = nothing
     end
-    polys = Vector{_get_poly_type(T)}()
+    polys = Vector{_get_poly_type(T, _fh_out_point_type(alg.manifold, multipoly_a, T))}()
     for poly_a in GI.getpolygon(multipoly_a)
-        append!(polys, intersection(alg, poly_a, multipoly_b; target, fix_multipoly))
+        append!(polys, intersection(alg, poly_a, multipoly_b, T; target, fix_multipoly))
     end
     return polys
 end
@@ -174,13 +167,13 @@ function _intersection(
     alg::FosterHormannClipping, ::TraitTarget{GI.MultiPolygonTrait}, ::Type{T},
     trait_a::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_a,
     trait_b::Union{GI.PolygonTrait, GI.MultiPolygonTrait}, polylike_b;
-    fix_multipoly = UnionIntersectingPolygons(), kwargs...
+    fix_multipoly = UnionIntersectingPolygons(alg, T), kwargs...
 ) where T
-    polys = _intersection(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; kwargs...)
+    polys = _intersection(alg, TraitTarget(GI.PolygonTrait()), T, trait_a, polylike_a, trait_b, polylike_b; fix_multipoly, kwargs...)
     if isnothing(fix_multipoly)
-        return GI.MultiPolygon(polys)
+        return _fh_multipolygon(polys)
     else
-        return fix_multipoly(GI.MultiPolygon(polys))
+        return fix_multipoly(_fh_multipolygon(polys))
     end
 end
 
@@ -201,6 +194,7 @@ end
 
 """
     intersection_points(geom_a, geom_b, [T::Type])
+    intersection_points(manifold::Manifold, geom_a, geom_b, [T::Type])
 
 Return a list of intersection tuple points between two geometries. If no intersection points
 exist, returns an empty list.
@@ -217,37 +211,47 @@ inter_points = GO.intersection_points(line1, line2)
 # output
 1-element Vector{Tuple{Float64, Float64}}:
  (125.58375366067548, -14.83572303404496)
+```
+
+On `Spherical()`, edges are minor great-circle arcs. Results preserve the first input's
+representation and use numeric type `T`.
+
+Spherical inputs support `NestedLoop()` and `AutoAccelerator()`; tree accelerators require
+`Planar()`.
 """
 intersection_points(geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat = intersection_points(FosterHormannClipping(Planar()), geom_a, geom_b, T)
 function intersection_points(alg::FosterHormannClipping{M, A}, geom_a, geom_b, ::Type{T} = Float64) where {M, A, T <: AbstractFloat}
     return _intersection_points(alg.manifold, alg.accelerator, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
+intersection_points(m::Manifold, geom_a, geom_b, ::Type{T} = Float64) where {T <: AbstractFloat} =
+    intersection_points(FosterHormannClipping(m), geom_a, geom_b, T)
+
 function intersection_points(m::Manifold, a::IntersectionAccelerator, geom_a, geom_b, ::Type{T} = Float64) where T <: AbstractFloat
     return _intersection_points(m, a, T, GI.trait(geom_a), geom_a, GI.trait(geom_b), geom_b)
 end
 
 
-#= Calculates the list of intersection points between two geometries, including line
-segments, line strings, linear rings, polygons, and multipolygons. =#
+# Find intersection points of segments, line strings, rings, polygons, or multipolygons.
 function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.AbstractTrait, a, ::GI.AbstractTrait, b; exact = True()) where {M <: Manifold, A <: IntersectionAccelerator, T}
     # Initialize an empty list of points
-    result = Tuple{T, T}[]
-    # Check if the geometries extents even overlap
-    Extents.intersects(GI.extent(a), GI.extent(b)) || return result
-    # Create a list of edges from the two input geometries
+    P = _fh_out_point_type(manifold, a, T)
+    result = P[]
+    # Cartesian envelopes are not valid bounds for great-circle arcs.
+    if manifold isa Planar
+        Extents.intersects(GI.extent(a), GI.extent(b)) || return result
+    end
     # edges_a, edges_b = map(sort! ∘ to_edges, (a, b))
-    # Loop over pairs of edges and add any unique intersection points to results
-    # TODO: add intersection acceleration here.
+    # Add unique intersections from candidate edge pairs.
 
     function f_on_each_maybe_intersect((a_edge, a_idx), (b_edge, b_idx))
         line_orient, intr1, intr2 = _intersection_point(manifold, T, a_edge, b_edge; exact)
         line_orient == line_out && return LoopStateMachine.Action(:continue) # use LoopStateMachine.Continue() to skip this edge - in this case it doesn't matter but you could use it to e.g. break once you found the first intersecting point.
         pt1, _ = intr1
-        push!(result, pt1)  # if not line_out, there is at least one intersection point
+        push!(result, _fh_as_point(P, pt1, T))  # if not line_out, there is at least one intersection point
         if line_orient == line_over # if line_over, there are two intersection points
             pt2, _ = intr2
-            push!(result, pt2)
+            push!(result, _fh_as_point(P, pt2, T))
         end
     end
 
@@ -268,28 +272,17 @@ function _intersection_points(manifold::M, accelerator::A, ::Type{T}, ::GI.Abstr
     returned from `_intersection_point`, but this would be different for curves vs polygons
     vs multipolygons depending on if the shape is closed. This then wouldn't allow using the
     `to_edges` functionality.  =# 
-    unique!(sort!(result))
+    unique!(sort!(result; by = Tuple))
     return result
 end
 
-#= Calculates the intersection points between two lines if they exists and the fractional
-component of each line from the initial end point to the intersection point where α is the
-fraction along (a1, a2) and β is the fraction along (b1, b2).
+#= Return the intersection class and two `(point, (α, β))` results. Fractions locate
+the point along `(a1, a2)` and `(b1, b2)`.
 
-Note that the first return is the type of intersection (line_cross, line_hinge, line_over,
-or line_out). The type of intersection determines how many intersection points there are.
-If the intersection is line_out, then there are no intersection points and the two
-intersections aren't valid and shouldn't be used. If the intersection is line_cross or
-line_hinge then the lines meet at one point and the first intersection is valid, while the
-second isn't. Finally, if the intersection is line_over, then both points are valid and they
-are the two points that define the endpoints of the overlapping region between the two
-lines.
+`line_out` has no valid points; `line_cross` and `line_hinge` use only the first.
+`line_over` uses both points as the overlap endpoints.
 
-Also note again that each intersection is a tuple of two tuples. The first is the
-intersection point (x,y) while the second is the ratio along the initial lines (α, β) for
-that point. 
-
-Calculation derivation can be found here: https://stackoverflow.com/questions/563198/ =#
+Derivation: https://stackoverflow.com/questions/563198/ =#
 function _intersection_point(manifold::M, ::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where {M <: Manifold, T}
     # Default answer for no intersection
     line_orient = line_out
@@ -329,12 +322,107 @@ end
 # TODO: deprecate this
 _intersection_point(::Type{T}, (a1, a2)::Edge, (b1, b2)::Edge; exact) where T = _intersection_point(Planar(), T, (a1, a2), (b1, b2); exact)
 
-#= If lines defined by (a1, a2) and (b1, b2) are collinear, find endpoints of overlapping
-region if they exist. This could result in three possibilities. First, there could be no
-overlapping region, in which case, the default 'no_intr_result' intersection information is
-returned. Second, the two regions could just meet at one shared endpoint, in which case it
-is a hinge intersection with one intersection point. Otherwise, it is a overlapping
-intersection defined by two of the endpoints of the line segments. =#
+#=
+Classify great-circle arcs with `_sph_arc_arc_class` and the predicate selected by `exact`. Do
+not filter by endpoint lon/lat bounds: arcs can leave those bounds.
+
+Only `line_cross` constructs a point. Other cases preserve input vertices exactly for
+`_build_b_list` endpoint matching and bitwise equality.
+
+Spherical clipping uses `UnitSphericalPoint` throughout; the lon/lat method serves other
+callers.
+=#
+const _USPEdge{T} = Tuple{UnitSpherical.UnitSphericalPoint{T}, UnitSpherical.UnitSphericalPoint{T}}
+
+_intersection_point(m::Spherical, ::Type{T}, a::_USPEdge, b::_USPEdge; exact) where {T} =
+    _sph_intersection_point(m, T, a, b; exact)
+_intersection_point(m::Spherical, ::Type{T}, a::Edge, b::Edge; exact) where {T} =
+    _sph_intersection_point(m, T, a, b; exact)
+
+#-- Give a computed crossing back in the representation the edge arrived in.
+_as_ingested(x, ::Tuple, ::Type{T}) where {T} = _sph_lonlat(T, x)
+_as_ingested(x, ::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = UnitSpherical.UnitSphericalPoint{T}(x)
+
+function _sph_intersection_point(m::Spherical, ::Type{T}, (a1, a2), (b1, b2); exact) where {T}
+    #= The sentinel point is never read: `line_out` carries no point, and `intr2` is only
+    destructured on the `line_over` branch, which fills it. Reusing `a1` keeps the returned
+    tuple concretely typed in whichever representation came in. =#
+    zero_intr = (a1, (zero(T), zero(T)))
+    no_intr_result = (line_out, zero_intr, zero_intr)
+
+    A0 = _spherical_kernel_point(a1); A1 = _spherical_kernel_point(a2)
+    B0 = _spherical_kernel_point(b1); B1 = _spherical_kernel_point(b2)
+
+    #= Clipping asks for the exact predicate: the banded `spherical_orient`'s eps*16 window
+    is wider than a cell-scale determinant, so a genuine crossing reads as a hinge, the
+    entry/exit alternation collapses, and the tracer emits the whole subject ring. =#
+    orient, a0_on_b, a1_on_b, b0_on_a, b1_on_a = _sph_arc_arc_class(A0, A1, B0, B1, exact)
+    orient === line_out && return no_intr_result
+
+    if orient === line_cross
+        x = _arc_crossing_point(A0, A1, B0, B1)
+        #-- a proper crossing cannot produce parallel normals, but guard anyway
+        x === nothing && return no_intr_result
+        α = _sph_arc_frac(T, A0, A1, x)
+        β = _sph_arc_frac(T, B0, B1, x)
+        return line_cross, (_as_ingested(x, a1, T), (α, β)), zero_intr
+    end
+
+    #= Both remaining cases meet at named endpoints. The four candidates are built up front
+    as one homogeneous, stack-allocated tuple, so this costs nothing. =#
+    cands = (
+        (a0_on_b, _tuple_point(a1, T), zero(T), _sph_arc_frac(T, B0, B1, A0)),
+        (a1_on_b, _tuple_point(a2, T), one(T),  _sph_arc_frac(T, B0, B1, A1)),
+        (b0_on_a, _tuple_point(b1, T), _sph_arc_frac(T, A0, A1, B0), zero(T)),
+        (b1_on_a, _tuple_point(b2, T), _sph_arc_frac(T, A0, A1, B1), one(T)),
+    )
+
+    if orient === line_hinge
+        #= One distinct meeting point, possibly named by several incidences (a shared
+        vertex is on both arcs and is reported four times). Any of them is that point. =#
+        @inbounds for k in 1:4
+            on, p, α, β = cands[k]
+            on && return line_hinge, (p, (α, β)), zero_intr
+        end
+        return no_intr_result
+    end
+
+    #= For `line_over`, return the extreme incident endpoints ordered along `a`,
+    matching the planar `intr1`/`intr2` convention. =#
+    lo_k, hi_k = 0, 0
+    lo_α, hi_α = T(Inf), T(-Inf)
+    @inbounds for k in 1:4
+        on, _, α, _ = cands[k]
+        on || continue
+        if α < lo_α; lo_α = α; lo_k = k end
+        if α > hi_α; hi_α = α; hi_k = k end
+    end
+    (lo_k == 0 || lo_k == hi_k) && return no_intr_result
+    @inbounds begin
+        _, p_lo, α_lo, β_lo = cands[lo_k]
+        _, p_hi, α_hi, β_hi = cands[hi_k]
+    end
+    return line_over, (p_lo, (α_lo, β_lo)), (p_hi, (α_hi, β_hi))
+end
+
+#= Arc-length fraction of `x` along `p0 → p1`, clamped to `[0, 1]`.
+Endpoint identity checks preserve exact fractions 0 and 1, including zero-length arcs.
+Rounded angle quotients can otherwise assign a shared endpoint twice.
+
+Use `atan(‖a × b‖, a ⋅ b)` to retain precision at small angles. =#
+@inline function _sph_arc_frac(::Type{T}, p0, p1, x) where {T}
+    x == p0 && return zero(T)
+    x == p1 && return one(T)
+    total = atan(norm(cross(p0, p1)), dot(p0, p1))
+    total == 0 && return zero(T)
+    part = atan(norm(cross(p0, x)), dot(p0, x))
+    return T(clamp(part / total, 0, 1))
+end
+
+@inline _sph_lonlat(::Type{T}, u) where {T} = ((ll = _usp_to_lonlat(u)); (T(ll[1]), T(ll[2])))
+
+#= Classify collinear segments: return `no_intr_result` if disjoint, a hinge for
+one shared endpoint, or an overlap with both endpoints of the shared interval. =#
 function _find_collinear_intersection(manifold::M, ::Type{T}, a1, a2, b1, b2, a_ext, b_ext, no_intr_result) where {M <: Manifold, T}
     # Define default return for no intersection points
     line_orient, intr1, intr2 = no_intr_result
@@ -402,11 +490,8 @@ _set_ab_collinear_intrs(::Type{T}, a_pt, b_pt, a_pt_α, b_pt_β, a1, b1, a_dist,
         (_tuple_point(b_pt, T), (_clamped_frac(distance(b_pt, a1, T), a_dist), b_pt_β))
     )
 
-#= If lines defined by (a1, a2) and (b1, b2) are just touching at one of those endpoints and
-are not collinear, then they form a hinge, with just that one shared intersection point.
-Point equality is checked before segment orientation to have maximal accurary on fractions
-to avoid floating point errors. If the points are not equal, we know that the hinge does not
-take place at an endpoint and the fractions must be between 0 or 1 (exclusive). =#
+#= Non-collinear segments meeting at an endpoint form a hinge. Check point equality
+first to preserve exact endpoint fractions; interior fractions stay strictly in (0, 1). =#
 function _find_hinge_intersection(::Type{T}, a1, a2, b1, b2, a1_orient, a2_orient, b1_orient) where T
     pt, α, β = if equals(a1, b1)
         _tuple_point(a1, T), zero(T), zero(T)
@@ -432,15 +517,9 @@ function _find_hinge_intersection(::Type{T}, a1, a2, b1, b2, a1_orient, a2_orien
     return pt, (α, β)
 end
 
-#= If lines defined by (a1, a2) and (b1, b2) meet at one point that is not an endpoint of
-either segment, they form a crossing intersection with a singular intersection point. That 
-point is calculated by finding the fractional distance along each segment the point occurs
-at (α, β). If the point is too close to an endpoint to be distinct, the point shares a value
-with the endpoint, but with a non-zero and non-one fractional value. If the intersection
-point calculated is outside of the envelope of the two segments due to floating point error,
-it is set to the endpoint of the two segments that is closest to the other segment.
-Regardless of point value, we know that it does not actually occur at an endpoint so the
-fractions must be between 0 or 1 (exclusive). =#
+#= Compute a proper crossing from segment fractions `(α, β)`, strictly in (0, 1).
+The rounded point may coincide with an endpoint. If it leaves the segment envelope,
+use the endpoint nearest the other segment while retaining interior fractions. =#
 function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where T
     # First line runs from a to a + Δa
     (a1x, a1y), (a2x, a2y) = _tuple_point(a1, T), _tuple_point(a2, T)
@@ -456,12 +535,9 @@ function _find_cross_intersection(::Type{T}, a1, a2, b1, b2, a_ext, b_ext) where
     α = _clamped_frac(Δbax * Δby - Δbay * Δbx, a_cross_b, eps(T))
     β = _clamped_frac(Δbax * Δay - Δbay * Δax, a_cross_b, eps(T))
 
-    #= Intersection will be where a1 + α * Δa = b1 + β * Δb. However, due to floating point
-    inaccuracies, α and β calculations may yield different intersection points. Average
-    both points together to minimize difference from real value, as long as segment isn't 
-    vertical or horizontal as this will almost certainly lead to the point being outside the
-    envelope due to floating point error. Also note that floating point limitations could
-    make intersection be endpoint if α≈0 or α≈1.=#
+    #= Average the points from `a1 + α * Δa` and `b1 + β * Δb` to reduce rounding error.
+    Preserve horizontal/vertical coordinates to stay inside the envelope. Rounding can
+    place the result at an endpoint even when its fraction is interior. =#
     x = if Δax == 0
         a1x
     elseif Δbx == 0

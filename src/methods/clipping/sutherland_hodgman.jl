@@ -22,6 +22,15 @@ Polygons with clockwise winding will produce incorrect results (typically a dege
 polygon). Use `GO.fix(geom; corrections=[GO.ClosedRing(), GO.GeometryCorrection()])` or
 manually reverse the coordinates if your input has the wrong winding order.
 
+Sidedness is decided with `UnitSpherical.spherical_orient`, which answers `0` for any point
+within roughly `32 * eps` radians of the great circle it is judged against. Two edges closer
+than that are therefore indistinguishable from coincident ones.
+
+Pass `exact = True()` to `intersection` or `intersection_area` to decide sidedness with
+`UnitSpherical.exact_spherical_orient` instead, which has no tolerance band. That resolves
+displacements this default cannot, and costs roughly 20% throughput on cell-scale polygons.
+The `Planar()` path is unaffected by either.
+
 # Example
 
 ```julia
@@ -111,7 +120,7 @@ function intersection(
         alg, T,
         GI.trait(geom_a), geom_a,
         GI.trait(geom_b), geom_b;
-        cache
+        cache, kwargs...
     )
 end
 
@@ -152,7 +161,8 @@ function _intersection_sutherland_hodgman(
     ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
-    cache::Union{Nothing, SutherlandHodgmanCache}=nothing
+    cache::Union{Nothing, SutherlandHodgmanCache}=nothing,
+    kwargs...
 ) where {T}
     cache = isnothing(cache) ? SutherlandHodgmanCache(Planar(), T) : _sh_check_cache(cache, Tuple{T,T})
     buf_in = _sh_clip_planar!(cache, poly_a, poly_b, T)
@@ -231,13 +241,14 @@ end
 # Point in convex spherical polygon - true if point is on the left of all edges
 function _point_in_convex_spherical_polygon(
     point::UnitSpherical.UnitSphericalPoint,
-    polygon_points::Vector{<:UnitSpherical.UnitSphericalPoint}
-)
+    polygon_points::Vector{<:UnitSpherical.UnitSphericalPoint},
+    orient::O = UnitSpherical.spherical_orient,
+) where {O}
     n = length(polygon_points)
     for i in 1:n
         edge_start = polygon_points[i]
         edge_end = polygon_points[mod1(i + 1, n)]
-        if UnitSpherical.spherical_orient(edge_start, edge_end, point) < 0
+        if orient(edge_start, edge_end, point) < 0
             return false
         end
     end
@@ -300,21 +311,22 @@ function _sh_clip_to_edge_spherical!(
     input::Vector{UnitSpherical.UnitSphericalPoint{T}},
     edge_start::UnitSpherical.UnitSphericalPoint,
     edge_end::UnitSpherical.UnitSphericalPoint,
-    ::Type{T}
-) where T
+    ::Type{T},
+    orient::O = UnitSpherical.spherical_orient,
+) where {T, O}
     empty!(output)
     n = length(input)
     n == 0 && return output
 
     # Track actual orient values to handle edge cases (orient=0 means exactly on the edge)
-    current_orient = UnitSpherical.spherical_orient(edge_start, edge_end, input[1])
+    current_orient = orient(edge_start, edge_end, input[1])
 
     for i in 1:n
         current = input[i]
         next_idx = mod1(i + 1, n)
         next_pt = input[next_idx]
 
-        next_orient = UnitSpherical.spherical_orient(edge_start, edge_end, next_pt)
+        next_orient = orient(edge_start, edge_end, next_pt)
         current_inside = current_orient >= 0
         next_inside = next_orient >= 0
 
@@ -348,7 +360,8 @@ end
 # Clip `poly_a` against every edge of `poly_b` on the sphere. Returns the cache buffer of
 # surviving vertices - which is the clip polygon itself when the subject contains it
 # entirely, and empty when the two are disjoint. Fewer than 3 points means no area.
-function _sh_clip_spherical!(cache::SutherlandHodgmanCache, poly_a, poly_b, ::Type{T}) where {T}
+function _sh_clip_spherical!(cache::SutherlandHodgmanCache, poly_a, poly_b, ::Type{T},
+        orient::O = UnitSpherical.spherical_orient) where {T, O}
     ring_a = GI.getexterior(poly_a)
     ring_b = GI.getexterior(poly_b)
 
@@ -395,14 +408,14 @@ function _sh_clip_spherical!(cache::SutherlandHodgmanCache, poly_a, poly_b, ::Ty
         edge_end = clip_points[mod1(i + 1, n_clip)]
         # Skip degenerate edges (duplicate vertices)
         edge_start == edge_end && continue
-        _sh_clip_to_edge_spherical!(buf_out, buf_in, edge_start, edge_end, T)
+        _sh_clip_to_edge_spherical!(buf_out, buf_in, edge_start, edge_end, T, orient)
         buf_in, buf_out = buf_out, buf_in
     end
 
     # Empty result - the clip polygon may still be fully inside the original subject.
     # "Fully inside" needs EVERY clip vertex inside the subject, not just the first:
     if isempty(buf_in) && !isempty(clip_points) &&
-       all(p -> _point_in_convex_spherical_polygon(p, original_subject), clip_points)
+       all(p -> _point_in_convex_spherical_polygon(p, original_subject, orient), clip_points)
         return clip_points
     end
     return buf_in
@@ -414,10 +427,12 @@ function _intersection_sutherland_hodgman(
     ::Type{T},
     ::GI.PolygonTrait, poly_a,
     ::GI.PolygonTrait, poly_b;
-    cache::Union{Nothing, SutherlandHodgmanCache}=nothing
+    cache::Union{Nothing, SutherlandHodgmanCache}=nothing,
+    exact = False(),
+    kwargs...
 ) where {F, T}
     cache = isnothing(cache) ? SutherlandHodgmanCache(alg.manifold, T) : _sh_check_cache(cache, UnitSpherical.UnitSphericalPoint{T})
-    pts = _sh_clip_spherical!(cache, poly_a, poly_b, T)
+    pts = _sh_clip_spherical!(cache, poly_a, poly_b, T, _spherical_orient_for(booltype(exact)))
 
     # 1-2 points can't form a valid ring (disjoint polygons, or adjacent ones sharing only
     # an edge or corner) - return a degenerate polygon with zero area

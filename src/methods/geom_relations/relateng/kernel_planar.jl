@@ -331,6 +331,12 @@ end
 # node keys its defining pair in `(pt, a1)`/`(b0, b1)`.
 _exact_crossing_point(k::NodeKey) = _exact_crossing_point(k.pt, k.a1, k.b0, k.b1)
 
+# Representative coordinate for node location.
+function _crossing_locate_point(::Planar, key::NodeKey)
+    xr, yr = _exact_crossing_point(key)
+    return (Float64(xr), Float64(yr))
+end
+
 _exact_node_point(k::NodeKey) = k.is_crossing ?
     _exact_crossing_point(k) :
     (Rational{BigInt}(GI.x(k.pt)), Rational{BigInt}(GI.y(k.pt)))

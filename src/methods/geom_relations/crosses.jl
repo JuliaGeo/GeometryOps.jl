@@ -33,6 +33,14 @@ This is equivalent to `x -> crosses(x, g1)`.
 """
 crosses(g1) = Base.Fix2(crosses, g1)
 
+#= `crosses` still runs on its own planar helpers rather than the shared
+processors (see the `TODO` below), so it has no spherical implementation.
+Answering a `Spherical()` call with the planar result would be silently wrong,
+so it errors instead. =#
+crosses(::Planar, g1, g2) = crosses(g1, g2)
+crosses(::AutoManifold, g1, g2) = crosses(g1, g2)
+crosses(m::Manifold, g1, g2) = _throw_no_manifold_predicate(crosses, m)
+
 
 
 function multipoint_crosses_line(geom1, geom2)

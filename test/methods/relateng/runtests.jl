@@ -17,6 +17,8 @@ using SafeTestsets
 @safetestset "RelateNG engine" begin include("relate_ng.jl") end
 @safetestset "JTS XML suite" begin include("xml_suite.jl") end
 @safetestset "Spherical relate end-to-end" begin include("spherical_end_to_end.jl") end
+@safetestset "Spherical crossing node location" begin include("spherical_crossing_nodes.jl") end
+@safetestset "Spherical preparation reuse" begin include("preparation_reuse.jl") end
 @safetestset "LibGEOS differential fuzz" begin include("fuzz.jl") end
 @safetestset "Allocations and type stability" begin include("allocations.jl") end
 # Further files appended here as tasks land:

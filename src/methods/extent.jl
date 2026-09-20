@@ -65,14 +65,15 @@ end
 _extent(::Planar, trait, geom, ::Type{T}) where T = GI.extent(geom)
 
 _extent(::Spherical, ::GI.PointTrait, geom, ::Type{T}) where T =
-    GI.extent(UnitSpherical.UnitSphericalPoint(geom))
+    GI.extent(UnitSpherical.UnitSphericalPoint(_tuple_point(geom, T)))
 _extent(m::Spherical, ::Union{GI.LineTrait, GI.LineStringTrait}, geom, ::Type{T}) where T =
     mapreduce(GI.extent, Extents.union, lazy_edgelist(m, geom, T))
 # rings are regions: put the denoted region on the ring's left — a flip of
 # a copy for a CW ring in the default (enclosed-region) mode, a no-op under
 # `oriented = true` — since `_spherical_region_extent` bounds the left region
 function _extent(m::Spherical, ::GI.LinearRingTrait, geom, ::Type{T}) where T
-    pts = _orient_ring(m, UnitSpherical.to_unit_spherical_points(geom), false, false;
+    pts = [UnitSpherical.UnitSphericalPoint(_tuple_point(p, T)) for p in GI.getpoint(geom)]
+    pts = _orient_ring(m, pts, false, false;
         exact = True())
     return _spherical_region_extent(pts)
 end
@@ -84,11 +85,18 @@ _extent(m::Spherical, ::GI.AbstractGeometryTrait, geom, ::Type{T}) where T =
     mapreduce(g -> Extents.extent(m, g, T), Extents.union, GI.getgeom(geom))
 
 function _spherical_region_extent(pts::Vector{<:UnitSpherical.UnitSphericalPoint})
-    n = length(pts)
-    n > 1 && pts[end] == pts[1] && (n -= 1)
+    nstored = length(pts)
+    # Assign once: the reduction closure must capture an Int, not a boxed local.
+    n = (nstored > 1 && pts[end] == pts[1]) ? nstored - 1 : nstored
     ext = mapreduce(Extents.union, 1:n) do i
         UnitSpherical.spherical_arc_extent(pts[i], pts[mod1(i + 1, n)])
     end
+    return _spherical_region_extent(pts, n, ext)
+end
+
+# Reuse boundary bounds computed during local preparation; enclosed axes must
+# still be tested, since a boundary box alone cannot bound a spherical region.
+function _spherical_region_extent(pts::Vector{<:UnitSpherical.UnitSphericalPoint}, n::Int, ext)
     n < 3 && return ext
 
     #=

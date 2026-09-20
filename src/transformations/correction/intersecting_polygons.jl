@@ -3,27 +3,14 @@
 export UnionIntersectingPolygons
 
 #=
-If the sub-polygons of a multipolygon are intersecting, this makes them invalid according to
-specification. Each sub-polygon of a multipolygon being disjoint (other than by a single
-point) is a requirement for a valid multipolygon. However, different libraries may achieve
-this in different ways. 
-
-For example, taking the union of all sub-polygons of a multipolygon will create a new
-multipolygon where each sub-polygon is disjoint. This can be done with the
-`UnionIntersectingPolygons` correction.
-
-The reason this operates on a multipolygon level is that it is easy for users to mistakenly
-create multipolygon's that overlap, which can then be detrimental to polygon clipping
-performance and even create wrong answers.
+Multipolygon components must have disjoint interiors and may meet only at isolated points.
+`UnionIntersectingPolygons` merges overlaps while preserving the covered area.
 =#
 
 # ## Example
 #=
 
-Multipolygon providers may not check that the polygons making up their multipolygons do not
-intersect, which makes them invalid according to the specification.
-
-For example, the following multipolygon is not valid:
+This multipolygon is invalid because it repeats the same polygon:
 
 ```@example union-multipoly
 import GeoInterface as GI
@@ -31,35 +18,44 @@ polygon = GI.Polygon([[(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0), (0.0, 0.0
 multipolygon = GI.MultiPolygon([polygon, polygon])
 ```
 
-given that the two sub-polygons are the exact same shape.
+Apply the correction:
 
 ```@example union-multipoly
 import GeometryOps as GO
 GO.fix(multipolygon, corrections = [GO.UnionIntersectingPolygons()])
 ```
 
-You can see that the the multipolygon now only contains one sub-polygon, rather than the two
-identical ones provided.
+The corrected multipolygon contains one component.
 =#
 
 # ## Implementation
 
 """
-    UnionIntersectingPolygons() <: GeometryCorrection
+    UnionIntersectingPolygons([manifold = Planar()], [T = Float64]) <: GeometryCorrection
+    UnionIntersectingPolygons(algorithm::FosterHormannClipping, [T = Float64])
 
-This correction ensures that the polygon's included in a multipolygon aren't intersecting.
-If any polygon's are intersecting, they will be combined through the union operation to
-create a unique set of disjoint (other than potentially connections by a single point)
-polygons covering the same area.
+Merge intersecting components with union, preserving the covered area. Result components are
+disjoint except for possible point contacts.
+
+Default clipping corrections inherit the caller's manifold, algorithm, and numeric type. An
+explicitly supplied correction retains its own settings.
 
 See also [`GeometryCorrection`](@ref).
 """
-struct UnionIntersectingPolygons <: GeometryCorrection end
+struct UnionIntersectingPolygons{A <: FosterHormannClipping, T <: AbstractFloat} <: GeometryCorrection
+    algorithm::A
+end
+UnionIntersectingPolygons(alg::FosterHormannClipping, ::Type{T} = Float64) where {T <: AbstractFloat} =
+    UnionIntersectingPolygons{typeof(alg), T}(alg)
+UnionIntersectingPolygons(m::Manifold = Planar(), ::Type{T} = Float64) where {T <: AbstractFloat} =
+    UnionIntersectingPolygons(FosterHormannClipping(m), T)
 
 application_level(::UnionIntersectingPolygons) = GI.MultiPolygonTrait
 
-function (::UnionIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
-    union_multipoly = tuples(multipoly)
+function (correction::UnionIntersectingPolygons{A, T})(::GI.MultiPolygonTrait, multipoly) where {A, T}
+    alg = correction.algorithm
+    P = _fh_out_point_type(alg.manifold, multipoly, T)
+    union_multipoly = _fh_multipolygon(_get_poly_type(T, P)[_fh_as_poly(P, poly, T) for poly in GI.getpolygon(multipoly)]; crs = GI.crs(multipoly))
     n_polys = GI.npolygon(multipoly)
     if n_polys > 1
         keep_idx = trues(n_polys)  # keep track of sub-polygons to remove
@@ -71,8 +67,8 @@ function (::UnionIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
                 poly_disjoint = true  # assume current polygon is disjoint from others
                 for (next_idx, _) in Iterators.filter(last, Iterators.drop(Iterators.enumerate(keep_idx), curr_idx))
                     next_poly = union_multipoly.geom[next_idx]
-                    if intersects(curr_poly, next_poly)  # if two polygons intersect
-                        new_polys = union(curr_poly, next_poly; target = GI.PolygonTrait())
+                    if intersects(alg.manifold, curr_poly, next_poly)  # if two polygons intersect
+                        new_polys = union(alg, curr_poly, next_poly, T; target = GI.PolygonTrait())
                         n_new_polys = length(new_polys)
                         if n_new_polys == 1  # if polygons combined
                             poly_disjoint = false
@@ -90,19 +86,28 @@ function (::UnionIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
 end
 
 """
-    DiffIntersectingPolygons() <: GeometryCorrection
-This correction ensures that the polygons included in a multipolygon aren't intersecting.
-If any polygon's are intersecting, they will be made nonintersecting through the [`difference`](@ref) 
-operation to create a unique set of disjoint (other than potentially connections by a single point)
-polygons covering the same area.
+    DiffIntersectingPolygons([manifold = Planar()], [T = Float64]) <: GeometryCorrection
+    DiffIntersectingPolygons(algorithm::FosterHormannClipping, [T = Float64])
+
+Remove component overlaps with [`difference`](@ref), preserving the covered area. Result
+components are disjoint except for possible point contacts.
+
 See also [`GeometryCorrection`](@ref), [`UnionIntersectingPolygons`](@ref).
 """
-struct DiffIntersectingPolygons <: GeometryCorrection end
+struct DiffIntersectingPolygons{A <: FosterHormannClipping, T <: AbstractFloat} <: GeometryCorrection
+    algorithm::A
+end
+DiffIntersectingPolygons(alg::FosterHormannClipping, ::Type{T} = Float64) where {T <: AbstractFloat} =
+    DiffIntersectingPolygons{typeof(alg), T}(alg)
+DiffIntersectingPolygons(m::Manifold = Planar(), ::Type{T} = Float64) where {T <: AbstractFloat} =
+    DiffIntersectingPolygons(FosterHormannClipping(m), T)
 
 application_level(::DiffIntersectingPolygons) = GI.MultiPolygonTrait
 
-function (::DiffIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
-    diff_multipoly = tuples(multipoly)
+function (correction::DiffIntersectingPolygons{A, T})(::GI.MultiPolygonTrait, multipoly) where {A, T}
+    alg = correction.algorithm
+    P = _fh_out_point_type(alg.manifold, multipoly, T)
+    diff_multipoly = _fh_multipolygon(_get_poly_type(T, P)[_fh_as_poly(P, poly, T) for poly in GI.getpolygon(multipoly)]; crs = GI.crs(multipoly))
     n_starting_polys = GI.npolygon(multipoly)
     n_polys = n_starting_polys
     if n_polys > 1
@@ -118,8 +123,8 @@ function (::DiffIntersectingPolygons)(::GI.MultiPolygonTrait, multipoly)
                 for curr_piece_idx in Iterators.flatten((curr_idx:curr_idx, curr_pieces_added))
                     !keep_idx[curr_piece_idx] && continue
                     curr_poly = diff_multipoly.geom[curr_piece_idx]
-                    if intersects(curr_poly, next_poly)  # if two polygons intersect
-                        new_polys = difference(curr_poly, next_poly; target = GI.PolygonTrait())
+                    if intersects(alg.manifold, curr_poly, next_poly)  # if two polygons intersect
+                        new_polys = difference(alg, curr_poly, next_poly, T; target = GI.PolygonTrait())
                         n_new_pieces = length(new_polys) - 1
                         if n_new_pieces < 0  # current polygon is covered by next_polygon
                             keep_idx[curr_piece_idx] = false

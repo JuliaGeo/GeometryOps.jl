@@ -34,6 +34,7 @@ end
 @safetestset "Convex Hull" begin include("methods/convex_hull.jl") end
 @safetestset "Voronoi" begin include("methods/voronoi.jl") end
 @safetestset "DE-9IM Geom Relations" begin include("methods/geom_relations.jl") end
+@safetestset "DE-9IM Geom Relations (spherical)" begin include("methods/geom_relations_spherical.jl") end
 @safetestset "RelateNG" begin include("methods/relateng/runtests.jl") end
 @safetestset "Distance" begin include("methods/distance.jl") end
 @safetestset "Equals" begin include("methods/equals.jl") end
@@ -46,6 +47,9 @@ end
 @safetestset "Intersection Point" begin include("methods/clipping/intersection_points.jl") end
 @safetestset "Polygon Clipping" begin include("methods/clipping/polygon_clipping.jl") end
 @safetestset "Sutherland-Hodgman" begin include("methods/clipping/sutherland_hodgman.jl") end
+@safetestset "Clipping manifold passthrough" begin include("methods/clipping/manifold_passthrough.jl") end
+@safetestset "Shared-boundary enclave" begin include("methods/clipping/shared_boundary_enclave.jl") end
+@safetestset "Spherical Foster-Hormann" begin include("methods/clipping/spherical_foster_hormann.jl") end
 @safetestset "OverlayNG noding" begin include("methods/clipping/overlayng/noding.jl") end
 @safetestset "OverlayNG graph" begin include("methods/clipping/overlayng/overlay_graph.jl") end
 @safetestset "OverlayNG engine" begin include("methods/clipping/overlayng/overlay_ng.jl") end

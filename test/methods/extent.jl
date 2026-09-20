@@ -21,6 +21,20 @@ end
     m = GO.Spherical()
     z = 0.9; s = sqrt(1 - z^2)
 
+    if VERSION >= v"1.12"
+        @testset "Region extent inference with implicit and explicit closure" begin
+            pts = polar_ring(z, 8)
+            closed = vcat(pts, [first(pts)])
+            ext = @inferred GO._spherical_region_extent(pts)
+            @test (@inferred GO._spherical_region_extent(closed)) == ext
+            @test ext.Z[2] == 1.0
+            # The ring reduction feeds both public extents and relation bounds.
+            ring = GI.LinearRing(pts)
+            @test (@inferred GO.extent(m, ring)) == ext
+            @test (@inferred GO.rk_interaction_bounds(m, ring)) isa Extents.Extent{(:X, :Y, :Z)}
+        end
+    end
+
     @testset "CCW polar cap ring encloses the pole" begin
         ext = GO.extent(m, GI.LinearRing(polar_ring(z, 8)))
         @test ext isa Extents.Extent{(:X, :Y, :Z)}
@@ -42,6 +56,13 @@ end
         ext = GO.extent(m, cap)
         @test ext.Z[2] == 1
         @test ext.Z[1] ≈ sind(60) atol = 1e-12
+    end
+
+    @testset "Non-Float64 coordinates are converted to T" begin
+        pts32 = [(5f0, 5f0), (15f0, 5f0), (15f0, 15f0), (5f0, 15f0), (5f0, 5f0)]
+        pts64 = [Float64.(p) for p in pts32]
+        @test GO.extent(m, GI.Polygon([pts32])) == GO.extent(m, GI.Polygon([pts64]))
+        @test GO.extent(m, GI.Point(5f0, 15f0)) == GO.extent(m, GI.Point(5.0, 15.0))
     end
 
     @testset "No enclosure: region extent equals curve extent" begin

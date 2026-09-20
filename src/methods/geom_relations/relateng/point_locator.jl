@@ -279,11 +279,9 @@ function RelatePointLocator(m::Manifold, geom; exact,
     lines = Any[]
     polygons = Any[]
     _extract_elements!(m, points, lines, polygons, geom)
-    # Narrow the overwhelmingly common homogeneous case after the recursive
-    # traversal; `map` computes a common element type from the values and keeps
-    # heterogeneous collections widened as needed.
-    lines = map(identity, lines)
-    polygons = map(identity, polygons)
+    # Recover concrete element types for homogeneous collections.
+    lines = identity.(lines)
+    polygons = identity.(polygons)
     # Java caches `isEmpty = geom.isEmpty()` (recursive emptiness); since
     # `extractElements` skips empty elements, the input is recursively empty
     # iff nothing was extracted.

@@ -158,6 +158,52 @@ function _relate_cache_extents(m::Manifold, trait::GI.AbstractCurveTrait, line)
         extent = rk_interaction_bounds(m, line), crs = GI.crs(line))
 end
 
+# Validation and bounds share the canonical ingest conversion. Shell points
+# survive only within this preparation call; exact point-location coordinates
+# continue to be read independently by `_ring_kernel_pts`.
+function _relate_cache_extents(m::Spherical, trait::GI.AbstractCurveTrait, line)
+    (GI.isempty(line) || _reusable_stored_extent(m, line)) && return line
+    ext = _sph_validated_curve_extent(line, nothing)
+    return GI.geointerface_geomtype(trait)(line;
+        extent = _pad_bounds(ext), crs = GI.crs(line))
+end
+
+function _relate_cache_extents(m::Spherical, trait::GI.AbstractPolygonTrait, poly)
+    GI.isempty(poly) && return poly
+    if _reusable_stored_extent(m, poly) && all(r -> GI.isempty(r) || _reusable_stored_extent(m, r), GI.getring(poly))
+        return poly
+    end
+    shell = GI.getexterior(poly)
+    # A reused shell has no transient coordinate metadata. Keep the established
+    # region computation in that case, including its treatment of stored boxes.
+    if GI.isempty(shell) || _reusable_stored_extent(m, shell) || _reusable_stored_extent(m, poly) ||
+            any(r -> _reusable_stored_extent(m, r), GI.gethole(poly))
+        rings = [_relate_cache_extents(m, GI.trait(r), r) for r in GI.getring(poly)]
+        ext = _polygon_cache_extent(m, poly, rings)
+        ext === nothing && return poly
+        return GI.geointerface_geomtype(trait)(rings; extent = ext, crs = GI.crs(poly))
+    end
+    pts = Vector{UnitSpherical.UnitSphericalPoint{Float64}}()
+    sizehint!(pts, GI.npoint(shell))
+    boundary = _sph_validated_curve_extent(shell, pts)
+    cached_shell = GI.geointerface_geomtype(GI.trait(shell))(shell;
+        extent = _pad_bounds(boundary), crs = GI.crs(shell))
+    rings = [cached_shell; [_relate_cache_extents(m, GI.trait(r), r) for r in GI.gethole(poly)]]
+    nstored = length(pts)
+    n = (nstored > 1 && pts[end] == pts[1]) ? nstored - 1 : nstored
+    # Region semantics include the implicit closing arc even for an open ring.
+    boundary = Extents.union(boundary, UnitSpherical.spherical_arc_extent(pts[n], pts[1]))
+    pts = _orient_ring(m, pts, false, false; exact = True())
+    ext = _spherical_region_extent(pts, n, boundary)
+    for hole in Iterators.drop(rings, 1)
+        GI.isempty(hole) && continue
+        # Cached ring bounds are already padded; padding once more below is
+        # conservative and avoids a second coordinate/arc scan of each hole.
+        ext = Extents.union(ext, rk_interaction_bounds(m, hole))
+    end
+    return GI.geointerface_geomtype(trait)(rings; extent = _pad_bounds(ext), crs = GI.crs(poly))
+end
+
 function _relate_cache_extents(m::Manifold, trait::GI.AbstractPolygonTrait, poly)
     GI.isempty(poly) && return poly
     if _reusable_stored_extent(m, poly) && all(r -> GI.isempty(r) || _reusable_stored_extent(m, r), GI.getring(poly))

@@ -259,21 +259,53 @@ end
         # Create two caps that intersect
         cap1 = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), π/4)
         cap2 = SphericalCap(UnitSphericalPoint(1/√2, 1/√2, 0.0), π/4)
-        @test UnitSpherical._intersects(cap1, cap2)
-        @test UnitSpherical._intersects(cap2, cap1)
+        @test Extents.intersects(cap1, cap2)
+        @test Extents.intersects(cap2, cap1)
         @test !UnitSpherical._disjoint(cap1, cap2)
 
         # Create two caps that don't intersect
         cap3 = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), π/8)
         cap4 = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), π/8)
-        @test !UnitSpherical._intersects(cap3, cap4)
+        @test !Extents.intersects(cap3, cap4)
         @test UnitSpherical._disjoint(cap3, cap4)
 
         # Test containment
         big_cap = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), π/2)
         small_cap = SphericalCap(UnitSphericalPoint(1/√2, 1/√2, 0.0), π/4)
-        @test UnitSpherical._contains(big_cap, small_cap)
-        @test !UnitSpherical._contains(small_cap, big_cap)
+        @test Extents.contains(big_cap, small_cap)
+        @test Extents.within(small_cap, big_cap)
+        @test Extents.contains(big_cap, small_cap; strict=true)
+        @test !Extents.contains(small_cap, big_cap)
+        @test !Extents.within(big_cap, small_cap)
+    end
+
+    @testset "ULP-near contact and coincident centres" begin
+        centre = UnitSphericalPoint(1.0, 0.0, 0.0)
+        for θ in (1e-10, 0.75, π / 2)
+            other = UnitSphericalPoint(cos(θ), sin(θ), 0.0)
+            contact = spherical_distance(centre, other)
+            pointcap = SphericalCap(other, 0.0)
+            @test !Extents.intersects(SphericalCap(centre, prevfloat(contact)), pointcap)
+            @test Extents.intersects(SphericalCap(centre, contact), pointcap)
+            @test Extents.intersects(SphericalCap(centre, nextfloat(contact)), pointcap)
+        end
+
+        pointcap = SphericalCap(centre, 0.0)
+        same = SphericalCap(centre, 0.0)
+        wider = SphericalCap(centre, 0.25)
+        @test Extents.intersects(pointcap, same)
+        @test Extents.contains(pointcap, same)
+        @test Extents.contains(wider, pointcap)
+        @test !Extents.contains(pointcap, wider)
+        @test Extents.union(pointcap, same) === pointcap
+        @test Extents.union(wider, pointcap) === wider
+        @test Extents.union(pointcap, wider) === wider
+        @test Extents.union(pointcap, wider; strict=true) === wider
+
+        whole = SphericalCap(centre, π)
+        antipode = UnitSphericalPoint(-1.0, 0.0, 0.0)
+        @test UnitSpherical._contains(whole, antipode)
+        @test Extents.contains(whole, SphericalCap(antipode, π / 3))
     end
 
     @testset "Circumcenter and circumradius" begin
@@ -410,21 +442,53 @@ end
         end
     end
 
-    @testset "Merging of SphericalCaps" begin
+    @testset "Union and growth of SphericalCaps" begin
         function test_merge(p1, p2, r1, r2, pmerged, rmerged)
             r1 = deg2rad(r1)
             r2 = deg2rad(r2)
             cap1 = SphericalCap(p1, r1)
             cap2 = SphericalCap(p2, r2)
-            capmerged = UnitSpherical._merge(cap1, cap2)
+            capmerged = Extents.union(cap1, cap2)
             @test all(isapprox.(GeographicFromUnitSphere()(capmerged.point), pmerged))
             @test isapprox(capmerged.radius, deg2rad(rmerged))
+            @test Extents.contains(capmerged, cap1)
+            @test Extents.contains(capmerged, cap2)
         end
 
         test_merge((10.0, 0.0), (30.0, 0.0), 5, 10, (22.5, 0.0), 17.5)
         test_merge((10.0, 0.0), (30.0, 0.0), 15, 10, (17.5, 0.0), 22.5)
         test_merge((10.0, 0.0), (30.0, 0.0), 40, 5, (10.0, 0.0), 40.0)
         test_merge((10.0, 0.0), (30.0, 0.0), 5, 50, (30.0, 0.0), 50.0)
+
+        east = UnitSphericalPoint(1.0, 0.0, 0.0)
+        west = UnitSphericalPoint(-1.0, 0.0, 0.0)
+        antipodal_merge = Extents.union(SphericalCap(east, 0.0), SphericalCap(west, 0.0))
+        @test UnitSpherical._contains(antipodal_merge, east)
+        @test UnitSpherical._contains(antipodal_merge, west)
+        wide_merge = Extents.union(SphericalCap(east, 3π / 4), SphericalCap(west, 3π / 4))
+        @test wide_merge.radius == Float64(π)
+        @test Extents.contains(wide_merge, SphericalCap(east, 3π / 4))
+        @test Extents.contains(wide_merge, SphericalCap(west, 3π / 4))
+
+        using Random: Xoshiro
+        rng = Xoshiro(0xcafecafe)
+        for _ in 1:100
+            a = SphericalCap(rand(rng, UnitSphericalPoint{Float64}), 0.4 * rand(rng))
+            b = SphericalCap(rand(rng, UnitSphericalPoint{Float64}), 0.4 * rand(rng))
+            merged = Extents.union(a, b)
+            @test Extents.contains(merged, a)
+            @test Extents.contains(merged, b)
+        end
+
+        cap = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), 0.2)
+        @test Extents.grow(cap, 0.0) === cap
+        dilated = Extents.grow(cap, 0.75)
+        @test dilated.radius > 0.5
+        @test Extents.contains(dilated, cap)
+        @test Extents.grow(cap, 0.5).radius > 2 * cap.radius
+        @test Extents.grow(cap, 10.0).radius == Float64(π)
+        @test Extents.grow(cap, -0.25).radius == cap.radius / 2
+        @test_throws DomainError Extents.grow(cap, -0.75)
     end
 end
 
@@ -546,6 +610,72 @@ end
     result = spherical_arc_intersection(a7, b7, a8, b8)
     @test result.type == arc_overlap
     @test length(result.points) == 2
+end
+
+@testset "Spherical cap XYZ bounds" begin
+    in_extent(p, ext) =
+        ext.X[1] <= p[1] <= ext.X[2] &&
+        ext.Y[1] <= p[2] <= ext.Y[2] &&
+        ext.Z[1] <= p[3] <= ext.Z[2]
+
+    function boundary_points(cap, n = 72)
+        c = collect(cap.point)
+        axis = abs(c[3]) < 0.9 ? [0.0, 0.0, 1.0] : [1.0, 0.0, 0.0]
+        u = normalize(cross(c, axis))
+        v = cross(c, u)
+        return [UnitSphericalPoint(Tuple(
+            cos(cap.radius) .* c .+
+            sin(cap.radius) .* (cos(ϕ) .* u .+ sin(ϕ) .* v)))
+            for ϕ in range(0.0, 2π; length = n + 1)[1:end-1]]
+    end
+
+    tiny = SphericalCap(UnitSphericalPoint(1.0, 0.0, 0.0), 1e-12)
+    @test which(Extents.extent, (typeof(tiny),)) == which(Extents.extent, (Any,))
+    @test Extents.extent(tiny) === nothing
+    tiny_ext = convert(Extents.Extent, tiny)
+    @test tiny_ext isa Extents.Extent{(:X, :Y, :Z)}
+    @test convert(Extents.Extent{(:X, :Y, :Z)}, tiny) === tiny_ext
+    @test convert(typeof(tiny_ext), tiny) === tiny_ext
+    @test_throws ArgumentError convert(Extents.Extent{(:X, :Y)}, tiny)
+    @test tiny_ext.X[1] <= cos(tiny.radius) <= tiny_ext.X[2]
+    @test tiny_ext.Y[1] <= -sin(tiny.radius) < sin(tiny.radius) <= tiny_ext.Y[2]
+    @test tiny_ext.Z[1] <= -sin(tiny.radius) < sin(tiny.radius) <= tiny_ext.Z[2]
+
+    polar = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), 0.2)
+    polar_ext = convert(Extents.Extent, polar)
+    @test polar_ext.X[1] <= -sin(polar.radius) < sin(polar.radius) <= polar_ext.X[2]
+    @test polar_ext.Y[1] <= -sin(polar.radius) < sin(polar.radius) <= polar_ext.Y[2]
+    @test polar_ext.Z[1] <= cos(polar.radius) <= polar_ext.Z[2] == 1.0
+
+    antimeridian = SphericalCap(UnitSphereFromGeographic()((180.0, 0.0)), 0.3)
+    antimeridian_ext = convert(Extents.Extent, antimeridian)
+    @test antimeridian_ext.X[1] == -1.0
+    @test antimeridian_ext.X[1] <= -cos(antimeridian.radius) <= antimeridian_ext.X[2]
+    @test antimeridian_ext.Y[1] <= -sin(antimeridian.radius) < sin(antimeridian.radius) <= antimeridian_ext.Y[2]
+
+    hemisphere = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), π / 2)
+    hemisphere_ext = convert(Extents.Extent, hemisphere)
+    @test hemisphere_ext.X == (-1.0, 1.0)
+    @test hemisphere_ext.Y == (-1.0, 1.0)
+    @test hemisphere_ext.Z[1] <= 0.0 <= hemisphere_ext.Z[2] == 1.0
+
+    whole = SphericalCap(UnitSphericalPoint(0.0, 0.0, 1.0), nextfloat(Float64(π)))
+    whole_ext = convert(Extents.Extent, whole)
+    @test whole_ext == Extents.Extent(X = (-1.0, 1.0), Y = (-1.0, 1.0), Z = (-1.0, 1.0))
+
+    arbitrary = SphericalCap(normalize(UnitSphericalPoint(1.0, -2.0, 3.0)), 0.7)
+    for cap in (tiny, polar, antimeridian, hemisphere, arbitrary)
+        ext = convert(Extents.Extent, cap)
+        @test in_extent(cap.point, ext)
+        @test all(p -> in_extent(p, ext), boundary_points(cap))
+        @test Extents.intersects(cap, ext)
+        @test Extents.intersects(cap, ext) == Extents.intersects(ext, cap)
+    end
+
+    cap32 = SphericalCap(UnitSphericalPoint(0.0f0, 0.0f0, 1.0f0), 0.2f0)
+    ext32 = convert(Extents.Extent, cap32)
+    @test ext32.X isa Tuple{Float32, Float32}
+    @test all(p -> in_extent(p, ext32), boundary_points(cap32))
 end
 
 @testset "Cap–extent intersection" begin

@@ -37,3 +37,4 @@ TraitTarget(traits::GI.AbstractTrait...) = TraitTarget{Union{map(typeof, traits)
 
 
 Base.in(::Trait, ::TraitTarget{Target}) where {Trait <: GI.AbstractTrait, Target} = Trait <: Target
+Base.broadcastable(t::TraitTarget) = Ref(t) # to allow broadcasting over TraitTarget

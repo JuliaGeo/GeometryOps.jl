@@ -136,3 +136,9 @@ struct FullEllipsoidParametrization{T} <: EllipsoidParametrization
     inv_flattening::T
 end
 
+# To enable broadcasting over bare Manifolds
+# NOTE: the Ref doesn't actually allocate,
+# because it gets elided by the compiler.
+# The Tuple form causes broadcasting to return
+# a tuple, which we don't want.
+Base.broadcastable(m::Manifold) = Ref(m)

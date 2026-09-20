@@ -517,9 +517,10 @@ another crossing — lands in the same map entry, in every mode (not only
 under self-noding; e.g. RelateNGTest.testPolygonLineCrossingContained needs
 a B-line proper crossing of one A polygon merged with its vertex touch of
 another). Here node identity is symbolic, so the merge is an explicit pass,
-run whenever any crossing key exists.
+run whenever any crossing key exists on the plane. On the sphere, it also
+merges distinct vertex keys with the same oriented direction.
 
-Candidate grouping is by *exact bounding boxes* (the F1 follow-up to
+On the plane, candidate grouping is by *exact bounding boxes* (the F1 follow-up to
 design D3): a vertex key's box is its exact coordinate; a crossing key's
 box is the intersection of its two defining segments' bounding boxes,
 which provably contains the exact crossing point (the point lies on both
@@ -540,9 +541,13 @@ crossing key on every evaluation.
 A vertex key is preferred as the canonical merged node: its coordinate is
 exact, so the edge wheel and node location never need the rational apex.
 Otherwise the merged crossing node's wheel compares foreign directions
-around the exact rational apex (`rk_compare_edge_dir` slow path).
+around the exact rational apex (`rk_compare_edge_dir` slow path). Spherical
+nodes are grouped by exact oriented projective directions instead; endpoint
+coordinate boxes do not bound great-circle arcs.
 =#
-function _merge_coincident_nodes!(tc::TopologyComputer)
+_merge_coincident_nodes!(tc::TopologyComputer) = _merge_coincident_nodes!(tc, _manifold(tc))
+
+function _merge_coincident_nodes!(tc::TopologyComputer, ::Planar)
     nodemap = tc.node_sections
     length(nodemap) > 1 || return nothing
     any(k -> k.is_crossing, keys(nodemap)) || return nothing
@@ -567,6 +572,33 @@ function _merge_coincident_nodes!(tc::TopologyComputer)
         end
         j > i && _merge_coincident_y_clusters!(nodemap, items[i:j])
         i = j + 1
+    end
+    return nothing
+end
+
+# Great-circle arcs are not bounded by their endpoint coordinate boxes.
+# Instead, hash exact oriented projective directions: unlike normalized unit
+# coordinates, these are rational and require no rounded square root. This
+# groups spherical nodes in linear expected time, including proportional vertex
+# coordinates, without relying on planar candidate bounds.
+function _merge_coincident_nodes!(tc::TopologyComputer, ::Spherical)
+    nodemap = tc.node_sections
+    length(nodemap) > 1 || return nothing
+    canonical_keys = Dict{NTuple{3, Rational{BigInt}}, keytype(nodemap)}()
+    for k in collect(keys(nodemap))
+        identity = _spherical_node_identity(k)
+        canonical = get(canonical_keys, identity, nothing)
+        if canonical === nothing
+            canonical_keys[identity] = k
+            continue
+        end
+        # Prefer an input vertex to a symbolic crossing, just as on the plane.
+        if canonical.is_crossing && !k.is_crossing
+            _merge_node_sections!(nodemap[k], pop!(nodemap, canonical), k)
+            canonical_keys[identity] = k
+        else
+            _merge_node_sections!(nodemap[canonical], pop!(nodemap, k), canonical)
+        end
     end
     return nothing
 end
@@ -695,10 +727,9 @@ proper-crossing key (design D2) with no stored coordinate:
   node of a Polygon/MultiPolygon lies on its boundary (the same exact
   shortcut as `locate_with_dim`'s isNode branch).
 - Otherwise (lineal geometries and GCs, where another element may cover
-  the node) a representative coordinate is required. The exact rational
-  crossing point is computed and rounded to Float64 — at least as precise
-  as JTS, whose node coordinate is the floating-point intersection
-  computed by RobustLineIntersector.
+  the node) a representative coordinate in the manifold's kernel space is
+  required. The kernel computes the exact crossing point or direction and
+  rounds it to its floating-point representation for the locator.
 ==========================================================================#
 
 function locate_node(rg::RelateGeometry, key::NodeKey, parent_polygonal)
@@ -707,7 +738,7 @@ function locate_node(rg::RelateGeometry, key::NodeKey, parent_polygonal)
     if GI.trait(rg.geom) isa Union{GI.PolygonTrait, GI.MultiPolygonTrait}
         return LOC_BOUNDARY
     end
-    return locate_node(rg, _crossing_locate_point(key), parent_polygonal)
+    return locate_node(rg, _crossing_locate_point(rg.m, key), parent_polygonal)
 end
 
 function is_node_in_area(rg::RelateGeometry, key::NodeKey, parent_polygonal)
@@ -717,16 +748,5 @@ function is_node_in_area(rg::RelateGeometry, key::NodeKey, parent_polygonal)
     if GI.trait(rg.geom) isa Union{GI.PolygonTrait, GI.MultiPolygonTrait}
         return false
     end
-    return is_node_in_area(rg, _crossing_locate_point(key), parent_polygonal)
-end
-
-# Representative Float64 coordinate of a proper-crossing node,
-# deterministically rounded via 256-bit BigFloat from the exact rational
-# crossing point (BigFloat avoids overflow in the Rational → Float64
-# conversion of huge numerators/denominators; the double rounding through
-# BigFloat's default precision is deterministic, though not strictly
-# correctly rounded).
-function _crossing_locate_point(key::NodeKey)
-    xr, yr = _exact_crossing_point(key)
-    return (Float64(BigFloat(xr)), Float64(BigFloat(yr)))
+    return is_node_in_area(rg, _crossing_locate_point(rg.m, key), parent_polygonal)
 end

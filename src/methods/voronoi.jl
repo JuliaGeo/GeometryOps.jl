@@ -67,7 +67,8 @@ in the same order as the input points.
     
 !!! note
     The polygons are returned in the same order as the input points after flattening.
-    Each polygon corresponds to the Voronoi cell of the point at the same index.
+    Points without a cell (for example, cells removed by clipping) are omitted;
+    the remaining cells retain their relative input order.
 
 ## Examples
 An example with default clipping to the convex hull.
@@ -79,12 +80,10 @@ using Random
 
 rng = Xoshiro(0)
 points = [(rand(rng), rand(rng)) .* 5 for i in range(1, 3)]
-GO.voronoi(points; rng = rng)
+polygons = GO.voronoi(points; rng = rng);
+length(polygons)
 # output
-3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(4.310704285977424, 0.42985432929210976), … (2) … , (4.310704285977424, 0.42985432929210976)])])
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7949144210695653, 0.4101636087384888), … (4) … , (3.7949144210695653, 0.4101636087384888)])])
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(2.685897788908803, 0.3678259474564151), … (2) … , (2.685897788908803, 0.3678259474564151)])])
+3
 ```
 
 An example with clipping to a GeoInterface polygon.
@@ -92,34 +91,28 @@ An example with clipping to a GeoInterface polygon.
 clip_points = ((0.0,0.0), (5.0,0.0), (5.0,5.0), (0.0,5.0), (0.0,0.0))
 clip_order = (1, 2, 3, 4, 1)
 clip_poly1 = GI.Polygon([collect(clip_points)])
-GO.voronoi(points; clip_polygon = clip_poly1, rng = rng)
+polygons = GO.voronoi(points; clip_polygon = clip_poly1, rng = rng);
+length(polygons)
 # output
-3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(5.0, 0.0), … (3) … , (5.0, 0.0)])])
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7328227614527916, 0.0), … (3) … , (3.7328227614527916, 0.0)])])
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(0.0, 5.0), … (3) … , (0.0, 5.0)])])
+3
 ```
 
 An example with clipping to a tuple of tuples.
 ```jldoctest voronoi
 clip_poly2 = (clip_points, clip_order) # tuples
-GO.voronoi(points; clip_polygon = clip_poly2, rng = rng)
+polygons = GO.voronoi(points; clip_polygon = clip_poly2, rng = rng);
+length(polygons)
 # output
-3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(5.0, 0.0), … (3) … , (5.0, 0.0)])])
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7328227614527916, 0.0), … (3) … , (3.7328227614527916, 0.0)])])
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(0.0, 5.0), … (3) … , (0.0, 5.0)])])
+3
 ```
 
 An example with clipping to a tuple of vectors.
 ```jldoctest voronoi
 clip_poly3 = (collect(clip_points), collect(clip_order)) # vectors
-GO.voronoi(points; clip_polygon = clip_poly3, rng = rng)
+polygons = GO.voronoi(points; clip_polygon = clip_poly3, rng = rng);
+length(polygons)
 # output
-3-element Vector{GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{Float64, Float64}}, Nothing, Nothing}}, Nothing, Nothing}}:
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(5.0, 0.0), … (3) … , (5.0, 0.0)])])
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(3.7328227614527916, 0.0), … (3) … , (3.7328227614527916, 0.0)])])
- GeoInterface.Wrappers.Polygon{false, false}([GeoInterface.Wrappers.LinearRing([(0.0, 5.0), … (3) … , (0.0, 5.0)])])
+3
 ```
 
 """
@@ -127,7 +120,7 @@ function voronoi(geometries, ::Type{T} = Float64; kwargs...) where T
     return voronoi(Planar(), geometries, T; kwargs...)
 end
 
-function voronoi(::Planar, geometries, ::Type{T} = Float64; clip_polygon = nothing, crs = __NoCRSProvided(), kwargs...) where T
+function voronoi(::Planar, geometries, ::Type{T} = Float64; clip_polygon = nothing, crs = __NoCRSProvided(), rng = Random.default_rng(), kwargs...) where T
     # Extract all points as tuples using GO.flatten
     # This handles any GeoInterface-compatible input
     points_iter = collect(flatten(tuples, GI.PointTrait, geometries))
@@ -145,7 +138,7 @@ function voronoi(::Planar, geometries, ::Type{T} = Float64; clip_polygon = nothi
     end
     
     # Compute Delaunay triangulation
-    tri = DelTri.triangulate(points_iter; kwargs...)
+    tri = DelTri.triangulate(points_iter; rng, kwargs...)
     
     # Compute Voronoi tessellation from the triangulation
     _clip_polygon = if isnothing(clip_polygon)
@@ -156,19 +149,17 @@ function voronoi(::Planar, geometries, ::Type{T} = Float64; clip_polygon = nothi
         _clean_voronoi_clip_point_inputs(clip_polygon)
     end
     # if isclockwise(clip_polygon)
-    vorn = DelTri.voronoi(tri; clip = true, clip_polygon = _clip_polygon)
+    vorn = DelTri.voronoi(tri; clip = true, clip_polygon = _clip_polygon, rng)
     
     polygons = GeoInterface.Wrappers.Polygon{false, false, Vector{GeoInterface.Wrappers.LinearRing{false, false, Vector{Tuple{T, T}}, Nothing, Nothing}}, Nothing, typeof(crs)}[]
     sizehint!(polygons, DelTri.num_polygons(vorn))
+    # Generator IDs are input point indices; dictionary iteration does not preserve their order.
     # Implementation below copied from Makie.jl
     # see https://github.com/MakieOrg/Makie.jl/blob/687c4466ce00154714297e36a7f610443c6ad5be/Makie/src/basic_recipes/voronoiplot.jl#L101-L110
-    for i in DelTri.each_generator(vorn)
+    for i in eachindex(points_iter)
         !DelTri.has_polygon(vorn, i) && continue
         polygon_coords = DelTri.getxy.(DelTri.get_polygon_coordinates(vorn, i))
         push!(polygons, GI.Polygon([GI.LinearRing(polygon_coords)], crs = crs))
-        # The code below gets the generator point, but we don't need it
-        # gp = DelTri.getxy(DelTri.get_generator(vorn, i))
-        # !isempty(polygon_coords) && push!(generators, gp)
     end
     
     return polygons
