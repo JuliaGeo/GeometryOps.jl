@@ -92,6 +92,18 @@ arguments are documented and independently reviewed, supported by exact-rational
 audits. A fallback handles failed certificates; it cannot repair an incorrect
 successful certificate.
 
+## Source layout
+
+The module entry points include implementation files from [`src/`](src/):
+
+- [`validated_float.jl`](src/validated_float.jl): general type and certificates.
+- [`bounds.jl`](src/bounds.jl): error-free transforms and outward rounding.
+- [`arithmetic.jl`](src/arithmetic.jl): general scalar operations.
+- [`crossing_float.jl`](src/crossing_float.jl): restricted domain, scaling, and certificates.
+- [`crossing_arithmetic.jl`](src/crossing_arithmetic.jl): restricted scalar operations.
+- [`crossing_vectors.jl`](src/crossing_vectors.jl): fused `cross` and `dot` methods.
+- [`exact_vectors.jl`](src/exact_vectors.jl): exact-input vector experiments.
+
 ## Running tests
 
 From the GeometryOps repository root, run the internal module tests in the docs
