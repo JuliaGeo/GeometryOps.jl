@@ -26,7 +26,14 @@ c1 = GI.GeometryCollection([pt1, l2, p2])
 @testset "GeometryOpsLibGEOSExt with GeoInterface Geometries" begin
     @testset "Functionality Tests" begin
         @testset "Buffer" begin
-            @test GO.equals(GO.buffer(p1, 1.0), LG.buffer(p1, 1.0))
+            #-- the GEOS path is GEOS, so exact equality holds. The DEFAULT path is
+            #-- now the native `ChenMcMains` engine, which agrees with GEOS to
+            #-- within a couple of ULPs per fillet vertex but is not bit-identical
+            #-- (it derives a corner's sweep from the other end) — see
+            #-- test/methods/buffer.jl for the native engine's own comparison.
+            @test GO.equals(GO.buffer(GO.GEOS(), p1, 1.0), LG.buffer(p1, 1.0))
+            @test LG.area(LG.symmetricDifference(GI.convert(LG, GO.buffer(p1, 1.0)),
+                                                 LG.buffer(p1, 1.0))) == 0.0
             @test_nowarn GO.buffer(GO.GEOS(), [p1 p2], 1.0) # test non-geometry inputs - if it works for this, it works for any `apply`.
             @test_nowarn GO.buffer(GO.GEOS(), c1, 1.0)      # test geometrycollection specifically - that's the reason for the awful hack in `GEOSExt/buffers.jl`.
         end

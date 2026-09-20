@@ -58,7 +58,8 @@ end
 
 # Ring the graph's result-area edges into shells and holes (port of the
 # `PolygonBuilder` constructor + `buildRings`), returning the builder context.
-function _build_polygon_ctx(m::Manifold, g::OverlayGraph{P, T}, result_area_edges, who; exact) where {P, T}
+function _build_polygon_ctx(m::Manifold, g::OverlayGraph{P, T}, result_area_edges, who;
+        exact, runs = nothing) where {P, T}
     _assert_graph_extractable(g, who)
     #-- the op pipeline walks `onext`/`sym` directly and has no notion of a removed
     #-- edge, so a hygiene-filtered graph would silently ignore the removal
@@ -68,15 +69,15 @@ function _build_polygon_ctx(m::Manifold, g::OverlayGraph{P, T}, result_area_edge
         "pipeline does not honour removal, so its result would silently ignore it. " *
         "Hygiene is a face-enumeration facility — use `_build_faces` on that graph."))
     ctx = _PolyBuilderCtx(m, g.edges, g.arr, exact, _MaxEdgeRing[], _edge_ring_type(T, m, exact)[],
-                          Int32[], Int32[])
+                          Int32[], Int32[], runs)
     _build_rings!(ctx, result_area_edges)
     return ctx
 end
 
 # Build the result polygons from the graph's result-area edges (port of the
 # `PolygonBuilder` constructor + `getPolygons`).
-function _build_polygons(m::Manifold, g::OverlayGraph, result_area_edges; exact)
-    ctx = _build_polygon_ctx(m, g, result_area_edges, "_build_polygons"; exact)
+function _build_polygons(m::Manifold, g::OverlayGraph, result_area_edges; exact, runs = nothing)
+    ctx = _build_polygon_ctx(m, g, result_area_edges, "_build_polygons"; exact, runs)
     return [_ring_to_polygon(ctx, sh) for sh in ctx.shell_list]
 end
 

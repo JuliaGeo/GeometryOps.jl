@@ -93,5 +93,30 @@ using PrecompileTools: @setup_workload, @compile_workload
             #-- the extractor afresh; the areal one is the case worth caching
             intersection(ovl, _pc_poly1, _pc_poly2; target = GI.MultiPolygonTrait())
         end
+
+        #-- buffer. Same shape of argument as the OverlayNG block, and sized the
+        #-- same way — `benchmarks/buffer_ttfb.jl` is the probe, and its recorded
+        #-- before/after ledger is the justification for every line here. The
+        #-- winding overlay is typed on the kernel and output point
+        #-- types exactly as the binary engine is, so ONE planar areal call
+        #-- caches the whole engine core; what remains per input type is the
+        #-- offset-curve generator's ingest, hence the line, point and
+        #-- multipolygon shapes. The keyword entry point is called once so the
+        #-- `ChenMcMains` constructor and the kwarg split come with it.
+        #--
+        #-- Measured on this machine (16-core x86-64 Linux, Julia 1.13.0): these
+        #-- four calls add 1.16 MB to the pkgimage (48.61 -> 49.77 MB) and no
+        #-- measurable build time (36.9 s against a 33.3-36.9 s baseline
+        #-- spread). Fresh-process first call over the probe's eight input
+        #-- shapes drops from 7.82 s to 0.21 s, and the areal call alone from
+        #-- 977 ms to 140 us. What is left is `apply`'s container recursion
+        #-- (a vector of geometries, a GeometryCollection: ~98 ms each), which
+        #-- every operation shares and none of them caches.
+        buffer(_pc_poly1, 0.5)
+        let alg = ChenMcMains()
+            buffer(alg, _pc_line, 0.5)
+            buffer(alg, _pc_pt, 0.5)
+            buffer(alg, _pc_mpoly_d, 0.5)
+        end
     end
 end

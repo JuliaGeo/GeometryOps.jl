@@ -11,8 +11,16 @@
 # nodes lying strictly in that segment's interior. `string_idx` is global into
 # the arrangement's `segstrings`: A strings occupy `1:na`, B strings `na+1:end`.
 
-@inline function _record_interior!(seg_nodes, string_idx::Int32, seg_idx::Int32, nid::Int32)
-    push!(get!(() -> Int32[], seg_nodes, (string_idx, seg_idx)), nid)
+#=
+`seg_nodes` is a flat, push-only `(string, segment, node)` list, sorted once
+after collect (`_merge_coincident_nodes!`) and then read by `split.jl` in one
+lockstep walk with its own segment loop. The keyed-`Dict` shape it replaces paid
+a hash on every record *and* a hash on every segment of every string at split
+time, including the overwhelming majority that carry no interior node at all.
+=#
+@inline function _record_interior!(seg_nodes::Vector{NTuple{3, Int32}},
+        string_idx::Int32, seg_idx::Int32, nid::Int32)
+    push!(seg_nodes, (string_idx, seg_idx, nid))
     return nothing
 end
 
@@ -20,9 +28,13 @@ function _collect_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
         ssa::AbstractVector{RelateSegmentString{P}},
         ssb::AbstractVector{RelateSegmentString{P}}, na::Int32;
         exact = True(), tree_a = nothing, tree_b = nothing,
-        clip_a = nothing, clip_b = nothing) where {P}
+        clip_a = nothing, clip_b = nothing, self_node_all::Bool = false) where {P}
     ta = tree_a === nothing ? _relate_edge_index(m, ssa) : tree_a
     tb = tree_b === nothing ? _relate_edge_index(m, ssb) : tree_b
+    #-- a chain index (`chains.jl`) indexes runs of segments, not segments, so it
+    #-- only ever reaches the self-noding pass below
+    (ta isa ChainIndex || tb isa ChainIndex) && !isempty(ssb) &&
+        throw(ArgumentError("a monotone-chain index cannot drive the A x B noding pass"))
     if !(ta === nothing || tb === nothing)
         SpatialTreeInterface.dual_depth_first_search(Extents.intersects, ta, tb) do ia, ib
             (sa, ka) = ta.data[ia]
@@ -35,10 +47,17 @@ function _collect_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
     #-- design §2.2 amendment: each input must additionally be self-noded, in two
     #-- passes of different scope (see below). Both are restricted to the side's
     #-- clip box when it has one — see "Self-noding under clip pruning".
-    _collect_self_crossings!(m, table, seg_nodes, ssa, Int32(0); exact, clip = clip_a)
-    _collect_self_crossings!(m, table, seg_nodes, ssb, na; exact, clip = clip_b)
-    _collect_self_vertex_nodes!(m, table, seg_nodes, ssa, Int32(0), ta; exact, clip = clip_a)
-    _collect_self_vertex_nodes!(m, table, seg_nodes, ssb, na, tb; exact, clip = clip_b)
+    _collect_self_crossings!(m, table, seg_nodes, ssa, Int32(0);
+                             exact, clip = clip_a, all_strings = self_node_all, tree = ta)
+    _collect_self_crossings!(m, table, seg_nodes, ssb, na;
+                             exact, clip = clip_b, all_strings = self_node_all, tree = tb)
+    #-- `self_node_all` has already run the all-pairs pass over every string, which
+    #-- subsumes the vertex pass (it classifies each segment pair exactly, vertex
+    #-- incidences included) — the same reason the vertex pass skips an all-linear side
+    if !self_node_all
+        _collect_self_vertex_nodes!(m, table, seg_nodes, ssa, Int32(0), ta; exact, clip = clip_a)
+        _collect_self_vertex_nodes!(m, table, seg_nodes, ssb, na, tb; exact, clip = clip_b)
+    end
     return nothing
 end
 
@@ -166,20 +185,82 @@ input, it is what the argument above licenses, and it never fabricates a
 crossing node on an input that should not have one — but it is not where the
 time went.
 =#
+#=
+`all_strings` widens the scope from LINEAR strings to every string on the side,
+and is what a caller asks for when its input is area-contributing but *not* a
+valid area — the N-ary winding overlay's self-intersecting offset curves. The
+dimension test above is a soundness argument about VALID input; linework that
+carries no validity guarantee needs the all-pairs pass whatever its dimension,
+and the caller is the only party that knows which it has.
+
+With every string selected, `sub` is the caller's own list, so `tree` — the index
+the A x B pass already built over exactly that list — is reused instead of a
+second one being built over a copy of it.
+=#
 function _collect_self_crossings!(m::Manifold, table::NodeTable{P}, seg_nodes,
-        ss::AbstractVector{RelateSegmentString{P}}, off::Int32; exact, clip = nothing) where {P}
+        ss::AbstractVector{RelateSegmentString{P}}, off::Int32;
+        exact, clip = nothing, all_strings::Bool = false, tree = nothing) where {P}
+    if all_strings
+        #-- fewer than two segments in total: no pair to classify
+        sum(s -> length(s.pts) - 1, ss; init = 0) < 2 && return nothing
+        t = tree === nothing ? _noding_index(m, ss) : tree
+        t === nothing && return nothing
+        return _collect_self_pairs!(m, table, seg_nodes, ss, off, nothing, t, clip; exact)
+    end
     lin = Int32[Int32(i) for i in eachindex(ss) if ss[i].dim == DIM_L]
     isempty(lin) && return nothing
     sub = [ss[i] for i in lin]
-    #-- fewer than two segments in total: no pair to classify
     sum(s -> length(s.pts) - 1, sub; init = 0) < 2 && return nothing
     t = _relate_edge_index(m, sub)
     t === nothing && return nothing
+    return _collect_self_pairs!(m, table, seg_nodes, sub, off, lin, t, clip; exact)
+end
+
+# `local_to_global[s]` maps a position in `ss` to its arrangement-global string
+# index; `nothing` when `ss` IS the side's own list and the map is the identity.
+@inline _self_string_idx(::Nothing, s::Integer) = Int32(s)
+@inline _self_string_idx(map::Vector{Int32}, s::Integer) = @inbounds map[s]
+
+#=
+Chain-indexed enumeration (`chains.jl`): the tree's leaves are monotone chains,
+so a leaf pair is a *chain* pair and the segment pairs inside it come from the
+mutual binary descent. Clip pruning is not offered here — the chain envelope
+keeps segments its members would individually have been pruned by, which would
+change which same-side nodes are dropped; the only caller (`winding_overlay.jl`)
+never clips.
+=#
+function _collect_self_pairs!(m::Manifold, table::NodeTable{P}, seg_nodes,
+        ss::AbstractVector{RelateSegmentString{P}}, off::Int32,
+        local_to_global, ci::ChainIndex, clip; exact) where {P}
+    clip === nothing ||
+        throw(ArgumentError("chain-indexed self-noding does not support clip pruning"))
+    t = ci.tree
+    _self_pair_search(m, t, nothing) do i1, i2
+        (s1, lo1, hi1) = t.data[i1]
+        (s2, lo2, hi2) = t.data[i2]
+        p1 = ss[s1].pts
+        p2 = ss[s2].pts
+        g1 = off + _self_string_idx(local_to_global, s1)
+        g2 = off + _self_string_idx(local_to_global, s2)
+        _chain_segment_pairs(p1, lo1, hi1, p2, lo2, hi2) do k1, k2
+            _classify_pair!(m, table, seg_nodes, ss, s1, g1, Int32(k1),
+                            ss, s2, g2, Int32(k2); exact)
+            return nothing
+        end
+        return nothing
+    end
+    return nothing
+end
+
+function _collect_self_pairs!(m::Manifold, table::NodeTable{P}, seg_nodes,
+        ss::AbstractVector{RelateSegmentString{P}}, off::Int32,
+        local_to_global, t, clip; exact) where {P}
     _self_pair_search(m, t, clip) do i1, i2
         (s1, k1) = t.data[i1]
         (s2, k2) = t.data[i2]
-        _classify_pair!(m, table, seg_nodes, sub, s1, off + lin[s1], Int32(k1),
-                        sub, s2, off + lin[s2], Int32(k2); exact)
+        _classify_pair!(m, table, seg_nodes,
+                        ss, s1, off + _self_string_idx(local_to_global, s1), Int32(k1),
+                        ss, s2, off + _self_string_idx(local_to_global, s2), Int32(k2); exact)
         return nothing
     end
     return nothing
@@ -311,6 +392,92 @@ function _self_pair_search(f::F, pred::PR, node::N, buf::Vector, clip) where {F,
     return nothing
 end
 
+#=
+## Rejecting a candidate pair in Float64 (design §2.3, performance)
+
+`_classify_pair!` costs four adaptive-exact orientations, and on offset-curve
+linework the overwhelming majority of candidates record nothing. Two shapes
+dominate:
+
+  * **segments sharing an endpoint** — every ring-adjacent pair, and every pair
+    inside a fillet arc, whose boxes necessarily overlap;
+  * **boxes that overlap while the segments stay apart** — a long inside-turn
+    spoke whose thin diagonal box crosses the boxes of many short arc segments
+    it never comes near.
+
+`_pair_needs_kernel` rejects both in plain Float64. Every sign it acts on
+carries Shewchuk's stage-A certificate — the same test `AdaptivePredicates`
+applies before escalating, so a certified sign is the exact sign and an
+uncertain one falls through to the kernel untouched. The recorded output is
+therefore identical pair for pair, which `perf/noder` asserts on every
+workload. The filter is planar and exact-mode only: `exact = False()` runs a
+deliberately sloppier kernel that this must not second-guess.
+
+Shared endpoints need the collinearity caveat. Two segments meeting at a shared
+endpoint `q` record nothing *unless* they overlap collinearly — a hairpin, which
+raw offset curves through input vertices really do contain. Otherwise the only
+incidence flags set are the ones at `q`, and `_classify_pair!`'s own
+`a0 != b0 && a0 != b1` guards already drop those; a second incidence would put
+two points of one segment on the other, forcing collinearity. So one certified
+orientation of `(other_a, q, other_b)` decides it: certainly non-zero means
+certainly nothing to record. Four orientations become one.
+=#
+
+#-- Shewchuk's `ccwerrboundA` for Float64, (3 + 16ε)ε with ε = 2^-53.
+const _ORIENT_ERRBOUND_A = (3.0 + 16.0 * (eps(Float64) / 2)) * (eps(Float64) / 2)
+
+# `orient(a, b, c)` in plain Float64 with its stage-A certificate: `certain`
+# means the returned value has the sign of the exact determinant (including a
+# certified zero). This is verbatim the filter stage of
+# `AdaptivePredicates.orient2`, so the two never disagree.
+@inline function _orient_filter(ax, ay, bx, by, cx, cy)
+    detleft = (ax - cx) * (by - cy)
+    detright = (ay - cy) * (bx - cx)
+    det = detleft - detright
+    if detleft > 0
+        detright <= 0 && return (det, true)
+        detsum = detleft + detright
+    elseif detleft < 0
+        detright >= 0 && return (det, true)
+        detsum = -detleft - detright
+    else
+        return (det, true)
+    end
+    errb = _ORIENT_ERRBOUND_A * detsum
+    return (det, (det >= errb) | (-det >= errb))
+end
+
+# `p`, `r` are the two segments' free endpoints, `q` their shared one.
+@inline function _shared_endpoint_needs_kernel(px, py, qx, qy, rx, ry)
+    d, certain = _orient_filter(px, py, qx, qy, rx, ry)
+    return !(certain & (d != 0))
+end
+
+@inline _pair_needs_kernel(::Manifold, ::BoolsAsTypes, a0, a1, b0, b1) = true
+
+@inline function _pair_needs_kernel(::Planar, ::True, a0, a1, b0, b1)
+    ax0, ay0 = GI.x(a0), GI.y(a0); ax1, ay1 = GI.x(a1), GI.y(a1)
+    bx0, by0 = GI.x(b0), GI.y(b0); bx1, by1 = GI.x(b1), GI.y(b1)
+    #-- (1) a shared endpoint: only a collinear overlap can record anything
+    if (ax0 == bx0) & (ay0 == by0)
+        return _shared_endpoint_needs_kernel(ax1, ay1, ax0, ay0, bx1, by1)
+    elseif (ax0 == bx1) & (ay0 == by1)
+        return _shared_endpoint_needs_kernel(ax1, ay1, ax0, ay0, bx0, by0)
+    elseif (ax1 == bx0) & (ay1 == by0)
+        return _shared_endpoint_needs_kernel(ax0, ay0, ax1, ay1, bx1, by1)
+    elseif (ax1 == bx1) & (ay1 == by1)
+        return _shared_endpoint_needs_kernel(ax0, ay0, ax1, ay1, bx0, by0)
+    end
+    #-- (2) one segment certainly strictly on one side of the other's line
+    d0, c0 = _orient_filter(bx0, by0, bx1, by1, ax0, ay0)
+    d1, c1 = _orient_filter(bx0, by0, bx1, by1, ax1, ay1)
+    (c0 & c1 & (d0 != 0) & (d1 != 0) & ((d0 > 0) == (d1 > 0))) && return false
+    e0, f0 = _orient_filter(ax0, ay0, ax1, ay1, bx0, by0)
+    e1, f1 = _orient_filter(ax0, ay0, ax1, ay1, bx1, by1)
+    (f0 & f1 & (e0 != 0) & (e1 != 0) & ((e0 > 0) == (e1 > 0))) && return false
+    return true
+end
+
 # Function barrier: statically-typed classification of one candidate pair
 # (the do-blocks above are dynamic closures over the tree traversal). `gsa`/`gsb`
 # are the *global* string indices (into the arrangement's `segstrings`) of the
@@ -321,6 +488,7 @@ function _classify_pair!(m::Manifold, table::NodeTable{P}, seg_nodes,
     a0 = ssa[sa].pts[ksa]; a1 = ssa[sa].pts[ksa + 1]
     b0 = ssb[sb].pts[ksb]; b1 = ssb[sb].pts[ksb + 1]
 
+    _pair_needs_kernel(m, booltype(exact), a0, a1, b0, b1) || return nothing
     cls = rk_classify_intersection(m, a0, a1, b0, b1; exact)
     kind = cls.kind
     if kind == SS_DISJOINT

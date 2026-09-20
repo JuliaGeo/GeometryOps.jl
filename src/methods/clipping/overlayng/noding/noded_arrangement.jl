@@ -27,7 +27,13 @@ struct NodedEdge
     seg_idx    :: Int32    # segment within that parent string (`pts[seg_idx:seg_idx+1]`)
     node_lo    :: Int32    # node id at the sub-segment start (in the parent's traversal order)
     node_hi    :: Int32    # node id at the sub-segment end
+    #-- LAST parent segment covered. `seg_idx` for the single-segment edges the
+    #-- binary path emits; `> seg_idx` for the polyline runs `run_split.jl`
+    #-- emits, whose interior vertices are `pts[seg_idx+1 : seg_hi]`.
+    seg_hi     :: Int32
 end
+
+NodedEdge(s::Int32, k::Int32, lo::Int32, hi::Int32) = NodedEdge(s, k, lo, hi, k)
 
 #=
 The node identity table (design §2.4). `ids` is the tier-1 egal interner
@@ -93,8 +99,9 @@ Fields:
 - `segstrings`: the ingested inputs as `RelateSegmentString`s (A side
   first, then B side); `NodedEdge.string_idx` indexes here.
 - `nodes`: the symbolic node table (`NodeTable`).
-- `seg_nodes`: per-parent-segment ordered interior node-id lists, keyed by
-  `(string_idx, seg_idx)`; absent for unsplit segments.
+- `seg_nodes`: the flat `(string_idx, seg_idx, node_id)` record of nodes lying
+  strictly inside a parent segment, sorted; segments with no interior node
+  simply do not appear.
 - `edges`: every noded sub-segment of every parent segment.
 - `truncated`: node ids whose incident-edge set was *reduced* by clip pruning
   (see `clip_a`/`clip_b` below). Empty (`BitVector()`) whenever no pruning ran,
@@ -107,7 +114,7 @@ Construct with `NodedArrangement(m, a, b)` (raw geometries) or
 struct NodedArrangement{P, T}
     segstrings :: Vector{RelateSegmentString{P}}
     nodes      :: NodeTable{P, T}
-    seg_nodes  :: Dict{Tuple{Int32, Int32}, Vector{Int32}}
+    seg_nodes  :: Vector{NTuple{3, Int32}}
     edges      :: Vector{NodedEdge}
     truncated  :: BitVector
 end
@@ -142,10 +149,11 @@ NodedArrangement(m::Manifold, a, b; exact = True(), tree_a = nothing, tree_b = n
     _noded_arrangement(m, point_type, a, b, exact, tree_a, tree_b, clip_a, clip_b)
 
 function _noded_arrangement(m::Manifold, ::Type{T}, a, b, exact, tree_a, tree_b,
-        clip_a, clip_b) where {T}
+        clip_a, clip_b; self_node_all::Bool = false) where {T}
     ssa = _overlay_segstrings(m, a, true; exact)
     ssb = _overlay_segstrings(m, b, false; exact)
-    return _noded_arrangement(m, T, ssa, ssb, exact, tree_a, tree_b, clip_a, clip_b)
+    return _noded_arrangement(m, T, ssa, ssb, exact, tree_a, tree_b, clip_a, clip_b;
+                              self_node_all)
 end
 
 #=
@@ -172,14 +180,19 @@ then infers as a `UnionAll` with the output type free.
 NodedArrangement(m::Manifold, ssa::AbstractVector{RelateSegmentString{P}},
         ssb::AbstractVector{RelateSegmentString{P}};
         exact = True(), tree_a = nothing, tree_b = nothing,
-        clip_a = nothing, clip_b = nothing,
+        clip_a = nothing, clip_b = nothing, self_node_all::Bool = false,
         point_type = _kernel_point_type(m)) where {P} =
-    _noded_arrangement(m, point_type, ssa, ssb, exact, tree_a, tree_b, clip_a, clip_b)
+    _noded_arrangement(m, point_type, ssa, ssb, exact, tree_a, tree_b, clip_a, clip_b;
+                       self_node_all)
 
+# `self_node_all` (see `collect.jl`): node every string against every other, not
+# only the linear ones. For a caller whose linework is area-contributing but is
+# not a valid area — the N-ary winding overlay's raw offset curves.
 function _noded_arrangement(m::Manifold, ::Type{T},
         ssa::AbstractVector{RelateSegmentString{P}},
         ssb::AbstractVector{RelateSegmentString{P}},
-        exact, tree_a, tree_b, clip_a, clip_b) where {P, T}
+        exact, tree_a, tree_b, clip_a, clip_b;
+        self_node_all::Bool = false) where {P, T}
     na = length(ssa)
     segstrings = Vector{RelateSegmentString{P}}(undef, na + length(ssb))
     @inbounds for i in 1:na
@@ -190,10 +203,10 @@ function _noded_arrangement(m::Manifold, ::Type{T},
     end
 
     table = NodeTable{P, T}()
-    seg_nodes = Dict{Tuple{Int32, Int32}, Vector{Int32}}()
+    seg_nodes = NTuple{3, Int32}[]
     # stage 1
     _collect_crossings!(m, table, seg_nodes, ssa, ssb, Int32(na);
-                        exact, tree_a, tree_b, clip_a, clip_b)
+                        exact, tree_a, tree_b, clip_a, clip_b, self_node_all)
     # stage 3
     _merge_coincident_nodes!(m, table, seg_nodes; exact)
     # stages 2 + 4
