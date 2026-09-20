@@ -350,12 +350,11 @@ end
 # ## Node ordering along a segment (design §2.5)
 
 # Float64 crossing solve without the rational lift: the *filter* seed shared by
-# node ordering (`rk_compare_along_segment`), coincidence proximity
-# (node_identity), and the emission fast path (design §2.4/§2.6). Returns the
-# approximate crossing coordinate together with `condK`, the determinant
-# conditioning `(|dax·dby| + |day·dbx|) / |denom|` — near-parallel pairs (small
-# `|denom|`) get a large `condK`, which every consumer folds into its error
-# bound so the certified filter escalates instead of trusting the approximation.
+# node ordering (`rk_compare_along_segment`) and coincidence proximity
+# (node_identity). Coordinate emission has a separate validated fast path. Returns the
+# approximate crossing coordinate together with a conservative absolute position
+# error radius, so every consumer's certified filter escalates to the exact
+# rational authority instead of trusting an ill-conditioned approximation.
 @inline function _approx_crossing_point(a0, a1, b0, b1)
     ax0, ay0 = Float64(GI.x(a0)), Float64(GI.y(a0))
     ax1, ay1 = Float64(GI.x(a1)), Float64(GI.y(a1))
@@ -363,10 +362,30 @@ end
     bx1, by1 = Float64(GI.x(b1)), Float64(GI.y(b1))
     dax, day = ax1 - ax0, ay1 - ay0
     dbx, dby = bx1 - bx0, by1 - by0
-    denom = dax * dby - day * dbx           # nonzero for a proper crossing
-    t = ((bx0 - ax0) * dby - (by0 - ay0) * dbx) / denom
-    condK = (abs(dax * dby) + abs(day * dbx)) / max(abs(denom), floatmin(Float64))
-    return (ax0 + t * dax, ay0 + t * day, condK)
+    pD, qD = dax * dby, day * dbx
+    pN, qN = (bx0 - ax0) * dby, (by0 - ay0) * dbx
+    denom = pD - qD                          # nonzero for a proper crossing
+    t = (pN - qN) / denom
+    x, y = ax0 + t * dax, ay0 + t * day
+    #-- forward error analysis with u = eps (2× the unit roundoff, the cushion).
+    #-- Each of N, D is a difference of two 3-rounding products plus its own
+    #-- rounding: |δN| ≤ 4u(|pN|+|qN|), likewise |δD|. Both cancellations count —
+    #-- the determinant's conditioning alone misses the numerator's.
+    u = eps(Float64)
+    dN = 4u * (abs(pN) + abs(qN))
+    dD = 4u * (abs(pD) + abs(qD))
+    #-- |D| within its own error of zero: the sign of the true D is uncertified
+    #-- and so is t; report an infinite radius so every filter escalates
+    dmin = abs(denom) - dD
+    dmin <= 0 && return (x, y, Inf)
+    #-- N/D − N′/D′ = (D′δN − N′δD) / (D D′) ≤ (|δN| + |t||δD|) / |D|, plus the
+    #-- division's rounding
+    err_t = u * abs(t) + (dN + abs(t) * dD) / dmin
+    #-- t·dax carries δt scaled by |dax| plus the roundings of dax, the product
+    #-- and the final add; the far-from-a0 amplification lives in |dax|·err_t
+    err_x = u * (abs(x) + 2 * abs(t * dax)) + abs(dax) * err_t
+    err_y = u * (abs(y) + 2 * abs(t * day)) + abs(day) * err_t
+    return (x, y, err_x + err_y)
 end
 
 # Approximate coordinate of a node key (crossing: the float solve; vertex: the
@@ -375,11 +394,7 @@ end
     if !k.is_crossing
         return (Float64(GI.x(k.pt)), Float64(GI.y(k.pt)), 0.0)
     end
-    x, y, condK = _approx_crossing_point(k.pt, k.a1, k.b0, k.b1)
-    #-- position error ~ (1 + conditioning) ulp of the coordinate magnitude; the
-    #-- 8× cushion covers the handful of rounding ops in the float solve above
-    err = 8 * eps(Float64) * (1.0 + condK) * (abs(x) + abs(y) + 1.0)
-    return (x, y, err)
+    return _approx_crossing_point(k.pt, k.a1, k.b0, k.b1)
 end
 
 # Order two nodes along the oriented segment (s0, s1). The along parameter is

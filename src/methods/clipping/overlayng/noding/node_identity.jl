@@ -92,9 +92,12 @@ function _merge_coincident_nodes!(m::Manifold, table::NodeTable{P}, seg_nodes; e
 end
 
 # Planar proximity sweep: a single x-sort, forward scan while the x-gap is within
-# the summed proximity radii, exact confirm, union. A true coincidence has
-# near-identical float positions (≪ the crossing radius), so the sweep never
-# misses one; over-broad radii only cost extra exact confirms.
+# the summed proximity radii, exact confirm, union. Every node is positioned to
+# within max(1e-9·scale, half an ulp) — a crossing whose certified float error
+# exceeds 1e-9·scale is re-positioned from its exact rational point — so the
+# 1e-8·scale gate strictly exceeds any coincident pair's summed error and no
+# merge can be missed; over-broad radii only cost extra exact confirms. This
+# gate is sound only because `_approx_node_point`'s radius is conservative.
 function _coincidence_sweep!(m::Planar, table::NodeTable{P}, parent; exact) where {P}
     n = num_nodes(table)
     xs = Vector{Float64}(undef, n)
@@ -102,10 +105,13 @@ function _coincidence_sweep!(m::Planar, table::NodeTable{P}, parent; exact) wher
     rad = Vector{Float64}(undef, n)
     for i in 1:n
         k = table.keys[i]
-        x, y, _ = _approx_node_point(k)
+        x, y, err = _approx_node_point(k)
+        #-- negated so a NaN solve (float determinant rounded to 0) also escalates
+        if k.is_crossing && !(err <= 1e-9 * max(1.0, abs(x), abs(y)))
+            ex, ey = _exact_node_point(k)
+            x = Float64(ex); y = Float64(ey)
+        end
         xs[i] = x; ys[i] = y
-        #-- crossings can land off their float approximation; vertices are exact.
-        #-- 1e-8·|coord| is a generous proximity gate (the exact test confirms)
         rad[i] = k.is_crossing ? 1e-8 * max(1.0, abs(x), abs(y)) : 0.0
     end
     order = sortperm(xs)

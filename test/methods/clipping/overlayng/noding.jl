@@ -8,6 +8,7 @@ include(joinpath(@__DIR__, "common.jl"))
 import GeometryOps: Planar, Spherical, True, False
 import GeometryOps.UnitSpherical: UnitSphericalPoint, UnitSphereFromGeographic
 using LinearAlgebra: cross, dot, norm
+import Random
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -315,4 +316,90 @@ end
         end
         @test tested >= 2
     end
+end
+
+# ---------------------------------------------------------------------------
+# 6. Coincidence sweep positions ill-conditioned crossings exactly
+# ---------------------------------------------------------------------------
+
+@testset "coincidence sweep merges an ill-conditioned exact coincidence" begin
+    #-- the measured counterexample: a proper crossing whose exact point is (1,1)
+    #-- but whose float solve lands ~1.2e-7 off with a determinant-only error
+    #-- claim of ~1e-14; the vertex node at (1,1) coincides with it exactly
+    a, b = (4.096955890625e8, 1.25542458125e8), (-8.19391175125e8, -2.5108491325e8)
+    c, d = (-6.4578703125e6, 2.44491420625e8), (1.93736149375e7, -7.33474257875e8)
+    k = GO.crossing_node(a, b, c, d)
+    vk = GO.vertex_node((1.0, 1.0))
+    @test GO._exact_node_point(k) == (1 // 1, 1 // 1)
+    x, y, err = GO._approx_node_point(k)
+    @test err >= abs(x - 1.0) + abs(y - 1.0)          # the radius covers the miss
+    P = Tuple{Float64, Float64}
+    t = GO.NodeTable{P, P}()
+    GO._intern_node!(t, vk); GO._intern_node!(t, k)
+    parent = Int32[1, 2]
+    @test GO._coincidence_sweep!(Planar(), t, parent; exact = True()) == 1
+    @test GO._uf_find(parent, Int32(1)) == GO._uf_find(parent, Int32(2))
+end
+
+@testset "near-coincident crossing pairs node without throwing" begin
+    #-- seeded batch of the same family: a crossing exactly on a third string's
+    #-- vertex, with endpoints large enough that the float solve is off by
+    #-- far more than the 1e-8 proximity gate
+    rng = Random.Xoshiro(54)
+    v = (1.0, 1.0)
+    dyadic() = rand(rng, -10_000_000_000:10_000_000_000) / 16
+    nbatch = 0
+    while nbatch < 300
+        u = (dyadic(), dyadic()); w = (dyadic(), dyadic())
+        u[1] * w[2] == u[2] * w[1] && continue
+        a, b, c, d = v .- u, v .+ 2 .* u, v .- w, v .+ 3 .* w
+        A = GI.LineString([a, b])
+        B = GI.MultiLineString([GI.LineString([c, d]), GI.LineString([(0.0, -5.0), v, (7.0, 0.0)])])
+        arr = GO.NodedArrangement(Planar(), A, B; exact = True())
+        #-- the crossing and the vertex are one node
+        @test count(i -> GO.node_point(arr, i) == v, 1:GO.num_nodes(arr)) == 1
+        nbatch += 1
+    end
+end
+
+function _rational_planar_crossing(a0, a1, b0, b1)
+    R = Rational{BigInt}
+    ax0, ay0 = R(a0[1]), R(a0[2]); ax1, ay1 = R(a1[1]), R(a1[2])
+    bx0, by0 = R(b0[1]), R(b0[2]); bx1, by1 = R(b1[1]), R(b1[2])
+    dax, day = ax1 - ax0, ay1 - ay0
+    dbx, dby = bx1 - bx0, by1 - by0
+    c0x, c0y = bx0 - ax0, by0 - ay0
+    t = (c0x * dby - c0y * dbx) / (dax * dby - day * dbx)
+    return Float64(ax0 + t * dax), Float64(ay0 + t * day)
+end
+
+@testset "planar emission: validated arithmetic domains" begin
+    large = 0x1p200
+    large_step = eps(large)
+    outside = 0x1p500
+    outside_step = eps(outside)
+    cases = [
+        ((0.0, 0.0), (10.0, 10.0), (0.0, 10.0), (10.0, 0.0)),
+        ((large, large), (large + 16large_step, large + 12large_step),
+         (large, large + 12large_step), (large + 16large_step, large)),
+        ((0.0, 0.0), (0x1p-200, 0x1p-200),
+         (0.0, 0x1p-200), (0x1p-200, 0.0)),
+        ((0.0, 0.0), (1.0, 1.0),
+         (0.0, -0x1p-41), (1.0, 1.0 + 0x1p-41)),
+        ((outside, outside), (outside + 16outside_step, outside + 12outside_step),
+         (outside, outside + 12outside_step), (outside + 16outside_step, outside)),
+    ]
+    ncert = 0
+    for (a0, a1, b0, b1) in cases
+        x, y, cert = GO._certified_crossing(a0, a1, b0, b1)
+        want = _rational_planar_crossing(a0, a1, b0, b1)
+        k = GO.crossing_node(a0, a1, b0, b1)
+        @test GO._emit_node_coord(k, Tuple{Float64, Float64}) == want
+        if cert
+            @test (x, y) == want
+            ncert += 1
+        end
+    end
+    @test 0 < ncert < length(cases)
+    @test !GO._certified_crossing(cases[end]...)[3]
 end

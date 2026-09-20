@@ -7,6 +7,7 @@ import GeometryOps: Planar, True, False
 import GeometryOps.UnitSpherical: UnitSphericalPoint
 import GeoInterface as GI
 import Extents
+import Random
 
 const PT = Tuple{Float64, Float64}
 m = Planar()
@@ -385,4 +386,28 @@ end
     order = sortperm(collect(eachindex(ks));
         lt = (i, j) -> GO.rk_compare_along_segment(ms, s0, s1, ks[i], ks[j]; exact = True()) < 0)
     @test order == collect(eachindex(ks))
+end
+
+@testset "planar crossing error radius is conservative" begin
+    #-- near-coincident family through v=(1,1) with large dyadic endpoints: both
+    #-- the determinant and the numerator of t cancel, and |t·dax| amplifies the
+    #-- error far from a0 — the configuration the old determinant-only bound
+    #-- under-reported by 1e7×
+    rng = Random.Xoshiro(54)
+    v = (1.0, 1.0)
+    dyadic() = rand(rng, -10_000_000_000:10_000_000_000) / 16
+    R = Rational{BigInt}
+    worst = 0.0
+    for _ in 1:3000
+        u = (dyadic(), dyadic()); w = (dyadic(), dyadic())
+        u[1] * w[2] == u[2] * w[1] && continue
+        k = GO.crossing_node(v .- u, v .+ 2 .* u, v .- w, v .+ 3 .* w)
+        x, y, err = GO._approx_node_point(k)
+        ex, ey = GO._exact_node_point(k)
+        true_err = Float64(abs(R(x) - ex) + abs(R(y) - ey))
+        worst = max(worst, true_err / err)
+    end
+    @test worst <= 1.0
+    #-- vertex nodes are exact
+    @test GO._approx_node_point(GO.vertex_node((3.0, 4.0))) == (3.0, 4.0, 0.0)
 end
