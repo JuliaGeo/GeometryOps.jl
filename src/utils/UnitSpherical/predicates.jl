@@ -123,6 +123,9 @@ collinear. Exact signs preserve their topology.
 Grouping unit vectors separately gives a filter bound near `5e-15`, even for nearby points.
 Instead use `det[a; b; c] == det[a; b-a; c-a]`, whose bound scales with separation squared.
 
+Exact orientation costs about twice a plain triple product and 1.2 times
+[`spherical_orient`](@ref).
+
 Unresolved signs use exact arithmetic. Non-finite coordinates are outside the contract and
 throw.
 
