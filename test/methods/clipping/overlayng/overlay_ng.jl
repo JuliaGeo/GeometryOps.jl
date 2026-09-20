@@ -305,20 +305,21 @@ end
     for m in (Planar(), Spherical()), exact in (GO.False(), GO.True())
         pts = m isa Planar ? lonlat : GO._ring_usp(GI.LinearRing(lonlat))
         L = GO.IndexedPointInAreaLocator{typeof(m), typeof(exact)}
-        R = GO._edge_ring_type(eltype(pts), m, exact)
+        R = GO._edge_ring_type(m, exact, eltype(pts))
         @test isconcretetype(R)
-        @test fieldtype(R, :locator) == Union{Nothing, L}
+        @test fieldtype(R, :locator) == Base.RefValue{Union{Nothing, L}}
         ring = R(1, 1, pts, Int32[], false,
-                 ntuple(_ -> 0.0, GO._bbox_len(eltype(pts))), 0, Int32[], nothing)
+                 ntuple(_ -> 0.0, GO._bbox_len(eltype(pts))), Ref(Int32(0)), Int32[],
+                 Base.RefValue{Union{Nothing, L}}(nothing))
         ctx = (; m, exact)
-        @test ring.locator === nothing
+        @test ring.locator[] === nothing
         # Start on the boundary so the caller must be able to continue probing.
         @test @inferred(GO._ring_locate(ctx, ring, pts[1])) == GO.LOC_BOUNDARY
-        locator = ring.locator
+        locator = ring.locator[]
         @test locator isa L
         interior = m isa Planar ? (5.0, 5.0) : GO._spherical_kernel_point((5.0, 5.0))
         @test @inferred(GO._ring_locate(ctx, ring, interior)) == GO.LOC_INTERIOR
-        @test ring.locator === locator
+        @test ring.locator[] === locator
     end
 end
 
