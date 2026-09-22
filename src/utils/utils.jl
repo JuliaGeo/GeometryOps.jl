@@ -319,4 +319,31 @@ function _geometry_or_error(g; geometrycolumn=:geometry)
 end
 _geometry_or_error(g::Extents.Extent; kw...) = g
 
+#=
+## Resolving `AutoManifold`
 
+Methods that accept `AutoManifold` select the manifold once, from the CRS of the
+top-level input.  Geometries without a CRS, and projected geometries, are planar
+in native units.  Without Proj, GeoInterface's geographic trait is the only signal
+to interpret coordinates as degree lon/lat on a sphere.
+
+The Proj extension adds methods for recognized CRSs, which select a `Geodesic`
+manifold on the CRS ellipsoid.  Its angular axes need not be east/north degrees,
+so `_auto_manifold` also returns the degrees per coordinate unit of the longitude
+and latitude axes, which only `Geodesic` implementations consume.
+=#
+_auto_manifold(geom) = _auto_manifold_from_crs(GI.crs(geom), geom)
+# Check the CRS before the CRS trait: `UnknownTrait()` emits a deprecation warning.
+_auto_manifold_from_crs(::Nothing, geom) = Planar(), (1, 1)
+_auto_manifold_from_crs(crs, geom) = _auto_manifold_with_crs(GI.crstrait(geom), crs)
+
+function _auto_manifold(geom1, geom2)
+    crs1, crs2 = GI.crs(geom1), GI.crs(geom2)
+    isnothing(crs1) && return _auto_manifold(geom2)
+    isnothing(crs2) || crs1 == crs2 ||
+        throw(ArgumentError("geometries have different CRSs $crs1 and $crs2; pass a manifold explicitly"))
+    return _auto_manifold(geom1)
+end
+
+_auto_manifold_with_crs(::GI.AbstractGeographicTrait, crs) = Spherical(), (1, 1)
+_auto_manifold_with_crs(::GI.AbstractProjectedTrait, crs) = Planar(), (1, 1)

@@ -8,5 +8,6 @@ using GeometryOps, Proj
 include("reproject.jl")
 include("segmentize.jl")
 include("perimeter_area.jl")
+include("distance.jl")
 
 end

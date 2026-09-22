@@ -178,13 +178,14 @@ end
 # ## Implementation
 
 """
-    segmentize([method = Planar()], geom; max_distance::Real, threaded)
+    segmentize([method = AutoManifold()], geom; max_distance::Real, threaded)
 
 Segmentize a geometry by adding extra vertices to the geometry so that no segment is longer than a given distance.  
 This is useful for plotting geometries with a limited number of vertices, or for ensuring that a geometry is not too "coarse" for a given application.
 
 ## Arguments
-- `method::Manifold = Planar()`: The method to use for segmentizing the geometry.  At the moment, [`Planar`](@ref) (assumes a flat plane), [`Spherical`](@ref) (assumes geometry on a sphere and interpolates along great circles) and [`Geodesic`](@ref) (assumes geometry on the ellipsoidal Earth and uses Vincenty's formulae) are available.
+- `method::Manifold = AutoManifold()`: The method to use for segmentizing the geometry.  At the moment, [`Planar`](@ref) (assumes a flat plane), [`Spherical`](@ref) (assumes geometry on a sphere and interpolates along great circles) and [`Geodesic`](@ref) (assumes geometry on the ellipsoidal Earth and uses Vincenty's formulae) are available.
+  `AutoManifold()` selects the manifold from the CRS of `geom`, as for [`area`](@ref): with the Proj extension loaded, recognized geographic CRSs use `Geodesic` on the CRS ellipsoid.  Without Proj, geographic geometries use `Spherical`.  Projected, unknown, and CRS-less geometries use `Planar`.
 - `geom`: The geometry to segmentize.  Must be a `LineString`, `LinearRing`, `Polygon`, `MultiPolygon`, or `GeometryCollection`, or some vector or table of those.
 - `max_distance::Real`: The maximum distance between vertices in the geometry.  
   For `Planar` manifolds, this is in the units of the geometry.  For `Spherical` and `Geodesic`, this is in the units of the manifold (the units of the radius of the sphere/ellipsoid).  By default this is meters.
@@ -194,20 +195,33 @@ This is useful for plotting geometries with a limited number of vertices, or for
 Returns a geometry of similar type to the input geometry, but resampled.
 """
 function segmentize(geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
-    return segmentize(Planar(), geom; max_distance, threaded = booltype(threaded))
+    return segmentize(AutoManifold(), geom; max_distance, threaded = booltype(threaded))
 end
 
 # allow three-arg method as well, just in case
-segmentize(geom, max_distance::Real; threaded = False()) = segmentize(Planar(), geom, max_distance; threaded)
+segmentize(geom, max_distance::Real; threaded = False()) = segmentize(AutoManifold(), geom, max_distance; threaded)
 segmentize(method::Manifold, geom, max_distance::Real; threaded = False()) = segmentize(method, geom; max_distance, threaded)
 
 # generic implementation
 function segmentize(method::Manifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
-    if max_distance <= 0 
+    _segmentize_function(geom) = _segmentize(method, geom, GI.trait(geom); max_distance)
+    return _segmentize_apply(_segmentize_function, geom; max_distance, threaded)
+end
+
+function segmentize(::AutoManifold, geom; max_distance, threaded::Union{Bool, BoolsAsTypes} = False())
+    m, scales = _auto_manifold(geom)
+    return _segmentize_auto(m, geom, scales; max_distance, threaded)
+end
+
+# The Proj extension adds a `Geodesic` method that applies the CRS axis scales.
+_segmentize_auto(m::Manifold, geom, scales; kwargs...) = segmentize(m, geom; kwargs...)
+
+# Apply the per-curve segmentization `f` to every curve in `geom`.
+function _segmentize_apply(f, geom; max_distance, threaded)
+    if max_distance <= 0
         throw(ArgumentError("`max_distance` should be positive and nonzero!  Found $(max_distance)."))
     end
-    _segmentize_function(geom) = _segmentize(method, geom, GI.trait(geom); max_distance)
-    return apply(_segmentize_function, TraitTarget(GI.LinearRingTrait(), GI.LineStringTrait()), geom; threaded)
+    return apply(f, TraitTarget(GI.LinearRingTrait(), GI.LineStringTrait()), geom; threaded)
 end
 
 function segmentize(method::SegmentizeMethod, geom; threaded::Union{Bool, BoolsAsTypes} = False())

@@ -40,8 +40,16 @@ end
 # This is the same method as in `transformations/segmentize.jl`,
 # but it constructs a Proj geodesic line every time.
 # Maybe this should be better...
-function _segmentize(method::Geodesic, geom, ::Union{GI.LineStringTrait, GI.LinearRingTrait}; max_distance)
-    proj_geodesic = Proj.geod_geodesic(method.semimajor_axis #= same thing as equatorial radius =#, 1/method.inv_flattening)
+_segmentize(method::Geodesic, geom, ::Union{GI.LineStringTrait, GI.LinearRingTrait}; max_distance) =
+    _geodesic_segmentize(method, geom, (1, 1); max_distance)
+
+function GeometryOps._segmentize_auto(method::Geodesic, geom, scales; max_distance, threaded)
+    _segmentize_function(geom) = _geodesic_segmentize(method, geom, scales; max_distance)
+    return GeometryOps._segmentize_apply(_segmentize_function, geom; max_distance, threaded)
+end
+
+function _geodesic_segmentize(method::Geodesic, geom, scales; max_distance)
+    proj_geodesic = Proj.geod_geodesic(method.semimajor_axis #= same thing as equatorial radius =#, _flattening(method.inv_flattening))
     first_coord = GI.getpoint(geom, 1)
     x1, y1 = GI.x(first_coord), GI.y(first_coord)
     new_coords = NTuple{2, Float64}[]
@@ -49,22 +57,24 @@ function _segmentize(method::Geodesic, geom, ::Union{GI.LineStringTrait, GI.Line
     push!(new_coords, (x1, y1))
     for coord in Iterators.drop(GI.getpoint(geom), 1)
         x2, y2 = GI.x(coord), GI.y(coord)
-        _fill_linear_kernel!(method, new_coords, x1, y1, x2, y2; max_distance, proj_geodesic)
+        _fill_linear_kernel!(method, new_coords, x1, y1, x2, y2; max_distance, proj_geodesic, scales)
         x1, y1 = x2, y2
     end 
     return rebuild(geom, new_coords)
 end
 
-function GeometryOps._fill_linear_kernel!(method::Geodesic, new_coords::Vector, x1, y1, x2, y2; max_distance, proj_geodesic)
-    geod_line = Proj.geod_inverseline(proj_geodesic, y1, x1, y2, x2)
+# `scales` are the degrees per coordinate unit of the longitude and latitude axes.
+function GeometryOps._fill_linear_kernel!(method::Geodesic, new_coords::Vector, x1, y1, x2, y2; max_distance, proj_geodesic, scales = (1, 1))
+    longitude_scale, latitude_scale = scales
+    geod_line = Proj.geod_inverseline(proj_geodesic, latitude_scale * y1, longitude_scale * x1, latitude_scale * y2, longitude_scale * x2)
     # This is the distance in meters computed between the two points.
     # It's `s13` because `geod_inverseline` sets point 3 to the second input point.
     distance = geod_line.s13 
     if distance > max_distance
         n_segments = ceil(Int, distance / max_distance)
         for i in 1:(n_segments - 1)
-            y, x, _ = Proj.geod_position(geod_line, i / n_segments * distance)
-            push!(new_coords, (x, y))
+            lat, lon, _ = Proj.geod_position(geod_line, i / n_segments * distance)
+            push!(new_coords, (lon / longitude_scale, lat / latitude_scale))
         end
     end
     # End the line with the original coordinate,

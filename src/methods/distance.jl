@@ -57,7 +57,8 @@ Distance and signed distance are only implemented for points to other geometries
 right now. This could be extended to include distance from other geometries in
 the future.
 
-The distance calculated is the Euclidean distance using the Pythagorean theorem.
+On the `Planar` manifold, the distance calculated is the Euclidean distance using
+the Pythagorean theorem.
 Also note that singed_distance only makes sense for "filled-in" shapes, like
 polygons, so it isn't implemented for curves.
 =#
@@ -65,14 +66,14 @@ polygons, so it isn't implemented for curves.
 const _DISTANCE_TARGETS = TraitTarget{Union{GI.AbstractPolygonTrait,GI.LineStringTrait,GI.LinearRingTrait,GI.LineTrait,GI.PointTrait}}()
 
 """
-    distance(point, geom, ::Type{T} = Float64)::T
+    distance([m::Manifold = AutoManifold()], point, geom, ::Type{T} = Float64)::T
 
 Calculates the distance from the geometry `g1` to the `point`. The distance
 will always be positive or zero.
 
 The method will differ based on the type of the geometry provided:
-    - The distance from a point to a point is just the Euclidean distance
-    between the points.
+    - The distance from a point to a point is just the distance between the
+    points.
     - The distance from a point to a line is the minimum distance from the point
     to the closest point on the given line.
     - The distance from a point to a linestring is the minimum distance from the
@@ -85,55 +86,41 @@ The method will differ based on the type of the geometry provided:
     - The distance from a point to a multigeometry or a geometry collection is
     the minimum distance between the point and any of the sub-geometries.
 
+## Manifold support
+
+- `AutoManifold()` (default): selects the manifold from the CRS of the inputs,
+  as for [`area`](@ref). An input without a CRS takes the CRS of the other
+  input; inputs with different CRSs throw an `ArgumentError`. With the Proj
+  extension loaded, recognized geographic CRSs use a geodesic calculation on
+  the CRS ellipsoid, in metres. Without Proj, geographic geometries use
+  `Spherical()`. Projected, unknown, and CRS-less geometries use `Planar()`.
+- `Planar()`: Euclidean distance in native coordinate units, regardless of CRS.
+- `Spherical()`: great-circle distance, with coordinates interpreted as
+  (longitude, latitude) in degrees, in units of the sphere's radius.
+- `Geodesic()`: geodesic distance on the ellipsoid (requires Proj extension).
+  Whether a point lies inside a polygon is decided on the sphere.
+
 Result will be of type T, where T is an optional argument with a default value
 of Float64.
 """
 function distance(
     geom1, geom2, ::Type{T} = Float64; threaded=false
 ) where T<:AbstractFloat
-    distance(GI.trait(geom1), geom1, GI.trait(geom2), geom2, T; threaded)
-end
-function distance(
-    trait1, geom, trait2::GI.PointTrait, point, ::Type{T} = Float64;
-    threaded=false
-) where T<:AbstractFloat
-    distance(trait2, point, trait1, geom, T) # Swap order
-end
-function distance(
-    trait1::GI.PointTrait, point, trait2, geom, ::Type{T} = Float64;
-    threaded=false
-) where T<:AbstractFloat
-    applyreduce(min, _DISTANCE_TARGETS, geom; threaded, init=typemax(T)) do g
-        _distance(T, trait1, point, GI.trait(g), g)
-    end
-end
-# Needed for method ambiguity
-function distance(
-    trait1::GI.PointTrait, point1, trait2::GI.PointTrait, point2, ::Type{T} = Float64;
-    threaded=false
-) where T<:AbstractFloat
-    _distance(T, trait1, point1, trait2, point2)
+    distance(AutoManifold(), geom1, geom2, T; threaded)
 end
 
-# Point-Point, Point-Line, Point-LineString, Point-LinearRing
-_distance(::Type{T}, ::GI.PointTrait, point, ::GI.PointTrait, geom) where T =
-    _euclid_distance(T, point, geom)
-_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LineTrait, geom) where T = 
-    _distance_line(T, point, GI.getpoint(geom, 1), GI.getpoint(geom, 2))
-_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LineStringTrait, geom) where T =
-    _distance_curve(T, point, geom; close_curve = false)
-_distance(::Type{T}, ::GI.PointTrait, point, ::GI.LinearRingTrait, geom) where T =
-    _distance_curve(T, point, geom; close_curve = true)
-# Point-Polygon
-function _distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
-    within(point, geom) && return zero(T)
-    return _distance_polygon(T, point, geom)
+function distance(::AutoManifold, geom1, geom2, ::Type{T} = Float64; kwargs...) where T <: AbstractFloat
+    m, scales = _auto_manifold(geom1, geom2)
+    _distance_auto(m, geom1, geom2, T, scales; kwargs...)
 end
+
+# The Proj extension adds a `Geodesic` method that applies the CRS axis scales.
+_distance_auto(m::Manifold, geom1, geom2, ::Type{T}, scales; kwargs...) where T =
+    distance(m, geom1, geom2, T; kwargs...)
 
 function distance(m::Manifold, geom1, geom2, ::Type{T} = Float64; kwargs...) where T <: AbstractFloat
     distance(m, GI.trait(geom1), geom1, GI.trait(geom2), geom2, T; kwargs...)
 end
-
 
 function distance(
     m::Manifold, trait1, geom, trait2::GI.PointTrait, point, ::Type{T} = Float64;
@@ -157,17 +144,60 @@ function distance(
     _distance(m, T, trait1, point1, trait2, point2)
 end
 
-function _distance(::Planar, args...)
-    _distance(args...)
+#=
+Each manifold provides a point-point kernel, `_distance_point`, and a
+point-segment kernel, `_distance_segment`; the curve and polygon distances
+below are built on those.
+=#
+
+# Point-Point, Point-Line, Point-LineString, Point-LinearRing
+_distance(m::Manifold, ::Type{T}, ::GI.PointTrait, point, ::GI.PointTrait, geom) where T =
+    _distance_point(m, T, point, geom)
+_distance(m::Manifold, ::Type{T}, ::GI.PointTrait, point, ::GI.LineTrait, geom) where T =
+    _distance_segment(m, T, point, GI.getpoint(geom, 1), GI.getpoint(geom, 2))
+_distance(m::Manifold, ::Type{T}, ::GI.PointTrait, point, ::GI.LineStringTrait, geom) where T =
+    _distance_curve(m, T, point, geom; close_curve = false)
+_distance(m::Manifold, ::Type{T}, ::GI.PointTrait, point, ::GI.LinearRingTrait, geom) where T =
+    _distance_curve(m, T, point, geom; close_curve = true)
+# Point-Polygon
+function _distance(m::Manifold, ::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
+    _distance_within(m, point, geom) && return zero(T)
+    return _distance_polygon(m, T, point, geom)
 end
 
-function _distance(m::Spherical, ::Type{T}, trait1::GI.PointTrait, p1, trait2::GI.PointTrait, p2) where T <: AbstractFloat
-    t = UnitSpherical.UnitSphereFromGeographic()
-    p1_us = t(p1)
-    p2_us = t(p2)
+_distance_within(m::Manifold, point, geom) = within(m, point, geom)
+#= There is no geodesic point-in-polygon test, so use the spherical one.  A
+geodesic edge deviates slightly from the great-circle edge between the same
+vertices, so this can only differ for points very close to the boundary. =#
+_distance_within(::Geodesic, point, geom) = within(Spherical(), point, geom)
 
-    dist = UnitSpherical.spherical_distance(p1_us, p2_us)
-    return T(dist * m.radius)
+_distance_point(::Planar, ::Type{T}, p1, p2) where T = _euclid_distance(T, p1, p2)
+_distance_segment(::Planar, ::Type{T}, p0, p1, p2) where T = _distance_line(T, p0, p1, p2)
+
+function _distance_point(m::Spherical, ::Type{T}, p1, p2) where T
+    t = UnitSpherical.UnitSphereFromGeographic()
+    return T(UnitSpherical.spherical_distance(t(p1), t(p2)) * m.radius)
+end
+
+#=
+On the sphere, the closest point of the great circle through `a` and `b` to
+`p` is the projection of `p` onto the circle's plane.  If that projection lies
+on the arc, it is the closest point of the arc; otherwise the closest point is
+the nearest endpoint.
+=#
+function _distance_segment(m::Spherical, ::Type{T}, p0, p1, p2) where T
+    t = UnitSpherical.UnitSphereFromGeographic()
+    p, a, b = t(p0), t(p1), t(p2)
+    endpoint_distance = min(UnitSpherical.spherical_distance(p, a), UnitSpherical.spherical_distance(p, b))
+    a == b && return T(endpoint_distance * m.radius)
+    n = normalize(UnitSpherical.robust_cross_product(a, b))
+    # `n × a` points along the arc from `a` towards `b`, `b × n` from `b` towards `a`.
+    if cross(n, a) ⋅ p >= 0 && cross(b, n) ⋅ p >= 0
+        out_of_plane = n ⋅ p
+        in_plane = norm(p - out_of_plane * n)
+        return T(min(atan(abs(out_of_plane), in_plane), endpoint_distance) * m.radius)
+    end
+    return T(endpoint_distance * m.radius)
 end
 
 """
@@ -220,11 +250,11 @@ end
 function _signed_distance(
     ::Type{T}, ptrait::GI.PointTrait, point, gtrait::GI.AbstractGeometryTrait, geom
 ) where T
-    _distance(T, ptrait, point, gtrait, geom)
+    _distance(Planar(), T, ptrait, point, gtrait, geom)
 end
 # Point-Polygon
 function _signed_distance(::Type{T}, ::GI.PointTrait, point, ::GI.PolygonTrait, geom) where T
-    min_dist = _distance_polygon(T, point, geom)
+    min_dist = _distance_polygon(Planar(), T, point, geom)
     return within(point, geom) ? -min_dist : min_dist
     # negative if point is inside polygon
 end
@@ -295,7 +325,7 @@ Returns the minimum distance from the given point to the given curve. If
 close_curve is true, make sure to include the edge from the first to last point
 of the curve, even if it isn't explicitly repeated.
 =#
-function _distance_curve(::Type{T}, point, curve; close_curve = false) where T
+function _distance_curve(m::Manifold, ::Type{T}, point, curve; close_curve = false) where T
     # see if linear ring has explicitly repeated last point in coordinates
     np = GI.npoint(curve)
     first_last_equal = equals(GI.getpoint(curve, 1), GI.getpoint(curve, np))
@@ -306,7 +336,7 @@ function _distance_curve(::Type{T}, point, curve; close_curve = false) where T
     p1 = GI.getpoint(curve, close_curve ? np : 1)
     for i in (close_curve ? 1 : 2):np
         p2 = GI.getpoint(curve, i)
-        dist = _distance_line(T, point, p1, p2)
+        dist = _distance_segment(m, T, point, p1, p2)
         min_dist = dist < min_dist ? dist : min_dist
         p1 = p2
     end
@@ -318,10 +348,10 @@ Returns the minimum distance from the given point to an edge of the given
 polygon, including from edges created by holes. Assumes polygon isn't filled and
 treats the exterior and each hole as a linear ring.
 =#
-function _distance_polygon(::Type{T}, point, poly) where T
-    min_dist = _distance_curve(T, point, GI.getexterior(poly); close_curve = true)
+function _distance_polygon(m::Manifold, ::Type{T}, point, poly) where T
+    min_dist = _distance_curve(m, T, point, GI.getexterior(poly); close_curve = true)
     @inbounds for hole in GI.gethole(poly)
-        dist = _distance_curve(T, point, hole; close_curve = true)
+        dist = _distance_curve(m, T, point, hole; close_curve = true)
         min_dist = dist < min_dist ? dist : min_dist
     end
     return min_dist
