@@ -319,4 +319,6 @@ function _geometry_or_error(g; geometrycolumn=:geometry)
 end
 _geometry_or_error(g::Extents.Extent; kw...) = g
 
-
+# GeoInterface reports `UnknownTrait` unless a type implements `crstrait`. Without Proj,
+# that is all there is to go on; the Proj extension classifies the attached `crs`.
+_crstrait(trait::GI.AbstractCRSTrait, crs) = trait
