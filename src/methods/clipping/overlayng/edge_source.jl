@@ -38,7 +38,7 @@ end
 # ring's stored order and matching that convention exactly. Folding the hole flip
 # into `_ring_material_interior_on_left` keeps relate / overlay / extents in
 # agreement by construction.
-function _ring_depth_delta(m::Manifold, pts::Vector, is_hole::Bool; exact)
+function _ring_depth_delta(m::Manifold, pts::AbstractVector, is_hole::Bool; exact)
     return _ring_material_interior_on_left(m, pts, is_hole; exact) ? Int8(-1) : Int8(1)
 end
 

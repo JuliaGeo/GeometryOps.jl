@@ -505,7 +505,7 @@ CCW in both windings.
 `exact` is unused: turn signs always use exact orientation. Normalize vertices because
 `robust_cross_product` requires unit input.
 =#
-function _ring_is_ccw(::Spherical, ring::Vector; exact)
+function _ring_is_ccw(::Spherical, ring::AbstractVector; exact)
     loop = _prune_loop_degeneracies([rk_normalize_usp(p) for p in ring])
     n = length(loop)
     n < 3 && return false   # bounds no area (JTS convention for flat rings)
@@ -519,8 +519,10 @@ retraced edges (`ABA → A`), including across closure.
 Remaining vertices have distinct, non-retracing neighbors. A fully degenerate loop returns
 fewer than three vertices.
 =#
-function _prune_loop_degeneracies(pts::Vector, same = ==)
-    vertices = empty(pts)
+function _prune_loop_degeneracies(pts::AbstractVector, same = ==)
+    # A fresh resizable `Vector`, not `empty(pts)`: that is an immutable
+    # `SVector{0}` for an `SVector` input, and the loop below `push!`es/`pop!`s.
+    vertices = Vector{eltype(pts)}()
     sizehint!(vertices, length(pts))
     for v in pts
         if !isempty(vertices)
@@ -677,7 +679,7 @@ For `Spherical(; oriented = true)`, stored winding defines the region as in S2 `
 Shells denote their left region; holes denote their right cavity. Reversing a ring denotes the
 complement, allowing regions larger than a hemisphere.
 =#
-_ring_interior_on_left(m::Spherical, pts::Vector, is_hole::Bool; exact) =
+_ring_interior_on_left(m::Spherical, pts::AbstractVector, is_hole::Bool; exact) =
     m.oriented ? !is_hole : _ring_is_ccw(m, pts; exact)
 
 # ## rk_point_in_ring (definitional-exterior crossing parity, winding-independent)
