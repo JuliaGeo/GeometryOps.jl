@@ -223,3 +223,22 @@ end
         @test dext.Z[1] ≈ sind(60) atol = 1e-12
     end
 end
+
+# Comprehensions over a StaticArrays-backed ring yield a `SizedVector`, which used
+# to hit `::Vector`-only methods on the spherical extent path.
+@testset "Spherical extent of StaticArrays-backed rings" begin
+    import StaticArrays: SVector, MVector
+    m = GO.Spherical()
+    ccw = vcat(polar_ring(0.9, 4), [first(polar_ring(0.9, 4))])
+    for pts in (ccw, reverse(ccw))   # CW reverses lazily inside `_orient_ring`
+        ref = GO.extent(m, GI.Polygon([GI.LinearRing(pts)]))
+        for wrap in (SVector{5}, MVector{5})
+            @test GO.extent(m, GI.Polygon([GI.LinearRing(wrap(pts))])) == ref
+        end
+    end
+    lonlat = [(lon, 60.0) for lon in 0.0:90.0:360.0]   # geographic tuples
+    @test GO.extent(m, GI.Polygon([GI.LinearRing(SVector{5}(lonlat))])) ==
+          GO.extent(m, GI.Polygon([GI.LinearRing(lonlat)]))
+    polys = [GI.Polygon([GI.LinearRing(SVector{5}(ccw))]) for _ in 1:3]
+    @test GO.FlexibleRTrees.RTree(m, GO.FlexibleRTrees.STR(), polys) isa GO.FlexibleRTrees.RTree
+end

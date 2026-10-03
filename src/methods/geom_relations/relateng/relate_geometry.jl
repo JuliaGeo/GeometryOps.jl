@@ -629,7 +629,8 @@ function _extract_ring_to_segment_string!(rg::RelateGeometry, is_a::Bool, ring, 
     require_cw = ring_id == 0
     pts = _to_kernel_points(rg.m, ring)
     pts = _orient_ring(rg.m, pts, require_cw, ring_id != 0; exact = rg.exact)
-    ss = _rss_create_ring(pts, is_a, rg.element_id, ring_id, parent_poly, rg)
+    #-- `RelateSegmentString.pts` is a `Vector{P}` field: materialize a reversed view here
+    ss = _rss_create_ring(_as_vector(pts), is_a, rg.element_id, ring_id, parent_poly, rg)
     push!(seg_strings, ss)
     return nothing
 end
@@ -637,12 +638,19 @@ end
 # Port of RelateGeometry.orient (static; moved here from point_locator.jl in
 # Task 13 — `AdjacentEdgeLocator._add_ring!` also uses it): coordinate vector
 # of `pts` with the ring's denoted region on the requested side (`orient_cw =
-# true` ⇒ on the right), reversing a copy only if needed. Which side the
-# region lies on in the stored order comes from `_ring_interior_on_left`.
-function _orient_ring(m, pts::Vector, orient_cw::Bool, is_hole::Bool; exact)
+# true` ⇒ on the right). A flip returns a lazy reversed view (no copy), so the
+# result is `pts` itself or a 1-based `SubArray` of it; callers that store the
+# points in a `Vector` field go through `_as_vector`. Which side the region
+# lies on in the stored order comes from `_ring_interior_on_left`.
+function _orient_ring(m, pts::AbstractVector, orient_cw::Bool, is_hole::Bool; exact)
+    Base.require_one_based_indexing(pts)
     is_flipped = orient_cw == _ring_interior_on_left(m, pts, is_hole; exact)
-    return is_flipped ? reverse(pts) : pts
+    return is_flipped ? view(pts, lastindex(pts):-1:firstindex(pts)) : pts
 end
+
+# A point list as a `Vector`: no copy when it already is one.
+_as_vector(pts::Vector) = pts
+_as_vector(pts::AbstractVector) = collect(pts)
 
 #=
 The one per-ring bit every consumer shares: whether the region the ring
@@ -653,7 +661,7 @@ the bit is the ring's winding (`_ring_is_ccw`); `Spherical(; oriented =
 true)` overrides this (kernel_spherical.jl) with the declared role — there
 the stored winding is authoritative.
 =#
-_ring_interior_on_left(m, pts::Vector, is_hole::Bool; exact) =
+_ring_interior_on_left(m, pts::AbstractVector, is_hole::Bool; exact) =
     _ring_is_ccw(m, pts; exact)
 
 #=
@@ -667,7 +675,7 @@ Overlay labeling derives JTS `Edge.depth_delta` from this
 a positive delta means Left = EXTERIOR, Right = INTERIOR). Manifold-generic:
 it delegates to the manifold-dispatched `_ring_interior_on_left`.
 =#
-_ring_material_interior_on_left(m, pts::Vector, is_hole::Bool; exact) =
+_ring_material_interior_on_left(m, pts::AbstractVector, is_hole::Bool; exact) =
     is_hole ? !_ring_interior_on_left(m, pts, is_hole; exact) :
                _ring_interior_on_left(m, pts, is_hole; exact)
 
@@ -680,7 +688,7 @@ upward segment, then the subsequent downward segment, and decides from the
 "cap" they form — using only one exact orientation test, so it is robust
 (unlike a floating signed-area sum).
 =#
-function _ring_is_ccw(m, ring::Vector; exact)
+function _ring_is_ccw(m, ring::AbstractVector; exact)
     # number of points without closing endpoint
     npts = length(ring) - 1
     # return default value if ring is flat

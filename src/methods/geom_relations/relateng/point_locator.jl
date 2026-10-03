@@ -205,7 +205,7 @@ function _add_ring!(m, ring, require_cw::Bool, ring_list; exact)
     #-- callers request CW for shells and CCW for holes, so `!require_cw`
     #-- is the ring's role
     pts = _orient_ring(m, pts, require_cw, !require_cw; exact)
-    push!(ring_list, pts)
+    push!(ring_list, _as_vector(pts))   # `ring_list::Vector{Vector{P}}`
     return nothing
 end
 

@@ -116,9 +116,17 @@ function (c::CrossingEdgeSplit)(::GI.MultiPolygonTrait, mp)
     return GI.MultiPolygon(out)
 end
 
-# The open lon/lat vertex list of a ring (closing duplicate dropped).
+# The open lon/lat vertex list of a ring (closing duplicate dropped), as an
+# owned `Vector`: callers `deleteat!` it (`_dedup_ring_vertices!`) and pass it
+# to `_split_loops!(::Vector, ...)`. Built by `push!` rather than a
+# comprehension, which over a StaticArrays-backed ring yields a fixed-size
+# `SizedVector`.
 function _ring_lonlat_open(ring)
-    ll = [(Float64(GI.x(p)), Float64(GI.y(p))) for p in GI.getpoint(ring)]
+    ll = Tuple{Float64, Float64}[]
+    sizehint!(ll, GI.npoint(ring))
+    for p in GI.getpoint(ring)
+        push!(ll, (Float64(GI.x(p)), Float64(GI.y(p))))
+    end
     length(ll) > 1 && ll[end] == ll[1] && pop!(ll)
     return ll
 end
