@@ -1,10 +1,12 @@
 using Test
 import GeometryOps as GO, GeoInterface as GI
-using GeometryOps.SpatialTreeInterface
-using GeometryOps.SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
-using GeometryOps.SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
-using GeometryOps.SpatialTreeInterface: FlatNoTree, spatialtree, node_extent_is_expensive
-using GeometryOps.LoopStateMachine: Action
+# The interface, FlatNoTree and STRtree conformance, and the traversals themselves are
+# tested in SpatialTreeInterface.jl; this file covers GeometryOps' own trees against them.
+using SpatialTreeInterface
+using SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
+using SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
+using SpatialTreeInterface: FlatNoTree, spatialtree, node_extent_is_expensive
+using SpatialTreeInterface.LoopStateMachine: Action
 using GeometryOps.FlexibleRTrees: RTree, STR
 using GeometryOps.NaturalIndexing: NaturalIndex
 using Extents
@@ -201,24 +203,12 @@ function test_find_point_in_all_countries(TreeType)
     end
 end
 
-# Test FlatNoTree implementation
-@testset "FlatNoTree" begin
-    test_basic_interface(FlatNoTree)
-    test_child_indices_extents(FlatNoTree)
-    test_query_functionality(FlatNoTree)
-    test_dual_query_functionality(FlatNoTree)
-    test_geometry_support(FlatNoTree)
-    test_find_point_in_all_countries(FlatNoTree)
-end
-
-# Test STRtree implementation
-@testset "STRtree" begin
-    test_basic_interface(STRtree)
-    test_child_indices_extents(STRtree)
-    test_query_functionality(STRtree)
-    test_dual_query_functionality(STRtree)
-    test_geometry_support(STRtree)
-    test_find_point_in_all_countries(STRtree)
+@testset "GeometryOps.SpatialTreeInterface is the package" begin
+    @test GO.SpatialTreeInterface === SpatialTreeInterface
+    @test GO.LoopStateMachine === SpatialTreeInterface.LoopStateMachine
+    # the STRtree methods come from SpatialTreeInterface's extension, which loading GeometryOps triggers
+    @test !isnothing(Base.get_extension(SpatialTreeInterface, :SpatialTreeInterfaceSortTileRecursiveTreeExt))
+    @test isspatialtree(STRtree([Extents.Extent(X=(0.0, 1.0), Y=(0.0, 1.0))]))
 end
 
 @testset "spatialtree" begin
@@ -243,7 +233,7 @@ end
 end
 
 # Test NaturalIndex implementation
-@testset "STRtree" begin
+@testset "NaturalIndex" begin
     test_basic_interface(NaturalIndex)
     test_child_indices_extents(NaturalIndex)
     test_query_functionality(NaturalIndex)
@@ -259,14 +249,14 @@ const NE_CALLS = Ref(0)
 struct CountedExtentNode{N}
     node::N
 end
-GO.SpatialTreeInterface.isspatialtree(::Type{<:CountedExtentNode}) = true
-GO.SpatialTreeInterface.node_extent_is_expensive(::Type{<:CountedExtentNode}) = true
-GO.SpatialTreeInterface.isleaf(n::CountedExtentNode) = isleaf(n.node)
-GO.SpatialTreeInterface.nchild(n::CountedExtentNode) = nchild(n.node)
-GO.SpatialTreeInterface.getchild(n::CountedExtentNode) = (CountedExtentNode(c) for c in getchild(n.node))
-GO.SpatialTreeInterface.getchild(n::CountedExtentNode, i) = CountedExtentNode(getchild(n.node, i))
-GO.SpatialTreeInterface.child_indices_extents(n::CountedExtentNode) = child_indices_extents(n.node)
-function GO.SpatialTreeInterface.node_extent(n::CountedExtentNode)
+SpatialTreeInterface.isspatialtree(::Type{<:CountedExtentNode}) = true
+SpatialTreeInterface.node_extent_is_expensive(::Type{<:CountedExtentNode}) = true
+SpatialTreeInterface.isleaf(n::CountedExtentNode) = isleaf(n.node)
+SpatialTreeInterface.nchild(n::CountedExtentNode) = nchild(n.node)
+SpatialTreeInterface.getchild(n::CountedExtentNode) = (CountedExtentNode(c) for c in getchild(n.node))
+SpatialTreeInterface.getchild(n::CountedExtentNode, i) = CountedExtentNode(getchild(n.node, i))
+SpatialTreeInterface.child_indices_extents(n::CountedExtentNode) = child_indices_extents(n.node)
+function SpatialTreeInterface.node_extent(n::CountedExtentNode)
     NE_CALLS[] += 1
     return node_extent(n.node)
 end
@@ -275,13 +265,13 @@ end
 struct PlainCountedNode{N}
     node::N
 end
-GO.SpatialTreeInterface.isspatialtree(::Type{<:PlainCountedNode}) = true
-GO.SpatialTreeInterface.isleaf(n::PlainCountedNode) = isleaf(n.node)
-GO.SpatialTreeInterface.nchild(n::PlainCountedNode) = nchild(n.node)
-GO.SpatialTreeInterface.getchild(n::PlainCountedNode) = (PlainCountedNode(c) for c in getchild(n.node))
-GO.SpatialTreeInterface.getchild(n::PlainCountedNode, i) = PlainCountedNode(getchild(n.node, i))
-GO.SpatialTreeInterface.child_indices_extents(n::PlainCountedNode) = child_indices_extents(n.node)
-function GO.SpatialTreeInterface.node_extent(n::PlainCountedNode)
+SpatialTreeInterface.isspatialtree(::Type{<:PlainCountedNode}) = true
+SpatialTreeInterface.isleaf(n::PlainCountedNode) = isleaf(n.node)
+SpatialTreeInterface.nchild(n::PlainCountedNode) = nchild(n.node)
+SpatialTreeInterface.getchild(n::PlainCountedNode) = (PlainCountedNode(c) for c in getchild(n.node))
+SpatialTreeInterface.getchild(n::PlainCountedNode, i) = PlainCountedNode(getchild(n.node, i))
+SpatialTreeInterface.child_indices_extents(n::PlainCountedNode) = child_indices_extents(n.node)
+function SpatialTreeInterface.node_extent(n::PlainCountedNode)
     NE_CALLS[] += 1
     return node_extent(n.node)
 end
@@ -297,13 +287,13 @@ struct VaryingFanoutNode
     items::Vector{Tuple{Int,XYExtent}}
     extent::XYExtent
 end
-GO.SpatialTreeInterface.isspatialtree(::Type{VaryingFanoutNode}) = true
-GO.SpatialTreeInterface.isleaf(n::VaryingFanoutNode) = isempty(n.children)
-GO.SpatialTreeInterface.nchild(n::VaryingFanoutNode) = length(n.children)
-GO.SpatialTreeInterface.getchild(n::VaryingFanoutNode) = n.children
-GO.SpatialTreeInterface.getchild(n::VaryingFanoutNode, i) = n.children[i]
-GO.SpatialTreeInterface.node_extent(n::VaryingFanoutNode) = n.extent
-GO.SpatialTreeInterface.child_indices_extents(n::VaryingFanoutNode) = n.items
+SpatialTreeInterface.isspatialtree(::Type{VaryingFanoutNode}) = true
+SpatialTreeInterface.isleaf(n::VaryingFanoutNode) = isempty(n.children)
+SpatialTreeInterface.nchild(n::VaryingFanoutNode) = length(n.children)
+SpatialTreeInterface.getchild(n::VaryingFanoutNode) = n.children
+SpatialTreeInterface.getchild(n::VaryingFanoutNode, i) = n.children[i]
+SpatialTreeInterface.node_extent(n::VaryingFanoutNode) = n.extent
+SpatialTreeInterface.child_indices_extents(n::VaryingFanoutNode) = n.items
 
 function varying_fanout_tree(items::Vector{Tuple{Int,XYExtent}}, depth = 0)
     length(items) <= 4 && return VaryingFanoutNode((), items, reduce(Extents.union, last.(items)))
@@ -374,9 +364,9 @@ collect_pairs(args...) = (out = Tuple{Int,Int}[];
     @testset "the caching strategy is a compile-time choice" begin
         cheap = varying_fanout_tree(fine)
         costly = CountedExtentNode(NaturalIndex(fine))
-        @test (@inferred GO.SpatialTreeInterface._child_extents(cheap)) === nothing
-        @test (@inferred GO.SpatialTreeInterface._child_extents(NaturalIndex(fine))) === nothing
-        @test (@inferred GO.SpatialTreeInterface._child_extents(costly)) isa Vector{<:Extents.Extent}
+        @test (@inferred SpatialTreeInterface._child_extents(cheap)) === nothing
+        @test (@inferred SpatialTreeInterface._child_extents(NaturalIndex(fine))) === nothing
+        @test (@inferred SpatialTreeInterface._child_extents(costly)) isa Vector{<:Extents.Extent}
     end
 end
 

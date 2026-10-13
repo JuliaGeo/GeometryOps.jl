@@ -15,13 +15,21 @@ behaviour from a function called from a inside a loop, where you do not have acc
 ## Example
 
 ```julia
+using SpatialTreeInterface.LoopStateMachine
+
+# `f` has no access to the loop it is called from, but it can still stop it.
+f(i) = i == 3 ? Action(:break) : i
+
+for i in 1:5
+    x = @controlflow f(i)   # `x` is `f(i)` when it is not an `Action`
+    println(x)
+end
+# prints 1 and 2, then breaks
 ```
 """
 module LoopStateMachine
 
 export Action, @controlflow
-
-import ..GeometryOps as GO
 
 const ALL_ACTION_DESCRIPTIONS = """
 - `:continue`: continue to the next iteration of the loop.  
@@ -83,7 +91,7 @@ end
 """
     @controlflow f(...)
 
-Process the result of `f(...)` and return the result if it's not an `Action`(@ref LoopStateMachine.Action).
+Process the result of `f(...)` and return the result if it's not an [`Action`](@ref).
     
 If it is an `Action`, then process it according to the following rules, and throw an error if it's not recognized.
 `:continue`, `:break`, `:return`, or `:full_return` are valid actions.
@@ -94,6 +102,8 @@ $ALL_ACTION_DESCRIPTIONS
     Only use this inside a loop, otherwise you'll get a syntax error, especially if you use `:continue` or `:break`.
 
 ## Examples
+
+See the [`LoopStateMachine`](@ref) module docstring.
 """
 macro controlflow(expr)
     varname = gensym("loop-state-machine-returned-value")

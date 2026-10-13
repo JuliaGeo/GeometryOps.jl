@@ -2,7 +2,7 @@
 
 using ..SpatialTreeInterface
 import ..SpatialTreeInterface: spatialtree, isspatialtree, isleaf, nchild, getchild,
-    child_indices_extents, depth_first_search
+    child_indices_extents
 
 """
     RTreeNode{T, E}
@@ -70,22 +70,20 @@ getchild(tree::RTree, i) = getchild(_rootnode(tree), i)
 child_indices_extents(tree::RTree) = child_indices_extents(_rootnode(tree))
 
 # ## Queries
+# `SpatialTreeInterface.query(tree, extent_or_geom_or_predicate)` works on an
+# `RTree` as it does on every other tree; there is no `RTree`-specific query.
 
 """
-    query(tree::RTree, extent_or_geom)
+    spatialtree([manifold::Manifold], geometries)
 
-Indices (into the collection the tree was built from) of every leaf whose
-extent intersects the given extent — or the extent of the given geometry —
-in ascending order.
+Build a default packed STR [`RTree`](@ref) from an iterable of geometries, over
+their extents on `manifold` (`Planar()` if not given).  This is GeometryOps'
+method for `SpatialTreeInterface.spatialtree`.
+
+`missing` and `nothing` entries are skipped, as are empty geometries.  Queries
+return indices into `geometries` regardless, so the skipped entries do not
+shift the answers.  If no valid geometries remain, return `nothing`.
 """
-query(tree::RTree, ext::Extents.Extent) =
-    sort!(depth_first_search(Base.Fix1(Extents.intersects, ext), tree))
-function query(tree::RTree, geom)
-    ext = GI.extent(geom)
-    isnothing(ext) && throw(ArgumentError("no extent found on $(typeof(geom))"))
-    return query(tree, ext)
-end
-
 spatialtree(geometries) = spatialtree(Planar(), geometries)
 function spatialtree(manifold::Manifold, geometries)
     items = geometries isa AbstractVector ? geometries : collect(geometries)

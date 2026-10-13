@@ -1,6 +1,6 @@
 using Test
-import GeometryOps.LoopStateMachine
-using GeometryOps.LoopStateMachine: @controlflow, Action
+import SpatialTreeInterface.LoopStateMachine
+using SpatialTreeInterface.LoopStateMachine: @controlflow, Action
 
 @testset "Continue action" begin
     count = 0
