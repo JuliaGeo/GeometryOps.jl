@@ -426,7 +426,7 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
             # Loop over the edges in b that might intersect the edges in a
             SpatialTreeInterface.depth_first_search(Base.Fix1(Extents.intersects, ext_l), b_tree) do j
                 b1t, b2t = edges_b[j].geom
-                b1t == b2t && return LoopStateMachine.Continue()
+                b1t == b2t && return LoopStateMachine.Action(:continue) # skip degenerate zero-length edges
                 # LoopStateMachine control is managed outside the loop, by the depth_first_search function.
                 return f_on_each_maybe_intersect(((a1t, a2t), i), ((b1t, b2t), j)) # note the indices_b[j] here - we are using the index of the edge in the original edge list, not the index of the edge in the STRtree.
             end
