@@ -39,7 +39,7 @@ The `SphericalCap` type offers multiple constructors to create caps from:
 ## Examples
 
 ```@example sphericalcap
-using GeometryOps.UnitSpherical
+using UnitSphericalGeometryCore
 using GeoInterface
 
 # Create a spherical cap from a point and radius
@@ -92,15 +92,14 @@ end
 
 SphericalCap(point, radius::Number) = SphericalCap(GI.trait(point), point, radius)
 
+# `SphericalCap(geom)` for a point is a zero-radius cap; for any other geometry it is the
+# bounding cap, see `bounding_cap.jl`.
 SphericalCap(geom) = SphericalCap(GI.trait(geom), geom)
-SphericalCap(t::GI.AbstractGeometryTrait, geom) = SphericalCap(t, geom, 0)
+SphericalCap(t::GI.PointTrait, geom) = SphericalCap(t, geom, 0)
 
 function SphericalCap(::GI.PointTrait, point, radius::Number)
-    return SphericalCap(UnitSphereFromGeographic()(point), radius)
+    return SphericalCap(_unit_spherical_point(point), radius)
 end
-# TODO: add implementations for line string and polygon traits
-# That will require a minimum bounding circle implementation.
-# TODO: add implementations for multitraits based on this
 
 # TODO: this returns an approximately antipodal point...
 

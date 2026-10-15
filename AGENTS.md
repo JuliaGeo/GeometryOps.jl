@@ -62,6 +62,7 @@ Bump version from 0.1.30 to 0.1.31
 GeometryOps uses a monorepo structure, organized as a Julia workspace (see `[workspace]` in `Project.toml`; subpackages are resolved by path via `[sources]`):
 - **GeometryOpsCore/**: Core abstractions, types, and primitive functions (`apply`, `applyreduce`, `flatten`, etc.)
 - **SpatialTreeInterface/**: The spatial tree interface (`isleaf`, `getchild`, `depth_first_search`, `dual_depth_first_search`, `query`, ...) and its `LoopStateMachine` submodule (`Action`, `@controlflow`). Has its own tests (`julia --project=SpatialTreeInterface -e 'using Pkg; Pkg.test()'`) and CI job.
+- **UnitSphericalGeometryCore/**: `UnitSphericalPoint`, `SphericalCap`, the geographic <-> unit sphere transformations, `slerp`, `spherical_distance`, `robust_cross_product` and `spherical_bounding_cap`, with minimal dependencies. Has its own tests (`julia --project=UnitSphericalGeometryCore -e 'using Pkg; Pkg.test()'`) and CI job.
 - **GeometryOpsTestHelpers/**: Test utilities (`@test_implementations`, `@testset_implementations`) for running tests across multiple geometry implementations
 - **src/**: Main package implementation
 - **ext/**: Package extensions for optional dependencies (LibGEOS, Proj, TGGeometry, DataFrames, FlexiJoins, Makie)
@@ -137,7 +138,7 @@ applyreduce(WithTrait((trait, g) -> _area(T, trait, g)), +, _AREA_TARGETS, geom;
 
 - **src/utils/**: Utility modules
   - `FlexibleRTrees/`: Packed R-trees (STR / Hilbert bulk loading) implementing SpatialTreeInterface
-  - `UnitSpherical/`: Spherical geometry utilities
+  - `UnitSpherical/`: Spherical predicates, arc intersection and arc extents, built on (and re-exporting) UnitSphericalGeometryCore
   - `NaturalIndexing.jl`: Natural indexing utilities
 
 GeometryOps does `using SpatialTreeInterface` and `using SpatialTreeInterface.LoopStateMachine`,

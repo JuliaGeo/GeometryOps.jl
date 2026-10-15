@@ -108,7 +108,7 @@ function normalizableFromExact(xf::AbstractVector{BigFloat})
     # exponents) — we cannot convert to Float64 first, because components
     # like 5e-324 would flush to the subnormal range or zero, destroying
     # the axis information before the scaling multiply can fix it.
-    # (Bug fixed at src/utils/UnitSpherical/robustcrossproduct/utils.jl:102.)
+    # (Bug fixed at UnitSphericalGeometryCore/src/robustcrossproduct/utils.jl:102.)
     x = Float64.(xf)
 
     if isNormalizable(x)

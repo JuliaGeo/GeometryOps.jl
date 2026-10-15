@@ -13,7 +13,7 @@ Accepts any [GeoInterface-compatible](https://github.com/JuliaGeo/GeoInterface.j
 ## Examples
 
 ```jldoctest
-julia> import GeoInterface as GI; using GeometryOps.UnitSpherical
+julia> import GeoInterface as GI; using UnitSphericalGeometryCore
 
 julia> UnitSphereFromGeographic()(GI.Point(45, 45))
 3-element UnitSphericalPoint{Float64} with indices SOneTo(3):
@@ -23,7 +23,7 @@ julia> UnitSphereFromGeographic()(GI.Point(45, 45))
 ```
 
 ```jldoctest
-julia> using GeometryOps.UnitSpherical
+julia> using UnitSphericalGeometryCore
 
 julia> UnitSphereFromGeographic()((45, 45))
 3-element UnitSphericalPoint{Float64} with indices SOneTo(3):
@@ -67,7 +67,7 @@ Accepts any 3-element vector, but the input is assumed to be on the unit sphere.
 ## Examples
 
 ```jldoctest
-julia> using GeometryOps.UnitSpherical
+julia> using UnitSphericalGeometryCore
 
 julia> GeographicFromUnitSphere()(UnitSphericalPoint(0.5, 0.5, 1/√(2)))
 (45.0, 44.99999999999999)

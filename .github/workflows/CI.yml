@@ -80,6 +80,36 @@ jobs:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: JuliaGeo/GeometryOps.jl
+  test-unitsphericalgeometrycore:
+    name: UnitSphericalGeometryCore - Julia ${{ matrix.version }} - ubuntu-latest
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - '1.10'
+          - '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: ${{ matrix.version }}
+      - uses: julia-actions/cache@v3
+      - uses: julia-actions/julia-buildpkg@v1
+        with:
+          project: UnitSphericalGeometryCore
+      - uses: julia-actions/julia-runtest@v1
+        with:
+          project: UnitSphericalGeometryCore
+      - uses: julia-actions/julia-processcoverage@v1
+        with:
+          directories: UnitSphericalGeometryCore/src
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v7.1.1
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: JuliaGeo/GeometryOps.jl
   docs:
     name: Documentation
     runs-on: ubuntu-latest
@@ -119,6 +149,8 @@ jobs:
       - run: |
           julia --project=docs -e '
             using Documenter: DocMeta, doctest
-            using GeometryOps
+            using GeometryOps, UnitSphericalGeometryCore
             DocMeta.setdocmeta!(GeometryOps, :DocTestSetup, :(using GeometryOps); recursive=true)
-            doctest(GeometryOps)'
+            doctest(GeometryOps)
+            DocMeta.setdocmeta!(UnitSphericalGeometryCore, :DocTestSetup, :(using UnitSphericalGeometryCore); recursive=true)
+            doctest(UnitSphericalGeometryCore; manual = false)'

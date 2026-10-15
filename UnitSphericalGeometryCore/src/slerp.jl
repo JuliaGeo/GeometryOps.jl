@@ -39,7 +39,7 @@ vector on *some* great circle through both points.
 ## Examples
 
 ```jldoctest
-julia> using GeometryOps.UnitSpherical
+julia> using UnitSphericalGeometryCore
 
 julia> slerp(UnitSphericalPoint(1, 0, 0), UnitSphericalPoint(0, 1, 0), 0.5)
 3-element UnitSphericalPoint{Float64} with indices SOneTo(3):
