@@ -89,8 +89,12 @@ Modules = [GeometryOps.UnitSpherical.RobustCrossProduct]
 
 ### SpatialTreeInterface
 
+The spatial tree interface and its traversals live in the SpatialTreeInterface
+sublibrary of this repository, which GeometryOps depends on and re-exposes as
+`GeometryOps.SpatialTreeInterface`.
+
 ```@autodocs
-Modules = [GeometryOps.SpatialTreeInterface]
+Modules = [SpatialTreeInterface]
 ```
 
 ### FlexibleRTrees
@@ -107,6 +111,9 @@ Modules = [GeometryOps.NaturalIndexing]
 
 ### LoopStateMachine
 
+`LoopStateMachine` is a submodule of SpatialTreeInterface, available as
+`GeometryOps.LoopStateMachine`.
+
 ```@autodocs
-Modules = [GeometryOps.LoopStateMachine]
+Modules = [SpatialTreeInterface.LoopStateMachine]
 ```

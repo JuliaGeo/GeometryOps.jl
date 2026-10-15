@@ -5,6 +5,12 @@ on:
       version:
         description: Version to register or component to bump
         required: true
+      subdir:
+        description: >-
+          Sublibrary to register (GeometryOpsCore, GeometryOpsTestHelpers or
+          SpatialTreeInterface).  Leave empty to register GeometryOps itself.
+        required: false
+        default: ''
 jobs:
   register:
     runs-on: ubuntu-latest

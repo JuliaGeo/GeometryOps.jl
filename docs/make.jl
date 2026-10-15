@@ -1,4 +1,5 @@
 using GeometryOps, GeometryOpsCore
+using SpatialTreeInterface
 using Documenter, DocumenterVitepress
 using Literate
 using Makie, CairoMakie
@@ -60,12 +61,10 @@ function current_module_from_paths(source_path, relative_path)
     # submodule checks must dispatch on `relative_path`, before any src catch-all
     if contains(source_path, "GeometryOpsCore")
         return "GeometryOpsCore"
+    elseif contains(source_path, "SpatialTreeInterface")
+        return contains(relative_path, "LoopStateMachine") ? "SpatialTreeInterface.LoopStateMachine" : "SpatialTreeInterface"
     elseif endswith(source_path, "ext")
         return "Base.get_extension(GeometryOps, :$(splitpath(relative_path)[1]))"
-    elseif contains(relative_path, "SpatialTreeInterface")
-        return "GeometryOps.SpatialTreeInterface"
-    elseif contains(relative_path, "LoopStateMachine")
-        return "GeometryOps.LoopStateMachine"
     elseif contains(relative_path, "NaturalIndexing")
         return "GeometryOps.NaturalIndexing"
     elseif contains(relative_path, "UnitSpherical")
@@ -113,6 +112,12 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
     push!(literate_pages, "GeometryOpsCore" => core_stuff[1][2])
 
     global source_path
+    source_path = joinpath(dirname(@__DIR__), "SpatialTreeInterface", "src")
+    sti_stuff = []
+    process_literate_recursive!(sti_stuff, source_path)
+    push!(literate_pages, "SpatialTreeInterface" => sti_stuff[1][2])
+
+    global source_path
     source_path = joinpath(dirname(@__DIR__), "ext")
     ext_stuff = []
     process_literate_recursive!(ext_stuff, source_path)
@@ -126,7 +131,7 @@ end
 
 # Finally, make the docs!
 makedocs(;
-    modules=[GeometryOps, GeometryOpsCore],
+    modules=[GeometryOps, GeometryOpsCore, SpatialTreeInterface],
     authors="Anshul Singhvi <anshulsinghvi@gmail.com> and contributors",
     repo="https://github.com/JuliaGeo/GeometryOps.jl/blob/{commit}{path}#{line}",
     sitename="GeometryOps.jl",

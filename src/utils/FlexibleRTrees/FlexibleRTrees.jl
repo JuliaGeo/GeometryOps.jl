@@ -37,7 +37,7 @@ using StaticArrays: MVector
 
 import ..GeometryOps: Manifold, Planar
 
-export RTree, BulkLoadAlgorithm, STR, HPR, Unsorted, query
+export RTree, BulkLoadAlgorithm, STR, HPR, Unsorted
 
 include("types.jl")         # `BulkLoadAlgorithm`s and the `RTree` type
 include("bulk_loading.jl")  # `loadorder` methods and bottom-up packing

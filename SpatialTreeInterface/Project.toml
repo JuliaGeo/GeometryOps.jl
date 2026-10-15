@@ -1,0 +1,28 @@
+name = "SpatialTreeInterface"
+uuid = "bf42099b-6274-40f2-a94d-272408263a4f"
+authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "and contributors"]
+version = "1.0.0"
+
+[deps]
+Extents = "411431e0-e8b7-467b-b5e0-f676ba4f2910"
+GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
+
+[weakdeps]
+SortTileRecursiveTree = "746ee33f-1797-42c2-866d-db2fce69d14d"
+
+[extensions]
+SpatialTreeInterfaceSortTileRecursiveTreeExt = "SortTileRecursiveTree"
+
+[compat]
+Extents = "0.1.5"
+GeoInterface = "1"
+SortTileRecursiveTree = "0.1.2"
+Test = "1"
+julia = "1.10"
+
+[extras]
+SortTileRecursiveTree = "746ee33f-1797-42c2-866d-db2fce69d14d"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["SortTileRecursiveTree", "Test"]

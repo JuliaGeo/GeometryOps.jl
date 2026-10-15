@@ -25,7 +25,7 @@ Here's an animated example of what `depth_first_search` is doing:
 
 ```julia
 using Makie
-using Extents, GeometryOps.SpatialTreeInterface, SortTileRecursiveTree
+using Extents, SpatialTreeInterface, SortTileRecursiveTree
 import GeoInterface as GI
 
 # Construct a tree of extents (in this case, just a grid)
@@ -86,7 +86,7 @@ This is generic to anything that implements the SpatialTreeInterface, particular
 ## Example
 
 ```jldoctest
-using Extents, GeometryOps.SpatialTreeInterface, SortTileRecursiveTree
+using Extents, SpatialTreeInterface, SortTileRecursiveTree
 # Construct a tree of extents (in this case, just a grid)
 xs, ys = 1:10, 1:10
 extents_vec = vec([Extents.Extent(X = (x, x+1), Y = (y, y+1)) for x in xs, y in ys])

@@ -43,12 +43,16 @@ include("types.jl")
 include("primitives.jl")
 include("not_implemented_yet.jl")
 
-include("utils/LoopStateMachine/LoopStateMachine.jl")
-include("utils/SpatialTreeInterface/SpatialTreeInterface.jl")
+# The spatial tree interface, its traversals, and `LoopStateMachine` live in
+# the SpatialTreeInterface sublibrary; `using` them here keeps `GeometryOps.SpatialTreeInterface`
+# and `GeometryOps.LoopStateMachine` resolving as they did when they were submodules.
+using SpatialTreeInterface
+using SpatialTreeInterface.LoopStateMachine
+
 include("utils/UnitSpherical/UnitSpherical.jl")
 
 # Load utility modules in
-using .LoopStateMachine, .SpatialTreeInterface, .UnitSpherical
+using .UnitSpherical
 
 include("utils/utils.jl")
 
@@ -59,7 +63,7 @@ include("utils/FlexibleRTrees/FlexibleRTrees.jl")
 using .FlexibleRTrees
 
 # Load utility modules in
-using .NaturalIndexing, .SpatialTreeInterface, .LoopStateMachine
+using .NaturalIndexing
 
 include("methods/angles.jl")
 include("methods/area.jl")

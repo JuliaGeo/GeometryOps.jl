@@ -61,6 +61,7 @@ Bump version from 0.1.30 to 0.1.31
 ### Monorepo Structure
 GeometryOps uses a monorepo structure, organized as a Julia workspace (see `[workspace]` in `Project.toml`; subpackages are resolved by path via `[sources]`):
 - **GeometryOpsCore/**: Core abstractions, types, and primitive functions (`apply`, `applyreduce`, `flatten`, etc.)
+- **SpatialTreeInterface/**: The spatial tree interface (`isleaf`, `getchild`, `depth_first_search`, `dual_depth_first_search`, `query`, ...) and its `LoopStateMachine` submodule (`Action`, `@controlflow`). Has its own tests (`julia --project=SpatialTreeInterface -e 'using Pkg; Pkg.test()'`) and CI job.
 - **GeometryOpsTestHelpers/**: Test utilities (`@test_implementations`, `@testset_implementations`) for running tests across multiple geometry implementations
 - **src/**: Main package implementation
 - **ext/**: Package extensions for optional dependencies (LibGEOS, Proj, TGGeometry, DataFrames, FlexiJoins, Makie)
@@ -135,10 +136,12 @@ applyreduce(WithTrait((trait, g) -> _area(T, trait, g)), +, _AREA_TARGETS, geom;
   - `correction/`: Geometry correction utilities
 
 - **src/utils/**: Utility modules
-  - `LoopStateMachine/`: State machine for polygon processing
-  - `SpatialTreeInterface/`: Spatial indexing (STRtree)
+  - `FlexibleRTrees/`: Packed R-trees (STR / Hilbert bulk loading) implementing SpatialTreeInterface
   - `UnitSpherical/`: Spherical geometry utilities
   - `NaturalIndexing.jl`: Natural indexing utilities
+
+GeometryOps does `using SpatialTreeInterface` and `using SpatialTreeInterface.LoopStateMachine`,
+so `GO.SpatialTreeInterface.depth_first_search`, `GO.LoopStateMachine.Action` etc. resolve to the sublibrary.
 
 - **test/**: Mirror structure of src/ with corresponding test files
 
