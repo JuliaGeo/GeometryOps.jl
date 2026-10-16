@@ -16,6 +16,8 @@
 # nchild
 # child_indices_extents
 # node_extent
+# split_weight
+# subtree_indices
 # ```
 
 """
@@ -122,3 +124,38 @@ there automatically.
 """
 node_extent_is_expensive(::T) where {T} = node_extent_is_expensive(T)
 node_extent_is_expensive(::Type{<:Any}) = false
+
+"""
+    split_weight(node) -> Real
+
+A relative estimate of the work under `node`, for dual-tree searches to decide
+which side to open: open the side with the larger weight.  For a leaf this is
+its number of entries; for an internal node the sum over its children, or an
+estimate such as `capacity^height`.  Exactness is not required, but the value
+must not increase going down the tree.  Defaults to `1`.  Wrapper trees must
+forward this to the wrapped node.
+"""
+split_weight(node) = 1
+
+"""
+    subtree_indices(node) -> AbstractVector{<:Integer}
+
+The leaf indices under `node`, in traversal order, without computing extents.
+The default walks the subtree depth-first and collects the index of every
+`child_indices_extents` entry into a `Vector{Int}`.  Trees whose leaves occupy a
+contiguous window should return a lazy range or view in O(1).  Wrapper trees
+must forward this to the wrapped node.
+"""
+function subtree_indices(node)
+    out = Int[]
+    _subtree_indices!(out, node)
+    return out
+end
+function _subtree_indices!(out, node)
+    if isleaf(node)
+        for (i, _) in child_indices_extents(node); push!(out, i); end
+    else
+        for child in getchild(node); _subtree_indices!(out, child); end
+    end
+    return out
+end

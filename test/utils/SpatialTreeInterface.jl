@@ -6,6 +6,7 @@ using SpatialTreeInterface
 using SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 using SpatialTreeInterface: query, depth_first_search, dual_depth_first_search
 using SpatialTreeInterface: FlatNoTree, spatialtree, node_extent_is_expensive
+using SpatialTreeInterface: split_weight, subtree_indices
 using SpatialTreeInterface.LoopStateMachine: Action
 using GeometryOps.FlexibleRTrees: RTree, STR
 using GeometryOps.NaturalIndexing: NaturalIndex
@@ -240,6 +241,40 @@ end
     test_dual_query_functionality(NaturalIndex)
     test_geometry_support(NaturalIndex)
     test_find_point_in_all_countries(NaturalIndex)
+end
+
+# The leaf walk `subtree_indices` defaults to, written out independently.
+function leaf_walk(node)
+    isleaf(node) && return Int[i for (i, _) in child_indices_extents(node)]
+    return reduce(vcat, (leaf_walk(c) for c in getchild(node)); init = Int[])
+end
+
+function check_subtree_verbs(node)
+    @test subtree_indices(node) == leaf_walk(node)
+    @test split_weight(node) == length(subtree_indices(node))
+    isleaf(node) || foreach(check_subtree_verbs, getchild(node))
+end
+
+@testset "split_weight and subtree_indices" begin
+    fine = [Extents.Extent(X=(x, x+0.1), Y=(y, y+0.1)) for x in 0:0.1:5, y in 0:0.1:5] |> vec
+
+    @testset "NaturalIndex (n = $n, nodecapacity = $cap)" for
+            n in (1, 7, 32, 33, 100, 1000, length(fine)), cap in (4, 32)
+        idx = NaturalIndex(fine[1:n]; nodecapacity = cap)
+        @test subtree_indices(idx) == 1:n
+        @test split_weight(idx) == n
+        check_subtree_verbs(idx)
+        # cursors hand back their level window as a range, in O(1)
+        isleaf(idx) || @test all(subtree_indices(c) isa UnitRange{Int} for c in getchild(idx))
+    end
+
+    @testset "RTree from spatialtree" begin
+        tree = spatialtree(vcat(Any[missing], fine))
+        @test subtree_indices(tree) === tree.indices
+        @test sort(subtree_indices(tree)) == 2:(length(fine) + 1)
+        check_subtree_verbs(tree)
+        isleaf(tree) || @test all(subtree_indices(c) isa SubArray for c in getchild(tree))
+    end
 end
 
 # Wraps another tree, derives its extents on access, and counts the derivations -

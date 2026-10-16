@@ -204,6 +204,20 @@ function SpatialTreeInterface.child_indices_extents(node::NaturalIndexNode)
     return ((i, @inbounds extents[i]) for i in range)
 end
 
+# The leaf slots under a node form one contiguous window.  A node at level `l`
+# spans `nodecapacity^(nlev - l)` slots, since the leaf extents sit at level
+# `nlev`; the last node of a level is clipped to the leaf count.
+@inline function _leaf_range(node::NaturalIndexNode)
+    idx = node.parent_index
+    span = idx.nodecapacity^(length(idx.levels) - node.level)
+    lo = (node.index - 1) * span + 1
+    hi = min(node.index * span, length(idx.levels[end].extents))
+    return lo:hi
+end
+
+SpatialTreeInterface.split_weight(node::NaturalIndexNode) = length(_leaf_range(node))
+SpatialTreeInterface.subtree_indices(node::NaturalIndexNode) = _leaf_range(node)
+
 # implementation for "root node" / top level tree
 
 SpatialTreeInterface.isleaf(node::NaturalIndex) = length(node.levels) == 1
@@ -214,6 +228,9 @@ SpatialTreeInterface.getchild(node::NaturalIndex) = SpatialTreeInterface.getchil
 SpatialTreeInterface.getchild(node::NaturalIndex, i) = SpatialTreeInterface.getchild(NaturalIndexNode(node, 0, 1, node.extent), i)
 
 SpatialTreeInterface.child_indices_extents(node::NaturalIndex) = (i_ext for i_ext in enumerate(node.levels[1].extents))
+
+SpatialTreeInterface.split_weight(node::NaturalIndex) = length(node.levels[end].extents)
+SpatialTreeInterface.subtree_indices(node::NaturalIndex) = 1:length(node.levels[end].extents)
 
 """
     NaturallyIndexedRing(points; nodecapacity = 32)

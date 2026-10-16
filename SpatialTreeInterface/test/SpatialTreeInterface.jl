@@ -394,3 +394,96 @@ end
     # the two-argument form collects the matching indices
     @test sort!(depth_first_search(Base.Fix1(Extents.intersects, Extents.Extent(X=(0, 6), Y=(0, 6))), tree)) == 1:length(fine)
 end
+
+# ## split_weight and subtree_indices
+using SpatialTreeInterface: split_weight, subtree_indices
+using SortTileRecursiveTree: STRLeafNode
+
+# The leaf walk `subtree_indices` defaults to, written out independently.
+function leaf_walk(node)
+    isleaf(node) && return Int[i for (i, _) in child_indices_extents(node)]
+    return reduce(vcat, (leaf_walk(c) for c in getchild(node)); init = Int[])
+end
+
+# The laws every node must satisfy.  `exact_leaves = false` for trees on the
+# default weight of 1, where a leaf's weight is not its entry count.
+function test_verb_laws(node; exact_leaves = true)
+    @test subtree_indices(node) == leaf_walk(node)
+    if isleaf(node)
+        exact_leaves && @test split_weight(node) == length(subtree_indices(node))
+    else
+        kids = collect(getchild(node))
+        @test subtree_indices(node) == reduce(vcat, subtree_indices.(kids))
+        for c in kids
+            @test split_weight(node) >= split_weight(c)
+            test_verb_laws(c; exact_leaves)
+        end
+    end
+end
+
+# Wraps another tree and forwards every verb, as wrapper trees must.
+struct ForwardingNode{N}
+    node::N
+end
+SpatialTreeInterface.isspatialtree(::ForwardingNode) = true
+SpatialTreeInterface.isleaf(n::ForwardingNode) = isleaf(n.node)
+SpatialTreeInterface.nchild(n::ForwardingNode) = nchild(n.node)
+SpatialTreeInterface.getchild(n::ForwardingNode) = (ForwardingNode(c) for c in getchild(n.node))
+SpatialTreeInterface.getchild(n::ForwardingNode, i) = ForwardingNode(getchild(n.node, i))
+SpatialTreeInterface.child_indices_extents(n::ForwardingNode) = child_indices_extents(n.node)
+SpatialTreeInterface.node_extent(n::ForwardingNode) = node_extent(n.node)
+SpatialTreeInterface.split_weight(n::ForwardingNode) = split_weight(n.node)
+SpatialTreeInterface.subtree_indices(n::ForwardingNode) = subtree_indices(n.node)
+
+@testset "split_weight and subtree_indices" begin
+    extents = [Extents.Extent(X=(x, x+0.1), Y=(y, y+0.1)) for x in 0:0.1:5, y in 0:0.1:5] |> vec
+    mock = varying_fanout_tree(extents)
+
+    @testset "defaults on a mock tree" begin
+        @test isspatialtree(ForwardingNode(mock))
+        @test split_weight(mock) == 1
+        @test all(split_weight(c) == 1 for c in getchild(mock))
+        @test subtree_indices(mock) isa Vector{Int}
+        @test subtree_indices(mock) == leaf_walk(mock) == 1:length(extents)
+        test_verb_laws(mock; exact_leaves = false)
+    end
+
+    @testset "FlatNoTree" begin
+        flat = FlatNoTree(extents)
+        @test subtree_indices(flat) === eachindex(extents)
+        @test split_weight(flat) == length(extents)
+        test_verb_laws(flat)
+        # a generator over a vector still has a length, but no `keys`
+        gen = FlatNoTree(e for e in extents)
+        @test split_weight(gen) == length(extents)
+        @test subtree_indices(gen) isa Vector{Int}
+        @test subtree_indices(gen) == 1:length(extents)
+        # a sizeless iterator falls back to the default weight
+        sizeless = FlatNoTree(Iterators.filter(_ -> true, extents))
+        @test split_weight(sizeless) == 1
+        @test subtree_indices(sizeless) == 1:length(extents)
+    end
+
+    @testset "STRtree (n = $n)" for n in (1, 5, 13, 21, 100, 1234, length(extents))
+        tree = STRtree(extents[1:n]; nodecapacity = 10)
+        @test subtree_indices(tree) == subtree_indices(tree.rootnode)
+        @test split_weight(tree) == 1   # STR nodes stay on the default weight
+        test_verb_laws(tree; exact_leaves = false)
+    end
+
+    @testset "STRLeafNode hands back its stored vector" begin
+        leaf = STRtree(extents[1:5]).rootnode
+        @test leaf isa STRLeafNode
+        @test subtree_indices(leaf) === leaf.indices
+    end
+
+    @testset "a forwarding wrapper delegates both verbs" begin
+        wrapped = ForwardingNode(mock)
+        @test split_weight(wrapped) == 1
+        @test subtree_indices(wrapped) == subtree_indices(mock)
+        wrapped = ForwardingNode(STRtree(extents[1:100]; nodecapacity = 10))
+        @test split_weight(wrapped) == 1
+        @test subtree_indices(wrapped) == subtree_indices(wrapped.node)
+        test_verb_laws(wrapped; exact_leaves = false)
+    end
+end

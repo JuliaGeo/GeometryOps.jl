@@ -2,7 +2,7 @@
 
 using ..SpatialTreeInterface
 import ..SpatialTreeInterface: spatialtree, isspatialtree, isleaf, nchild, getchild,
-    child_indices_extents
+    child_indices_extents, split_weight, subtree_indices
 
 """
     RTreeNode{T, E}
@@ -60,6 +60,19 @@ function child_indices_extents(node::RTreeNode)
     return ((@inbounds(indices[i]), @inbounds(extents[i])) for i in range)
 end
 
+# The leaf slots under a node form one contiguous window.  A node at level `l`
+# spans `nodecapacity^(nlev - l)` slots, since the leaf entries sit at level
+# `nlev`; the last node of a level is clipped to the leaf count.
+@inline function _leaf_range(node::RTreeNode)
+    span = node.tree.nodecapacity^(length(node.tree.levels) - node.level)
+    lo = (node.index - 1) * span + 1
+    hi = min(node.index * span, length(node.tree.levels[end]))
+    return lo:hi
+end
+
+split_weight(node::RTreeNode) = length(_leaf_range(node))
+subtree_indices(node::RTreeNode) = view(node.tree.indices, _leaf_range(node))
+
 # The tree itself acts as the (implicit) root node.
 _rootnode(tree::RTree) = RTreeNode(tree, 0, 1, tree.extent)
 
@@ -68,6 +81,8 @@ nchild(tree::RTree) = length(tree.levels[1])
 getchild(tree::RTree) = getchild(_rootnode(tree))
 getchild(tree::RTree, i) = getchild(_rootnode(tree), i)
 child_indices_extents(tree::RTree) = child_indices_extents(_rootnode(tree))
+split_weight(tree::RTree) = length(tree.indices)
+subtree_indices(tree::RTree) = tree.indices
 
 # ## Queries
 # `SpatialTreeInterface.query(tree, extent_or_geom_or_predicate)` works on an

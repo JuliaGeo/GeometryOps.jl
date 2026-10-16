@@ -32,3 +32,12 @@ function child_indices_extents(tree::FlatNoTree{T}) where T
         return ((i, node_extent(obj)) for (i, obj) in enumerate(tree.geometries))
     end
 end
+
+# A flat collection with a known length is its own leaf: its weight is that
+# length, and its indices are its own.  Sizeless iterators fall back to the
+# defaults (weight 1, and a leaf walk through `child_indices_extents`).
+function split_weight(tree::FlatNoTree)
+    Base.IteratorSize(tree.geometries) isa Union{Base.HasLength, Base.HasShape} || return 1
+    return length(tree.geometries)
+end
+subtree_indices(tree::FlatNoTree{<:AbstractVector}) = eachindex(tree.geometries)
