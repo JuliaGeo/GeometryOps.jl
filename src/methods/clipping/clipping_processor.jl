@@ -1092,10 +1092,12 @@ _fh_as_point(::Type{<:UnitSpherical.UnitSphericalPoint}, p, ::Type{T}) where {T}
 _fh_tuple_point(p::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = _sph_lonlat(T, p)
 _fh_tuple_point(p, ::Type{T}) where {T} = _tuple_point(p, T)
 
+#-- Built by index: a comprehension over an `SVector` ring allocates through `similar` on
+#-- its static axes and returns a `SizedVector`, not the `Vector` the tracer's output holds.
 _fh_as_ring(::Type{P}, ring, ::Type{T}) where {P, T} =
-    GI.LinearRing([_fh_as_point(P, p, T) for p in GI.getpoint(ring)])
+    GI.LinearRing([_fh_as_point(P, GI.getpoint(ring, i), T) for i in 1:GI.npoint(ring)])
 _fh_as_poly(::Type{P}, poly, ::Type{T}) where {P, T} =
-    GI.Polygon([_fh_as_ring(P, r, T) for r in GI.getring(poly)])
+    GI.Polygon([_fh_as_ring(P, GI.getring(poly, i), T) for i in 1:GI.nring(poly)])
 
 #-- for the callers that know the point type but do not carry `T`
 _fh_float_type(::Type{<:Tuple{T, T}}) where {T} = T
