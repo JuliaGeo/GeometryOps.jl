@@ -38,3 +38,12 @@ pu = GI.Polygon([GI.LinearRing([(0, 0), (0, 1), (1, 1), (0, 0)])])
     @test GI.geometrycolumns(no_metadata_location) == (:geometry,)
     @test_throws "type NamedTuple has no field" FlexiJoins.innerjoin((no_metadata_location, zones_by_shape), GO.within)
 end
+
+@testset "disjoint matches geometries whose extents do not meet" begin
+    points_df = DataFrame(geometry=[GI.Point((0.25, 0.5)), GI.Point((0.75, 0.25)), GI.Point((2.0, 2.0))])
+    poly_df = DataFrame(geometry=[pl, pu])
+    joined = FlexiJoins.innerjoin((poly_df, points_df), by_pred(:geometry, GO.disjoint, :geometry))
+    nested = FlexiJoins.innerjoin((poly_df, points_df), by_pred(:geometry, GO.disjoint, :geometry); mode=FlexiJoins.Mode.NestedLoopFast())
+    @test nrow(joined) == nrow(nested) == 4
+    @test all(GO.disjoint.(joined.geometry, joined.geometry_1))
+end

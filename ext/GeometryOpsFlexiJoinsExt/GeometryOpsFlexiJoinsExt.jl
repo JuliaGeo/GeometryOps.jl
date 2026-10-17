@@ -60,6 +60,20 @@ function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{
     return intersecting_idxs
 end
 
+# The tree only returns geometries whose extents meet the query. Every other geometry is
+# disjoint from it, so it is a match. The predicate decides the rest.
+function FlexiJoins.findmatchix(::FlexiJoins.Mode.Tree, cond::FlexiJoins.ByPred{typeof(GO.disjoint)}, ix_a, a, (B, tree)::Tuple, multi::typeof(identity))
+    tree === nothing && return Int[]
+    left_geom = cond.Lf(a)
+    (isnothing(left_geom) || ismissing(left_geom)) && return Int[]
+    GI.isempty(left_geom) && return collect(eachindex(B))
+    matches = trues(length(B))
+    for idx in query(tree, left_geom)
+        matches[idx] = cond.pred(left_geom, cond.Rf(B[idx]))
+    end
+    return findall(matches)
+end
+
 # Finally, for completeness, we define the `swap_sides` function for those predicates which are defined as inversions.
 
 FlexiJoins.swap_sides(::typeof(GO.contains)) = GO.within
