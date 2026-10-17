@@ -918,21 +918,33 @@ end
 
 #= Use a non-intersection vertex to determine the next intersection's entry/exit flag.
 If none exists, probe after a chain end or an unchained crossing. Return `nothing`
-as the next index if no such point exists. =#
+as the next index if no such point exists; the status is `true` outside `poly`.
+
+A probe the point-in-ring test reads as on `poly`'s boundary says nothing, so the next
+candidate is tried (vertices, then edge midpoints); only when every candidate reads on is
+the first taken as outside.
+On the sphere this happens to a vertex within the banded on-arc test's window of an edge
+it does not touch under the exact crossing predicates (a HEALPix pixel edge 1e-17 off a
+lat/lon meridian): reading it as outside traces the complement. =#
 function _pt_off_edge_status(m::Manifold, pt_list, poly, npts; exact)
-    start_idx, is_non_intr_pt = findfirst(_is_not_intr, pt_list), true
-    if isnothing(start_idx)
-        start_idx, is_non_intr_pt = findfirst(_next_edge_off, pt_list), false
-        isnothing(start_idx) && return (start_idx, false)
+    first_idx = 0
+    for k in 1:npts
+        _is_not_intr(pt_list[k]) || continue
+        next_idx = k < npts ? (k + 1) : 1
+        loc = _point_filled_curve_orientation(m, pt_list[k].point, poly; in = 1, on = 0, out = -1, exact)
+        loc == 0 || return next_idx, loc == -1
+        first_idx == 0 && (first_idx = k)
     end
-    next_idx = start_idx < npts ? (start_idx + 1) : 1
-    start_pt = if is_non_intr_pt
-        pt_list[start_idx].point
-    else
-        _clip_midpoint(m, pt_list[start_idx].point, pt_list[next_idx].point)
+    for k in 1:npts
+        _next_edge_off(pt_list[k]) || continue
+        next_idx = k < npts ? (k + 1) : 1
+        probe = _clip_midpoint(m, pt_list[k].point, pt_list[next_idx].point)
+        loc = _point_filled_curve_orientation(m, probe, poly; in = 1, on = 0, out = -1, exact)
+        loc == 0 || return next_idx, loc == -1
+        first_idx == 0 && (first_idx = k)
     end
-    start_status = !_point_filled_curve_orientation(m, start_pt, poly; in = true, on = false, out = false, exact)
-    return next_idx, start_status
+    first_idx == 0 && return (nothing, false)
+    return (first_idx < npts ? (first_idx + 1) : 1), true
 end
 
 #= Drop `p2` only if it lies on the manifold edge joining its neighbors.
@@ -1423,12 +1435,22 @@ function _remove_collinear_points!(alg::FosterHormannClipping{M, A}, polys, remo
                     # check if p2 is approximately on the edge formed by p1 and p3 - remove if so
                     if _is_removable_collinear(alg.manifold, p1, p2, p3)
                         remove_idx[i - 1] = true
+                        #= p1 stays: a removed point is no neighbour. Otherwise two
+                        near-duplicate vertices each read collinear through the other and
+                        both go, taking a real corner with them. =#
+                        p2 = p3
+                        continue
                     end
                 end
                 p1, p2 = p2, p3
             end
-            # Check if the first point (which is repeated as the last point) is needed 
-            if _is_removable_collinear(alg.manifold, ring.geom[end - 1], ring.geom[1], ring.geom[2])
+            # Check if the first point (which is repeated as the last point) is needed,
+            # against its nearest kept neighbours
+            prev_k = findlast(!, view(remove_idx, 1:(n - 1)))
+            next_k = findfirst(!, view(remove_idx, 2:(n - 1)))
+            prev_k = (prev_k === nothing || prev_k == 1) ? n - 1 : prev_k
+            next_k = next_k === nothing ? 2 : next_k + 1
+            if _is_removable_collinear(alg.manifold, ring.geom[prev_k], ring.geom[1], ring.geom[next_k])
                 remove_idx[1], remove_idx[end] = true, true
             end
             # Remove unneeded collinear points
