@@ -32,6 +32,12 @@ Optionally, one may define:
 
 They enable the generic query functions described below.
 
+Two further verbs describe the work under a node, for traversals that need to choose which side of a pair to open or to enumerate a subtree without touching extents.  Neither is required; both have defaults, and a tree that wraps another tree must forward them to the wrapped node.
+- `split_weight(node)::Real` - a relative estimate of the work under a node: its number of entries for a leaf, the sum (or an estimate like `capacity^height`) for an internal node.  Must not increase going down the tree.  Defaults to `1`.
+- `subtree_indices(node)::AbstractVector{<:Integer}` - the leaf indices under a node, in traversal order.  Defaults to a depth-first walk collected into a `Vector{Int}`; trees whose leaves sit in one contiguous window should return a range or view in O(1).
+
+`dual_depth_first_search` does not consult `split_weight`; it is there for opt-in traversals built on top of the interface.  `STRtree` stays on the default weight (its nodes carry neither a level nor a capacity); GeometryOps' `RTree` answers both verbs in O(1).
+
 ## Traversals
 
 - `depth_first_search(f, predicate, tree)` - call `f(i)` for each index `i` in `tree` that satisfies `predicate(extent(i))`.

@@ -1,5 +1,6 @@
 using GeometryOps, GeometryOpsCore
 using SpatialTreeInterface
+using UnitSphericalGeometryCore
 using Documenter, DocumenterVitepress
 using Literate
 using Makie, CairoMakie
@@ -63,6 +64,8 @@ function current_module_from_paths(source_path, relative_path)
         return "GeometryOpsCore"
     elseif contains(source_path, "SpatialTreeInterface")
         return contains(relative_path, "LoopStateMachine") ? "SpatialTreeInterface.LoopStateMachine" : "SpatialTreeInterface"
+    elseif contains(source_path, "UnitSphericalGeometryCore")
+        return contains(relative_path, "robustcrossproduct") ? "UnitSphericalGeometryCore.RobustCrossProduct" : "UnitSphericalGeometryCore"
     elseif endswith(source_path, "ext")
         return "Base.get_extension(GeometryOps, :$(splitpath(relative_path)[1]))"
     elseif contains(relative_path, "NaturalIndexing")
@@ -118,6 +121,12 @@ withenv("JULIA_DEBUG" => "Literate") do # allow Literate debug output to escape 
     push!(literate_pages, "SpatialTreeInterface" => sti_stuff[1][2])
 
     global source_path
+    source_path = joinpath(dirname(@__DIR__), "UnitSphericalGeometryCore", "src")
+    usgc_stuff = []
+    process_literate_recursive!(usgc_stuff, source_path)
+    push!(literate_pages, "UnitSphericalGeometryCore" => usgc_stuff[1][2])
+
+    global source_path
     source_path = joinpath(dirname(@__DIR__), "ext")
     ext_stuff = []
     process_literate_recursive!(ext_stuff, source_path)
@@ -131,7 +140,7 @@ end
 
 # Finally, make the docs!
 makedocs(;
-    modules=[GeometryOps, GeometryOpsCore, SpatialTreeInterface],
+    modules=[GeometryOps, GeometryOpsCore, SpatialTreeInterface, UnitSphericalGeometryCore],
     authors="Anshul Singhvi <anshulsinghvi@gmail.com> and contributors",
     repo="https://github.com/JuliaGeo/GeometryOps.jl/blob/{commit}{path}#{line}",
     sitename="GeometryOps.jl",

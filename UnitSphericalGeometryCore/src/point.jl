@@ -22,13 +22,15 @@ spherical_distance
 A unit spherical point, i.e., point living on the 2-sphere (𝕊²),
 represented as Cartesian coordinates in ℝ³.
 
-This currently has no support for heights, only going from lat long to spherical
-and back again.
+Constructors accept unit-sphere `xyz` as three numbers, a 3-tuple or a 3-vector, or a
+geographic (longitude, latitude) point in degrees as a 2-tuple, a 2-vector or any
+GeoInterface point.  A 3D GeoInterface point is taken to be unit-sphere `xyz`; there is
+no support for heights.
 
 ## Examples
 
 ```jldoctest
-julia> using GeometryOps.UnitSpherical
+julia> using UnitSphericalGeometryCore
 
 julia> UnitSphericalPoint(1, 0, 0)
 3-element UnitSphericalPoint{Int64} with indices SOneTo(3):
@@ -54,7 +56,9 @@ UnitSphericalPoint(v::NTuple{2, T}) where T = UnitSphereFromGeographic()(v)
 UnitSphericalPoint(p::UnitSphericalPoint) = p
 ## handle the GeoInterface case, this is the catch-all method
 UnitSphericalPoint(v) = UnitSphericalPoint(GI.trait(v), v)
-UnitSphericalPoint(::GI.PointTrait, v) = UnitSphereFromGeographic()(v) # since it works on any GI compatible point
+## a 2D point is geographic (longitude, latitude); a 3D point is already unit-sphere xyz,
+## matching the tuple and vector constructors below
+UnitSphericalPoint(::GI.PointTrait, v) = _unit_spherical_point(v)
 UnitSphericalPoint(::GI.PointTrait, v::UnitSphericalPoint) = v
 ## finally, handle the case where a vector is passed in
 ## we may want it to go to the geographic pipeline _or_ direct materialization
@@ -128,14 +132,14 @@ nearly-identical points.  Adapted from Google's S2 geometry library
 ## Doctests
 
 ```jldoctest
-julia> using GeometryOps.UnitSpherical
+julia> using UnitSphericalGeometryCore
 
 julia> spherical_distance(UnitSphericalPoint(1, 0, 0), UnitSphericalPoint(0, 1, 0))
 1.5707963267948966
 ```
 
 ```jldoctest
-julia> using GeometryOps.UnitSpherical
+julia> using UnitSphericalGeometryCore
 
 julia> spherical_distance(UnitSphericalPoint(1, 0, 0), UnitSphericalPoint(1, 0, 0))
 0.0
@@ -160,7 +164,7 @@ end
 # ## Tests
 
 # @testitem "UnitSphericalPoint constructor" begin
-#     using GeometryOps.UnitSpherical
+#     using UnitSphericalGeometryCore
 #     import GeoInterface as GI
 
 #     northpole = UnitSphericalPoint{Float64}(1, 0, 0)

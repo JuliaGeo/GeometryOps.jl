@@ -1,7 +1,7 @@
 using Test
-using GeometryOps
-using GeometryOps.UnitSpherical
-using GeometryOps.UnitSpherical.RobustCrossProduct
+
+using UnitSphericalGeometryCore
+using UnitSphericalGeometryCore.RobustCrossProduct
 using StaticArrays
 using LinearAlgebra
 using Random

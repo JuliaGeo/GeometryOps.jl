@@ -26,7 +26,7 @@ This implementation handles these edge cases by:
 ## Examples
 
 ```@example robust-cross
-using GeometryOps.UnitSpherical
+using UnitSphericalGeometryCore
 using LinearAlgebra: ⋅
 
 # Regular case - points at right angles
@@ -50,7 +50,7 @@ println("Perpendicular to inputs: ", isapprox(dot_a, 0, atol=1e-14), ", ", isapp
 
 module RobustCrossProduct
 
-using ..UnitSpherical: UnitSphericalPoint
+using ..UnitSphericalGeometryCore: UnitSphericalPoint
 using StaticArrays
 using LinearAlgebra
 
@@ -97,7 +97,7 @@ Returns a unit-length vector that is perpendicular to both input vectors.
 ## Examples
 
 ```jldoctest
-using GeometryOps.UnitSpherical: UnitSphericalPoint, robust_cross_product
+using UnitSphericalGeometryCore: UnitSphericalPoint, robust_cross_product
 a = UnitSphericalPoint(1, 0, 0);
 b = UnitSphericalPoint(0, 1, 0);
 result = robust_cross_product(a, b)
@@ -340,7 +340,7 @@ function symbolic_cross_product_sorted(a::AbstractVector{T}, b::AbstractVector{T
         # S2's SymbolicCrossProdSorted at s2edge_crossings.cc:251-253 returns
         # `Vector3_d(a[1], -a[0], 0)` in C++ 0-based indexing.
         # In Julia's 1-based indexing, that's (a[2], -a[1], 0). Bug fixed at
-        # src/utils/UnitSpherical/robustcrossproduct/RobustCrossProduct.jl:327.
+        # UnitSphericalGeometryCore/src/robustcrossproduct/RobustCrossProduct.jl:327.
         return UnitSphericalPoint{T}(a[2], -a[1], 0)
     end
     
@@ -404,5 +404,5 @@ Based on analyzing s2edge_crossings.cc, we need to implement the following compo
 - A module for arbitrary precision arithmetic (we already have that in BigFloat)
 - Symbolic perturbation utilities
 - Robust predicates for orientation tests (we already have that through ExactPredicates.jl and AdaptivePredicates.jl)
-- Specialized vector types and operations (we already have that in UnitSpherical.jl)
+- Specialized vector types and operations (we already have that in `UnitSphericalPoint`)
 =#

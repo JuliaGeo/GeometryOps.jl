@@ -29,7 +29,7 @@ export spatialtree
 @static if VERSION >= v"1.11"
     eval(Meta.parse("""
     public isspatialtree, isleaf, getchild, nchild, child_indices_extents,
-        node_extent, node_extent_is_expensive,
+        node_extent, node_extent_is_expensive, split_weight, subtree_indices,
         depth_first_search, dual_depth_first_search, sanitize_predicate,
         LoopStateMachine
     """))

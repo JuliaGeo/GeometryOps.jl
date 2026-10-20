@@ -1,0 +1,30 @@
+name = "UnitSphericalGeometryCore"
+uuid = "374d2b58-edf9-4f97-868a-42ae1c074d0a"
+authors = ["Anshul Singhvi <anshulsinghvi@gmail.com>", "and contributors"]
+version = "0.1.0"
+
+[deps]
+CoordinateTransformations = "150eb455-5306-5404-9cee-2592286d6298"
+Extents = "411431e0-e8b7-467b-b5e0-f676ba4f2910"
+GeoFormatTypes = "68eda718-8dee-11e9-39e7-89f7f65f511f"
+GeoInterface = "cf35fbd7-0cd7-5166-be24-54bfbe79505f"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+
+[compat]
+CoordinateTransformations = "0.5, 0.6"
+Extents = "0.1.5"
+GeoFormatTypes = "0.4"
+GeoInterface = "1"
+LinearAlgebra = "1"
+Random = "1"
+StaticArrays = "1"
+Test = "1"
+julia = "1.10"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

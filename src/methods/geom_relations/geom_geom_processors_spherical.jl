@@ -319,46 +319,6 @@ function _split_segment_interactions(
 end
 
 #=
-Bound the geometry by a cap centered on its normalized vertex mass and reaching its furthest
-vertex. Caps smaller than a quarter turn contain the minor arcs between their vertices.
-
-Return `nothing` for degenerate vertex mass or a cap reaching a quarter turn. Two passes take
-O(n) time without allocation.
-
-Compute the radius from chord length for small-angle precision, then pad it to keep rejection
-conservative.
-=#
-_spherical_bounding_cap(geom) = _spherical_bounding_cap(GI.trait(geom), geom)
-
-# `GI.getpoint` has no `PointTrait` method; a point is its own zero-radius cap.
-_spherical_bounding_cap(::GI.PointTrait, geom) =
-    UnitSpherical.SphericalCap(_spherical_kernel_point(geom), 1e-7)
-
-function _spherical_bounding_cap(::GI.AbstractGeometryTrait, geom)
-    sx = sy = sz = 0.0
-    n = 0
-    for p in GI.getpoint(geom)
-        u = _spherical_kernel_point(p)
-        sx += u[1]; sy += u[2]; sz += u[3]
-        n += 1
-    end
-    n == 0 && return nothing
-    nrm = sqrt(sx * sx + sy * sy + sz * sz)
-    nrm < 1e-9 && return nothing  # vertices spread over a great circle
-    c = UnitSphericalPoint(sx / nrm, sy / nrm, sz / nrm)
-    maxchord2 = 0.0
-    for p in GI.getpoint(geom)
-        u = _spherical_kernel_point(p)
-        dx = c[1] - u[1]; dy = c[2] - u[2]; dz = c[3] - u[3]
-        ch2 = dx * dx + dy * dy + dz * dz
-        ch2 > maxchord2 && (maxchord2 = ch2)
-    end
-    maxchord2 >= 2.0 && return nothing  # radius past a quarter turn
-    r = 2 * asin(sqrt(maxchord2) / 2)
-    return UnitSpherical.SphericalCap(c, r + 1e-7 + 8 * eps(r))
-end
-
-#=
 Reject disjoint spherical bounding caps. Endpoint lon/lat boxes are insufficient because
 great-circle arcs can leave them. Once disjointness is established, use the planar flag rules.
 =#
@@ -367,10 +327,10 @@ great-circle arcs can leave them. Once disjointness is established, use the plan
     in_require, on_require, out_require,
     kw...
 )
-    capa = _spherical_bounding_cap(a)
-    capa === nothing && return (false, false)
-    capb = _spherical_bounding_cap(b)
-    capb === nothing && return (false, false)
+    # `spherical_bounding_cap` answers the whole sphere for degenerate or very wide
+    # geometries, which is never disjoint from anything, so no special-casing is needed.
+    capa = UnitSpherical.spherical_bounding_cap(a)
+    capb = UnitSpherical.spherical_bounding_cap(b)
     UnitSpherical._disjoint(capa, capb) || return (false, false)
     return if out_allow
         (in_require || on_require) ? (true, false) : (true, true)

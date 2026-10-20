@@ -34,6 +34,7 @@ SpatialTreeInterface = "bf42099b-6274-40f2-a94d-272408263a4f"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TGGeometry = "d7e755d2-3c95-4bcf-9b3c-79ab1a78647b"
 Tables = "bd369af6-aec1-5ad0-b16a-f7cc5008161c"
+UnitSphericalGeometryCore = "374d2b58-edf9-4f97-868a-42ae1c074d0a"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 WellKnownGeometry = "0f680547-7be7-4555-8820-bb198eeb646b"
 XML = "72c71f33-b9b6-44de-8c94-c961784809e2"
@@ -49,4 +50,5 @@ XML = "0.3.8, 0.4"
 GeometryOps = {path = ".."}
 GeometryOpsCore = {path = "../GeometryOpsCore"}
 SpatialTreeInterface = {path = "../SpatialTreeInterface"}
+UnitSphericalGeometryCore = {path = "../UnitSphericalGeometryCore"}
 GeometryOpsTestHelpers = {path = "../GeometryOpsTestHelpers"}

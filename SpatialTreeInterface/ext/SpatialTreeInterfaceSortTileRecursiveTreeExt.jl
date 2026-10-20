@@ -4,6 +4,7 @@
 # their stored indices with their extents.
 module SpatialTreeInterfaceSortTileRecursiveTreeExt
 
+import SpatialTreeInterface
 import SpatialTreeInterface: isspatialtree, isleaf, getchild, nchild, child_indices_extents, node_extent
 using SortTileRecursiveTree: STRtree, STRNode, STRLeafNode
 
@@ -14,6 +15,7 @@ getchild(tree::STRtree) = getchild(tree.rootnode)
 getchild(tree::STRtree, i) = getchild(tree.rootnode, i)
 isleaf(tree::STRtree) = isleaf(tree.rootnode)
 child_indices_extents(tree::STRtree) = child_indices_extents(tree.rootnode)
+SpatialTreeInterface.subtree_indices(tree::STRtree) = SpatialTreeInterface.subtree_indices(tree.rootnode)
 
 isspatialtree(::Type{<: STRNode}) = true
 node_extent(node::STRNode) = node.extent
@@ -21,10 +23,14 @@ nchild(node::STRNode) = length(node.children)
 getchild(node::STRNode) = node.children
 getchild(node::STRNode, i) = node.children[i]
 isleaf(node::STRNode) = false # STRNodes are not leaves by definition
+# No `split_weight` methods: STR nodes carry neither a level nor a capacity, so
+# an O(1) weight is not available and an exact one would walk the subtree.
+# STRtree keeps the default of 1; use an RTree where weights matter.
 
 isspatialtree(::Type{<: STRLeafNode}) = true
 node_extent(node::STRLeafNode) = node.extent
 isleaf(node::STRLeafNode) = true
 child_indices_extents(node::STRLeafNode) = zip(node.indices, node.extents)
+SpatialTreeInterface.subtree_indices(node::STRLeafNode) = node.indices
 
 end # module

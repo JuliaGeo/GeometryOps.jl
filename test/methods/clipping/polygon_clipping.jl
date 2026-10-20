@@ -244,3 +244,16 @@ end
     # if the polygon is large enoughs
     @test_throws "The polygons are contained in the exception object" throw(GO.TracingError(message, poly_a_large, poly_b_large, GO.PolyNode{Float64}[], GO.PolyNode{Float64}[], Int[]))
 end
+# Static-array rings (as ConservativeRegridding's planar cells are) on the no-crossing path:
+# the contained polygon is rebuilt into the tracer's `Vector` ring type, not a `SizedVector`.
+@testset "Nested polygons with SVector rings" begin
+    import StaticArrays: SVector
+    sq(a, b) = GI.Polygon(SVector(GI.LinearRing(SVector((a, a), (b, a), (b, b), (a, b), (a, a)))))
+    outer, inner = sq(0.0, 2.0), sq(0.5, 1.0)
+    for (a, b) in ((outer, inner), (inner, outer))
+        r = GO.intersection(a, b; target = GI.PolygonTrait())
+        @test length(r) == 1 && GO.area(r[1]) ≈ 0.25
+    end
+    @test GO.area(GO.difference(outer, inner; target = GI.PolygonTrait())[1]) ≈ 3.75
+    @test GO.area(GO.union(outer, inner; target = GI.PolygonTrait())[1]) ≈ 4.0
+end

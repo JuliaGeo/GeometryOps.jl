@@ -77,14 +77,27 @@ reference (and because GeometryOps' own source code links to them).
 
 ### UnitSpherical
 
+`GeometryOps.UnitSpherical` adds the orientation predicates, arc intersection and arc
+extents on top of the UnitSphericalGeometryCore sublibrary, whose API it re-exports.
+
 ```@autodocs
 Modules = [GeometryOps.UnitSpherical]
+```
+
+### UnitSphericalGeometryCore
+
+The unit-spherical point and cap types, geographic transformations, `slerp` and bounding
+caps live in the UnitSphericalGeometryCore sublibrary of this repository, which
+GeometryOps depends on.
+
+```@autodocs
+Modules = [UnitSphericalGeometryCore]
 ```
 
 ### RobustCrossProduct
 
 ```@autodocs
-Modules = [GeometryOps.UnitSpherical.RobustCrossProduct]
+Modules = [UnitSphericalGeometryCore.RobustCrossProduct]
 ```
 
 ### SpatialTreeInterface

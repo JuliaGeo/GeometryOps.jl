@@ -186,6 +186,51 @@ Test a narrow overlap whose orientation signs fall inside the `eps*16` band. =#
     @test sum(p -> GO.area(Spherical(), p), polys) ≈ GO.area(Spherical(), P) * frac rtol = 1e-3
 end
 
+#= A vertex 1e-17 inside the other ring's edge reads `on` to the banded point-in-ring test
+while the exact crossing predicates see no contact; taken as outside, it flipped every
+entry/exit flag and the clip returned the complement (two slivers of the lat/lon cell). =#
+@testset "start probe within the on-arc band of an edge" begin
+    P = GO.UnitSpherical.UnitSphericalPoint
+    #-- lat/lon cell lon 90..96, lat -84..-78; HEALPix nside 8 nested pixel 579 as Healpix.jl
+    #-- gives it, its west edge on lon = 90 but for x = 1.2e-17, 6.2e-18
+    latlon = ring([P(0.0, 0.10452846326765347, -0.9945218953682733), P(-0.010926199633097182, 0.10395584540887966, -0.9945218953682733),
+        P(-0.021732689536559883, 0.20677272882130043, -0.9781476007338057), P(0.0, 0.20791169081775934, -0.9781476007338057)])
+    healpix = ring([P(-0.15128841196122716, 0.26203921611325665, -0.953125), P(1.2433729683664407e-17, 0.20305821551685357, -0.9791666666666666),
+        P(6.24135685332258e-18, 0.10192909266031733, -0.9947916666666666), P(-0.14358384116760659, 0.1435838411676066, -0.9791666666666666)])
+    expected = GO.intersection_area(GO.ConvexConvexSutherlandHodgman(Spherical()), latlon, healpix)
+    @test expected > 0.98 * GO.area(Spherical(), latlon)
+    for (a, b) in ((latlon, healpix), (healpix, latlon))
+        polys = fh(:intersection, ALG_S, a, b)
+        @test length(polys) == 1
+        @test sum(p -> GO.area(Spherical(), p), polys) ≈ expected rtol = 1e-12
+    end
+end
+
+#= A crossing 1e-16 along an edge from its end vertex leaves two near-duplicate vertices in
+the traced ring; collinear-point removal judged each through the other and dropped both,
+deleting a real corner (a triangle became a segment: area 0) or a quad's tip. =#
+@testset "near-duplicate traced vertices keep their corner" begin
+    P = GO.UnitSpherical.UnitSphericalPoint
+    sh(a, b) = GO.intersection_area(GO.ConvexConvexSutherlandHodgman(Spherical()), a, b)
+    #-- lat/lon cell lon 54..60, lat 54..60 against RingGrids HEALPix nside 8 pixel 27, whose
+    #-- north vertex sits on the cell's east edge
+    latlon = ring([P(0.3454915028125263, 0.4755282581475768, 0.8090169943749475), P(0.29389262614623657, 0.5090369604551271, 0.8090169943749475),
+        P(0.25, 0.4330127018922193, 0.8660254037844386), P(0.29389262614623657, 0.4045084971874737, 0.8660254037844386)])
+    healpix = ring([P(0.29148059540902554, 0.5048592006688598, 0.8125), P(0.5270462766947299, 0.5270462766947298, 0.6666666666666666),
+        P(0.4811379353814157, 0.7200738067288024, 0.5), P(0.2852353895437613, 0.6886191459053214, 0.6666666666666666)])
+    #-- lat/lon cell lon 84..90, lat 30..36 against Healpix.jl nside 8 pixel 384, whose south
+    #-- vertex is the cell's south-east corner to within 5e-17
+    latlon2 = ring([P(0.09052430460833645, 0.8612812260087741, 0.5), P(0.0, 0.8660254037844386, 0.5),
+        P(0.0, 0.8090169943749475, 0.5877852522924731), P(0.0845653031794291, 0.8045851146309164, 0.5877852522924731)])
+    healpix2 = ring([P(4.5639891522016886e-17, 0.7453559924999299, 0.6666666666666666), P(0.07961274242154245, 0.8083217388307352, 0.5833333333333334),
+        P(5.302876193624534e-17, 0.8660254037844386, 0.5), P(-0.07961274242154236, 0.8083217388307352, 0.5833333333333334)])
+    for (a, b) in ((latlon, healpix), (latlon2, healpix2)), (x, y) in ((a, b), (b, a))
+        polys = fh(:intersection, ALG_S, x, y)
+        @test length(polys) == 1
+        @test sum(p -> GO.area(Spherical(), p), polys; init = 0.0) ≈ sh(a, b) rtol = 1e-12
+    end
+end
+
 #= Unchanged vertices must preserve their exact input values. Fetch lon/lat vertices
 by source index to avoid round-trip conversion; 3D vertices need no conversion. =#
 @testset "passthrough vertices are bit-exact" begin

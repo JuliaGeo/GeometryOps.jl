@@ -175,3 +175,33 @@ end
     @test query(partial, pole_box) == [14]  # the cap, one along from before
     @test partial.data === unindexable
 end
+
+# The leaf walk `STI.subtree_indices` defaults to, written out independently.
+function leaf_walk(node)
+    STI.isleaf(node) && return Int[i for (i, _) in STI.child_indices_extents(node)]
+    return reduce(vcat, (leaf_walk(c) for c in STI.getchild(node)); init = Int[])
+end
+
+function check_subtree_verbs(node)
+    @test STI.subtree_indices(node) == leaf_walk(node)
+    @test STI.split_weight(node) == length(STI.subtree_indices(node))
+    STI.isleaf(node) || foreach(check_subtree_verbs, STI.getchild(node))
+end
+
+@testset "split_weight and subtree_indices ($alg, n = $n, partial = $partial)" for
+        alg in (STR(), HPR(), Unsorted()),
+        n in (1, 5, 16, 17, 100, 1000),
+        partial in (false, true)
+    extents = random_extents(Xoshiro(n), n, 2)
+    tree = partial ? RTree(alg, extents; nodecapacity = 8, indices = 1:2:n) :
+                     RTree(alg, extents; nodecapacity = 8)
+    @test STI.subtree_indices(tree) === tree.indices
+    @test STI.split_weight(tree) == length(tree.indices)
+    @test sort(STI.subtree_indices(tree)) == (partial ? (1:2:n) : (1:n))
+    check_subtree_verbs(tree)
+    # the root cursor sees the same window, lazily (a view, or a range of a range) rather than as a copy
+    root = FRT._rootnode(tree)
+    @test STI.subtree_indices(root) == tree.indices
+    @test !(STI.subtree_indices(root) isa Vector)
+    @test STI.split_weight(root) == STI.split_weight(tree)
+end
