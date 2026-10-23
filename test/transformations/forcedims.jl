@@ -33,3 +33,9 @@ GI.LinearRing([(3, 4), (5, 6), (6, 7), (3, 4)])])
     # Test forcexyz preserves existing z values
     @test GO.equals(GO.forcexyz(geom3d), geom3d)
 end
+
+@testset "forcexyz on a vector of geometries" begin
+    geoms3d = GO.forcexyz([geom, geom])
+    @test all(GI.is3d, geoms3d)
+    @test all(p -> GI.z(p) == 0, GO.flatten(GI.PointTrait, geoms3d))
+end
