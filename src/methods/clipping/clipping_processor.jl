@@ -448,15 +448,15 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
     tree_a = NaturalIndexing.NaturalIndex(edges_a)
     tree_b = NaturalIndexing.NaturalIndex(edges_b)
 
-    last_a_idx = 0
+    last_a_idx = Ref(0)
 
     SpatialTreeInterface.dual_depth_first_search(Extents.intersects, tree_a, tree_b) do a_edge_idx, b_edge_idx
         a1t, a2t = edges_a[a_edge_idx].geom
         b1t, b2t = edges_b[b_edge_idx].geom
 
-        if last_a_idx < a_edge_idx
+        if last_a_idx[] < a_edge_idx
             if !isnothing(f_on_each_a)
-                for i in (last_a_idx+1):(a_edge_idx-1)
+                for i in (last_a_idx[]+1):(a_edge_idx-1)
                     f_on_each_a((edges_a[i].geom[1]), i)
                     !isnothing(f_after_each_a) && f_after_each_a((edges_a[i].geom[1]), i)
                 end
@@ -466,15 +466,15 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
 
         f_on_each_maybe_intersect(((a1t, a2t), a_edge_idx), ((b1t, b2t), b_edge_idx))
 
-        if last_a_idx < a_edge_idx
+        if last_a_idx[] < a_edge_idx
             if !isnothing(f_after_each_a)
                 f_after_each_a(a1t, a_edge_idx)
             end
-            last_a_idx = a_edge_idx
+            last_a_idx[] = a_edge_idx
         end
     end
 
-    if last_a_idx == 0 # the query did not find any intersections
+    if last_a_idx[] == 0 # the query did not find any intersections
         if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
             return
         else
@@ -483,12 +483,12 @@ function foreach_pair_of_maybe_intersecting_edges_in_order(
                 !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
             end
         end
-    elseif last_a_idx < length(edges_a)
+    elseif last_a_idx[] < length(edges_a)
         # the query terminated early - this will almost always be the case.
         if !isnothing(f_on_each_a) && isnothing(f_after_each_a)
             return
         else
-            for (i, edge) in zip(last_a_idx+1:length(edges_a), view(edges_a, last_a_idx+1:length(edges_a)))
+            for (i, edge) in zip(last_a_idx[]+1:length(edges_a), view(edges_a, last_a_idx[]+1:length(edges_a)))
                 !isnothing(f_on_each_a) && f_on_each_a(edge.geom[1], i)
                 !isnothing(f_after_each_a) && f_after_each_a(edge.geom[1], i)
             end
@@ -560,24 +560,24 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
     cache === nothing && sizehint!(a_list, n_a_edges)
     # finds indices of intersection points in a_list
     a_idx_list = _fh_buffer(cache === nothing ? nothing : cache.a_idx_list, Vector{Int})
-    local a_count::Int = 0  # number of points added to a_list
-    local n_b_intrs::Int = 0
-    local prev_counter::Int = 0
+    a_count = Ref(0)  # number of points added to a_list
+    n_b_intrs = Ref(0)
+    prev_counter = Ref(0)
 
     function on_each_a(a_pt, i)
         #-- edge `i` starts at vertex `i`, so this is the slot egress reads back
         new_point = PolyNode{T}(;point = a_pt, srcidx = Int32(i))
-        a_count += 1
+        a_count[] += 1
         push!(a_list, new_point)
-        prev_counter = a_count
+        prev_counter[] = a_count[]
         return nothing
     end
 
     function after_each_a(a_pt, i)
         # Order intersection points by placement along edge using fracs value
-        if prev_counter < a_count
-            Δintrs = a_count - prev_counter
-            inter_points = @view a_list[(a_count - Δintrs + 1):a_count]
+        if prev_counter[] < a_count[]
+            Δintrs = a_count[] - prev_counter[]
+            inter_points = @view a_list[(a_count[] - Δintrs + 1):a_count[]]
             sort!(inter_points, by = x -> x.fracs[1])
         end
         return nothing
@@ -597,10 +597,10 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                     point = int_pt, inter = true, neighbor = j, # j is now equivalent to old j-1
                     crossing = true, fracs = fracs,
                 )
-                a_count += 1
-                n_b_intrs += 1
+                a_count[] += 1
+                n_b_intrs[] += 1
                 push!(a_list, new_intr)
-                push!(a_idx_list, a_count)
+                push!(a_idx_list, a_count[])
             else
                 (_, (α1, β1)) = intr1
                 # Determine if a1 or b1 should be added to a_list
@@ -620,22 +620,22 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
                 end
                 # Add intersection points determined above
                 if add_a1
-                    n_b_intrs += a1_β == 0 ? 0 : 1
+                    n_b_intrs[] += a1_β == 0 ? 0 : 1
                     #= This promotes the vertex already sitting at `prev_counter` -- same
                     point -- so copy it rather than rebuild it, keeping its source slot. =#
-                    a_list[prev_counter] = PolyNode(a_list[prev_counter];
+                    a_list[prev_counter[]] = PolyNode(a_list[prev_counter[]];
                         inter = true, neighbor = j, fracs = (zero(T), a1_β),
                     )
-                    push!(a_idx_list, prev_counter)
+                    push!(a_idx_list, prev_counter[])
                 end
                 if add_b1
                     new_intr = PolyNode{T}(;
                         point = b_pt1, inter = true, neighbor = j,
                         fracs = (b1_α, zero(T)),
                     )
-                    a_count += 1
+                    a_count[] += 1
                     push!(a_list, new_intr)
-                    push!(a_idx_list, a_count)
+                    push!(a_idx_list, a_count[])
                 end
             end
         end
@@ -664,7 +664,7 @@ function _build_a_list(alg::FosterHormannClipping{M, A}, ::Type{T}, poly_a, poly
         foreach_pair_of_maybe_intersecting_edges_in_order(alg, on_each_a, after_each_a, on_each_maybe_intersect, poly_a, poly_b, T)
     end
 
-    return a_list, a_idx_list, n_b_intrs
+    return a_list, a_idx_list, n_b_intrs[]
 end
 
 #=
