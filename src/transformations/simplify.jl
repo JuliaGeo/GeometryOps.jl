@@ -290,10 +290,9 @@ function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
         npts
     end
     max_tol = !isnothing(alg.tol) ? alg.tol : zero(Float64)
-    # Set up queue
-    queue = Vector{Tuple{Int, Int, Int, Float64}}()
-    queue_idx, queue_dist = 0, zero(Float64)
-    len_queue = 0
+    # Set up queue, a binary max-heap of (start_idx, max_idx, end_idx, max_dist, order)
+    queue = Vector{Tuple{Int, Int, Int, Float64, Int}}()
+    norder = 0
     # Set up results vector
     results = Vector{Int}(undef, max_points + (preserve_endpoint ? 0 : 1))
     results[1], results[2] = 1, npoints
@@ -311,40 +310,24 @@ function _simplify(alg::DouglasPeucker, points::Vector, preserve_endpoint)
         left_vals = (start_idx, left_idx, max_idx, left_dist)
         right_vals = (max_idx, right_idx, end_idx, right_dist)
         # Add and remove values from queue
+        queue_dist = isempty(queue) ? zero(Float64) : first(queue)[4]
         if queue_dist > left_dist && queue_dist > right_dist
             # Value in queue is next value to add to results
-            start_idx, max_idx, end_idx, max_dist = queue[queue_idx]
-            # Add left and/or right values to queue or delete used queue value
+            start_idx, max_idx, end_idx, max_dist, order = _dp_queue_pop!(queue)
+            # Add left and/or right values to queue, the first taking the order of the used value
             if left_dist > 0
-                queue[queue_idx] = left_vals
+                _dp_queue_push!(queue, (left_vals..., order))
                 if right_dist > 0
-                    push!(queue, right_vals)
-                    len_queue += 1
+                    _dp_queue_push!(queue, (right_vals..., norder += 1))
                 end
             elseif right_dist > 0
-                queue[queue_idx] = right_vals
-            else
-                deleteat!(queue, queue_idx)
-                len_queue -= 1
+                _dp_queue_push!(queue, (right_vals..., order))
             end
-            # Determine new maximum queue value
-            queue_dist, queue_idx = !isempty(queue) ?
-                findmax(x -> x[4], queue) : (zero(Float64), 0)
         elseif left_dist > right_dist  # use left value as next value to add to results
-            push!(queue, right_vals)  # add right value to queue
-            len_queue += 1
-            if right_dist > queue_dist
-                queue_dist = right_dist
-                queue_idx = len_queue
-            end
+            _dp_queue_push!(queue, (right_vals..., norder += 1))  # add right value to queue
             start_idx, max_idx, end_idx, max_dist = left_vals
         else  # use right value as next value to add to results
-            push!(queue, left_vals)  # add left value to queue
-            len_queue += 1
-            if left_dist > queue_dist
-                queue_dist = left_dist
-                queue_idx = len_queue
-            end
+            _dp_queue_push!(queue, (left_vals..., norder += 1))  # add left value to queue
             start_idx, max_idx, end_idx, max_dist = right_vals
         end
     end
@@ -385,6 +368,43 @@ function _find_max_squared_dist(points, start_idx, end_idx)
         end
     end
     return max_idx, max_dist
+end
+
+#= The DouglasPeucker queue is a binary max-heap on the distance (the 4th value of an entry),
+so that the next segment to split is found in O(log n) instead of O(n) time. Equal distances
+are ordered by the 5th value, smallest first, so ties are broken deterministically in the
+order in which segments were queued. =#
+_dp_queue_before(a, b) = a[4] > b[4] || (a[4] == b[4] && a[5] < b[5])
+
+function _dp_queue_push!(queue, entry)
+    push!(queue, entry)
+    i = lastindex(queue)
+    while i > 1 && _dp_queue_before(entry, queue[i ÷ 2])
+        queue[i] = queue[i ÷ 2]
+        i ÷= 2
+    end
+    queue[i] = entry
+    return queue
+end
+
+function _dp_queue_pop!(queue)
+    top = first(queue)
+    entry = pop!(queue)
+    n = length(queue)
+    n == 0 && return top
+    # Move the last entry down from the top to its place
+    i = 1
+    while 2i <= n
+        child = 2i
+        if child < n && _dp_queue_before(queue[child + 1], queue[child])
+            child += 1
+        end
+        _dp_queue_before(queue[child], entry) || break
+        queue[i] = queue[child]
+        i = child
+    end
+    queue[i] = entry
+    return top
 end
 
 # # Simplify with VisvalingamWhyatt Algorithm
