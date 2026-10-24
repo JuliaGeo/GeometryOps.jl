@@ -1064,9 +1064,11 @@ _get_poly_type(::Type{T}) where T = _get_poly_type(T, Tuple{T, T})
 #-- declares and the one `GI.Polygon` infers from 3D points are different types
 _fh_pt_is3d(::Type{<:UnitSpherical.UnitSphericalPoint}) = true
 _fh_pt_is3d(::Type) = false
+_fh_ring_type(::Type{P}) where P =
+    GI.LinearRing{_fh_pt_is3d(P), false, Vector{P}, Nothing, Nothing}
 _get_poly_type(::Type{T}, ::Type{P}) where {T, P} =
     GI.Polygon{_fh_pt_is3d(P), false,
-        Vector{GI.LinearRing{_fh_pt_is3d(P), false, Vector{P}, Nothing, Nothing}}, Nothing, Nothing}
+        Vector{_fh_ring_type(P)}, Nothing, Nothing}
 
 # GeoInterface's convenience constructor inspects the first polygon even when Z/M
 # are explicit. Supply the concrete wrapper type so empty clipping results are valid.
@@ -1092,10 +1094,22 @@ _fh_as_point(::Type{<:UnitSpherical.UnitSphericalPoint}, p, ::Type{T}) where {T}
 _fh_tuple_point(p::UnitSpherical.UnitSphericalPoint, ::Type{T}) where {T} = _sph_lonlat(T, p)
 _fh_tuple_point(p, ::Type{T}) where {T} = _tuple_point(p, T)
 
-_fh_as_ring(::Type{P}, ring, ::Type{T}) where {P, T} =
-    GI.LinearRing([_fh_as_point(P, p, T) for p in GI.getpoint(ring)])
-_fh_as_poly(::Type{P}, poly, ::Type{T}) where {P, T} =
-    GI.Polygon([_fh_as_ring(P, r, T) for r in GI.getring(poly)])
+function _fh_as_ring(::Type{P}, ring, ::Type{T}) where {P, T}
+    # StaticArrays' comprehension preserves its source shape as a SizedVector.
+    # Match the tracer's concrete Vector storage even for those inputs.
+    points = Vector{P}(undef, GI.npoint(ring))
+    for (i, p) in enumerate(GI.getpoint(ring))
+        points[i] = _fh_as_point(P, p, T)
+    end
+    return GI.LinearRing(points)
+end
+function _fh_as_poly(::Type{P}, poly, ::Type{T}) where {P, T}
+    rings = Vector{_fh_ring_type(P)}(undef, GI.nring(poly))
+    for (i, ring) in enumerate(GI.getring(poly))
+        rings[i] = _fh_as_ring(P, ring, T)
+    end
+    return GI.Polygon(rings)
+end
 
 #-- for the callers that know the point type but do not carry `T`
 _fh_float_type(::Type{<:Tuple{T, T}}) where {T} = T
