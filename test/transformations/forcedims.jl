@@ -34,6 +34,23 @@ GI.LinearRing([(3, 4), (5, 6), (6, 7), (3, 4)])])
     @test GO.equals(GO.forcexyz(geom3d), geom3d)
 end
 
+@testset "forcexyz on mixed dimensions" begin
+    line2d = GI.LineString([(1.0, 2.0), (3.0, 4.0)])
+    line3d = GI.LineString([(5.0, 6.0, 7.0), (8.0, 9.0, 10.0)])
+    filled = [(1.0, 2.0, 42.0), (3.0, 4.0, 42.0)]
+    preserved = [(5.0, 6.0, 7.0), (8.0, 9.0, 10.0)]
+    # Exercise both orders: the fill value must not depend on the previous point.
+    for (geoms, expected) in (([line2d, line3d], vcat(filled, preserved)),
+                              ([line3d, line2d], vcat(preserved, filled))),
+        input in (geoms, GI.GeometryCollection(geoms))
+        result = GO.forcexyz(input, 42)
+        @test collect(GO.flatten(GI.PointTrait, result)) == expected
+        @test all(GI.is3d, GO.flatten(GI.PointTrait, result))
+    end
+    @test (@inferred GO.forcexyz((1.0, 2.0), 42)) == (1.0, 2.0, 42.0)
+    @test (@inferred GO.forcexyz((1.0, 2.0, 3.0), 42)) == (1.0, 2.0, 3.0)
+end
+
 @testset "forcexyz on a vector of geometries" begin
     geoms3d = GO.forcexyz([geom, geom])
     @test all(GI.is3d, geoms3d)

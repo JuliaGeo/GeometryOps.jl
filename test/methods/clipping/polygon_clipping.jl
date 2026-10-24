@@ -4,6 +4,56 @@ import GeoInterface as GI
 import LibGEOS as LG
 using GeometryOpsTestHelpers
 
+@testset "Dual natural tree edge callbacks" begin
+    a = GI.LinearRing([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)])
+    # No candidates, candidates only on edge 1, and candidates only on edge 2:
+    # exercise the empty query, trailing edges, and skipped leading edges.
+    for (coords, expected_edges) in (
+        ([(8.0, 8.0), (9.0, 8.0), (9.0, 9.0), (8.0, 8.0)], Int[]),
+        ([(1.0, -1.0), (2.0, -1.0), (2.0, 1.0), (1.0, -1.0)], [1]),
+        ([(3.0, 1.0), (5.0, 1.0), (5.0, 2.0), (3.0, 1.0)], [2]),
+    )
+        b = GI.LinearRing(coords)
+        events = Tuple{Symbol, Int, Tuple{Float64, Float64}}[]
+        pairs = Tuple{Int, Int}[]
+        before(p, i) = push!(events, (:before, i, p))
+        after(p, i) = push!(events, (:after, i, p))
+        candidate(a, b) = push!(pairs, (a[2], b[2]))
+        GO.foreach_pair_of_maybe_intersecting_edges_in_order(
+            GO.Planar(), GO.DoubleNaturalTree(), before, after, candidate, a, b,
+        )
+        @test events == [(kind, i, GI.getpoint(a, i)) for i in 1:4 for kind in (:before, :after)]
+        @test sort!(unique(first.(pairs))) == expected_edges
+        # Check candidate indices against an independent bounding-box calculation.
+        expected_pairs = [(i, j) for (i, ea) in enumerate(GO.to_edgelist(a, Float64))
+            for (j, eb) in enumerate(GO.to_edgelist(b, Float64))
+            if GO.Extents.intersects(GI.extent(ea), GI.extent(eb))]
+        @test pairs == expected_pairs
+    end
+end
+
+@testset "Degenerate intersection nodes" begin
+    a = GI.LinearRing([(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0), (0.0, 0.0)])
+    b = GI.LinearRing([(1.0, 0.0), (3.0, 0.0), (3.0, -1.0), (1.0, -1.0), (1.0, 0.0)])
+    alg = GO.FosterHormannClipping(GO.NestedLoop())
+    nodes, indices, n_b = GO._build_a_list(alg, Float64, a, b; exact=true)
+    @test getproperty.(nodes, :point) == [(0.0, 0.0), (1.0, 0.0), (3.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)]
+    @test indices == [2, 3]
+    @test all(n -> n.inter && n.fracs[2] == 0 && n.srcidx == 0, nodes[indices])
+    @test n_b == 0
+    # Swapping inputs promotes existing a vertices rather than inserting b vertices.
+    nodes, indices, n_b = GO._build_a_list(alg, Float64, b, a; exact=true)
+    @test getproperty.(nodes, :point) == collect(GI.getpoint(b))[1:4]
+    @test indices == [1, 2]
+    @test getproperty.(nodes[indices], :srcidx) == [1, 2]
+    @test getproperty.(nodes[indices], :fracs) == [(0.0, 0.25), (0.0, 0.75)]
+    @test n_b == 2
+    nodes, indices, n_b = GO._build_a_list(alg, Float64, a, a; exact=true)
+    @test indices == [1, 2, 3, 4]
+    @test all(n -> n.inter && n.fracs == (0.0, 0.0), nodes)
+    @test n_b == 0
+end
+
 # Test of polygon clipping
 p1 = GI.Polygon([[(0.0, 0.0), (5.0, 5.0), (10.0, 0.0), (5.0, -5.0), (0.0, 0.0)]])
 p2 = GI.Polygon([[(3.0, 0.0), (8.0, 5.0), (13.0, 0.0), (8.0, -5.0), (3.0, 0.0)]])
