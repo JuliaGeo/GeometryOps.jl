@@ -106,33 +106,36 @@ _reconstruct(::Type{Target}, geom, components, iter) where Target =
     _reconstruct(Target, GI.trait(geom), geom, components, iter)
 # Try to reconstruct over iterables
 function _reconstruct(::Type{Target}, ::Nothing, iterable, components, iter) where Target
+    iter_ref = Ref(iter)
     vect = map(iterable) do x
         # iter is updated by _reconstruct here
-        obj, iter = _reconstruct(Target, x, components, iter)
+        obj, iter_ref[] = _reconstruct(Target, x, components, iter_ref[])
         obj
     end
-    return vect, iter
+    return vect, iter_ref[]
 end
 # Reconstruct feature collections
 function _reconstruct(::Type{Target}, ::GI.FeatureCollectionTrait, fc, components, iter) where Target
+    iter_ref = Ref(iter)
     features = map(GI.getfeature(fc)) do feature
         # iter is updated by _reconstruct here
-        newfeature, iter = _reconstruct(Target, feature, components, iter)
+        newfeature, iter_ref[] = _reconstruct(Target, feature, components, iter_ref[])
         newfeature
     end
-    return GI.FeatureCollection(features; crs=GI.crs(fc)), iter
+    return GI.FeatureCollection(features; crs=GI.crs(fc)), iter_ref[]
 end
 function _reconstruct(::Type{Target}, ::GI.FeatureTrait, feature, components, iter) where Target
     geom, iter = _reconstruct(Target, GI.geometry(feature), components, iter)
     return GI.Feature(geom; properties=GI.properties(feature), crs=GI.crs(feature)), iter
 end
 function _reconstruct(::Type{Target}, trait, geom, components, iter) where Target
+    iter_ref = Ref(iter)
     geoms = map(GI.getgeom(geom)) do subgeom
         # iter is updated by _reconstruct here
-        subgeom1, iter = _reconstruct(Target, GI.trait(subgeom), subgeom, components, iter)
+        subgeom1, iter_ref[] = _reconstruct(Target, GI.trait(subgeom), subgeom, components, iter_ref[])
         subgeom1
     end
-    return rebuild(geom, geoms), iter
+    return rebuild(geom, geoms), iter_ref[]
 end
 # Apply f to the target geometry
 _reconstruct(::Type{Target}, ::Trait, geom, components, iter) where {Target,Trait<:Target} =

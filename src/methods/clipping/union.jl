@@ -270,7 +270,9 @@ function _union(
         fix_multipoly = nothing
     end
     multipolys = multipoly_b
-    polys = [_fh_as_poly(_fh_out_point_type(alg.manifold, multipoly_a, T), p, T) for p in GI.getpolygon(multipoly_b)]
+    polys = let multipoly_a = multipoly_a
+        [_fh_as_poly(_fh_out_point_type(alg.manifold, multipoly_a, T), p, T) for p in GI.getpolygon(multipoly_b)]
+    end
     for poly_a in GI.getpolygon(multipoly_a)
         polys = union(alg, poly_a, multipolys, T; target, fix_multipoly)
         multipolys = _fh_multipolygon(polys)

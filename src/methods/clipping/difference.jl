@@ -154,7 +154,9 @@ function _difference(
         multipoly_b = fix_multipoly(multipoly_b)
         fix_multipoly = nothing
     end
-    polys = [_fh_as_poly(_fh_out_point_type(alg.manifold, multipoly_a, T), p, T) for p in GI.getpolygon(multipoly_a)]
+    polys = let multipoly_a = multipoly_a
+        [_fh_as_poly(_fh_out_point_type(alg.manifold, multipoly_a, T), p, T) for p in GI.getpolygon(multipoly_a)]
+    end
     for (i, poly_b) in enumerate(GI.getpolygon(multipoly_b))
         # Subtract each component from the remaining pieces in `polys`.
         polys = if i == 1

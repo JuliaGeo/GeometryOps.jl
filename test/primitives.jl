@@ -163,4 +163,34 @@ end
     gb_reconstructed = GO.reconstruct(gb_poly, reverse(gb_points))
     @test gb_reconstructed == revpoly
     @test gb_reconstructed isa GI.Polygon
+
+    @testset "Iterables and feature collections" begin
+        crs = GFT.EPSG(4326)
+        features = [GI.Feature(poly; properties=(id=i,), crs) for i in 1:2]
+        fc = GI.FeatureCollection(features; crs)
+        # Nest features inside ordinary iterables as well as a FeatureCollection.
+        # Distinct replacements expose a cursor that is reset between siblings.
+        for (input, hasfeatures) in (([poly, poly], false), ((poly, poly), false), (fc, true), (([fc], features), true))
+            original = collect(GO.flatten(GI.PointTrait, input))
+            roundtrip = GO.reconstruct(input, original)
+            @test collect(GO.flatten(GI.PointTrait, roundtrip)) == original
+            replacements = [(Float64(i), -Float64(i)) for i in eachindex(original)]
+            result = GO.reconstruct(input, replacements)
+            @test collect(GO.flatten(GI.PointTrait, result)) == replacements
+            if input === fc
+                @test GI.crs(result) == crs
+            elseif hasfeatures
+                @test GI.crs(result[1][1]) == crs
+            end
+            if hasfeatures
+                before_features = collect(GO.flatten(GI.FeatureTrait, input))
+                after_features = collect(GO.flatten(GI.FeatureTrait, result))
+                @test length(after_features) == length(before_features)
+                for (before, after) in zip(before_features, after_features)
+                    @test GI.properties(after) == GI.properties(before)
+                    @test GI.crs(after) == GI.crs(before)
+                end
+            end
+        end
+    end
 end
