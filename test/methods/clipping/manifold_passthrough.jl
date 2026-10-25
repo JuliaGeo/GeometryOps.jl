@@ -1,6 +1,7 @@
 using Test
 import GeoInterface as GI
 import GeometryOps as GO
+using StaticArrays: SVector
 
 # Wrapped longitudes distinguish spherical dispatch from planar bounds and predicates.
 function passthrough_box(x1, y1, x2, y2, ::Type{T} = Float64) where T
@@ -194,5 +195,39 @@ end
     for result in (GO.union(m,ma,disjoint;target=GI.PolygonTrait()), GO.difference(m,ma,disjoint;target=GI.PolygonTrait()))
         pts = collect(Iterators.flatten(GI.getpoint.(result)))
         @test all(p -> p in pts, GI.getpoint(a))
+    end
+end
+
+# StaticArrays' comprehension preserves the input shape as a SizedVector. No-crossing
+# results must instead use the same concrete Vector storage as traced polygons.
+function static_passthrough_polygon(rings)
+    GI.Polygon(SVector((GI.LinearRing(SVector(points...)) for points in rings)...))
+end
+
+@testset "Static polygon storage in no-crossing results" begin
+    for (m, point) in ((GO.Planar(), identity), (GO.Spherical(radius=1.0), identity),
+                      (GO.Spherical(radius=1.0), GO.UnitSphereFromGeographic()))
+        box(x1, y1, x2, y2) = point.([(x1,y1), (x2,y1), (x2,y2), (x1,y2), (x1,y1)])
+        outer = static_passthrough_polygon([box(0.,0.,4.,4.)])
+        inner = static_passthrough_polygon([box(1.,1.,2.,2.)])
+        far = static_passthrough_polygon([box(10.,0.,11.,1.)])
+        donut = static_passthrough_polygon([box(0.,0.,4.,4.), box(1.,1.,2.,2.)])
+        for (op, a, b, expected, n) in (
+            (GO.intersection, outer, inner, GO.area(m, inner), 1),
+            (GO.intersection, inner, outer, GO.area(m, inner), 1),
+            (GO.union, outer, far, GO.area(m, outer)+GO.area(m, far), 2),
+            (GO.union, donut, far, GO.area(m, donut)+GO.area(m, far), 2),
+            (GO.difference, donut, far, GO.area(m, donut), 1),
+        )
+            result = op(m, a, b; target=GI.PolygonTrait())
+            @test length(result) == n
+            @test passthrough_area(m, result) ≈ expected
+            op === GO.difference && @test GI.nhole(only(result)) == 1
+        end
+        line = GI.Line([point((20.,20.)), point((21.,21.))])
+        pieces = GO.cut(m, donut, line)
+        @test length(pieces) == 1
+        @test GO.area(m, only(pieces)) ≈ GO.area(m, donut)
+        @test GI.nhole(only(pieces)) == 1
     end
 end
